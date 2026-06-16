@@ -17,8 +17,14 @@ const config = defaultConfig({ maxCells: 100_000 });
 const world = new World(config);
 world.seedLife(20_000);
 
-// M4 demo: a few hand-wired swimmer critters whose brains chase food.
-spawnSwimmer(world, world.config.worldWidth * 0.5, world.config.worldHeight * 0.5, 0);
+// M4 demo: a few hand-wired swimmer critters whose brains chase food. Remember the
+// first critter's organism so the brain inspector can scope to a single, legible network.
+const demoCritter = spawnSwimmer(
+  world,
+  world.config.worldWidth * 0.5,
+  world.config.worldHeight * 0.5,
+  0,
+);
 spawnSwimmer(world, world.config.worldWidth * 0.5 + 120, world.config.worldHeight * 0.5, Math.PI);
 
 const f = world.cells.fields;
@@ -118,7 +124,14 @@ function drawScene(alpha: number): void {
     foodOverlay.render(camera, world.food, FOOD_DISPLAY_MAX, canvas.width, canvas.height);
   }
   renderer.render(world, camera, prevX, prevY, prevGen, alpha);
-  if (showBrain) brain.render(world);
+  if (showBrain) {
+    // Scope to the followed cell's organism if it's a neural critter, else the demo critter.
+    const followOrg =
+      followId >= 0 && world.cells.isAlive(followId) && f.organismId[followId]! > 0
+        ? f.organismId[followId]!
+        : demoCritter.organismId;
+    brain.render(world, followOrg);
+  }
 }
 
 function fit(): void {

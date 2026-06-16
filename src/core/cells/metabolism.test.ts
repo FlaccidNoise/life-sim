@@ -322,4 +322,25 @@ describe('metabolism — M4 neuralCost', () => {
     // 100 − basal(0.04) − neural(0.05) − move(0.02·9=0.18)
     expect(f.energy[i]).toBeCloseTo(100 - 0.04 - 0.05 - 0.18, 4);
   });
+
+  it('does NOT charge neuralCost to a non-neural cell (PHOTO) even when the knob is large', () => {
+    const store = new CellStore(8, false);
+    const f = store.fields;
+    const i = store.alloc();
+    f.posX[i] = 500;
+    f.posY[i] = 500;
+    f.radius[i] = 2; // area 4
+    f.mass[i] = 1;
+    f.energy[i] = 100;
+    f.cellType[i] = CellType.PHOTO;
+    f.thrust[i] = 0;
+    const live = new Uint32Array([i]);
+    const lf = new LightField(16, 16, 1024, 1024);
+    lf.cap.fill(0);
+    lf.light.fill(0); // no photosynthesis gain
+    const hash = buildHash(store, live, 1, 1024, 1024, 12);
+    // neuralCost 99 — must be ignored for PHOTO; only basal(0.01·4) applies.
+    metabolize(live, 1, f, hash, lf, 0, 0, 7, 0.7, 0.01, 0.5, 0.02, 99);
+    expect(f.energy[i]).toBeCloseTo(100 - 0.04, 4);
+  });
 });
