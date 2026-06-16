@@ -35,22 +35,23 @@ in float v_heading;
 out vec4 frag;
 void main() {
   vec2 c = gl_PointCoord - 0.5;
-  if (v_type > 2.5) {                       // MOTILE — directional wedge
-    // rotate point-coord into heading frame (screen y is down → flip sin)
+  // Directional wedge for cells that swim (MOTILE=3, MOVER=6).
+  if ((v_type > 2.5 && v_type < 3.5) || v_type > 5.5) {
     float s = sin(-v_heading), co = cos(-v_heading);
     vec2 d = vec2(co * c.x - s * c.y, s * c.x + co * c.y);
-    // a triangle pointing +x: inside if behind the tip plane and within the body.
-    // Base kept inside the rotated point-sprite extent: |d| max at the base corner
-    // (d.x=-0.35, |d.y|=0.5575) = 0.658 < 0.707 (=0.5·√2), so no corner is clipped.
     if (d.x > 0.45 || d.x < -0.35 || abs(d.y) > (0.40 - d.x * 0.45)) discard;
-    frag = vec4(0.30, 0.85, 0.95, 1.0);     // cyan
+    frag = (v_type > 5.5)
+      ? vec4(0.95, 0.85, 0.30, 1.0)   // MOVER  amber
+      : vec4(0.30, 0.85, 0.95, 1.0);  // MOTILE cyan
     return;
   }
   if (dot(c, c) > 0.25) discard;            // disc for the rest
   vec3 col;
-  if (v_type < 0.5)       col = vec3(0.30, 0.80, 0.35);  // PHOTO   green
-  else if (v_type < 1.5)  col = vec3(0.95, 0.45, 0.20);  // DIGEST  orange-red
-  else                    col = vec3(0.55, 0.50, 0.45);  // MEAT    grey-brown
+  if (v_type < 0.5)       col = vec3(0.30, 0.80, 0.35);  // PHOTO    green
+  else if (v_type < 1.5)  col = vec3(0.95, 0.45, 0.20);  // DIGEST   orange-red
+  else if (v_type < 2.5)  col = vec3(0.55, 0.50, 0.45);  // MEAT     grey-brown
+  else if (v_type < 4.5)  col = vec3(0.85, 0.35, 0.85);  // SENSOR   magenta
+  else                    col = vec3(0.45, 0.55, 0.95);  // NEURON   blue
   frag = vec4(col, 1.0);
 }`;
 
