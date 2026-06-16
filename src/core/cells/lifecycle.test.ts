@@ -204,3 +204,56 @@ describe('lifecycle — neural cells are exempt from death + division (M4)', () 
     expect(out.births).toBe(1);
   });
 });
+
+describe('lifecycle — organism cells are exempt from death + division (M5)', () => {
+  it('does NOT convert a depleted bonded (organismId!=0) DIGESTIVE to MEAT', () => {
+    const store = new CellStore(4, false);
+    const f = store.fields;
+    const a = store.alloc();
+    f.cellType[a] = CellType.DIGESTIVE;
+    f.organismId[a] = 7; // in an organism
+    f.energy[a] = -5; // would normally die
+    f.mass[a] = 1;
+    const out = { births: 0, deaths: 0 };
+    lifecycle(Uint32Array.from([a]), 1, store, 1, 1024, 1024, 30, 150, 10, 6, 0, out);
+    expect(out.deaths).toBe(0);
+    expect(f.cellType[a]).toBe(CellType.DIGESTIVE); // still alive, not MEAT
+  });
+
+  it('does NOT divide a bonded DIGESTIVE above threshold', () => {
+    const store = new CellStore(4, false);
+    const f = store.fields;
+    const a = store.alloc();
+    f.cellType[a] = CellType.DIGESTIVE;
+    f.organismId[a] = 7;
+    f.energy[a] = 5000;
+    f.mass[a] = 1;
+    f.radius[a] = 6;
+    const before = store.aliveCount;
+    const out = { births: 0, deaths: 0 };
+    lifecycle(Uint32Array.from([a]), 1, store, 1, 1024, 1024, 30, 150, 10, 6, 0, out);
+    expect(out.births).toBe(0);
+    expect(store.aliveCount).toBe(before);
+  });
+
+  it('STILL kills/divides a FREE (organismId 0) cell — ecosystem unaffected', () => {
+    const store = new CellStore(4, false);
+    const f = store.fields;
+    const dead = store.alloc();
+    f.cellType[dead] = CellType.DIGESTIVE;
+    f.organismId[dead] = 0;
+    f.energy[dead] = -1;
+    f.mass[dead] = 1;
+    const big = store.alloc();
+    f.cellType[big] = CellType.PHOTO;
+    f.organismId[big] = 0;
+    f.energy[big] = 300;
+    f.mass[big] = 1;
+    f.radius[big] = 6;
+    const out = { births: 0, deaths: 0 };
+    lifecycle(Uint32Array.from([dead, big]), 2, store, 1, 1024, 1024, 30, 150, 10, 6, 0, out);
+    expect(out.deaths).toBe(1);
+    expect(f.cellType[dead]).toBe(CellType.MEAT);
+    expect(out.births).toBe(1);
+  });
+});
