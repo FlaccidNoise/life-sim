@@ -40,12 +40,13 @@ describe('Rng', () => {
 
 describe('hashFloat3 (fixed-arity, allocation-free)', () => {
   it('is byte-identical to the variadic hashFloat for 3 args', () => {
-    for (const [a, b, c] of [
+    const cases: Array<[number, number, number]> = [
       [0, 0, 0],
       [1, 2, 3],
       [7, 150, 99999],
       [-5, 4096, 123],
-    ]) {
+    ];
+    for (const [a, b, c] of cases) {
       expect(hashFloat3(a, b, c)).toBe(hashFloat(a, b, c));
     }
   });
