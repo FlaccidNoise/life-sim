@@ -34,3 +34,45 @@ describe('LightField init', () => {
     expect(Array.from(lf.cap)).toEqual(Array.from(lf.light));
   });
 });
+
+describe('LightField dynamics', () => {
+  it('deplete reduces a patch and clamps at zero', () => {
+    const lf = new LightField(8, 8, 800, 800);
+    lf.init(new Rng(1), 4, 2, 1);
+    const i = lf.patchIndex(400, 400);
+    const before = lf.light[i]!;
+    lf.depleteAt(400, 400, before + 5); // over-deplete
+    expect(lf.light[i]).toBe(0);
+    expect(before).toBeGreaterThanOrEqual(0);
+  });
+
+  it('regen pushes a depleted patch back toward capacity', () => {
+    const lf = new LightField(8, 8, 800, 800);
+    lf.init(new Rng(1), 4, 2, 1);
+    const i = lf.patchIndex(400, 400);
+    lf.depleteAt(400, 400, lf.light[i]!); // empty it
+    const cap = lf.cap[i]!;
+    lf.step(0, 0.5); // no diffusion, strong regen
+    expect(lf.light[i]).toBeGreaterThan(0);
+    expect(lf.light[i]).toBeLessThanOrEqual(cap + 1e-6);
+  });
+
+  it('pure diffusion (regen=0) conserves total light', () => {
+    const lf = new LightField(8, 8, 800, 800);
+    lf.init(new Rng(2), 4, 2, 1);
+    const sum = (a: Float32Array): number => a.reduce((s, v) => s + v, 0);
+    const before = sum(lf.light);
+    lf.step(0.2, 0);
+    expect(sum(lf.light)).toBeCloseTo(before, 3);
+  });
+
+  it('diffusion spreads toroidally across the wrap edge', () => {
+    const lf = new LightField(8, 8, 800, 800);
+    // hand-set a single spike at column 0, then check column 7 (wrapped neighbour)
+    lf.cap.fill(0);
+    lf.light.fill(0);
+    lf.light[0] = 1; // row 0, col 0
+    lf.step(0.2, 0);
+    expect(lf.light[7]!).toBeGreaterThan(0); // wrapped left neighbour received light
+  });
+});
