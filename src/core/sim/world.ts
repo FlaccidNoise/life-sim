@@ -15,21 +15,29 @@ import { CellType, isEdibleBy } from '../cells/types';
 import { NeuralNetwork } from '../neural/network';
 import { think } from '../neural/think';
 import { driveMovers } from '../neural/motor';
-import { repositionPassengers } from '../physics/rigid-group';
+import { computeBondForces } from '../physics/bond-force';
+import { computeAdhesion } from '../physics/adhesion';
+import { breakStrainedBonds } from '../organism/breakage';
+import { transferEnergy } from '../organism/transfer';
+import { computeDigestBonus } from '../organism/digest-bonus';
+import { orientSensors } from '../neural/orient';
 import { BondNetwork } from '../organism/bonds';
-import { OrganismTable } from '../organism/organisms';
+import { OrganismTable, aggregateOrganisms } from '../organism/organisms';
 import { SplitChecker } from '../organism/split';
 import { makeMetrics, sampleMetrics, type Metrics } from './metrics';
 
 /**
- * The simulation world. Each `tick()` runs the M4 pipeline:
- * rebuild the compact live set (canonical ascending order) → spatial hash →
- * SENSE (food gradient) → THINK (neuron-cell forward pass, double-buffered) →
- * ACT (reflex steer + neuron-driven movers) →
- * soft repulsion → apply thrust → semi-implicit integrate → metabolize
- * (basal + move cost) → age → lifecycle (death/decay/division) → light step →
- * re-derive live → persistent food-field update → sample metrics.
- * Deterministic given (Config, seed); allocation-free in the hot loop.
+ * The simulation world. Each `tick()` runs the M5 pipeline:
+ * rebuild the compact live set (canonical ascending order) + live-bond set → spatial
+ * hash → SENSE (food gradient) → orientSensors (MOVER heading → SENSORs) → THINK
+ * (neuron-cell forward pass, double-buffered) → ACT (reflex steer + neuron-driven
+ * movers) → soft repulsion → apply thrust → bond springs + adhesion → semi-implicit
+ * integrate → break over-stretched bonds (split organisms) → digest-bonus → metabolize
+ * (basal + move + neural cost) → intra-organism energy transfer → age → lifecycle
+ * (death/decay/division) → light step → re-derive live → persistent food-field update →
+ * recompute organism aggregates → sample metrics. The M4 kinematic rigid grouping is
+ * gone; cohesion is bond physics. Deterministic given (Config, seed); allocation-free
+ * in the hot loop.
  */
 export class World {
   readonly config: Config;
@@ -44,14 +52,6 @@ export class World {
   readonly splitter: SplitChecker;
   /** Per-cell bonded-DIGESTIVE-neighbour count (the digestion-clustering payoff input). */
   readonly digestBonus: Uint8Array;
-  /** Per-World deterministic organism-id allocator (M4 kinematic groups; M5 organisms). */
-  nextOrganismId: number;
-  // Kinematic rigid-group table (M4 critter cohesion; M5 replaces with bonds).
-  readonly rigidPassenger: Uint32Array;
-  readonly rigidBody: Uint32Array;
-  readonly rigidOffX: Float32Array;
-  readonly rigidOffY: Float32Array;
-  rigidCount: number;
   readonly metrics: Metrics;
   /** Pre-allocated so lifecycle writes counts without a per-tick object (zero-alloc). */
   readonly lifecycleResult: LifecycleResult;
@@ -98,12 +98,6 @@ export class World {
     this.organisms = new OrganismTable(config.maxOrganisms);
     this.splitter = new SplitChecker(config.maxCells);
     this.digestBonus = new Uint8Array(config.maxCells);
-    this.nextOrganismId = 1;
-    this.rigidPassenger = new Uint32Array(config.maxCells);
-    this.rigidBody = new Uint32Array(config.maxCells);
-    this.rigidOffX = new Float32Array(config.maxCells);
-    this.rigidOffY = new Float32Array(config.maxCells);
-    this.rigidCount = 0;
     this.metrics = makeMetrics();
     this.lifecycleResult = { births: 0, deaths: 0 };
     this.lastBirths = 0;
@@ -140,15 +134,6 @@ export class World {
     return spawned;
   }
 
-  /** Register a kinematic passenger at a fixed body-frame offset (M4 critter group). */
-  addPassenger(passenger: number, body: number, offX: number, offY: number): void {
-    const k = this.rigidCount++;
-    this.rigidPassenger[k] = passenger;
-    this.rigidBody[k] = body;
-    this.rigidOffX[k] = offX;
-    this.rigidOffY[k] = offY;
-  }
-
   /** Seed an initial PHOTO/DIGESTIVE/MOTILE mix per the configured fractions. */
   seedLife(n: number): void {
     const photo = Math.round(n * this.config.initialPhotoFraction);
@@ -180,12 +165,14 @@ export class World {
   }
 
   /**
-   * Advance one tick (§4.3 pipeline): rebuild live → hash → SENSE (food gradient)
-   * → THINK (neuron-cell forward pass, double-buffered; swap) → ACT (reflex steer +
-   * driveMovers from neuron outputs) → repulsion → apply thrust → integrate →
-   * reposition kinematic passengers → metabolize (basal + move + neural cost) → age
-   * → lifecycle → light step → re-derive live → persistent food-field update →
-   * sample metrics.
+   * Advance one tick (§4.3 pipeline): rebuild live + live bonds → hash → SENSE (food
+   * gradient) → orientSensors (MOVER heading → SENSORs) → THINK (neuron-cell forward
+   * pass, double-buffered; swap) → ACT (reflex steer + driveMovers from neuron outputs)
+   * → repulsion → apply thrust → bond springs + adhesion → integrate → break
+   * over-stretched bonds (split organisms) → digest-bonus → metabolize (basal + move +
+   * neural cost) → intra-organism energy transfer → age → lifecycle → light step →
+   * re-derive live → persistent food-field update → recompute organism aggregates →
+   * sample metrics. The M4 kinematic grouping is gone; cohesion is bond physics.
    */
   tick(): void {
     const f = this.cells.fields;
@@ -195,10 +182,18 @@ export class World {
     const live = this.liveIndices;
     const n = this.liveCount;
 
+    // M5: refresh the live-bond snapshot (prunes any bond with a dangling endpoint)
+    // before the force/break/transfer kernels iterate it this tick.
+    this.bonds.rebuildLive(this.cells);
+
     this.hash.build(live, n, f.posX, f.posY);
 
     // Step 2 SENSE → step 3 THINK (recurrent forward pass) → step 4 ACT.
     sense(live, n, f, this.food);
+
+    // M5: orient SENSOR cells to their organism's MOVER heading before THINK projects
+    // the gradient into the body frame (one-tick orientation lag, documented).
+    orientSensors(this.net, f.organismId, this.organisms.mover, f.heading);
 
     think(this.net, f.cellType, f.senseX, f.senseY, f.heading);
     this.net.swap(); // actCur now holds a(t)
@@ -226,6 +221,39 @@ export class World {
 
     computeRepulsion(this.hash, f.posX, f.posY, f.radius, f.forceX, f.forceY, cfg.repulsion);
     applyThrust(live, n, f.heading, f.thrust, f.forceX, f.forceY);
+
+    // M5 bond springs (scatter) + minimal adhesion (gather), accumulating into the force
+    // buffer alongside repulsion + thrust before integrate (§4.3 step 5 FORCES).
+    computeBondForces(
+      this.bonds.liveBonds,
+      this.bonds.liveBondCount,
+      this.bonds.cellA,
+      this.bonds.cellB,
+      this.bonds.restLen,
+      this.bonds.stiffness,
+      f.posX,
+      f.posY,
+      f.forceX,
+      f.forceY,
+      cfg.bondStiffness,
+      cfg.worldWidth,
+      cfg.worldHeight,
+    );
+    computeAdhesion(
+      this.hash,
+      f.posX,
+      f.posY,
+      f.radius,
+      f.cellType,
+      f.organismId,
+      f.forceX,
+      f.forceY,
+      cfg.adhesionStrength,
+      cfg.adhesionRange,
+      cfg.worldWidth,
+      cfg.worldHeight,
+    );
+
     integrate(
       live,
       n,
@@ -242,24 +270,23 @@ export class World {
       cfg.worldHeight,
     );
 
-    // Step 6b: snap kinematic passengers to the rigid body-frame layout (after the
-    // body integrated). Overrides any broad-phase nudge; only the MOVER body integrates.
-    repositionPassengers(
-      this.rigidPassenger,
-      this.rigidBody,
-      this.rigidOffX,
-      this.rigidOffY,
-      this.rigidCount,
+    // M5: break over-stretched bonds (post-integrate strain) → split organisms.
+    const broke = breakStrainedBonds(
+      this.bonds,
+      f.organismId,
+      this.organisms,
+      this.splitter,
       f.posX,
       f.posY,
-      f.heading,
-      f.velX,
-      f.velY,
-      f.forceX,
-      f.forceY,
+      cfg.bondMaxStrain,
+      cfg.maxSplitChecksPerTick,
       cfg.worldWidth,
       cfg.worldHeight,
     );
+    if (broke > 0) this.bonds.rebuildLive(this.cells);
+
+    // The digestion-clustering payoff input, read by METABOLIZE.
+    computeDigestBonus(this.bonds, f.cellType, this.digestBonus);
 
     metabolize(
       live,
@@ -277,6 +304,17 @@ export class World {
       cfg.neuralCost,
       this.digestBonus,
       cfg.digestClusterBonus,
+    );
+
+    // M5: intra-organism energy transfer toward needier cells (§4.5).
+    transferEnergy(
+      this.bonds.liveBonds,
+      this.bonds.liveBondCount,
+      this.bonds.cellA,
+      this.bonds.cellB,
+      f.energy,
+      cfg.transferRate,
+      cfg.transferEfficiency,
     );
 
     // Age the tick-start live set BEFORE lifecycle. The free-list is LIFO, so a
@@ -323,6 +361,17 @@ export class World {
       if (isEdibleBy(CellType.MOTILE, t)) food.depositAt(f.posX[idx]!, f.posY[idx]!, dep);
     }
     food.step(cfg.foodDiffuse, cfg.foodDecay);
+
+    // M5: recompute per-organism aggregates over the post-lifecycle live set.
+    aggregateOrganisms(
+      this.liveIndices,
+      this.liveCount,
+      f.organismId,
+      f.energy,
+      f.posX,
+      f.posY,
+      this.organisms,
+    );
 
     sampleMetrics(
       this.metrics,

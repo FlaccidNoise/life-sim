@@ -7,20 +7,27 @@ order means changing this table first.
 | # | Step | Reads | Writes |
 |---|---|---|---|
 | 1 | rebuildLive | flags | liveIndices, liveCount |
+| 1b | **bonds.rebuildLive** (M5) | bond pool (alive flags + endpoint slots/gens); cell generations | liveBonds, liveBondCount (prunes bonds with a dangling endpoint) |
 | 2 | hash.build | posX, posY | hash buckets |
 | 2b | **SENSE** | cellType, pos; **previous** tick's food field | senseX, senseY (**MOTILE and SENSOR**) |
+| 2c | **orientSensors** (M5) | net.sensorCell; organismId; `organisms.mover`; **previous** tick's MOVER heading | heading (SENSOR cells ← their organism's MOVER heading) |
 | 3 | **THINK** (M4) | sensor bindings + senseX/senseY + heading (body-frame projection); snapshotted live-synapse pool (pre/post); `actCur` (a(t−1)); bias; cellType (per-neuron re-check) | `actNxt` then **swap** → `actCur` holds a(t) (SENSOR/NEURON/MOVER activations) |
 | 4 | **ACT** | MOTILE: cellType, senseX, senseY, heading (reflex). **driveMovers (M4):** motor bindings + `actCur`[turn/thrust neuron] + heading | heading, thrust (**MOTILE reflex AND MOVER from neurons**) |
 | 5 | computeRepulsion | posX, posY, radius | forceX, forceY |
 | 5b | **applyThrust** | cellType (via thrust=0 skip), heading, thrust | forceX, forceY (**accumulates** after repulsion) |
+| 5c | **computeBondForces** (M5) | liveBonds; cellA/cellB; restLen; stiffness; posX/posY; `cfg.bondStiffness` | forceX, forceY (**scatter, equal-and-opposite**; accumulates after repulsion + thrust) |
+| 5d | **computeAdhesion** (M5) | hash; posX/posY; radius; cellType; organismId; `cfg.adhesionStrength/Range` | forceX, forceY (gather pull toward same-type cells of a DIFFERENT organism; no-op when strength≤0, the default) |
 | 6 | integrate | pos, vel, force, mass | posX, posY, velX, velY; resets force=0 |
-| 6b | **repositionPassengers** (M4) | rigid-group table; body pos/heading | passenger posX/posY/heading; passenger velX/velY/forceX/forceY ← 0 (kinematic override) |
-| 7 | **METABOLIZE** | cellType, energy, radius, pos, **thrust**; light field; hash buckets | energy (self **and eaten prey**, **−= moveCost·thrust²**, **−= neuralCost for SENSOR/NEURON/MOVER**), light field (depletion) |
+| 6c | **breakStrainedBonds + split** (M5) | liveBonds; cellA/cellB; restLen; **post-integrate** posX/posY; organismId; bond adjacency; `cfg.bondMaxStrain/maxSplitChecksPerTick` | removes over-strained bonds (detaches adjacency); organismId (split relabels the smaller component); `organisms.mover` (migrates on split); `organisms` free-list (allocs the new id). If any broke → bonds.rebuildLive again |
+| 6d | **computeDigestBonus** (M5) | liveBonds; cellA/cellB; cellType | digestBonus[] (reset then count bonded DIGESTIVE↔DIGESTIVE pairs) |
+| 7 | **METABOLIZE** | cellType, energy, radius, pos, **thrust**, **digestBonus**; light field; hash buckets | energy (self **and eaten prey**, **−= moveCost·thrust²**, **−= neuralCost for SENSOR/NEURON/MOVER**, **digestive gain × (1+digestClusterBonus·digestBonus)**), light field (depletion) |
+| 7b | **transferEnergy** (M5) | liveBonds; cellA/cellB; energy; `cfg.transferRate/transferEfficiency` | energy (diffuse from higher to lower endpoint per bond; `efficiency`<1 lost in transit) |
 | 8 | **age** | liveIndices (tick-start set) | age |
 | 9 | **LIVE/DIE/BREED** | cellType, energy, mass, pos | cellType (→MEAT), energy, **generation[] (bumped on every freed MEAT slot)**, frees meat slots, allocs child slots (split energy); lastBirths/lastDeaths |
 | 10 | **ENVIRONMENT (light)** | light field, cap | light field (diffuse + regen; double-buffer swap) |
 | 11 | rebuildLive (again) | flags | liveIndices, liveCount |
 | 11b | **ENVIRONMENT (food)** | cellType, pos (**post-lifecycle live set**) | persistent food field (deposit + diffuse + decay; double-buffer swap) |
+| 11c | **aggregateOrganisms** (M5) | post-lifecycle liveIndices; organismId; energy; posX/posY | `organisms` energy/cellCount/centroidX/centroidY (the authoritative per-organism numbers) |
 | 12 | sampleMetrics | cellType, energy (current live set) | metrics |
 
 ## Ordering notes (the contract the golden-tick + integration tests assert against)
@@ -91,22 +98,44 @@ order means changing this table first.
   neuron. In M4 neural cells never die/divide (exempt in lifecycle), so the topology
   is immutable and no synapse can dangle at runtime.
 
-- **Sensor heading lag (one tick).** THINK's body-frame projection (step 3) reads the
-  passenger sensor's `heading`, which was set by the PREVIOUS tick's
-  `repositionPassengers` (step 6b runs after THINK). So a sensor projects the gradient
-  using the body orientation as of last tick. Accepted (a one-tick frame lag is
-  imperceptible for chemotaxis); recorded so a future reader does not treat it as a bug.
-
-- **Kinematic override + one-sided passenger momentum.** `repositionPassengers`
-  (step 6b) runs AFTER integrate and OVERWRITES passenger positions to the rigid
-  body-frame layout, zeroing their velocity and force. Passengers sit at offsets
-  larger than the contact range, so they rarely overlap anything; when one does push
-  an ecosystem cell via repulsion (step 5), the reposition then zeroes the passenger's
-  own velocity/force — so a passenger can shove but never recoils. Negligible in M4
-  (the intended "the critter occupies space" behaviour); M5 organism physics makes it
-  symmetric. Only the MOVER body integrates dynamically.
-
 - **METABOLIZE charges THIS tick's neuralCost** for SENSOR/NEURON/MOVER cells (a small
   per-cell brain upkeep, §4.5; per-synapse cost deferred), alongside this tick's thrust
   cost. Critter cells are provisioned with a large reserve and are lifecycle-exempt, so
   they neither starve nor divide over the demo.
+
+## Bond / organism coupling notes (M5)
+
+The M4 kinematic rigid grouping (`repositionPassengers`, the `rigidPassenger/Body/Off*`
+table, `addPassenger`, `nextOrganismId`) is GONE. Cohesion is now bond physics: the
+hand-wired critter is a real bonded organism (spokes from the MOVER to every cell +
+cross-bracing between rim cells → a triangulated, soft-but-braced body). The cells
+integrate dynamically like any other; nothing snaps them to a body frame.
+
+- **Sensor orientation lag (one tick).** `orientSensors` (step 2c) reads the MOVER
+  heading set by LAST tick's `driveMovers` (step 4 runs after it). So a SENSOR projects
+  the gradient (THINK, step 3) using the body orientation as of last tick — the same
+  one-tick frame lag M4 documented. Imperceptible for chemotaxis; recorded so a future
+  reader does not treat it as a bug.
+
+- **Split does not prune cross-organism synapses.** M4's single global neural net is
+  retained; a split (step 6c) never frees a cell, so every synapse endpoint stays valid
+  (no dangling). Per-organism brain partitioning + severed-activation zeroing is M6. The
+  split-on-break test uses non-neural cells, so this never bites in M5.
+
+- **Aggregates recomputed each tick.** The split (step 6c) relabels `organismId`
+  incrementally on the smaller component; `aggregateOrganisms` (step 11c) is the
+  authority for the per-organism energy/cellCount/centroid numbers.
+
+- **bondMaxStrain is a soft-body tolerance, not a rigidity claim (Task 14 retune).** The
+  hand-wired critter is genuinely soft: its single MOVER yanks 6 spokes (effective
+  k = `bondStiffness·1` = 1.5) which transiently stretch to ~2× rest under thrust+turn.
+  At the original `bondMaxStrain=0.6` the spokes snapped within ~8 ticks and the body
+  fragmented (critter-swim closed ~7 units, not ≥150). Raised to **1.0** (config
+  default), the spokes flex without breaking and the critter homes in robustly across
+  start headings. Counterintuitively, raising `bondStiffness` toward the ceiling made it
+  WORSE (tightens the orbital limit cycle); cohesion here comes from strain tolerance +
+  bracing geometry, NOT large k. Under a genuine hard pull a bond still snaps
+  (split.test / golden-bond override `bondMaxStrain` to 0.2). Even at 1.0 a single direct
+  spoke can break during an aggressive no-food spin, but the cross-bracing keeps every
+  cell in ONE organism — the body never flies apart (asserted in golden-think's cohesion
+  case as an organism-membership invariant, not an exact spoke length).
