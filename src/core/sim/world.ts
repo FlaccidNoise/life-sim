@@ -275,6 +275,8 @@ export class World {
       cfg.meatDecay,
       cfg.moveCost,
       cfg.neuralCost,
+      this.digestBonus,
+      cfg.digestClusterBonus,
     );
 
     // Age the tick-start live set BEFORE lifecycle. The free-list is LIFO, so a

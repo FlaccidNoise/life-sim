@@ -12,7 +12,10 @@ import { wrapDelta } from '../math/vec2';
  * - DIGESTIVE/MOTILE: extracts up to digestRate from the FIRST edible (PHOTO/MEAT)
  *   neighbour found within (ri+rj), scanned in fixed toroidal 3×3 bucket order
  *   (dy=-1..1, dx=-1..1) then ascending within-bucket order — deterministic, but
- *   NOT necessarily the lowest-slot prey. Keeps digestEfficiency of what it takes.
+ *   NOT necessarily the lowest-slot prey. Keeps digestEfficiency of what it takes,
+ *   scaled by the clustering multiplier 1 + digestClusterBonus·digestBonus[i] — a
+ *   bonded digestive cluster out-harvests lone cells (the multicellular payoff, §4.5).
+ *   With no bonds digestBonus is all-zero → multiplier 1 → identical pre-M5 behaviour.
  * - All living cells pay basalCost · area + moveCost · thrust²; SENSOR/NEURON/MOVER
  *   additionally pay neuralCost per tick (the brain isn't free, §4.5; per-synapse cost
  *   deferred). MEAT loses meatDecay per tick.
@@ -32,6 +35,8 @@ export function metabolize(
   meatDecay: number,
   moveCost: number,
   neuralCost: number,
+  digestBonus: Uint8Array,
+  digestClusterBonus: number,
 ): void {
   const { cols, rows, width, height, sorted, bucketStart } = hash;
 
@@ -79,7 +84,8 @@ export function metabolize(
               const extracted = avail < digestRate ? avail : digestRate;
               if (extracted > 0) {
                 f.energy[j] = avail - extracted;
-                f.energy[i] = f.energy[i]! + extracted * digestEfficiency;
+                const mult = 1 + digestClusterBonus * digestBonus[i]!;
+                f.energy[i] = f.energy[i]! + extracted * digestEfficiency * mult;
                 eaten = true;
                 break;
               }
