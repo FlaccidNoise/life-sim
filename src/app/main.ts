@@ -55,6 +55,9 @@ const brainCanvas = document.getElementById('brain') as HTMLCanvasElement;
 const brain = new BrainInspector(brainCanvas);
 let showBrain = false;
 
+// Legend / "what am I seeing" overlay (toggled with `H`); shown by default.
+const legend = document.getElementById('legend');
+
 // Telemetry dashboard + inspect panel + live economy knobs.
 const dash = new TelemetryDashboard(document.getElementById('telemetry') as HTMLCanvasElement);
 const inspectPanel = document.getElementById('inspect') as HTMLElement;
@@ -228,7 +231,9 @@ window.addEventListener('keydown', (e) => {
     showFood = !showFood;
   } else if (e.key === 'b' || e.key === 'B') {
     showBrain = !showBrain;
-    brainCanvas.style.display = showBrain ? 'block' : 'none';
+    brainCanvas.classList.toggle('hidden', !showBrain);
+  } else if (e.key === 'h' || e.key === 'H') {
+    legend?.classList.toggle('hidden');
   } else if (e.key === 'c' || e.key === 'C' || e.key === 'Escape') {
     followId = -1;
   }
@@ -241,14 +246,15 @@ let lastFpsT = performance.now();
 function updateHud(): void {
   if (!hud) return;
   const m = world.metrics;
+  const net = world.net;
   hud.textContent =
-    `cells ${world.cells.aliveCount} | tick ${world.tickCount} | ${fps} fps | ` +
-    `speed ${speed.toFixed(2)}x${paused ? ' (paused)' : ''} | zoom ${camera.scale.toFixed(3)}\n` +
-    `photo ${m.photo} dig ${m.digestive} meat ${m.meat} | div ${m.diversity.toFixed(3)} | ` +
-    `light ${showLight ? 'on' : 'off'} | food ${showFood ? 'on' : 'off'}` +
-    `${followId >= 0 ? ` | follow #${followId}` : ''}\n` +
-    `space pause | . step | [ ] slower/faster | drag pan | wheel zoom | L light | F food | ` +
-    `B brain | click inspect/follow | C release`;
+    `cells ${world.cells.aliveCount}  ·  tick ${world.tickCount}  ·  ${fps} fps  ·  ` +
+    `${speed.toFixed(2)}×${paused ? ' paused' : ''}  ·  zoom ${camera.scale.toFixed(2)}\n` +
+    `photo ${m.photo}  dig ${m.digestive}  motile ${m.motile}  meat ${m.meat}` +
+    `   ·   ⌀energy ${m.meanEnergy.toFixed(0)}  ·  diversity ${m.diversity.toFixed(3)}\n` +
+    `brain: ${net.liveNeuronCount} neurons · ${net.liveSynapseCount} synapses` +
+    `   ·   light ${showLight ? 'on' : 'off'}  smell ${showFood ? 'on' : 'off'}` +
+    `${followId >= 0 ? `  ·  follow #${followId}` : ''}   ·   ${legend && !legend.classList.contains('hidden') ? 'H hide legend' : 'H legend'}`;
 }
 
 function loop(): void {

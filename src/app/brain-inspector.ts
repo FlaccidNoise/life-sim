@@ -1,10 +1,19 @@
 import { type World } from '../core/sim/world';
+import { CellType } from '../core/cells/types';
+
+/** Single-letter tag per neural cell type, drawn inside each node. */
+const TYPE_TAG: Record<number, string> = {
+  [CellType.SENSOR]: 'S',
+  [CellType.NEURON]: 'N',
+  [CellType.MOVER]: 'M',
+};
 
 /**
  * §11 M4 deliverable — renders the neuron-cell network with LIVE activations.
  * Nodes are laid out from each neuron's world position (projected into the canvas);
- * node colour encodes activation (blue −1 → grey 0 → orange +1); synapse edges are
- * green (excitatory) / red (inhibitory), width ∝ |weight|. Read-only over core.
+ * node colour encodes activation (blue −1 → grey 0 → orange +1), with the cell-type
+ * tag (S/N/M) and the activation value drawn on each; synapse edges are green
+ * (excitatory) / red (inhibitory), width ∝ |weight|. Read-only over core.
  *
  * Scoped to a single organism when `organismId` is given (else all neurons), so two
  * roaming critters don't collapse into one degenerate shared bounding box.
@@ -27,6 +36,13 @@ export class BrainInspector {
     const inScope = (i: number): boolean =>
       organismId === undefined || f.organismId[i] === organismId;
 
+    // Title.
+    ctx.font = '700 10px ui-monospace, monospace';
+    ctx.fillStyle = '#5fd9ff';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText('BRAIN INSPECTOR', 10, 16);
+
     // Bounding box of the in-scope live neurons in world space → fit canvas + padding.
     let minX = Infinity;
     let minY = Infinity;
@@ -45,19 +61,22 @@ export class BrainInspector {
       if (y > maxY) maxY = y;
     }
     if (shown === 0) {
-      ctx.fillStyle = '#789';
-      ctx.font = '12px monospace';
-      ctx.fillText('no neuron cells', 10, 20);
+      ctx.fillStyle = '#7d93a4';
+      ctx.font = '11px ui-monospace, monospace';
+      ctx.fillText('no neuron cells — spawn a critter', 10, 34);
       return;
     }
-    const pad = 24;
+    // Asymmetric padding: room for the title (top) and the key (bottom).
+    const padX = 30;
+    const padTop = 30;
+    const padBot = 22;
     const spanX = Math.max(1, maxX - minX);
     const spanY = Math.max(1, maxY - minY);
-    const sx = (w - 2 * pad) / spanX;
-    const sy = (h - 2 * pad) / spanY;
+    const sx = (w - 2 * padX) / spanX;
+    const sy = (h - padTop - padBot) / spanY;
     const proj = (x: number, y: number): [number, number] => [
-      pad + (x - minX) * sx,
-      pad + (y - minY) * sy,
+      padX + (x - minX) * sx,
+      padTop + (y - minY) * sy,
     ];
 
     // Edges (synapses).
@@ -75,7 +94,8 @@ export class BrainInspector {
       ctx.stroke();
     }
 
-    // Nodes (neurons), coloured by activation.
+    // Nodes (neurons): fill by activation, tag by cell type, value beneath.
+    ctx.textAlign = 'center';
     for (let k = 0; k < net.liveNeuronCount; k++) {
       const i = net.liveNeurons[k]!;
       if (!inScope(i)) continue;
@@ -88,11 +108,28 @@ export class BrainInspector {
       const bl = Math.round(120 - 110 * t);
       ctx.fillStyle = `rgb(${r},${g},${bl})`;
       ctx.beginPath();
-      ctx.arc(px, py, 7, 0, Math.PI * 2);
+      ctx.arc(px, py, 9, 0, Math.PI * 2);
       ctx.fill();
       ctx.strokeStyle = '#cde';
       ctx.lineWidth = 1;
       ctx.stroke();
+      // type tag inside the node (dark for contrast on the bright fill)
+      ctx.fillStyle = 'rgba(8,12,18,0.85)';
+      ctx.font = '700 9px ui-monospace, monospace';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(TYPE_TAG[f.cellType[i]!] ?? '?', px, py + 0.5);
+      // activation value beneath
+      ctx.fillStyle = '#aebfce';
+      ctx.font = '8px ui-monospace, monospace';
+      ctx.textBaseline = 'top';
+      ctx.fillText(a.toFixed(2), px, py + 11);
     }
+
+    // Footer key.
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'alphabetic';
+    ctx.font = '8px ui-monospace, monospace';
+    ctx.fillStyle = '#7d93a4';
+    ctx.fillText('S sensor  N neuron  M mover   ·   − blue / + orange', 10, h - 8);
   }
 }
