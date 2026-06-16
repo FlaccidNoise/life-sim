@@ -48,3 +48,28 @@ describe('telemetry metrics', () => {
     }
   });
 });
+
+describe('metrics — MOTILE (M3)', () => {
+  it('counts motiles and includes them in Simpson diversity', () => {
+    const { store, live } = seed(
+      [CellType.PHOTO, CellType.PHOTO, CellType.DIGESTIVE, CellType.MOTILE],
+      [100, 100, 100, 100],
+    );
+    const m = makeMetrics();
+    sampleMetrics(m, live, 4, store.fields, 0, 0, 0);
+    expect(m.photo).toBe(2);
+    expect(m.digestive).toBe(1);
+    expect(m.motile).toBe(1);
+    // living = 4; Simpson = 1 − ((2/4)²+(1/4)²+(1/4)²) = 0.625
+    expect(m.diversity).toBeCloseTo(0.625, 6);
+  });
+
+  it('still passes births/deaths through (must not be dropped by the M3 edit)', () => {
+    const { store, live } = seed([CellType.MOTILE], [100]);
+    const m = makeMetrics();
+    sampleMetrics(m, live, 1, store.fields, 5, 4, 2);
+    expect(m.motile).toBe(1);
+    expect(m.births).toBe(4);
+    expect(m.deaths).toBe(2);
+  });
+});
