@@ -72,3 +72,57 @@ describe('reproducibility — neuron activations', () => {
     expect(a.w.net.actCur[a.c.sensorFwd]! !== 0 || a.w.net.actCur[a.c.sensorLat]! !== 0).toBe(true);
   });
 });
+
+describe('reproducibility — bonds + organism state', () => {
+  function runBonded(seed: number): World {
+    const w = new World(defaultConfig({ seed, maxCells: 2000 }), false);
+    w.seedLife(500);
+    // A bonded digestive cluster near a PHOTO patch + a swimmer → exercises bond springs,
+    // transfer, the digestion-clustering bonus, and the neural chain together.
+    const f = w.cells.fields;
+    const org = w.organisms.alloc();
+    const cluster: number[] = [];
+    for (let kk = 0; kk < 4; kk++) {
+      const i = w.cells.alloc();
+      f.posX[i] = 1000 + (kk % 2) * 14;
+      f.posY[i] = 1000 + ((kk / 2) | 0) * 14;
+      f.radius[i] = w.config.cellRadius;
+      f.mass[i] = 1;
+      f.energy[i] = 200;
+      f.cellType[i] = CellType.DIGESTIVE;
+      f.organismId[i] = org;
+      cluster.push(i);
+    }
+    for (let kk = 0; kk + 1 < cluster.length; kk++) {
+      w.bonds.addBond(
+        cluster[kk]!,
+        f.generation[cluster[kk]!]!,
+        cluster[kk + 1]!,
+        f.generation[cluster[kk + 1]!]!,
+        14,
+        1,
+      );
+    }
+    w.bonds.rebuildLive(w.cells);
+    spawnSwimmer(w, 1040, 1000, 0.5);
+    for (let i = 0; i < 150; i++) w.tick();
+    return w;
+  }
+
+  it('produces byte-identical bond positions, organismId, and organism energy for the same (Config, seed)', () => {
+    const a = runBonded(424242);
+    const b = runBonded(424242);
+    const fa = a.cells.fields;
+    const fb = b.cells.fields;
+    for (let i = 0; i < a.cells.capacity; i++) {
+      expect(fa.posX[i]!).toBe(fb.posX[i]!);
+      expect(fa.posY[i]!).toBe(fb.posY[i]!);
+      expect(fa.energy[i]!).toBe(fb.energy[i]!);
+      expect(fa.organismId[i]!).toBe(fb.organismId[i]!);
+    }
+    for (let org = 0; org < a.organisms.maxOrganisms; org++) {
+      expect(a.organisms.energy[org]!).toBe(b.organisms.energy[org]!);
+      expect(a.organisms.cellCount[org]!).toBe(b.organisms.cellCount[org]!);
+    }
+  });
+});
