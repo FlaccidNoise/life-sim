@@ -147,3 +147,69 @@ describe('metabolism — digestion', () => {
     expect(f.energy[a]).toBeCloseTo(100 - cfg.basalCost * 9, 4);
   });
 });
+
+describe('metabolism — basal cost and meat decay', () => {
+  it('a MEAT cell only decays (no basal, no gain)', () => {
+    const cfg = defaultConfig({ worldWidth: 1024, worldHeight: 1024 });
+    const store = new CellStore(8, false);
+    const f = store.fields;
+    const m = store.alloc();
+    f.posX[m] = 100;
+    f.posY[m] = 100;
+    f.radius[m] = 5;
+    f.energy[m] = 20;
+    f.mass[m] = 1;
+    f.cellType[m] = CellType.MEAT;
+    const live = new Uint32Array([m]);
+    const lf = new LightField(16, 16, 1024, 1024);
+    lf.cap.fill(1);
+    lf.light.fill(1); // light present but meat ignores it
+    const hash = buildHash(store, live, 1, 1024, 1024, 2 * cfg.cellRadius);
+    metabolize(
+      live,
+      1,
+      f,
+      hash,
+      lf,
+      cfg.photoGain,
+      cfg.photoDepletion,
+      cfg.digestRate,
+      cfg.digestEfficiency,
+      cfg.basalCost,
+      cfg.meatDecay,
+    );
+    expect(f.energy[m]).toBeCloseTo(20 - cfg.meatDecay, 4);
+  });
+
+  it('basal cost scales with area (radius²)', () => {
+    const cfg = defaultConfig({ worldWidth: 1024, worldHeight: 1024 });
+    const store = new CellStore(8, false);
+    const f = store.fields;
+    const big = store.alloc();
+    f.posX[big] = 100;
+    f.posY[big] = 100;
+    f.radius[big] = 4;
+    f.energy[big] = 100;
+    f.mass[big] = 1;
+    f.cellType[big] = CellType.DIGESTIVE;
+    const live = new Uint32Array([big]);
+    const lf = new LightField(16, 16, 1024, 1024);
+    lf.cap.fill(0);
+    lf.light.fill(0);
+    const hash = buildHash(store, live, 1, 1024, 1024, 2 * cfg.cellRadius);
+    metabolize(
+      live,
+      1,
+      f,
+      hash,
+      lf,
+      cfg.photoGain,
+      cfg.photoDepletion,
+      cfg.digestRate,
+      cfg.digestEfficiency,
+      cfg.basalCost,
+      cfg.meatDecay,
+    );
+    expect(f.energy[big]).toBeCloseTo(100 - cfg.basalCost * 16, 4);
+  });
+});
