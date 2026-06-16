@@ -158,3 +158,49 @@ describe('lifecycle — division', () => {
     expect(f.heading[0]).toBeCloseTo(0.5, 6);
   });
 });
+
+describe('lifecycle — neural cells are exempt from death + division (M4)', () => {
+  it('does NOT divide a provisioned NEURON/MOVER even above divideThreshold', () => {
+    const store = new CellStore(8, false);
+    const f = store.fields;
+    const a = store.alloc();
+    const b = store.alloc();
+    f.cellType[a] = CellType.NEURON;
+    f.cellType[b] = CellType.MOVER;
+    f.energy[a] = 5000;
+    f.energy[b] = 5000;
+    f.mass[a] = 1;
+    f.mass[b] = 1;
+    const before = store.aliveCount;
+    const out = { births: 0, deaths: 0 };
+    lifecycle(Uint32Array.from([a, b]), 2, store, 1, 1024, 1024, 30, 150, 10, 6, 0, out);
+    expect(out.births).toBe(0);
+    expect(store.aliveCount).toBe(before); // no clones allocated
+  });
+
+  it('does NOT convert a depleted SENSOR/NEURON to MEAT', () => {
+    const store = new CellStore(4, false);
+    const f = store.fields;
+    const a = store.alloc();
+    f.cellType[a] = CellType.SENSOR;
+    f.energy[a] = -5; // would normally die
+    f.mass[a] = 1;
+    const out = { births: 0, deaths: 0 };
+    lifecycle(Uint32Array.from([a]), 1, store, 1, 1024, 1024, 30, 150, 10, 6, 0, out);
+    expect(out.deaths).toBe(0);
+    expect(f.cellType[a]).toBe(CellType.SENSOR); // still a sensor, not MEAT
+  });
+
+  it('still divides a PHOTO above threshold (guard does not break normal division)', () => {
+    const store = new CellStore(4, false);
+    const f = store.fields;
+    const a = store.alloc();
+    f.cellType[a] = CellType.PHOTO;
+    f.energy[a] = 300;
+    f.mass[a] = 1;
+    f.radius[a] = 6;
+    const out = { births: 0, deaths: 0 };
+    lifecycle(Uint32Array.from([a]), 1, store, 1, 1024, 1024, 30, 150, 10, 6, 0, out);
+    expect(out.births).toBe(1);
+  });
+});

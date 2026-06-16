@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { CellType, isLiving, isEdibleBy } from './types';
+import { CellType, isLiving, isEdibleBy, isNeural } from './types';
 
 describe('cell type palette', () => {
   it('assigns distinct stable indices', () => {
@@ -40,5 +40,39 @@ describe('MOTILE type (M3)', () => {
     expect(isEdibleBy(CellType.MOTILE, CellType.MEAT)).toBe(true);
     expect(isEdibleBy(CellType.MOTILE, CellType.MOTILE)).toBe(false);
     expect(isEdibleBy(CellType.DIGESTIVE, CellType.MOTILE)).toBe(false);
+  });
+});
+
+describe('M4 neural cell types', () => {
+  it('appends SENSOR/NEURON/MOVER without renumbering the M2/M3 palette', () => {
+    expect(CellType.PHOTO).toBe(0);
+    expect(CellType.DIGESTIVE).toBe(1);
+    expect(CellType.MEAT).toBe(2);
+    expect(CellType.MOTILE).toBe(3);
+    expect(CellType.SENSOR).toBe(4);
+    expect(CellType.NEURON).toBe(5);
+    expect(CellType.MOVER).toBe(6);
+  });
+
+  it('SENSOR/NEURON/MOVER are living (metabolize + age), MEAT is not', () => {
+    expect(isLiving(CellType.SENSOR)).toBe(true);
+    expect(isLiving(CellType.NEURON)).toBe(true);
+    expect(isLiving(CellType.MOVER)).toBe(true);
+    expect(isLiving(CellType.MEAT)).toBe(false);
+  });
+
+  it('isNeural is true only for SENSOR/NEURON/MOVER', () => {
+    expect(isNeural(CellType.SENSOR)).toBe(true);
+    expect(isNeural(CellType.NEURON)).toBe(true);
+    expect(isNeural(CellType.MOVER)).toBe(true);
+    expect(isNeural(CellType.PHOTO)).toBe(false);
+    expect(isNeural(CellType.MOTILE)).toBe(false);
+    expect(isNeural(CellType.MEAT)).toBe(false);
+  });
+
+  it('neural cells are NOT edible (only PHOTO/MEAT are prey)', () => {
+    expect(isEdibleBy(CellType.DIGESTIVE, CellType.NEURON)).toBe(false);
+    expect(isEdibleBy(CellType.MOTILE, CellType.MOVER)).toBe(false);
+    expect(isEdibleBy(CellType.MOTILE, CellType.SENSOR)).toBe(false);
   });
 });
