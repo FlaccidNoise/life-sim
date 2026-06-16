@@ -20,6 +20,11 @@ export function wrapDelta(d: number, span: number): number {
   return d;
 }
 
+/** Interpolate from `a` to `b` by `t` along the shortest toroidal path. */
+export function lerpWrapped(a: number, b: number, t: number, span: number): number {
+  return wrap(a + wrapDelta(b - a, span) * t, span);
+}
+
 /** Euclidean distance between two points on a toroidal plane. */
 export function torusDist(
   ax: number,

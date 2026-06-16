@@ -1,4 +1,5 @@
 import { type World } from '../core/sim/world';
+import { lerpWrapped } from '../core/math/vec2';
 
 export interface Camera {
   /** World-space point at the centre of the viewport. */
@@ -117,20 +118,33 @@ export class Renderer {
     this.gl.viewport(0, 0, width, height);
   }
 
-  render(world: World, camera: Camera): void {
+  /**
+   * Draw the live cells. Positions are interpolated `alpha` of the way from the
+   * previous physics step (`prevX/prevY`) to the current one (along the shortest
+   * toroidal path), so motion is smooth at any sim speed. `alpha` ∈ [0, 1].
+   */
+  render(
+    world: World,
+    camera: Camera,
+    prevX: Float64Array,
+    prevY: Float64Array,
+    alpha: number,
+  ): void {
     const gl = this.gl;
     const f = world.cells.fields;
     const live = world.liveIndices;
     const n = world.liveCount;
     const data = this.data;
+    const w = world.config.worldWidth;
+    const h = world.config.worldHeight;
 
     for (let k = 0; k < n; k++) {
       const i = live[k]!;
       const vx = f.velX[i]!;
       const vy = f.velY[i]!;
       const o = k * 3;
-      data[o] = f.posX[i]!;
-      data[o + 1] = f.posY[i]!;
+      data[o] = lerpWrapped(prevX[i]!, f.posX[i]!, alpha, w);
+      data[o + 1] = lerpWrapped(prevY[i]!, f.posY[i]!, alpha, h);
       data[o + 2] = Math.sqrt(vx * vx + vy * vy);
     }
 

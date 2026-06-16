@@ -8,9 +8,16 @@ const hud = document.getElementById('hud');
 const config = defaultConfig({ maxCells: 100_000 });
 const world = new World(config);
 world.spawn(100_000);
+const f = world.cells.fields;
 
 const renderer = new Renderer(canvas, config.maxCells, config.cellRadius * 2);
 const camera: Camera = { x: config.worldWidth / 2, y: config.worldHeight / 2, scale: 1 };
+
+// Previous-step position snapshots, for render interpolation (smooth motion at any speed).
+const prevX = new Float64Array(config.maxCells);
+const prevY = new Float64Array(config.maxCells);
+prevX.set(f.posX);
+prevY.set(f.posY);
 
 function fit(): void {
   canvas.width = window.innerWidth;
@@ -22,8 +29,16 @@ function fit(): void {
 window.addEventListener('resize', fit);
 fit();
 
+// Fixed-timestep state.
+let speed = 0.25; // physics ticks advanced per rendered frame (fractional = slow-mo)
 let paused = false;
-let stepsPerFrame = 1;
+let accumulator = 0;
+const MAX_STEPS = 64;
+
+function snapshot(): void {
+  prevX.set(f.posX);
+  prevY.set(f.posY);
+}
 
 // Pan with mouse drag.
 let dragging = false;
@@ -53,17 +68,20 @@ canvas.addEventListener(
   { passive: false },
 );
 
-// Time controls: space = pause, '.' = step, ']' / '[' = faster / slower.
+// Time controls: space = pause, '.' = single step, ']' / '[' = faster / slower.
 window.addEventListener('keydown', (e) => {
   if (e.key === ' ') {
     paused = !paused;
+    accumulator = 0;
     e.preventDefault();
   } else if (e.key === '.') {
+    snapshot();
     world.tick();
+    snapshot(); // prev == cur → render the stepped state statically
   } else if (e.key === ']') {
-    stepsPerFrame = Math.min(64, stepsPerFrame * 2);
+    speed = Math.min(16, speed * 1.5);
   } else if (e.key === '[') {
-    stepsPerFrame = Math.max(1, Math.floor(stepsPerFrame / 2));
+    speed = Math.max(0.02, speed / 1.5);
   }
 });
 
@@ -75,15 +93,25 @@ function updateHud(): void {
   if (!hud) return;
   hud.textContent =
     `cells ${world.cells.aliveCount} | tick ${world.tickCount} | ${fps} fps | ` +
-    `${stepsPerFrame}x${paused ? ' (paused)' : ''} | zoom ${camera.scale.toFixed(3)} | ` +
+    `speed ${speed.toFixed(2)}x${paused ? ' (paused)' : ''} | zoom ${camera.scale.toFixed(3)} | ` +
     `shared ${world.cells.soa.shared}`;
 }
 
 function loop(): void {
   if (!paused) {
-    for (let s = 0; s < stepsPerFrame; s++) world.tick();
+    accumulator += speed;
+    let steps = 0;
+    while (accumulator >= 1 && steps < MAX_STEPS) {
+      snapshot();
+      world.tick();
+      accumulator -= 1;
+      steps++;
+    }
+    if (steps === MAX_STEPS) accumulator = 0; // drop backlog rather than spiral
   }
-  renderer.render(world, camera);
+
+  const alpha = paused ? 1 : Math.min(1, accumulator);
+  renderer.render(world, camera, prevX, prevY, alpha);
 
   frames++;
   const now = performance.now();
@@ -98,3 +126,17 @@ function loop(): void {
 
 updateHud();
 requestAnimationFrame(loop);
+
+// Debug/automation handle — also handy from the browser console for live poking.
+interface SimHandle {
+  world: World;
+  camera: Camera;
+  setSpeed: (s: number) => void;
+}
+(globalThis as unknown as { sim: SimHandle }).sim = {
+  world,
+  camera,
+  setSpeed: (s) => {
+    speed = s;
+  },
+};
