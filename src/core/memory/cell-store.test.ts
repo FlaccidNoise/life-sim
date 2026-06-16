@@ -38,6 +38,17 @@ describe('CellStore', () => {
     expect(s.validate(i, gen)).toBe(false); // stale: freed (and gen bumped)
   });
 
+  it('exposes fields with their declared element types (Float64 positions)', () => {
+    const s = new CellStore(4, false);
+    // Guards the `as unknown as CellArrays` cast: positions must stay Float64
+    // (precision invariant), and the typed view must match the SoA layout.
+    expect(s.fields.posX).toBeInstanceOf(Float64Array);
+    expect(s.fields.posY).toBeInstanceOf(Float64Array);
+    expect(s.fields.velX).toBeInstanceOf(Float32Array);
+    expect(s.fields.cellType).toBeInstanceOf(Uint8Array);
+    expect(s.fields.organismId).toBeInstanceOf(Uint32Array);
+  });
+
   it('stores per-slot field values independently', () => {
     const s = new CellStore(4, false);
     const i = s.alloc();

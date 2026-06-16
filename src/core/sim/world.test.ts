@@ -37,6 +37,21 @@ describe('World', () => {
     expect(w.cells.fields.age[0]).toBe(2);
   });
 
+  it('keeps all live cells within the toroidal bounds after many ticks', () => {
+    const cfg = defaultConfig({ maxCells: 500, worldWidth: 256, worldHeight: 256 });
+    const w = new World(cfg, false);
+    w.spawn(500);
+    for (let i = 0; i < 50; i++) w.tick();
+    const f = w.cells.fields;
+    for (let k = 0; k < w.liveCount; k++) {
+      const i = w.liveIndices[k]!;
+      expect(f.posX[i]).toBeGreaterThanOrEqual(0);
+      expect(f.posX[i]).toBeLessThan(256);
+      expect(f.posY[i]).toBeGreaterThanOrEqual(0);
+      expect(f.posY[i]).toBeLessThan(256);
+    }
+  });
+
   it('separates two overlapping cells over ticks', () => {
     const w = new World(
       defaultConfig({

@@ -30,6 +30,14 @@ export class SpatialHash {
     this.height = height;
     this.cols = Math.max(1, Math.floor(width / cellSize));
     this.rows = Math.max(1, Math.floor(height / cellSize));
+    // The toroidal 3×3 neighbour iteration aliases a bucket onto itself (double-
+    // counting forces) if there are fewer than 3 columns/rows. Refuse such grids.
+    if (this.cols < 3 || this.rows < 3) {
+      throw new Error(
+        `SpatialHash needs >=3 columns and rows, got ${this.cols}x${this.rows} ` +
+          `(world ${width}x${height}, cellSize ${cellSize}). Use a larger world or smaller cellSize.`,
+      );
+    }
     this.invCellW = this.cols / width;
     this.invCellH = this.rows / height;
 
