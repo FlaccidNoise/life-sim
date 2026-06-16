@@ -1,7 +1,7 @@
 import { type SpatialHash } from '../spatial/spatial-hash';
 import { type LightField } from '../environment/light-field';
 import { type CellArrays } from '../memory/cell-store';
-import { CellType, isEdibleBy } from './types';
+import { CellType, isEdibleBy, isNeural } from './types';
 import { wrapDelta } from '../math/vec2';
 
 /**
@@ -13,7 +13,9 @@ import { wrapDelta } from '../math/vec2';
  *   neighbour found within (ri+rj), scanned in fixed toroidal 3×3 bucket order
  *   (dy=-1..1, dx=-1..1) then ascending within-bucket order — deterministic, but
  *   NOT necessarily the lowest-slot prey. Keeps digestEfficiency of what it takes.
- * - All living cells pay basalCost · area + moveCost · thrust². MEAT loses meatDecay per tick.
+ * - All living cells pay basalCost · area + moveCost · thrust²; SENSOR/NEURON/MOVER
+ *   additionally pay neuralCost per tick (the brain isn't free, §4.5; per-synapse cost
+ *   deferred). MEAT loses meatDecay per tick.
  * Death and division happen later (lifecycle); this step only moves energy/light.
  */
 export function metabolize(
@@ -29,6 +31,7 @@ export function metabolize(
   basalCost: number,
   meatDecay: number,
   moveCost: number,
+  neuralCost: number,
 ): void {
   const { cols, rows, width, height, sorted, bucketStart } = hash;
 
@@ -86,8 +89,9 @@ export function metabolize(
       }
     }
 
-    // basal cost for all living cells, plus movement cost ∝ thrust² (0 for non-movers)
+    // basal (all living) + movement (∝ thrust²; 0 for non-movers) + neural (SENSOR/NEURON/MOVER)
     const th = f.thrust[i]!;
-    f.energy[i] = f.energy[i]! - basalCost * area - moveCost * th * th;
+    const neural = isNeural(type) ? neuralCost : 0;
+    f.energy[i] = f.energy[i]! - basalCost * area - moveCost * th * th - neural;
   }
 }
