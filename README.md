@@ -6,7 +6,9 @@ with neuron-cell neural networks, developmental genomes, and evolution driven
 by an energy economy.
 
 ## Status
-Milestone **M0 — Foundation** (see `docs/superpowers/plans/2026-06-15-m0-foundation.md`).
+Milestone **M1 — Particle Core** complete: 100k soft cells repelling in a toroidal
+world, WebGL2 viewer with pan/zoom + time controls (~65 fps). Next: M2 (metabolism).
+Plans in `docs/superpowers/plans/`.
 
 ## Docs
 - Design spec: `docs/superpowers/specs/2026-06-15-life-sim-design.md`

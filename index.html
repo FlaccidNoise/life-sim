@@ -4,9 +4,30 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>life-sim</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        overflow: hidden;
+        background: #0a0e14;
+      }
+      #hud {
+        position: fixed;
+        top: 8px;
+        left: 8px;
+        font: 12px monospace;
+        color: #9fe;
+        background: rgba(0, 0, 0, 0.4);
+        padding: 4px 8px;
+        border-radius: 4px;
+        white-space: pre;
+        pointer-events: none;
+      }
+    </style>
   </head>
   <body>
-    <pre id="status">booting…</pre>
+    <canvas id="view"></canvas>
+    <div id="hud"></div>
     <script type="module" src="/src/app/main.ts"></script>
   </body>
 </html>
