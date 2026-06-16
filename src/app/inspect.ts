@@ -2,7 +2,7 @@ import { type World } from '../core/sim/world';
 import { type Camera } from '../render/webgl-renderer';
 import { wrapDelta } from '../core/math/vec2';
 
-const NAMES = ['PHOTO', 'DIGESTIVE', 'MEAT', 'MOTILE'];
+const NAMES = ['PHOTO', 'DIGESTIVE', 'MEAT', 'MOTILE', 'SENSOR', 'NEURON', 'MOVER'];
 
 /** Pick the nearest live cell to a screen click and render its details. */
 export function inspectAt(
@@ -35,7 +35,9 @@ export function inspectAt(
     return;
   }
   const t = f.cellType[best]!;
+  const act = world.net.actCur[best]!;
+  const neural = t >= 4 ? ` | act ${act.toFixed(3)}` : '';
   panel.textContent =
     `#${best} ${NAMES[t] ?? t} | energy ${f.energy[best]!.toFixed(1)} | ` +
-    `age ${f.age[best]} | pos ${f.posX[best]!.toFixed(0)},${f.posY[best]!.toFixed(0)}`;
+    `age ${f.age[best]} | pos ${f.posX[best]!.toFixed(0)},${f.posY[best]!.toFixed(0)}${neural}`;
 }
