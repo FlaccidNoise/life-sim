@@ -7,6 +7,8 @@ import { FoodOverlay } from '../render/food-overlay';
 import { TelemetryDashboard } from './telemetry';
 import { inspectAt } from './inspect';
 import { mountControls } from './controls';
+import { BrainInspector } from './brain-inspector';
+import { spawnSwimmer } from '../core/sim/critter';
 
 const canvas = document.getElementById('view') as HTMLCanvasElement;
 const hud = document.getElementById('hud');
@@ -14,6 +16,11 @@ const hud = document.getElementById('hud');
 const config = defaultConfig({ maxCells: 100_000 });
 const world = new World(config);
 world.seedLife(20_000);
+
+// M4 demo: a few hand-wired swimmer critters whose brains chase food.
+spawnSwimmer(world, world.config.worldWidth * 0.5, world.config.worldHeight * 0.5, 0);
+spawnSwimmer(world, world.config.worldWidth * 0.5 + 120, world.config.worldHeight * 0.5, Math.PI);
+
 const f = world.cells.fields;
 
 function createRenderer(): Renderer {
@@ -36,6 +43,11 @@ let showLight = false;
 const foodOverlay = new FoodOverlay(renderer.gl, world.food);
 let showFood = false;
 const FOOD_DISPLAY_MAX = 8; // smell scale for the heatmap; tune to taste
+
+// Brain inspector overlay (toggled with `B`): live neuron-cell network of a critter.
+const brainCanvas = document.getElementById('brain') as HTMLCanvasElement;
+const brain = new BrainInspector(brainCanvas);
+let showBrain = false;
 
 // Telemetry dashboard + inspect panel + live economy knobs.
 const dash = new TelemetryDashboard(document.getElementById('telemetry') as HTMLCanvasElement);
@@ -106,6 +118,7 @@ function drawScene(alpha: number): void {
     foodOverlay.render(camera, world.food, FOOD_DISPLAY_MAX, canvas.width, canvas.height);
   }
   renderer.render(world, camera, prevX, prevY, prevGen, alpha);
+  if (showBrain) brain.render(world);
 }
 
 function fit(): void {
@@ -200,6 +213,9 @@ window.addEventListener('keydown', (e) => {
     showLight = !showLight;
   } else if (e.key === 'f' || e.key === 'F') {
     showFood = !showFood;
+  } else if (e.key === 'b' || e.key === 'B') {
+    showBrain = !showBrain;
+    brainCanvas.style.display = showBrain ? 'block' : 'none';
   } else if (e.key === 'c' || e.key === 'C' || e.key === 'Escape') {
     followId = -1;
   }
@@ -219,7 +235,7 @@ function updateHud(): void {
     `light ${showLight ? 'on' : 'off'} | food ${showFood ? 'on' : 'off'}` +
     `${followId >= 0 ? ` | follow #${followId}` : ''}\n` +
     `space pause | . step | [ ] slower/faster | drag pan | wheel zoom | L light | F food | ` +
-    `click inspect/follow | C release`;
+    `B brain | click inspect/follow | C release`;
 }
 
 function loop(): void {
