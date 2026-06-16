@@ -9,11 +9,11 @@ import { wrapDelta } from '../math/vec2';
  * ascending live-slot order. Takes scalar economy params (not Config) to keep the
  * cells/ layer off sim/ (§5.1 DAG), matching computeRepulsion/integrate.
  * - PHOTO: gain = photoGain · localLight · area; depletes the local patch.
- * - DIGESTIVE: extracts up to digestRate from the FIRST edible (PHOTO/MEAT)
+ * - DIGESTIVE/MOTILE: extracts up to digestRate from the FIRST edible (PHOTO/MEAT)
  *   neighbour found within (ri+rj), scanned in fixed toroidal 3×3 bucket order
  *   (dy=-1..1, dx=-1..1) then ascending within-bucket order — deterministic, but
  *   NOT necessarily the lowest-slot prey. Keeps digestEfficiency of what it takes.
- * - All living cells pay basalCost · area. MEAT loses meatDecay per tick.
+ * - All living cells pay basalCost · area + moveCost · thrust². MEAT loses meatDecay per tick.
  * Death and division happen later (lifecycle); this step only moves energy/light.
  */
 export function metabolize(
@@ -28,6 +28,7 @@ export function metabolize(
   digestEfficiency: number,
   basalCost: number,
   meatDecay: number,
+  moveCost: number,
 ): void {
   const { cols, rows, width, height, sorted, bucketStart } = hash;
 
@@ -51,7 +52,7 @@ export function metabolize(
         f.energy[i] = f.energy[i]! + gain;
         light.depleteAt(xi, yi, gain * photoDepletion);
       }
-    } else if (type === CellType.DIGESTIVE) {
+    } else if (type === CellType.DIGESTIVE || type === CellType.MOTILE) {
       const xi = f.posX[i]!;
       const yi = f.posY[i]!;
       const cx = hash.colOf(xi);
@@ -66,7 +67,7 @@ export function metabolize(
           for (let idx = bucketStart[b]!; idx < end; idx++) {
             const j = sorted[idx]!;
             if (j === i) continue;
-            if (!isEdibleBy(CellType.DIGESTIVE, f.cellType[j]!)) continue;
+            if (!isEdibleBy(type, f.cellType[j]!)) continue;
             const ddx = wrapDelta(xi - f.posX[j]!, width);
             const ddy = wrapDelta(yi - f.posY[j]!, height);
             const rsum = ri + f.radius[j]!;
@@ -85,7 +86,8 @@ export function metabolize(
       }
     }
 
-    // basal cost for all living cells
-    f.energy[i] = f.energy[i]! - basalCost * area;
+    // basal cost for all living cells, plus movement cost ∝ thrust² (0 for non-movers)
+    const th = f.thrust[i]!;
+    f.energy[i] = f.energy[i]! - basalCost * area - moveCost * th * th;
   }
 }

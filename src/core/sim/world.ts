@@ -159,6 +159,7 @@ export class World {
       cfg.digestEfficiency,
       cfg.basalCost,
       cfg.meatDecay,
+      0, // moveCost — wired to cfg.moveCost in Task 9
     );
 
     // Age the tick-start live set BEFORE lifecycle. The free-list is LIFO, so a

@@ -56,6 +56,7 @@ describe('metabolism — photosynthesis', () => {
       cfg.digestEfficiency,
       cfg.basalCost,
       cfg.meatDecay,
+      0,
     );
 
     const area = 2 * 2;
@@ -103,6 +104,7 @@ describe('metabolism — digestion', () => {
       cfg.digestEfficiency,
       cfg.basalCost,
       cfg.meatDecay,
+      0,
     );
 
     const area = 3 * 3;
@@ -143,6 +145,7 @@ describe('metabolism — digestion', () => {
       cfg.digestEfficiency,
       cfg.basalCost,
       cfg.meatDecay,
+      0,
     );
     expect(f.energy[a]).toBeCloseTo(100 - cfg.basalCost * 9, 4);
   });
@@ -177,6 +180,7 @@ describe('metabolism — basal cost and meat decay', () => {
       cfg.digestEfficiency,
       cfg.basalCost,
       cfg.meatDecay,
+      0,
     );
     expect(f.energy[m]).toBeCloseTo(20 - cfg.meatDecay, 4);
   });
@@ -209,7 +213,63 @@ describe('metabolism — basal cost and meat decay', () => {
       cfg.digestEfficiency,
       cfg.basalCost,
       cfg.meatDecay,
+      0,
     );
     expect(f.energy[big]).toBeCloseTo(100 - cfg.basalCost * 16, 4);
+  });
+});
+
+describe('metabolism — M3 movement cost & MOTILE digestion', () => {
+  it('charges moveCost·thrust² to a moving cell on top of basal', () => {
+    const store = new CellStore(8, false);
+    const f = store.fields;
+    const i = store.alloc();
+    f.posX[i] = 500;
+    f.posY[i] = 500;
+    f.radius[i] = 2; // area 4
+    f.mass[i] = 1;
+    f.energy[i] = 100;
+    f.cellType[i] = CellType.MOTILE;
+    f.thrust[i] = 3;
+    const live = new Uint32Array([i]);
+    const lf = new LightField(16, 16, 1024, 1024);
+    lf.cap.fill(0);
+    lf.light.fill(0); // no photosynthesis
+    const hash = buildHash(store, live, 1, 1024, 1024, 12);
+    // photoGain 0, photoDepletion 0, digestRate 7, eff 0.7, basal 0.01, meatDecay 0.5, moveCost 0.02
+    metabolize(live, 1, f, hash, lf, 0, 0, 7, 0.7, 0.01, 0.5, 0.02);
+    // energy = 100 − basal(0.01·4) − moveCost(0.02·3²) = 100 − 0.04 − 0.18
+    expect(f.energy[i]).toBeCloseTo(100 - 0.04 - 0.18, 4);
+  });
+
+  it('a MOTILE eats an adjacent PHOTO like a digestive', () => {
+    const store = new CellStore(8, false);
+    const f = store.fields;
+    const a = store.alloc(); // motile — lower slot, eats first
+    const b = store.alloc(); // photo prey, adjacent (within ri+rj)
+    f.posX[a] = 500;
+    f.posY[a] = 500;
+    f.radius[a] = 3;
+    f.mass[a] = 1;
+    f.energy[a] = 100;
+    f.cellType[a] = CellType.MOTILE;
+    f.thrust[a] = 0;
+    f.posX[b] = 503;
+    f.posY[b] = 500;
+    f.radius[b] = 3;
+    f.mass[b] = 1;
+    f.energy[b] = 50;
+    f.cellType[b] = CellType.PHOTO;
+    const live = new Uint32Array([a, b]);
+    const lf = new LightField(16, 16, 1024, 1024);
+    lf.cap.fill(0);
+    lf.light.fill(0); // isolate digestion (prey photosynthesises 0)
+    const hash = buildHash(store, live, 2, 1024, 1024, 12);
+    metabolize(live, 2, f, hash, lf, 0, 0, 7, 0.7, 0.01, 0.5, 0.02);
+    const area = 9;
+    // MOTILE extracts min(7,50)=7, keeps 0.7·7=4.9, pays basal 0.01·9, move 0.
+    expect(f.energy[a]).toBeCloseTo(100 + 7 * 0.7 - 0.01 * area, 4);
+    // PHOTO prey loses the 7 eaten, gains 0 light, then pays its OWN basal 0.01·9.
+    expect(f.energy[b]).toBeCloseTo(50 - 7 - 0.01 * area, 4);
   });
 });
