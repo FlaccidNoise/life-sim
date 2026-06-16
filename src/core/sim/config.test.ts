@@ -61,7 +61,7 @@ describe('M3 config', () => {
 
   it('round-trips the new fields through serialize/deserialize', () => {
     const c = defaultConfig({ thrustGain: 99, foodDecay: 0.123 });
-    const back = JSON.parse(JSON.stringify(c));
+    const back = deserializeConfig(serializeConfig(c));
     expect(back.thrustGain).toBe(99);
     expect(back.foodDecay).toBe(0.123);
   });
