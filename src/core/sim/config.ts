@@ -83,6 +83,19 @@ export interface Config {
   moveCost: number;
   /** Fraction of initial cells spawned as MOTILE (rest split photo/digestive). */
   initialMotileFraction: number;
+
+  // Neural network (§4.6, §5.2). maxSynapses is a buffer-resize knob (restart-required);
+  // overflow policy is refuse-new (addSynapse returns -1). The rest are live knobs.
+  /** Synapse pool capacity. Not derivable from maxCells (§5.2); restart-required. */
+  maxSynapses: number;
+  /** Energy per tick charged to each SENSOR/NEURON/MOVER cell (per-synapse cost deferred). */
+  neuralCost: number;
+  /** Radians per tick a MOVER turns per unit of turn-neuron activation. */
+  turnScale: number;
+  /** Thrust force per unit of thrust-neuron activation. */
+  thrustScale: number;
+  /** Baseline thrust added to thrustScale·activation before clamping (a cruise term). */
+  thrustBias: number;
 }
 
 export function defaultConfig(overrides: Partial<Config> = {}): Config {
@@ -144,6 +157,12 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     cruiseThrust: 0.5, // gentle roam so a motile in a flat zone explores until it picks up a scent
     moveCost: 0.02, // at maxThrust → ~0.72 energy/tick; affordable once it reaches food
     initialMotileFraction: 0.1,
+
+    maxSynapses: 4096, // ample for hand-wired M4 critters; grows in M6 (genome wiring)
+    neuralCost: 0.01, // small — a brain isn't free, but the M4 demo critter (provisioned) survives
+    turnScale: 0.3, // |a_turn|≤1 → ≤0.3 rad/tick ≈ 17°/tick: curves toward food, no snapping
+    thrustScale: 3, // a_thrust∈(−1,1) → ±3, plus bias
+    thrustBias: 2, // baseline cruise so the critter keeps moving while searching
 
     ...overrides,
   };
