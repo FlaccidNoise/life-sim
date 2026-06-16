@@ -20,9 +20,12 @@ export interface LifecycleResult {
  *              seeded jitter (stateless hashFloat3 → reproducible, order-free).
  * Children are NOT added to `live`; they first act next tick.
  *
- * Neural cells (SENSOR/NEURON/MOVER) are exempt from passes 1 and 3: the M4
- * hand-wired critter topology must never die or divide (M5 owns organism-level
- * lifecycle). Their slots are stable for the whole run, so synapses never dangle.
+ * Neural cells (SENSOR/NEURON/MOVER) AND any bonded organism cell
+ * (`organismId !== 0`) are exempt from passes 1 and 3: M5 organisms are
+ * hand-built clusters whose cells must never die or divide at the cell level
+ * (M6 owns organism-level lifecycle/reproduction). Their slots are stable for
+ * the whole run, so bonds and synapses never dangle. Free cells (`organismId
+ * === 0` — the M2/M3 ecosystem) are unaffected and still die/divide normally.
  */
 export function lifecycle(
   live: Uint32Array,
@@ -47,7 +50,7 @@ export function lifecycle(
     const i = live[k]!;
     const type = f.cellType[i]!;
     if (isLiving(type)) {
-      if (isNeural(type)) continue; // M4: hand-wired critter cells never die (M5 organism lifecycle)
+      if (isNeural(type) || f.organismId[i]! !== 0) continue; // M5: organism cells managed by organism lifecycle (M6)
       if (f.energy[i]! <= 0) {
         f.cellType[i] = CellType.MEAT;
         f.energy[i] = f.mass[i]! * meatEnergyOnDeath;
@@ -66,7 +69,7 @@ export function lifecycle(
     const i = live[k]!;
     const type = f.cellType[i]!;
     if (!isLiving(type)) continue;
-    if (isNeural(type)) continue; // M4: hand-wired topology must not divide (M5 reproduces organisms)
+    if (isNeural(type) || f.organismId[i]! !== 0) continue; // M5: organism cells don't divide (M6 reproduces organisms)
     if (f.energy[i]! < divideThreshold) continue;
     const child = store.alloc();
     if (child < 0) break; // at capacity — refuse-new
