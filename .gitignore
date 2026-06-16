@@ -4,3 +4,5 @@ coverage/
 .vite/
 *.log
 .DS_Store
+.playwright-mcp/
+m1-100k-*.png
