@@ -4,6 +4,7 @@ import { wrapDelta } from '../core/math/vec2';
 import { Renderer, type Camera } from '../render/webgl-renderer';
 import { LightOverlay } from '../render/light-overlay';
 import { FoodOverlay } from '../render/food-overlay';
+import { BondOverlay } from '../render/bond-overlay';
 import { TelemetryDashboard } from './telemetry';
 import { inspectAt } from './inspect';
 import { mountControls } from './controls';
@@ -49,6 +50,12 @@ let showLight = false;
 const foodOverlay = new FoodOverlay(renderer.gl, world.food);
 let showFood = false;
 const FOOD_DISPLAY_MAX = 8; // smell scale for the heatmap; tune to taste
+
+// Bond-network + energy-flow overlay (toggled with `O`): a 2D canvas layered over the
+// WebGL viewport, drawing each live bond as a segment coloured by its energy gap.
+const bondsCanvas = document.getElementById('bonds') as HTMLCanvasElement;
+const bondOverlay = new BondOverlay(bondsCanvas);
+let showBonds = false;
 
 // Brain inspector overlay (toggled with `B`): live neuron-cell network of a critter.
 const brainCanvas = document.getElementById('brain') as HTMLCanvasElement;
@@ -127,6 +134,9 @@ function drawScene(alpha: number): void {
     foodOverlay.render(camera, world.food, FOOD_DISPLAY_MAX, canvas.width, canvas.height);
   }
   renderer.render(world, camera, prevX, prevY, prevGen, alpha);
+  if (showBonds) {
+    bondOverlay.render(world, camera);
+  }
   if (showBrain) {
     // Scope to the followed cell's organism if it's a neural critter, else the demo critter.
     const followOrg =
@@ -141,6 +151,7 @@ function fit(): void {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
   renderer.resize(canvas.width, canvas.height);
+  bondOverlay.resize(canvas.width, canvas.height);
   camera.scale =
     Math.min(canvas.width / config.worldWidth, canvas.height / config.worldHeight) * 0.95;
 }
@@ -229,6 +240,9 @@ window.addEventListener('keydown', (e) => {
     showLight = !showLight;
   } else if (e.key === 'f' || e.key === 'F') {
     showFood = !showFood;
+  } else if (e.key === 'o' || e.key === 'O') {
+    showBonds = !showBonds;
+    bondsCanvas.style.display = showBonds ? 'block' : 'none';
   } else if (e.key === 'b' || e.key === 'B') {
     showBrain = !showBrain;
     brainCanvas.classList.toggle('hidden', !showBrain);
@@ -253,7 +267,7 @@ function updateHud(): void {
     `photo ${m.photo}  dig ${m.digestive}  motile ${m.motile}  meat ${m.meat}` +
     `   ·   ⌀energy ${m.meanEnergy.toFixed(0)}  ·  diversity ${m.diversity.toFixed(3)}\n` +
     `brain: ${net.liveNeuronCount} neurons · ${net.liveSynapseCount} synapses` +
-    `   ·   light ${showLight ? 'on' : 'off'}  smell ${showFood ? 'on' : 'off'}` +
+    `   ·   light ${showLight ? 'on' : 'off'}  smell ${showFood ? 'on' : 'off'}  bonds ${showBonds ? 'on' : 'off'}` +
     `${followId >= 0 ? `  ·  follow #${followId}` : ''}   ·   ${legend && !legend.classList.contains('hidden') ? 'H hide legend' : 'H legend'}`;
 }
 

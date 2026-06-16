@@ -206,6 +206,11 @@
   </head>
   <body>
     <canvas id="view"></canvas>
+    <canvas
+      id="bonds"
+      style="position: absolute; left: 0; top: 0; pointer-events: none; display: none"
+      aria-label="bond network and energy-flow overlay"
+    ></canvas>
     <div id="hud" class="panel" role="status" aria-label="simulation status"></div>
     <canvas
       id="telemetry"
@@ -252,6 +257,10 @@
         <span class="sw wedge" style="border-left: 11px solid #f2d94d"></span>MOVER — critter body;
         driven by its neurons
       </div>
+      <div class="row">
+        <span class="sw" style="background: #50c88c"></span>BOND (O) — link between cells; brighter
+        = more energy flowing
+      </div>
       <hr />
       <div class="note">
         Edible cells emit a diffusing <b>smell</b>; movers &amp; critters climb its gradient
@@ -269,7 +278,8 @@
       <div>
         <b>Keys:</b>
         <span class="note"
-          >L light · F smell · B brain · H legend · click follow · space pause · [ ] speed</span
+          >L light · F smell · O bonds · B brain · H legend · click follow · space pause · [ ]
+          speed</span
         >
       </div>
     </aside>
