@@ -74,3 +74,62 @@ describe('lifecycle — death and decay', () => {
     expect(out.deaths).toBe(0); // decay-removal is not a "death" event
   });
 });
+
+describe('lifecycle — division', () => {
+  it('a cell at/above threshold clones a same-type child, splitting energy 50/50', () => {
+    const cfg = defaultConfig({ divideThreshold: 200, divideCost: 10 });
+    const store = new CellStore(8, false);
+    const f = store.fields;
+    const i = store.alloc();
+    f.cellType[i] = CellType.DIGESTIVE;
+    f.energy[i] = 250;
+    f.mass[i] = 1;
+    f.radius[i] = 4;
+    f.posX[i] = 100;
+    f.posY[i] = 100;
+    const live = new Uint32Array([i]);
+
+    run(live, 1, store, cfg, 5);
+
+    expect(out.births).toBe(1);
+    expect(store.aliveCount).toBe(2);
+    const half = (250 - 10) * 0.5;
+    expect(f.energy[i]).toBeCloseTo(half, 4);
+    let child = -1;
+    for (let s = 0; s < store.capacity; s++) if (s !== i && store.isAlive(s)) child = s;
+    expect(child).toBeGreaterThanOrEqual(0);
+    expect(f.cellType[child]).toBe(CellType.DIGESTIVE);
+    expect(f.energy[child]).toBeCloseTo(half, 4);
+    expect(f.age[child]).toBe(0);
+  });
+
+  it('does not divide below threshold', () => {
+    const cfg = defaultConfig({ divideThreshold: 200 });
+    const store = new CellStore(8, false);
+    const f = store.fields;
+    const i = store.alloc();
+    f.cellType[i] = CellType.PHOTO;
+    f.energy[i] = 150;
+    f.mass[i] = 1;
+    f.radius[i] = 4;
+    const live = new Uint32Array([i]);
+    run(live, 1, store, cfg, 0);
+    expect(out.births).toBe(0);
+    expect(store.aliveCount).toBe(1);
+  });
+
+  it('refuses to divide when no free slot remains (no allocation, no crash)', () => {
+    const cfg = defaultConfig({ divideThreshold: 100, maxCells: 1 });
+    const store = new CellStore(1, false);
+    const f = store.fields;
+    const i = store.alloc(); // last and only slot
+    f.cellType[i] = CellType.PHOTO;
+    f.energy[i] = 500;
+    f.mass[i] = 1;
+    f.radius[i] = 4;
+    const live = new Uint32Array([i]);
+    run(live, 1, store, cfg, 0);
+    expect(out.births).toBe(0);
+    expect(f.energy[i]).toBe(500); // untouched
+  });
+});
