@@ -42,3 +42,27 @@ describe('Config', () => {
     expect(c.initialPhotoFraction).toBeLessThanOrEqual(1);
   });
 });
+
+describe('M3 config', () => {
+  it('exposes food-field + sense/move knobs with sane defaults', () => {
+    const c = defaultConfig();
+    expect(c.foodGridCols).toBe(64);
+    expect(c.foodGridRows).toBe(64);
+    expect(c.foodDiffuse).toBeGreaterThan(0);
+    expect(c.foodDiffuse).toBeLessThanOrEqual(0.25);
+    expect(c.foodDecay).toBeGreaterThanOrEqual(0);
+    expect(c.foodDecay).toBeLessThan(1);
+    expect(c.maxThrust).toBeGreaterThan(0);
+    expect(c.moveCost).toBeGreaterThan(0);
+    expect(c.initialMotileFraction).toBeGreaterThanOrEqual(0);
+    // photo + motile fractions must leave room for digestives
+    expect(c.initialPhotoFraction + c.initialMotileFraction).toBeLessThanOrEqual(1);
+  });
+
+  it('round-trips the new fields through serialize/deserialize', () => {
+    const c = defaultConfig({ thrustGain: 99, foodDecay: 0.123 });
+    const back = JSON.parse(JSON.stringify(c));
+    expect(back.thrustGain).toBe(99);
+    expect(back.foodDecay).toBe(0.123);
+  });
+});
