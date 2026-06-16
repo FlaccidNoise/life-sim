@@ -8,8 +8,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "NODE_OPTIONS=--expose-gc vitest run",
+    "test:watch": "NODE_OPTIONS=--expose-gc vitest",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "headless": "tsx src/headless/run.ts"
