@@ -18,3 +18,5 @@ full design rationale lives in `docs/superpowers/specs/`.
 - 2026-06-15: Neuron-cells wire into an evolvable recurrent network → [simulation-design.md](simulation-design.md)
 - 2026-06-15: Developmental (seed cell + division program) genome → [simulation-design.md](simulation-design.md)
 - 2026-06-15: No live-run determinism; RNG seedable for tests → [simulation-design.md](simulation-design.md)
+- 2026-06-16: M2 trophic scope = full food web (PHOTO/DIGESTIVE/MEAT); digestive cells feed passively (no movement pre-M3) → [../superpowers/plans/2026-06-16-m2-metabolism.md](../superpowers/plans/2026-06-16-m2-metabolism.md)
+- 2026-06-16: M2 reproduction = per-cell clone division, 50/50 energy split, organismId stays 0 (interim; organism-level maternal provisioning per spec §4.5 deferred to M5/M6) → [../superpowers/plans/2026-06-16-m2-metabolism.md](../superpowers/plans/2026-06-16-m2-metabolism.md)
