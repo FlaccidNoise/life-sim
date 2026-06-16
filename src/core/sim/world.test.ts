@@ -80,18 +80,21 @@ describe('World', () => {
 });
 
 describe('World M2 metabolism integration', () => {
-  it('seeds a PHOTO/DIGESTIVE mix by initialPhotoFraction', () => {
+  it('seeds a PHOTO/DIGESTIVE/MOTILE mix by initialPhotoFraction', () => {
     const w = new World(defaultConfig({ maxCells: 1000, initialPhotoFraction: 0.8 }), false);
     w.seedLife(1000);
     let photo = 0;
     let dig = 0;
+    let motile = 0;
     for (let i = 0; i < w.cells.capacity; i++) {
       if (!w.cells.isAlive(i)) continue;
       if (w.cells.fields.cellType[i] === CellType.PHOTO) photo++;
       else if (w.cells.fields.cellType[i] === CellType.DIGESTIVE) dig++;
+      else if (w.cells.fields.cellType[i] === CellType.MOTILE) motile++;
     }
     expect(photo).toBe(800);
-    expect(dig).toBe(200);
+    expect(dig).toBe(100); // 1000 − 800 photo − 100 motile
+    expect(motile).toBe(100); // initialMotileFraction 0.1
   });
 
   it('ticks without error and updates metrics + light field', () => {

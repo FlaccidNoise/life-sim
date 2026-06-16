@@ -80,6 +80,10 @@ export function lifecycle(
     f.genomeRef[child] = 0;
     f.brainRef[child] = 0;
     f.age[child] = 0;
+    f.heading[child] = f.heading[i]!; // inherit parent heading (not a garbage recycled angle)
+    f.senseX[child] = 0;
+    f.senseY[child] = 0;
+    f.thrust[child] = 0;
     births++;
   }
 

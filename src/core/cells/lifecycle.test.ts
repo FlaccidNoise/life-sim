@@ -132,4 +132,29 @@ describe('lifecycle — division', () => {
     expect(out.births).toBe(0);
     expect(f.energy[i]).toBe(500); // untouched
   });
+
+  it("a division child does not inherit a recycled slot's stale thrust/heading", () => {
+    const store = new CellStore(8, false);
+    const f = store.fields;
+    const corpse = store.alloc(); // slot 0 — decays & frees this tick
+    const parent = store.alloc(); // slot 1 — divides this tick
+    f.cellType[corpse] = CellType.MEAT;
+    f.energy[corpse] = 0; // ≤0 MEAT → freed in pass 2
+    f.mass[corpse] = 1;
+    f.thrust[corpse] = 9; // STALE value the LIFO free-list would hand to the child
+    f.heading[corpse] = 2.5;
+    f.cellType[parent] = CellType.MOTILE;
+    f.energy[parent] = 1000;
+    f.mass[parent] = 1;
+    f.radius[parent] = 6;
+    f.posX[parent] = 100;
+    f.posY[parent] = 100;
+    f.heading[parent] = 0.5;
+    const live = new Uint32Array([corpse, parent]);
+    const out = { births: 0, deaths: 0 };
+    lifecycle(live, 2, store, 1, 256, 256, 30, 100 /*divideThreshold*/, 10, 6, 0, out);
+    // The child recycles slot 0 (LIFO). It must carry thrust=0 and the PARENT's heading.
+    expect(f.thrust[0]).toBe(0);
+    expect(f.heading[0]).toBeCloseTo(0.5, 6);
+  });
 });
