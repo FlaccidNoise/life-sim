@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { World } from './world';
 import { defaultConfig } from './config';
+import { CellType } from '../cells/types';
 
 // Requires --expose-gc (passed via NODE_OPTIONS in the package.json "test" script).
 const gc = (globalThis as { gc?: () => void }).gc;
@@ -17,6 +18,7 @@ describe('zero-allocation hot loop', () => {
       false,
     );
     w.spawn(50_000);
+    w.spawn(2_000, CellType.MOTILE); // exercise SENSE/ACT/thrust/food deposit in the hot loop
 
     for (let i = 0; i < 50; i++) w.tick(); // warm up JIT
     gc();
@@ -28,5 +30,9 @@ describe('zero-allocation hot loop', () => {
 
     const growthKb = (after - before) / 1024;
     expect(growthKb).toBeLessThan(512); // generous margin; tick() allocates nothing
+
+    // The food path must actually run: with edible cells seeded, the smell field is
+    // non-zero somewhere. Guards against a regression that no-ops the deposit.
+    expect(w.food.field.some((v) => v > 0)).toBe(true);
   }, 30_000); // 50k cells × 550 ticks through the full M3 path exceeds vitest's 5s default
 });
