@@ -2,7 +2,7 @@ import { type World } from '../core/sim/world';
 import { type Camera } from '../render/webgl-renderer';
 import { wrapDelta } from '../core/math/vec2';
 
-const NAMES = ['PHOTO', 'DIGESTIVE', 'MEAT'];
+const NAMES = ['PHOTO', 'DIGESTIVE', 'MEAT', 'MOTILE'];
 
 /** Pick the nearest live cell to a screen click and render its details. */
 export function inspectAt(

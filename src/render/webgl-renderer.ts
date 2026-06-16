@@ -12,26 +12,41 @@ export interface Camera {
 const VERT = `#version 300 es
 layout(location=0) in vec2 a_pos;
 layout(location=1) in float a_type;
+layout(location=2) in float a_heading;
 uniform vec2 u_offset;
 uniform float u_scale;
 uniform vec2 u_res;
 uniform float u_point;
 out float v_type;
+out float v_heading;
 void main() {
   vec2 screen = (a_pos - u_offset) * u_scale;
   vec2 clip = screen / (u_res * 0.5);
   gl_Position = vec4(clip.x, -clip.y, 0.0, 1.0);
   gl_PointSize = clamp(u_point * u_scale, 1.0, 64.0);
   v_type = a_type;
+  v_heading = a_heading;
 }`;
 
 const FRAG = `#version 300 es
 precision mediump float;
 in float v_type;
+in float v_heading;
 out vec4 frag;
 void main() {
   vec2 c = gl_PointCoord - 0.5;
-  if (dot(c, c) > 0.25) discard;
+  if (v_type > 2.5) {                       // MOTILE — directional wedge
+    // rotate point-coord into heading frame (screen y is down → flip sin)
+    float s = sin(-v_heading), co = cos(-v_heading);
+    vec2 d = vec2(co * c.x - s * c.y, s * c.x + co * c.y);
+    // a triangle pointing +x: inside if behind the tip plane and within the body.
+    // Base kept inside the rotated point-sprite extent: |d| max at the base corner
+    // (d.x=-0.35, |d.y|=0.5575) = 0.658 < 0.707 (=0.5·√2), so no corner is clipped.
+    if (d.x > 0.45 || d.x < -0.35 || abs(d.y) > (0.40 - d.x * 0.45)) discard;
+    frag = vec4(0.30, 0.85, 0.95, 1.0);     // cyan
+    return;
+  }
+  if (dot(c, c) > 0.25) discard;            // disc for the rest
   vec3 col;
   if (v_type < 0.5)       col = vec3(0.30, 0.80, 0.35);  // PHOTO   green
   else if (v_type < 1.5)  col = vec3(0.95, 0.45, 0.20);  // DIGEST  orange-red
@@ -58,7 +73,7 @@ export class Renderer {
   private readonly program: WebGLProgram;
   private readonly vao: WebGLVertexArrayObject;
   private readonly buffer: WebGLBuffer;
-  private readonly data: Float32Array; // interleaved [x, y, cellType] per cell
+  private readonly data: Float32Array; // interleaved [x, y, cellType, heading] per cell
   private readonly uOffset: WebGLUniformLocation;
   private readonly uScale: WebGLUniformLocation;
   private readonly uRes: WebGLUniformLocation;
@@ -98,15 +113,17 @@ export class Renderer {
     if (!buffer) throw new Error('failed to create buffer');
     this.buffer = buffer;
 
-    this.data = new Float32Array(capacity * 3);
+    this.data = new Float32Array(capacity * 4);
     gl.bindVertexArray(vao);
     gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
     gl.bufferData(gl.ARRAY_BUFFER, this.data.byteLength, gl.DYNAMIC_DRAW);
-    const stride = 3 * 4;
+    const stride = 4 * 4;
     gl.enableVertexAttribArray(0);
     gl.vertexAttribPointer(0, 2, gl.FLOAT, false, stride, 0);
     gl.enableVertexAttribArray(1);
     gl.vertexAttribPointer(1, 1, gl.FLOAT, false, stride, 2 * 4);
+    gl.enableVertexAttribArray(2);
+    gl.vertexAttribPointer(2, 1, gl.FLOAT, false, stride, 3 * 4);
     gl.bindVertexArray(null);
 
     gl.useProgram(program);
@@ -163,7 +180,7 @@ export class Renderer {
 
     for (let k = 0; k < n; k++) {
       const i = live[k]!;
-      const o = k * 3;
+      const o = k * 4;
       const px = prevX[i]!;
       const py = prevY[i]!;
       // Interpolate only if this slot held the SAME cell at the last snapshot:
@@ -175,6 +192,7 @@ export class Renderer {
       data[o] = same ? lerpWrapped(px, f.posX[i]!, alpha, w) : f.posX[i]!;
       data[o + 1] = same ? lerpWrapped(py, f.posY[i]!, alpha, h) : f.posY[i]!;
       data[o + 2] = f.cellType[i]!;
+      data[o + 3] = f.heading[i]!;
     }
 
     gl.useProgram(this.program);
@@ -184,7 +202,7 @@ export class Renderer {
 
     gl.bindVertexArray(this.vao);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
-    gl.bufferSubData(gl.ARRAY_BUFFER, 0, data.subarray(0, n * 3));
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, data.subarray(0, n * 4));
     gl.drawArrays(gl.POINTS, 0, n);
     gl.bindVertexArray(null);
   }
