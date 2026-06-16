@@ -1,5 +1,6 @@
 import { World } from '../core/sim/world';
 import { defaultConfig } from '../core/sim/config';
+import { wrapDelta } from '../core/math/vec2';
 import { Renderer, type Camera } from '../render/webgl-renderer';
 import { LightOverlay } from '../render/light-overlay';
 import { FoodOverlay } from '../render/food-overlay';
@@ -59,7 +60,44 @@ for (let i = 0; i < config.maxCells; i++) {
   }
 }
 
+// Follow-cam: click locks the camera onto the nearest cell; C / Escape releases.
+// followGen pins the generation so the lock auto-releases when that cell dies and
+// its slot is recycled into a different cell.
+let followId = -1;
+let followGen = 0;
+
+function pickNearest(screenX: number, screenY: number): number {
+  const wx = camera.x + (screenX - canvas.width / 2) / camera.scale;
+  const wy = camera.y + (screenY - canvas.height / 2) / camera.scale;
+  const live = world.liveIndices;
+  let best = -1;
+  let bestD2 = Infinity;
+  for (let k = 0; k < world.liveCount; k++) {
+    const i = live[k]!;
+    // Toroidal nearest — matches inspectAt (inspect.ts), so follow + inspect never disagree.
+    const dx = wrapDelta(wx - f.posX[i]!, world.config.worldWidth);
+    const dy = wrapDelta(wy - f.posY[i]!, world.config.worldHeight);
+    const d2 = dx * dx + dy * dy;
+    if (d2 < bestD2) {
+      bestD2 = d2;
+      best = i;
+    }
+  }
+  return best;
+}
+
+function updateFollowCam(): void {
+  if (followId < 0) return;
+  if (!world.cells.isAlive(followId) || f.generation[followId]! !== followGen) {
+    followId = -1;
+    return;
+  }
+  camera.x = f.posX[followId]!;
+  camera.y = f.posY[followId]!;
+}
+
 function drawScene(alpha: number): void {
+  updateFollowCam();
   renderer.clear();
   if (showLight) {
     overlay.render(camera, world.light, config.lightMax, canvas.width, canvas.height);
@@ -117,6 +155,11 @@ window.addEventListener('mouseup', (e) => {
     const moved = Math.hypot(e.clientX - downX, e.clientY - downY);
     if (moved < 4) {
       inspectAt(world, camera, e.clientX, e.clientY, canvas.width, canvas.height, inspectPanel);
+      const id = pickNearest(e.clientX, e.clientY);
+      if (id >= 0) {
+        followId = id;
+        followGen = f.generation[id]!;
+      }
     }
   }
   dragging = false;
@@ -157,6 +200,8 @@ window.addEventListener('keydown', (e) => {
     showLight = !showLight;
   } else if (e.key === 'f' || e.key === 'F') {
     showFood = !showFood;
+  } else if (e.key === 'c' || e.key === 'C' || e.key === 'Escape') {
+    followId = -1;
   }
 });
 
@@ -171,8 +216,10 @@ function updateHud(): void {
     `cells ${world.cells.aliveCount} | tick ${world.tickCount} | ${fps} fps | ` +
     `speed ${speed.toFixed(2)}x${paused ? ' (paused)' : ''} | zoom ${camera.scale.toFixed(3)}\n` +
     `photo ${m.photo} dig ${m.digestive} meat ${m.meat} | div ${m.diversity.toFixed(3)} | ` +
-    `light ${showLight ? 'on' : 'off'} | food ${showFood ? 'on' : 'off'}\n` +
-    `space pause | . step | [ ] slower/faster | drag pan | wheel zoom | L light | F food | click inspect`;
+    `light ${showLight ? 'on' : 'off'} | food ${showFood ? 'on' : 'off'}` +
+    `${followId >= 0 ? ` | follow #${followId}` : ''}\n` +
+    `space pause | . step | [ ] slower/faster | drag pan | wheel zoom | L light | F food | ` +
+    `click inspect/follow | C release`;
 }
 
 function loop(): void {
