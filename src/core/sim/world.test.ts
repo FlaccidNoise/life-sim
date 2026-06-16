@@ -36,4 +36,29 @@ describe('World', () => {
     expect(w.tickCount).toBe(2);
     expect(w.cells.fields.age[0]).toBe(2);
   });
+
+  it('separates two overlapping cells over ticks', () => {
+    const w = new World(
+      defaultConfig({
+        maxCells: 8,
+        worldWidth: 200,
+        worldHeight: 200,
+        cellRadius: 10,
+        repulsion: 2,
+        damping: 0.5,
+      }),
+      false,
+    );
+    w.spawn(2);
+    const f = w.cells.fields;
+    // Force a known overlap: 5 apart with radius 10 (sum 20).
+    f.posX[0] = 100;
+    f.posY[0] = 100;
+    f.posX[1] = 105;
+    f.posY[1] = 100;
+    const before = Math.abs(f.posX[1] - f.posX[0]);
+    for (let i = 0; i < 30; i++) w.tick();
+    const after = Math.abs(f.posX[1] - f.posX[0]);
+    expect(after).toBeGreaterThan(before);
+  });
 });

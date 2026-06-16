@@ -1,7 +1,27 @@
-import { allocateSoa, type SoaLayout, type TypedArray } from './buffers';
+import { allocateSoa, type SoaLayout } from './buffers';
 
 /** Bit 0 of `flags` marks a slot as alive. */
 export const FLAG_ALIVE = 1;
+
+/** Concrete typed view of the cell SoA — each field with its real element type. */
+export interface CellArrays {
+  posX: Float64Array;
+  posY: Float64Array;
+  velX: Float32Array;
+  velY: Float32Array;
+  forceX: Float32Array;
+  forceY: Float32Array;
+  radius: Float32Array;
+  mass: Float32Array;
+  energy: Float32Array;
+  cellType: Uint8Array;
+  organismId: Uint32Array;
+  genomeRef: Uint32Array;
+  brainRef: Uint32Array;
+  age: Uint32Array;
+  flags: Uint8Array;
+  generation: Uint32Array;
+}
 
 const CELL_FIELDS = [
   { name: 'posX', ctor: Float64Array },
@@ -51,8 +71,8 @@ export class CellStore {
     this.freeTop = capacity;
   }
 
-  get fields(): Readonly<Record<CellField, TypedArray>> {
-    return this.soa.fields;
+  get fields(): CellArrays {
+    return this.soa.fields as unknown as CellArrays;
   }
 
   /** Allocate a slot, or -1 if at capacity. */
