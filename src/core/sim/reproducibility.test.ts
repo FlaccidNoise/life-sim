@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { World } from './world';
 import { defaultConfig } from './config';
+import { spawnSwimmer, type Critter } from './critter';
+import { CellType } from '../cells/types';
 
 function runWorld(seed: number): World {
   const w = new World(defaultConfig({ seed, maxCells: 2000 }), false);
@@ -33,5 +35,40 @@ describe('reproducibility', () => {
     expect(Array.from(a.cells.fields.posX.slice(0, 1000))).not.toEqual(
       Array.from(b.cells.fields.posX.slice(0, 1000)),
     );
+  });
+});
+
+function runWithCritter(seed: number): { w: World; c: Critter } {
+  const w = new World(defaultConfig({ seed, maxCells: 2000 }), false);
+  w.seedLife(500);
+  // Spawn the critter into a PHOTO cluster so the smell field gives it a real
+  // gradient → the reproduced activations cover the sensor→neuron→motor chain.
+  const f = w.cells.fields;
+  for (let k = 0; k < 12; k++) {
+    const i = w.cells.alloc();
+    f.posX[i] = 1040 + (k % 4) * 4;
+    f.posY[i] = 1000 + ((k / 4) | 0) * 4;
+    f.radius[i] = w.config.cellRadius;
+    f.mass[i] = 1;
+    f.energy[i] = 100;
+    f.cellType[i] = CellType.PHOTO;
+  }
+  const c = spawnSwimmer(w, 1000, 1000, 0.5);
+  for (let i = 0; i < 150; i++) w.tick();
+  return { w, c };
+}
+
+describe('reproducibility — neuron activations', () => {
+  it('produces byte-identical activations for the same (Config, seed)', () => {
+    const a = runWithCritter(999);
+    const b = runWithCritter(999);
+    // Compare the actual critter neuron slots + the mover's thrust/heading, so the
+    // sensorimotor chain — not only the oscillator — is locked.
+    const slots = [a.c.sensorFwd, a.c.sensorLat, a.c.clockA, a.c.clockB, a.c.turn, a.c.thrust];
+    for (const s of slots) expect(a.w.net.actCur[s]!).toBe(b.w.net.actCur[s]!);
+    expect(a.w.cells.fields.thrust[a.c.mover]!).toBe(b.w.cells.fields.thrust[b.c.mover]!);
+    expect(a.w.cells.fields.heading[a.c.mover]!).toBe(b.w.cells.fields.heading[b.c.mover]!);
+    // and the chain actually computed non-trivial (non-zero) activations.
+    expect(slots.some((s) => a.w.net.actCur[s]! !== 0)).toBe(true);
   });
 });
