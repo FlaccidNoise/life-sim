@@ -92,8 +92,8 @@ do not delete or hand-edit versions.
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "NODE_OPTIONS=--expose-gc vitest run",
+    "test:watch": "NODE_OPTIONS=--expose-gc vitest",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "headless": "tsx src/headless/run.ts"
@@ -158,9 +158,9 @@ export default defineConfig({
   test: {
     include: ['src/**/*.test.ts'],
     pool: 'forks',
-    // --expose-gc is required by the zero-allocation test (Task 15).
-    // Vitest 4 moved pool options to top-level (was poolOptions.forks).
-    forks: { execArgv: ['--expose-gc'] },
+    // The zero-allocation test (Task 15) needs global.gc; --expose-gc is passed
+    // via NODE_OPTIONS in the package.json "test" script (Vitest 4 removed
+    // poolOptions; forked workers inherit NODE_OPTIONS).
   },
 });
 ```
@@ -1422,8 +1422,10 @@ describe('zero-allocation hot loop', () => {
 
 - [ ] **Step 2: Run the test to verify it passes**
 
-Run: `pnpm vitest run src/core/sim/zero-alloc.test.ts`
-Expected: PASS. (If it fails with "run with --expose-gc", confirm `vitest.config.ts` has `poolOptions.forks.execArgv: ['--expose-gc']` from Task 2.)
+Run: `pnpm test` (uses `NODE_OPTIONS=--expose-gc`). Running the file directly with
+`pnpm vitest run <file>` will throw "run with --expose-gc" because it bypasses the
+`test` script's env — use `pnpm test` or `NODE_OPTIONS=--expose-gc pnpm vitest run <file>`.
+Expected: PASS.
 
 - [ ] **Step 3: Commit**
 
