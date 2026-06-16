@@ -4,8 +4,8 @@ import { wrapDelta } from '../math/vec2';
 /**
  * Soft-repulsion forces (gather formulation): each live cell sums outward forces
  * from neighbours it overlaps. No closures, no allocation — iterates the hash's
- * toroidal 3×3 buckets inline. Requires the hash to have ≥3 columns/rows so the
- * 3×3 block does not alias a bucket onto itself (true for any real world size).
+ * toroidal 3×3 buckets inline. The hash guarantees ≥3 columns/rows (enforced in
+ * its constructor), so the 3×3 block never aliases a bucket onto itself.
  */
 export function computeRepulsion(
   hash: SpatialHash,

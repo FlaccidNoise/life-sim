@@ -49,7 +49,11 @@ export class Rng {
     return min + (max - min) * this.float();
   }
 
-  /** Integer in [0, maxExclusive). */
+  /**
+   * Integer in [0, maxExclusive). Has slight modulo bias for non-power-of-2
+   * ranges — fine for jitter/spawn, but don't use it for selection-sensitive
+   * draws later without a rejection-sampling variant.
+   */
   int(maxExclusive: number): number {
     return this.next() % maxExclusive;
   }

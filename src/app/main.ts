@@ -10,7 +10,16 @@ const world = new World(config);
 world.spawn(100_000);
 const f = world.cells.fields;
 
-const renderer = new Renderer(canvas, config.maxCells, config.cellRadius * 2);
+function createRenderer(): Renderer {
+  try {
+    return new Renderer(canvas, config.maxCells, config.cellRadius * 2);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (hud) hud.textContent = `Viewer needs WebGL2 — initialisation failed: ${msg}`;
+    throw err;
+  }
+}
+const renderer = createRenderer();
 const camera: Camera = { x: config.worldWidth / 2, y: config.worldHeight / 2, scale: 1 };
 
 // Previous-step position snapshots, for render interpolation (smooth motion at any speed).

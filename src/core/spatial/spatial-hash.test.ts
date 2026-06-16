@@ -21,6 +21,10 @@ function neighbors(h: SpatialHash, x: number, y: number): number[] {
 }
 
 describe('SpatialHash', () => {
+  it('refuses grids smaller than 3x3 (would alias toroidal neighbours)', () => {
+    expect(() => new SpatialHash(20, 20, 10, 4)).toThrow(/>=3 columns/);
+  });
+
   it('bins every live cell exactly once', () => {
     const h = new SpatialHash(100, 100, 10, 16);
     const posX = new Float64Array([5, 55, 95, 5]);
