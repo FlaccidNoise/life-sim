@@ -38,7 +38,12 @@ export function inspectAt(
   const t = f.cellType[best]!;
   const act = world.net.actCur[best]!;
   const neural = isNeural(t) ? ` | act ${act.toFixed(3)}` : '';
+  const org = f.organismId[best]!;
+  const orgInfo =
+    org !== 0
+      ? ` | org #${org} cells ${world.organisms.cellCount[org]} E ${world.organisms.energy[org]!.toFixed(0)}`
+      : '';
   panel.textContent =
     `#${best} ${NAMES[t] ?? t} | energy ${f.energy[best]!.toFixed(1)} | ` +
-    `age ${f.age[best]} | pos ${f.posX[best]!.toFixed(0)},${f.posY[best]!.toFixed(0)}${neural}`;
+    `age ${f.age[best]} | pos ${f.posX[best]!.toFixed(0)},${f.posY[best]!.toFixed(0)}${neural}${orgInfo}`;
 }

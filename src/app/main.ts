@@ -120,8 +120,15 @@ function updateFollowCam(): void {
     followId = -1;
     return;
   }
-  camera.x = f.posX[followId]!;
-  camera.y = f.posY[followId]!;
+  // Centre on the organism centroid for bonded cells; else pin to the single cell.
+  const org = f.organismId[followId]!;
+  if (org !== 0 && world.organisms.cellCount[org]! > 0) {
+    camera.x = world.organisms.centroidX[org]!;
+    camera.y = world.organisms.centroidY[org]!;
+  } else {
+    camera.x = f.posX[followId]!;
+    camera.y = f.posY[followId]!;
+  }
 }
 
 function drawScene(alpha: number): void {
