@@ -60,3 +60,15 @@ describe('CellStore', () => {
     expect(s.fields.cellType[i]).toBe(3);
   });
 });
+
+describe('M3 SoA fields', () => {
+  it('exposes heading/senseX/senseY/thrust as Float32 arrays of capacity length, zero-init', () => {
+    const store = new CellStore(4, false);
+    const f = store.fields;
+    for (const arr of [f.heading, f.senseX, f.senseY, f.thrust]) {
+      expect(arr).toBeInstanceOf(Float32Array);
+      expect(arr.length).toBe(4);
+      expect(arr[0]).toBe(0);
+    }
+  });
+});
