@@ -84,3 +84,35 @@ describe('M4 config', () => {
     expect(back.maxSynapses).toBe(1234);
   });
 });
+
+describe('M5 config', () => {
+  it('exposes bond/organism/transfer/adhesion knobs with sane defaults', () => {
+    const c = defaultConfig();
+    expect(c.maxBonds).toBeGreaterThan(0);
+    expect(c.maxOrganisms).toBeGreaterThan(0);
+    expect(c.bondDegreeCap).toBeGreaterThanOrEqual(4);
+    expect(c.bondStiffness).toBeGreaterThan(0);
+    // Symplectic-Euler stability (audit blocker): the bond spring's effective k = bondStiffness·perBondStiffness
+    // (the kernel's /d cancels the ddx=±d projection). The two-free-mass ceiling for dt=1/damping=0.5/mass=1
+    // is ~3; a multi-spoke hub is tighter; k=8 diverges to ~1e162. Gate the default well under the ceiling so a
+    // future re-tune to an unstable value fails HERE (Task 1) instead of as Inf/NaN 13 tasks later (Task 14).
+    expect(c.bondStiffness * c.dt * c.dt).toBeLessThanOrEqual(2.5);
+    expect(c.bondMaxStrain).toBeGreaterThan(0);
+    expect(c.transferRate).toBeGreaterThan(0);
+    expect(c.transferRate).toBeLessThanOrEqual(0.5); // stability bound
+    expect(c.transferEfficiency).toBeGreaterThan(0);
+    expect(c.transferEfficiency).toBeLessThanOrEqual(1);
+    expect(c.adhesionStrength).toBe(0); // OFF by default — no perturbation to M2/M3
+    expect(c.adhesionRange).toBeGreaterThan(0);
+    expect(c.digestClusterBonus).toBeGreaterThanOrEqual(0);
+    expect(c.maxSplitChecksPerTick).toBeGreaterThan(0);
+  });
+
+  it('round-trips the new fields through serialize/deserialize', () => {
+    const c = defaultConfig({ maxBonds: 1234, transferRate: 0.077, digestClusterBonus: 0.33 });
+    const back = JSON.parse(serializeConfig(c)) as typeof c;
+    expect(back.maxBonds).toBe(1234);
+    expect(back.transferRate).toBe(0.077);
+    expect(back.digestClusterBonus).toBe(0.33);
+  });
+});

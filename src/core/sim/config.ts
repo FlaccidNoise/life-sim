@@ -96,6 +96,31 @@ export interface Config {
   thrustScale: number;
   /** Baseline thrust added to thrustScale·activation before clamping (a cruise term). */
   thrustBias: number;
+
+  // Bonds & organisms (§4.4, §4.8, §5.2). maxBonds/maxOrganisms/bondDegreeCap are
+  // buffer-resize knobs (restart-required; overflow = refuse-new). The rest are live.
+  /** Bond pool capacity. Not derivable from maxCells (§5.2); restart-required. */
+  maxBonds: number;
+  /** Organism-id capacity (id 0 = free/food). Restart-required. */
+  maxOrganisms: number;
+  /** Max bonds per cell — sizes the per-cell adjacency. Restart-required. */
+  bondDegreeCap: number;
+  /** Global bond-spring stiffness scale (× each bond's relative stiffness). */
+  bondStiffness: number;
+  /** A bond breaks when (dist − restLen)/restLen exceeds this. */
+  bondMaxStrain: number;
+  /** Per-tick fraction of a bond's energy gap moved to the needier endpoint, (0, 0.5]. */
+  transferRate: number;
+  /** Fraction of transferred energy that arrives (<1; the rest is lost in transit). */
+  transferEfficiency: number;
+  /** Short-range adhesion strength (0 = OFF; minimal in M5, genome-gated formation is M6). */
+  adhesionStrength: number;
+  /** Adhesion range in world units (must be ≤ ~2·hash cellSize for the 3×3 query). */
+  adhesionRange: number;
+  /** Digestion gain multiplier per bonded DIGESTIVE neighbour (the multicellular payoff). */
+  digestClusterBonus: number;
+  /** Max split-checks per tick (guards a mass-break tick; excess strained bonds defer). */
+  maxSplitChecksPerTick: number;
 }
 
 export function defaultConfig(overrides: Partial<Config> = {}): Config {
@@ -163,6 +188,18 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     turnScale: 0.3, // |a_turn|≤1 → ≤0.3 rad/tick ≈ 17°/tick: curves toward food, no snapping
     thrustScale: 3, // a_thrust∈(−1,1) → ±3, plus bias
     thrustBias: 2, // baseline cruise so the critter keeps moving while searching
+
+    maxBonds: 4096, // ample for hand-built M5 organisms; grows in M6 (developmental genome)
+    maxOrganisms: 4096,
+    bondDegreeCap: 8, // the braced critter peaks at 6 bonds/cell; headroom for clusters
+    bondStiffness: 1.5, // SYMPLECTIC-EULER STABILITY (audit blocker): the bond force's effective spring constant is k_eff = bondStiffness·perBondStiffness (the /d in the kernel cancels the ddx=±d projection — see bond-force.ts). The two-free-mass ceiling for dt=1/damping=0.5/mass=1 is ~3, and a multi-spoke hub like the MOVER is TIGHTER, so keep ≤2.5. k=8 diverges to ~1e162 in a few ticks. Cohesion comes from bracing geometry + low strain tolerance, NOT large k. Live knob (tune via golden-bond / critter-swim within the ceiling).
+    bondMaxStrain: 0.6, // break at 60% stretch — survives steering, snaps under a hard pull
+    transferRate: 0.1, // gentle diffusion; well under the 0.5 oscillation bound
+    transferEfficiency: 0.95, // 5% lost per hop — a small cost to sharing
+    adhesionStrength: 0, // OFF by default: the verified M2/M3 ecosystem must be unperturbed
+    adhesionRange: 18, // 3·cellRadius — inside the spatial-hash 3×3 neighbourhood
+    digestClusterBonus: 0.5, // a fully-bonded digestive cluster out-harvests lone cells (payoff); 0 for free (organismId 0) cells
+    maxSplitChecksPerTick: 64,
 
     ...overrides,
   };
