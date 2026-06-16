@@ -8,16 +8,20 @@ export const CellType = {
   PHOTO: 0,
   DIGESTIVE: 1,
   MEAT: 2,
+  MOTILE: 3,
 } as const;
 
 export type CellTypeValue = (typeof CellType)[keyof typeof CellType];
 
-/** True for types that metabolize and can divide (PHOTO, DIGESTIVE). MEAT is dead. */
+/** True for types that metabolize and can divide (PHOTO, DIGESTIVE, MOTILE). MEAT is dead. */
 export function isLiving(type: number): boolean {
-  return type === CellType.PHOTO || type === CellType.DIGESTIVE;
+  return type === CellType.PHOTO || type === CellType.DIGESTIVE || type === CellType.MOTILE;
 }
 
-/** Can a cell of `eater` type consume a cell of `prey` type? M2: digestive eats photo + meat. */
+/** Can `eater` consume `prey`? Heterotrophs (DIGESTIVE, MOTILE) eat PHOTO + MEAT. */
 export function isEdibleBy(eater: number, prey: number): boolean {
-  return eater === CellType.DIGESTIVE && (prey === CellType.PHOTO || prey === CellType.MEAT);
+  return (
+    (eater === CellType.DIGESTIVE || eater === CellType.MOTILE) &&
+    (prey === CellType.PHOTO || prey === CellType.MEAT)
+  );
 }
