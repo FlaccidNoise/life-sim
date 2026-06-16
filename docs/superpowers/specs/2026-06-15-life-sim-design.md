@@ -1,7 +1,7 @@
 # Life-Sim — Design Specification
 
 **Date:** 2026-06-15
-**Status:** Approved (design), hardened by adversarial review (see §12 changelog); implementation not started
+**Status:** Approved (design), hardened by adversarial review (see §13 changelog); implementation not started
 **Author:** Josh Taylor + Claude
 
 ---
@@ -461,7 +461,53 @@ execution is the default, with frequent reviewable checkpoints.
   from-scratch open-endedness as an aspirational M9+ experiment, so the first
   evolution milestone isn't gated on crossing that valley.
 
-## 11. Glossary
+## 11. Control surface & observability (interactive tuning & experimentation)
+
+A first-class goal: tuning knobs live and watching what emerges is a primary
+source of the project's value. The serializable `Config` (§5.4) is the backbone —
+every coefficient is a knob. Interactivity is a **continuous thread alongside the
+engine**, not a single milestone. Three layers:
+
+**1. Live parameter tuning (write-side).** A control panel binds `Config` fields
+to sliders/inputs, applied to the running sim with no restart for most parameters:
+economy (basal/move/neural/bond costs, photosynthesis & digestion gains,
+reproduction threshold, maternal-provisioning fraction, intra-organism transfer
+rate, meat decay, death-energy fraction); environment (light patch
+density/intensity/regen, food spawn rate, crowding penalty; later
+temperature/toxins/currents/seasons amplitude & period); physics (drag, repulsion
+& bond stiffness, max strain, adhesion, dt, substeps); mutation (per-operator
+rates, σ, recursion-depth & cells-per-organism caps). Buffer-resizing knobs
+(`maxCells`, world span, `maxBonds`/`maxSynapses`) are **restart-required**; the
+rest are **live**. `Config` exports/imports as JSON, so a `(Config, seed)` pair
+reproduces a run (single-thread) — shareable "the seed that grew this creature."
+
+**2. Time & world control.** Play/pause, single-step, speed multiplier
+(1×–1000×), headless fast-forward then resume render; set/reseed; save/load world
+snapshots (serialize SoA + Config); reset; spawn presets. **"Hand of god" tools:**
+click/drag to spawn food, paint light/nutrient/toxins, drop a predator, or cull a
+region — apply selection pressure by hand and watch the response.
+
+**3. Observation (read-side — equally where the fun is).** Click a cell/organism
+to inspect energy/type/age/genome; a **brain inspector** renders the neuron-cell
+network with live activations; lineage/ancestry view. Colour by
+type/energy/organism/age/lineage/neural-activity; overlays for the light field,
+food density, velocity, bond network; follow-cam locks to an organism. **Telemetry
+dashboards (from M2):** live time-series of population, mean energy, **genotypic &
+phenotypic diversity**, trophic-level counts, mean expressed cell-types/organism,
+births/deaths — the same metrics that define run health (§4.5) and the statistical
+tests (§6). **Experiment runner (M7+):** headless **parameter sweeps** (vary a knob
+× N seeds, plot outcomes to find phase transitions), A/B worlds, a pinned-genome
+library, record/replay, GIF/video export.
+
+**Per-milestone control-surface deliverables:** **M1** time controls + camera +
+colour-by-type + core physics knobs + HUD; **M2** economy/light knobs + telemetry
+charts + light heatmap + basic inspect; **M3** sensor/mover knobs + gradient
+overlay + follow-cam; **M4** brain inspector; **M5** bond-network overlay +
+organism inspector + energy-flow viz; **M6** genome/lineage inspector + mutation
+knobs + save/load; **M7** experiment/sweep runner + phylogeny tree + "hand of god"
+tools; **M9+** scenario presets + A/B + record/replay.
+
+## 12. Glossary
 - **Cell** — the atomic entity; an index into SoA arrays.
 - **Organism** — a connected component of bonded cells sharing a genome.
 - **Palette** — the fixed set of cell capability types.
@@ -473,7 +519,7 @@ execution is the default, with frequent reviewable checkpoints.
 - **Tick** — one fixed-timestep simulation step.
 - **Reference/oracle** — the single-threaded engine that deterministic tests trust.
 
-## 12. Changelog
+## 13. Changelog
 - **2026-06-15 — Initial design** approved via interactive brainstorming.
 - **2026-06-15 — Hardened by adversarial review** (4-lens workflow). Resolved 4
   blockers (monoculture gradient; per-cell-vs-organism energy contradiction +
@@ -485,3 +531,8 @@ execution is the default, with frequent reviewable checkpoints.
   AB/SAB-agnostic SoA + COOP/COEP + fallback; golden-tick test tier + statistical
   contract + zero-alloc enforcement; tiered CI; ESLint AST boundary rule;
   innovation IDs). Two judgment calls surfaced to the user (§10 Q-A, Q-B).
+- **2026-06-15 — Q-A & Q-B resolved** with the recommended defaults (falsification
+  criterion before M7; M7 seeded from the hand-built critter).
+- **2026-06-15 — Added §11 Control surface & observability** as a first-class
+  continuous thread (live Config tuning, time/"hand of god" controls, inspection &
+  telemetry, experiment/sweep runner), per user priority on interactive tuning.
