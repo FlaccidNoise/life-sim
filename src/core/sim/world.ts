@@ -16,6 +16,9 @@ import { NeuralNetwork } from '../neural/network';
 import { think } from '../neural/think';
 import { driveMovers } from '../neural/motor';
 import { repositionPassengers } from '../physics/rigid-group';
+import { BondNetwork } from '../organism/bonds';
+import { OrganismTable } from '../organism/organisms';
+import { SplitChecker } from '../organism/split';
 import { makeMetrics, sampleMetrics, type Metrics } from './metrics';
 
 /**
@@ -36,6 +39,11 @@ export class World {
   readonly light: LightField;
   readonly food: FoodField;
   readonly net: NeuralNetwork;
+  readonly bonds: BondNetwork;
+  readonly organisms: OrganismTable;
+  readonly splitter: SplitChecker;
+  /** Per-cell bonded-DIGESTIVE-neighbour count (the digestion-clustering payoff input). */
+  readonly digestBonus: Uint8Array;
   /** Per-World deterministic organism-id allocator (M4 kinematic groups; M5 organisms). */
   nextOrganismId: number;
   // Kinematic rigid-group table (M4 critter cohesion; M5 replaces with bonds).
@@ -86,6 +94,10 @@ export class World {
       config.worldHeight,
     );
     this.net = new NeuralNetwork(config.maxCells, config.maxSynapses, config.maxCells);
+    this.bonds = new BondNetwork(config.maxCells, config.maxBonds, config.bondDegreeCap);
+    this.organisms = new OrganismTable(config.maxOrganisms);
+    this.splitter = new SplitChecker(config.maxCells);
+    this.digestBonus = new Uint8Array(config.maxCells);
     this.nextOrganismId = 1;
     this.rigidPassenger = new Uint32Array(config.maxCells);
     this.rigidBody = new Uint32Array(config.maxCells);
