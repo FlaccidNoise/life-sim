@@ -2,6 +2,7 @@ import { World } from '../core/sim/world';
 import { defaultConfig } from '../core/sim/config';
 import { Renderer, type Camera } from '../render/webgl-renderer';
 import { LightOverlay } from '../render/light-overlay';
+import { FoodOverlay } from '../render/food-overlay';
 import { TelemetryDashboard } from './telemetry';
 import { inspectAt } from './inspect';
 import { mountControls } from './controls';
@@ -30,6 +31,11 @@ const camera: Camera = { x: config.worldWidth / 2, y: config.worldHeight / 2, sc
 const overlay = new LightOverlay(renderer.gl, world.light);
 let showLight = false;
 
+// Food/smell-gradient heatmap overlay (toggled with `F`). Shares the GL context.
+const foodOverlay = new FoodOverlay(renderer.gl, world.food);
+let showFood = false;
+const FOOD_DISPLAY_MAX = 8; // smell scale for the heatmap; tune to taste
+
 // Telemetry dashboard + inspect panel + live economy knobs.
 const dash = new TelemetryDashboard(document.getElementById('telemetry') as HTMLCanvasElement);
 const inspectPanel = document.getElementById('inspect') as HTMLElement;
@@ -57,6 +63,9 @@ function drawScene(alpha: number): void {
   renderer.clear();
   if (showLight) {
     overlay.render(camera, world.light, config.lightMax, canvas.width, canvas.height);
+  }
+  if (showFood) {
+    foodOverlay.render(camera, world.food, FOOD_DISPLAY_MAX, canvas.width, canvas.height);
   }
   renderer.render(world, camera, prevX, prevY, prevGen, alpha);
 }
@@ -146,6 +155,8 @@ window.addEventListener('keydown', (e) => {
     speed = Math.max(0.02, speed / 1.5);
   } else if (e.key === 'l' || e.key === 'L') {
     showLight = !showLight;
+  } else if (e.key === 'f' || e.key === 'F') {
+    showFood = !showFood;
   }
 });
 
@@ -160,8 +171,8 @@ function updateHud(): void {
     `cells ${world.cells.aliveCount} | tick ${world.tickCount} | ${fps} fps | ` +
     `speed ${speed.toFixed(2)}x${paused ? ' (paused)' : ''} | zoom ${camera.scale.toFixed(3)}\n` +
     `photo ${m.photo} dig ${m.digestive} meat ${m.meat} | div ${m.diversity.toFixed(3)} | ` +
-    `light ${showLight ? 'on' : 'off'}\n` +
-    `space pause | . step | [ ] slower/faster | drag pan | wheel zoom | L light | click inspect`;
+    `light ${showLight ? 'on' : 'off'} | food ${showFood ? 'on' : 'off'}\n` +
+    `space pause | . step | [ ] slower/faster | drag pan | wheel zoom | L light | F food | click inspect`;
 }
 
 function loop(): void {
