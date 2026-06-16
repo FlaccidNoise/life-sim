@@ -1,0 +1,13 @@
+name: Nightly
+on:
+  schedule:
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+
+jobs:
+  statistical:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Placeholder for long statistical/evolutionary runs (added at M7)
+        run: echo "No statistical tests yet — see spec §6 tier 5 (M7)."

@@ -159,7 +159,8 @@ export default defineConfig({
     include: ['src/**/*.test.ts'],
     pool: 'forks',
     // --expose-gc is required by the zero-allocation test (Task 15).
-    poolOptions: { forks: { execArgv: ['--expose-gc'] } },
+    // Vitest 4 moved pool options to top-level (was poolOptions.forks).
+    forks: { execArgv: ['--expose-gc'] },
   },
 });
 ```

@@ -1,0 +1,30 @@
+{
+  "layers": {
+    "core": {
+      "path": "src/core",
+      "mayImport": [],
+      "description": "Pure headless engine. No DOM/Worker deps. No imports from outer layers."
+    },
+    "render": {
+      "path": "src/render",
+      "mayImport": ["core"],
+      "description": "WebGL2 renderer. Reads core via read-only views; never mutates core."
+    },
+    "app": {
+      "path": "src/app",
+      "mayImport": ["core", "render"],
+      "description": "Browser viewer/UI orchestration."
+    },
+    "headless": {
+      "path": "src/headless",
+      "mayImport": ["core"],
+      "description": "Node CLI for batch runs / experiments."
+    },
+    "workers": {
+      "path": "src/workers",
+      "mayImport": ["core"],
+      "description": "Worker entry + partitioning (M8)."
+    }
+  },
+  "notes": "ESLint (eslint.config.js) is the CI-enforced layer for import direction and ambient DOM/Worker globals; this file documents intent for the architecture-guard skill."
+}
