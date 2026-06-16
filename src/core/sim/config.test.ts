@@ -66,3 +66,21 @@ describe('M3 config', () => {
     expect(back.foodDecay).toBe(0.123);
   });
 });
+
+describe('M4 config', () => {
+  it('exposes neural knobs with sane defaults', () => {
+    const c = defaultConfig();
+    expect(c.maxSynapses).toBeGreaterThan(0);
+    expect(c.neuralCost).toBeGreaterThanOrEqual(0);
+    expect(c.turnScale).toBeGreaterThan(0);
+    expect(c.thrustScale).toBeGreaterThan(0);
+    expect(typeof c.thrustBias).toBe('number');
+  });
+
+  it('round-trips the new fields through serialize/deserialize', () => {
+    const c = defaultConfig({ neuralCost: 0.077, maxSynapses: 1234 });
+    const back = JSON.parse(JSON.stringify(c));
+    expect(back.neuralCost).toBe(0.077);
+    expect(back.maxSynapses).toBe(1234);
+  });
+});
