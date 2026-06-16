@@ -125,16 +125,31 @@ export class Renderer {
     this.gl_.viewport(0, 0, width, height);
   }
 
+  /** Clear the framebuffer. Call once per frame before any overlay/point pass. */
+  clear(): void {
+    this.gl_.clear(this.gl_.COLOR_BUFFER_BIT);
+  }
+
   /**
    * Draw the live cells. Positions are interpolated `alpha` of the way from the
    * previous physics step (`prevX/prevY`) to the current one (along the shortest
    * toroidal path), so motion is smooth at any sim speed. `alpha` ∈ [0, 1].
+   *
+   * `prevGen` is the per-slot `generation[]` snapshot from the previous step. A
+   * corpse freed and re-allocated as a division child the same tick keeps a stale
+   * `prevX/prevY` from the dead occupant — interpolating that would streak the
+   * point across the world. When a slot's generation changed, draw it statically
+   * at its current position instead of interpolating.
+   *
+   * Does NOT clear the framebuffer — call `clear()` once per frame first, so an
+   * overlay (e.g. the light heatmap) can be drawn underneath the points.
    */
   render(
     world: World,
     camera: Camera,
     prevX: Float64Array,
     prevY: Float64Array,
+    prevGen: Uint32Array,
     alpha: number,
   ): void {
     const gl = this.gl_;
@@ -148,12 +163,12 @@ export class Renderer {
     for (let k = 0; k < n; k++) {
       const i = live[k]!;
       const o = k * 3;
-      data[o] = lerpWrapped(prevX[i]!, f.posX[i]!, alpha, w);
-      data[o + 1] = lerpWrapped(prevY[i]!, f.posY[i]!, alpha, h);
+      const same = prevGen[i] === f.generation[i]!; // identity unchanged → interpolate
+      data[o] = same ? lerpWrapped(prevX[i]!, f.posX[i]!, alpha, w) : f.posX[i]!;
+      data[o + 1] = same ? lerpWrapped(prevY[i]!, f.posY[i]!, alpha, h) : f.posY[i]!;
       data[o + 2] = f.cellType[i]!;
     }
 
-    gl.clear(gl.COLOR_BUFFER_BIT);
     gl.useProgram(this.program);
     gl.uniform2f(this.uOffset, camera.x, camera.y);
     gl.uniform1f(this.uScale, camera.scale);
