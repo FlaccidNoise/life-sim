@@ -11,29 +11,31 @@ export interface Camera {
 
 const VERT = `#version 300 es
 layout(location=0) in vec2 a_pos;
-layout(location=1) in float a_speed;
+layout(location=1) in float a_type;
 uniform vec2 u_offset;
 uniform float u_scale;
 uniform vec2 u_res;
 uniform float u_point;
-out float v_speed;
+out float v_type;
 void main() {
   vec2 screen = (a_pos - u_offset) * u_scale;
   vec2 clip = screen / (u_res * 0.5);
   gl_Position = vec4(clip.x, -clip.y, 0.0, 1.0);
   gl_PointSize = clamp(u_point * u_scale, 1.0, 64.0);
-  v_speed = a_speed;
+  v_type = a_type;
 }`;
 
 const FRAG = `#version 300 es
 precision mediump float;
-in float v_speed;
+in float v_type;
 out vec4 frag;
 void main() {
   vec2 c = gl_PointCoord - 0.5;
   if (dot(c, c) > 0.25) discard;
-  float s = clamp(v_speed * 4.0, 0.0, 1.0);
-  vec3 col = mix(vec3(0.25, 0.55, 0.95), vec3(1.0, 0.95, 0.7), s);
+  vec3 col;
+  if (v_type < 0.5)       col = vec3(0.30, 0.80, 0.35);  // PHOTO   green
+  else if (v_type < 1.5)  col = vec3(0.95, 0.45, 0.20);  // DIGEST  orange-red
+  else                    col = vec3(0.55, 0.50, 0.45);  // MEAT    grey-brown
   frag = vec4(col, 1.0);
 }`;
 
@@ -52,11 +54,11 @@ function compile(gl: WebGL2RenderingContext, type: number, src: string): WebGLSh
 /** WebGL2 instanced point renderer. Draws every live cell in one draw call,
  *  coloured by speed, under a pan/zoom camera. */
 export class Renderer {
-  private readonly gl: WebGL2RenderingContext;
+  private readonly gl_: WebGL2RenderingContext;
   private readonly program: WebGLProgram;
   private readonly vao: WebGLVertexArrayObject;
   private readonly buffer: WebGLBuffer;
-  private readonly data: Float32Array; // interleaved [x, y, speed] per cell
+  private readonly data: Float32Array; // interleaved [x, y, cellType] per cell
   private readonly uOffset: WebGLUniformLocation;
   private readonly uScale: WebGLUniformLocation;
   private readonly uRes: WebGLUniformLocation;
@@ -67,7 +69,7 @@ export class Renderer {
   constructor(canvas: HTMLCanvasElement, capacity: number, pointDiameter: number) {
     const gl = canvas.getContext('webgl2');
     if (!gl) throw new Error('WebGL2 not supported');
-    this.gl = gl;
+    this.gl_ = gl;
 
     const program = gl.createProgram();
     if (!program) throw new Error('failed to create program');
@@ -112,10 +114,15 @@ export class Renderer {
     gl.clearColor(0.04, 0.055, 0.08, 1);
   }
 
+  /** The underlying WebGL2 context, shared with the light overlay. */
+  get gl(): WebGL2RenderingContext {
+    return this.gl_;
+  }
+
   resize(width: number, height: number): void {
     this.width = width;
     this.height = height;
-    this.gl.viewport(0, 0, width, height);
+    this.gl_.viewport(0, 0, width, height);
   }
 
   /**
@@ -130,7 +137,7 @@ export class Renderer {
     prevY: Float64Array,
     alpha: number,
   ): void {
-    const gl = this.gl;
+    const gl = this.gl_;
     const f = world.cells.fields;
     const live = world.liveIndices;
     const n = world.liveCount;
@@ -140,12 +147,10 @@ export class Renderer {
 
     for (let k = 0; k < n; k++) {
       const i = live[k]!;
-      const vx = f.velX[i]!;
-      const vy = f.velY[i]!;
       const o = k * 3;
       data[o] = lerpWrapped(prevX[i]!, f.posX[i]!, alpha, w);
       data[o + 1] = lerpWrapped(prevY[i]!, f.posY[i]!, alpha, h);
-      data[o + 2] = Math.sqrt(vx * vx + vy * vy);
+      data[o + 2] = f.cellType[i]!;
     }
 
     gl.clear(gl.COLOR_BUFFER_BIT);
