@@ -63,9 +63,19 @@ Expected: a `package.json` is created and `corepack use` pins a `"packageManager
 Run:
 ```bash
 pnpm add -D typescript tsx vite vitest @vitest/coverage-v8 \
-  eslint typescript-eslint eslint-config-prettier prettier
+  eslint typescript-eslint eslint-config-prettier prettier @types/node
 ```
-Expected: packages install; `pnpm-lock.yaml` is created.
+Expected: packages install; `pnpm-lock.yaml` is created. (`@types/node` is needed
+for Node globals like `process` used by the headless entry and the zero-alloc test.)
+
+pnpm 11 blocks dependency build scripts by default. esbuild (used by Vite/Vitest/
+tsx) needs its postinstall to fetch its platform binary. Approve it by editing
+the generated `pnpm-workspace.yaml` to:
+```yaml
+allowBuilds:
+  esbuild: true
+```
+then run `pnpm install` again so esbuild's postinstall runs.
 
 - [ ] **Step 3: Edit `package.json` — add `"type": "module"` and the scripts block**
 
@@ -100,7 +110,7 @@ do not delete or hand-edit versions.
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "types": ["vite/client"],
+    "types": ["node", "vite/client"],
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
