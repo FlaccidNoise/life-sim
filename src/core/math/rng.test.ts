@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Rng, hash32, hashFloat } from './rng';
+import { Rng, hash32, hashFloat, hashFloat3 } from './rng';
 
 describe('Rng', () => {
   it('is deterministic for the same seed', () => {
@@ -35,5 +35,18 @@ describe('Rng', () => {
     expect(hash32(1, 2, 3)).not.toBe(hash32(3, 2, 1));
     expect(hashFloat(5)).toBeGreaterThanOrEqual(0);
     expect(hashFloat(5)).toBeLessThan(1);
+  });
+});
+
+describe('hashFloat3 (fixed-arity, allocation-free)', () => {
+  it('is byte-identical to the variadic hashFloat for 3 args', () => {
+    for (const [a, b, c] of [
+      [0, 0, 0],
+      [1, 2, 3],
+      [7, 150, 99999],
+      [-5, 4096, 123],
+    ]) {
+      expect(hashFloat3(a, b, c)).toBe(hashFloat(a, b, c));
+    }
   });
 });

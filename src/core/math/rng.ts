@@ -20,6 +20,18 @@ export function hashFloat(...ints: number[]): number {
 }
 
 /**
+ * Fixed-arity, allocation-free equivalent of `hashFloat(a, b, c)`. The variadic
+ * forms allocate a rest-args array + iterator; this one does not, so it is safe
+ * in the allocation-free tick path (division jitter). Byte-identical by a test.
+ */
+export function hashFloat3(a: number, b: number, c: number): number {
+  let h = mix32((0 + GOLDEN) ^ (a | 0));
+  h = mix32((h + GOLDEN) ^ (b | 0));
+  h = mix32((h + GOLDEN) ^ (c | 0));
+  return (h >>> 0) / 4294967296;
+}
+
+/**
  * Counter-based seedable PRNG. Deterministic from its seed; `split(streamId)`
  * derives an independent substream so adding draws in one subsystem does not
  * perturb another's stream (spec §6).
