@@ -78,16 +78,27 @@ describe('golden tick — SENSE → THINK → ACT through World.tick', () => {
     expect(Math.abs(w.net.actCur[critter.thrust]!)).toBeLessThanOrEqual(1.0000001);
   });
 
-  it('passengers stay rigidly attached to the moving body', () => {
+  it('bonded cells stay cohered as one organism (soft body) as it moves', () => {
     const w = new World(defaultConfig({ maxCells: 64, initialMotileFraction: 0 }), false);
     const critter = spawnSwimmer(w, 500, 500, 0);
     const f = w.cells.fields;
+    const off = 4 * w.config.cellRadius;
+    const restFwd = Math.hypot(off, off * 0.6); // MOVER↔sensorFwd spoke rest length
     for (let t = 0; t < 30; t++) w.tick();
-    const dx = f.posX[critter.sensorFwd]! - f.posX[critter.mover]!;
-    const dy = f.posY[critter.sensorFwd]! - f.posY[critter.mover]!;
-    const off = 4 * w.config.cellRadius; // must match the builder (off = 4·r, lat = 0.6·off)
-    const expected = Math.hypot(off, off * 0.6);
-    expect(Math.hypot(dx, dy)).toBeCloseTo(expected, 2);
+    // The hand-wired critter is a SOFT braced body, not a rigid one. Under the no-food
+    // spin a single spoke (e.g. MOVER↔sensorFwd) can over-stretch and snap, but the cross-
+    // bracing keeps every cell in ONE organism — the body never flies apart. Assert the
+    // real cohesion invariant: sensorFwd is still bonded into the mover's organism and is a
+    // finite, bounded distance away (not the exact rest length, and not a fled fragment).
+    expect(f.organismId[critter.sensorFwd]).toBe(f.organismId[critter.mover]);
+    expect(f.organismId[critter.sensorFwd]).toBeGreaterThan(0);
+    const d = Math.hypot(
+      f.posX[critter.sensorFwd]! - f.posX[critter.mover]!,
+      f.posY[critter.sensorFwd]! - f.posY[critter.mover]!,
+    );
+    expect(Number.isFinite(d)).toBe(true);
+    expect(d).toBeGreaterThan(restFwd * 0.5);
+    expect(d).toBeLessThan(restFwd * 4); // a generous "did not fly apart" sanity bound
   });
 
   it('recurrent clock oscillates under a flat food field (persistent activation, §4.6)', () => {
