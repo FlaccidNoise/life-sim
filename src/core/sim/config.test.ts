@@ -79,7 +79,7 @@ describe('M4 config', () => {
 
   it('round-trips the new fields through serialize/deserialize', () => {
     const c = defaultConfig({ neuralCost: 0.077, maxSynapses: 1234 });
-    const back = JSON.parse(JSON.stringify(c));
+    const back = deserializeConfig(serializeConfig(c));
     expect(back.neuralCost).toBe(0.077);
     expect(back.maxSynapses).toBe(1234);
   });
