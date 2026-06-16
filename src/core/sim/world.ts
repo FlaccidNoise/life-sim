@@ -12,12 +12,17 @@ import { act } from '../cells/act';
 import { applyThrust } from '../physics/thrust';
 import { lifecycle, type LifecycleResult } from '../cells/lifecycle';
 import { CellType, isEdibleBy } from '../cells/types';
+import { NeuralNetwork } from '../neural/network';
+import { think } from '../neural/think';
+import { driveMovers } from '../neural/motor';
+import { repositionPassengers } from '../physics/rigid-group';
 import { makeMetrics, sampleMetrics, type Metrics } from './metrics';
 
 /**
- * The simulation world. Each `tick()` runs the M3 pipeline:
+ * The simulation world. Each `tick()` runs the M4 pipeline:
  * rebuild the compact live set (canonical ascending order) → spatial hash →
- * SENSE (food gradient) → (THINK = M4, skipped) → ACT (steer + thrust) →
+ * SENSE (food gradient) → THINK (neuron-cell forward pass, double-buffered) →
+ * ACT (reflex steer + neuron-driven movers) →
  * soft repulsion → apply thrust → semi-implicit integrate → metabolize
  * (basal + move cost) → age → lifecycle (death/decay/division) → light step →
  * re-derive live → persistent food-field update → sample metrics.
@@ -30,6 +35,15 @@ export class World {
   readonly hash: SpatialHash;
   readonly light: LightField;
   readonly food: FoodField;
+  readonly net: NeuralNetwork;
+  /** Per-World deterministic organism-id allocator (M4 kinematic groups; M5 organisms). */
+  nextOrganismId: number;
+  // Kinematic rigid-group table (M4 critter cohesion; M5 replaces with bonds).
+  readonly rigidPassenger: Uint32Array;
+  readonly rigidBody: Uint32Array;
+  readonly rigidOffX: Float32Array;
+  readonly rigidOffY: Float32Array;
+  rigidCount: number;
   readonly metrics: Metrics;
   /** Pre-allocated so lifecycle writes counts without a per-tick object (zero-alloc). */
   readonly lifecycleResult: LifecycleResult;
@@ -71,6 +85,13 @@ export class World {
       config.worldWidth,
       config.worldHeight,
     );
+    this.net = new NeuralNetwork(config.maxCells, config.maxSynapses, config.maxCells);
+    this.nextOrganismId = 1;
+    this.rigidPassenger = new Uint32Array(config.maxCells);
+    this.rigidBody = new Uint32Array(config.maxCells);
+    this.rigidOffX = new Float32Array(config.maxCells);
+    this.rigidOffY = new Float32Array(config.maxCells);
+    this.rigidCount = 0;
     this.metrics = makeMetrics();
     this.lifecycleResult = { births: 0, deaths: 0 };
     this.lastBirths = 0;
@@ -107,6 +128,15 @@ export class World {
     return spawned;
   }
 
+  /** Register a kinematic passenger at a fixed body-frame offset (M4 critter group). */
+  addPassenger(passenger: number, body: number, offX: number, offY: number): void {
+    const k = this.rigidCount++;
+    this.rigidPassenger[k] = passenger;
+    this.rigidBody[k] = body;
+    this.rigidOffX[k] = offX;
+    this.rigidOffY[k] = offY;
+  }
+
   /** Seed an initial PHOTO/DIGESTIVE/MOTILE mix per the configured fractions. */
   seedLife(n: number): void {
     const photo = Math.round(n * this.config.initialPhotoFraction);
@@ -139,9 +169,11 @@ export class World {
 
   /**
    * Advance one tick (§4.3 pipeline): rebuild live → hash → SENSE (food gradient)
-   * → (THINK = M4 neural, skipped) → ACT (steer + thrust) → repulsion → apply
-   * thrust → integrate → metabolize (basal + move cost) → age → lifecycle → light
-   * step → re-derive live → persistent food-field update → sample metrics.
+   * → THINK (neuron-cell forward pass, double-buffered; swap) → ACT (reflex steer +
+   * driveMovers from neuron outputs) → repulsion → apply thrust → integrate →
+   * reposition kinematic passengers → metabolize (basal + move + neural cost) → age
+   * → lifecycle → light step → re-derive live → persistent food-field update →
+   * sample metrics.
    */
   tick(): void {
     const f = this.cells.fields;
@@ -153,8 +185,12 @@ export class World {
 
     this.hash.build(live, n, f.posX, f.posY);
 
-    // Step 2 SENSE → step 4 ACT (step 3 THINK is neural = M4, skipped).
+    // Step 2 SENSE → step 3 THINK (recurrent forward pass) → step 4 ACT.
     sense(live, n, f, this.food);
+
+    think(this.net, f.cellType, f.senseX, f.senseY, f.heading);
+    this.net.swap(); // actCur now holds a(t)
+
     act(
       live,
       n,
@@ -164,6 +200,16 @@ export class World {
       cfg.maxThrust,
       cfg.senseThreshold,
       cfg.cruiseThrust,
+    );
+    // MOVER cells are driven by their motor neurons (ACT for the neural critter).
+    driveMovers(
+      this.net,
+      f.heading,
+      f.thrust,
+      cfg.turnScale,
+      cfg.thrustScale,
+      cfg.thrustBias,
+      cfg.maxThrust,
     );
 
     computeRepulsion(this.hash, f.posX, f.posY, f.radius, f.forceX, f.forceY, cfg.repulsion);
@@ -180,6 +226,25 @@ export class World {
       f.mass,
       cfg.dt,
       cfg.damping,
+      cfg.worldWidth,
+      cfg.worldHeight,
+    );
+
+    // Step 6b: snap kinematic passengers to the rigid body-frame layout (after the
+    // body integrated). Overrides any broad-phase nudge; only the MOVER body integrates.
+    repositionPassengers(
+      this.rigidPassenger,
+      this.rigidBody,
+      this.rigidOffX,
+      this.rigidOffY,
+      this.rigidCount,
+      f.posX,
+      f.posY,
+      f.heading,
+      f.velX,
+      f.velY,
+      f.forceX,
+      f.forceY,
       cfg.worldWidth,
       cfg.worldHeight,
     );
