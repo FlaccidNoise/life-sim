@@ -5,16 +5,22 @@ import { SpatialHash } from '../spatial/spatial-hash';
 import { computeRepulsion } from '../physics/forces';
 import { integrate } from '../physics/integrator';
 import { LightField } from '../environment/light-field';
+import { FoodField } from '../environment/food-field';
 import { metabolize } from '../cells/metabolism';
+import { sense } from '../cells/sense';
+import { act } from '../cells/act';
+import { applyThrust } from '../physics/thrust';
 import { lifecycle, type LifecycleResult } from '../cells/lifecycle';
-import { CellType } from '../cells/types';
+import { CellType, isEdibleBy } from '../cells/types';
 import { makeMetrics, sampleMetrics, type Metrics } from './metrics';
 
 /**
- * The simulation world. Each `tick()` runs the M2 pipeline:
+ * The simulation world. Each `tick()` runs the M3 pipeline:
  * rebuild the compact live set (canonical ascending order) → spatial hash →
- * soft repulsion → semi-implicit integrate → metabolize → age → lifecycle
- * (death/decay/division) → environment step → re-derive live → sample metrics.
+ * SENSE (food gradient) → (THINK = M4, skipped) → ACT (steer + thrust) →
+ * soft repulsion → apply thrust → semi-implicit integrate → metabolize
+ * (basal + move cost) → age → lifecycle (death/decay/division) → light step →
+ * re-derive live → persistent food-field update → sample metrics.
  * Deterministic given (Config, seed); allocation-free in the hot loop.
  */
 export class World {
@@ -23,6 +29,7 @@ export class World {
   readonly cells: CellStore;
   readonly hash: SpatialHash;
   readonly light: LightField;
+  readonly food: FoodField;
   readonly metrics: Metrics;
   /** Pre-allocated so lifecycle writes counts without a per-tick object (zero-alloc). */
   readonly lifecycleResult: LifecycleResult;
@@ -58,6 +65,12 @@ export class World {
       config.lightPatchRadius,
       config.lightMax,
     );
+    this.food = new FoodField(
+      config.foodGridCols,
+      config.foodGridRows,
+      config.worldWidth,
+      config.worldHeight,
+    );
     this.metrics = makeMetrics();
     this.lifecycleResult = { births: 0, deaths: 0 };
     this.lastBirths = 0;
@@ -85,16 +98,23 @@ export class World {
       f.genomeRef[i] = 0;
       f.brainRef[i] = 0;
       f.age[i] = 0;
+      f.heading[i] = 0;
+      f.senseX[i] = 0;
+      f.senseY[i] = 0;
+      f.thrust[i] = 0;
       spawned++;
     }
     return spawned;
   }
 
-  /** Seed an initial PHOTO/DIGESTIVE mix per `initialPhotoFraction`. */
+  /** Seed an initial PHOTO/DIGESTIVE/MOTILE mix per the configured fractions. */
   seedLife(n: number): void {
     const photo = Math.round(n * this.config.initialPhotoFraction);
+    const motile = Math.round(n * this.config.initialMotileFraction);
+    const digestive = Math.max(0, n - photo - motile);
     this.spawn(photo, CellType.PHOTO);
-    this.spawn(n - photo, CellType.DIGESTIVE);
+    this.spawn(digestive, CellType.DIGESTIVE);
+    this.spawn(motile, CellType.MOTILE);
   }
 
   /**
@@ -118,8 +138,10 @@ export class World {
   }
 
   /**
-   * Advance one tick (§4.3 pipeline): rebuild live → hash → repulsion → integrate
-   * → metabolize → age → lifecycle → environment → re-derive live → sample metrics.
+   * Advance one tick (§4.3 pipeline): rebuild live → hash → SENSE (food gradient)
+   * → (THINK = M4 neural, skipped) → ACT (steer + thrust) → repulsion → apply
+   * thrust → integrate → metabolize (basal + move cost) → age → lifecycle → light
+   * step → re-derive live → persistent food-field update → sample metrics.
    */
   tick(): void {
     const f = this.cells.fields;
@@ -130,7 +152,22 @@ export class World {
     const n = this.liveCount;
 
     this.hash.build(live, n, f.posX, f.posY);
+
+    // Step 2 SENSE → step 4 ACT (step 3 THINK is neural = M4, skipped).
+    sense(live, n, f, this.food);
+    act(
+      live,
+      n,
+      f,
+      cfg.turnRate,
+      cfg.thrustGain,
+      cfg.maxThrust,
+      cfg.senseThreshold,
+      cfg.cruiseThrust,
+    );
+
     computeRepulsion(this.hash, f.posX, f.posY, f.radius, f.forceX, f.forceY, cfg.repulsion);
+    applyThrust(live, n, f.heading, f.thrust, f.forceX, f.forceY);
     integrate(
       live,
       n,
@@ -159,7 +196,7 @@ export class World {
       cfg.digestEfficiency,
       cfg.basalCost,
       cfg.meatDecay,
-      0, // moveCost — wired to cfg.moveCost in Task 9
+      cfg.moveCost,
     );
 
     // Age the tick-start live set BEFORE lifecycle. The free-list is LIFO, so a
@@ -192,6 +229,21 @@ export class World {
     // Re-derive the live set so metrics exclude freed corpses (free() leaves
     // cellType=MEAT) and include fresh-slot newborns; population == aliveCount.
     this.rebuildLive();
+
+    // Step 9 ENVIRONMENT (food): deposit smell from currently-alive edible cells onto
+    // the PERSISTENT field (do NOT clear — like LightField), then diffuse + decay so
+    // deposit balances decay into an equilibrium ∝ local food density. Deposit over the
+    // post-lifecycle live set (only-alive) at post-integrate positions; SENSE reads this
+    // field on the NEXT tick (one-tick coupling).
+    const food = this.food;
+    const dep = cfg.foodDeposit;
+    for (let k = 0; k < this.liveCount; k++) {
+      const idx = this.liveIndices[k]!;
+      const t = f.cellType[idx]!;
+      if (isEdibleBy(CellType.MOTILE, t)) food.depositAt(f.posX[idx]!, f.posY[idx]!, dep);
+    }
+    food.step(cfg.foodDiffuse, cfg.foodDecay);
+
     sampleMetrics(
       this.metrics,
       this.liveIndices,

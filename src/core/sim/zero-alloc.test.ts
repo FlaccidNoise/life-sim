@@ -28,5 +28,5 @@ describe('zero-allocation hot loop', () => {
 
     const growthKb = (after - before) / 1024;
     expect(growthKb).toBeLessThan(512); // generous margin; tick() allocates nothing
-  });
+  }, 30_000); // 50k cells × 550 ticks through the full M3 path exceeds vitest's 5s default
 });
