@@ -35,14 +35,23 @@ const dash = new TelemetryDashboard(document.getElementById('telemetry') as HTML
 const inspectPanel = document.getElementById('inspect') as HTMLElement;
 mountControls(document.getElementById('controls') as HTMLElement, config);
 
-// Previous-step position snapshots, for render interpolation (smooth motion at any speed).
-// prevGen tracks slot generation so recycled-then-reused slots draw statically (no streak).
+// Previous-step snapshots for render interpolation (smooth motion at any speed).
+// NaN marks a slot we have no previous position for — a never-snapshotted newborn,
+// including a division child placed in a pristine (never-freed) slot; the renderer
+// draws those statically so they don't streak from the world origin. prevGen catches
+// the other newborn case: a corpse slot recycled into a child the same tick.
 const prevX = new Float64Array(config.maxCells);
 const prevY = new Float64Array(config.maxCells);
 const prevGen = new Uint32Array(config.maxCells);
-prevX.set(f.posX);
-prevY.set(f.posY);
-prevGen.set(f.generation);
+prevX.fill(NaN);
+prevY.fill(NaN);
+for (let i = 0; i < config.maxCells; i++) {
+  if (world.cells.isAlive(i)) {
+    prevX[i] = f.posX[i]!;
+    prevY[i] = f.posY[i]!;
+    prevGen[i] = f.generation[i]!;
+  }
+}
 
 function drawScene(alpha: number): void {
   renderer.clear();
@@ -69,9 +78,16 @@ let accumulator = 0;
 const MAX_STEPS = 64;
 
 function snapshot(): void {
-  prevX.set(f.posX);
-  prevY.set(f.posY);
-  prevGen.set(f.generation);
+  // Only update slots that are currently live, so never-live slots keep their NaN
+  // sentinel (a pristine slot only gets a real prev once it has held a live cell).
+  const live = world.liveIndices;
+  const n = world.liveCount;
+  for (let k = 0; k < n; k++) {
+    const i = live[k]!;
+    prevX[i] = f.posX[i]!;
+    prevY[i] = f.posY[i]!;
+    prevGen[i] = f.generation[i]!;
+  }
 }
 
 // Pan with mouse drag. A near-stationary press+release (<4px) is a click → inspect.
