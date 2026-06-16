@@ -1,0 +1,88 @@
+import { type CellStore } from '../memory/cell-store';
+import { CellType, isLiving } from './types';
+import { hashFloat3 } from '../math/rng';
+import { wrap } from '../math/vec2';
+
+export interface LifecycleResult {
+  births: number;
+  deaths: number;
+}
+
+/**
+ * LIVE/DIE/BREED step (§4.3). Single-threaded, canonical ascending-live-slot
+ * order. Takes scalar params (not Config) and writes counts into `out` (no
+ * per-tick allocation). Three in-order passes over the live set captured at tick
+ * start:
+ *   1. Death:  living energy<=0 → convert in place to MEAT (biomass→food energy).
+ *   2. Decay:  MEAT energy<=0   → free the slot (bumps generation[]; exercises the free-list).
+ *   3. Divide: living energy>=divideThreshold → clone same-type child into a free
+ *              slot, 50/50 energy split minus divideCost; child placed at parent +
+ *              seeded jitter (stateless hashFloat3 → reproducible, order-free).
+ * Children are NOT added to `live`; they first act next tick.
+ */
+export function lifecycle(
+  live: Uint32Array,
+  n: number,
+  store: CellStore,
+  seed: number,
+  worldWidth: number,
+  worldHeight: number,
+  meatEnergyOnDeath: number,
+  divideThreshold: number,
+  divideCost: number,
+  divideJitter: number,
+  tick: number,
+  out: LifecycleResult,
+): void {
+  const f = store.fields;
+  let births = 0;
+  let deaths = 0;
+
+  // Pass 1 + 2: death and decay-removal.
+  for (let k = 0; k < n; k++) {
+    const i = live[k]!;
+    const type = f.cellType[i]!;
+    if (isLiving(type)) {
+      if (f.energy[i]! <= 0) {
+        f.cellType[i] = CellType.MEAT;
+        f.energy[i] = f.mass[i]! * meatEnergyOnDeath;
+        f.velX[i] = 0;
+        f.velY[i] = 0;
+        deaths++;
+      }
+    } else if (f.energy[i]! <= 0) {
+      // MEAT fully decayed → recycle the slot.
+      store.free(i);
+    }
+  }
+
+  // Pass 3: division. (Slots freed in pass 2 are available for reuse.)
+  for (let k = 0; k < n; k++) {
+    const i = live[k]!;
+    if (!isLiving(f.cellType[i]!)) continue;
+    if (f.energy[i]! < divideThreshold) continue;
+    const child = store.alloc();
+    if (child < 0) break; // at capacity — refuse-new
+    const half = (f.energy[i]! - divideCost) * 0.5;
+    f.energy[i] = half;
+    f.energy[child] = half;
+    const angle = hashFloat3(seed, tick, i) * Math.PI * 2;
+    f.posX[child] = wrap(f.posX[i]! + Math.cos(angle) * divideJitter, worldWidth);
+    f.posY[child] = wrap(f.posY[i]! + Math.sin(angle) * divideJitter, worldHeight);
+    f.velX[child] = 0;
+    f.velY[child] = 0;
+    f.forceX[child] = 0;
+    f.forceY[child] = 0;
+    f.radius[child] = f.radius[i]!;
+    f.mass[child] = f.mass[i]!;
+    f.cellType[child] = f.cellType[i]!;
+    f.organismId[child] = 0;
+    f.genomeRef[child] = 0;
+    f.brainRef[child] = 0;
+    f.age[child] = 0;
+    births++;
+  }
+
+  out.births = births;
+  out.deaths = deaths;
+}
