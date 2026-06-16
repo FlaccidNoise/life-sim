@@ -4,7 +4,7 @@ import { defaultConfig } from './config';
 
 function runWorld(seed: number): World {
   const w = new World(defaultConfig({ seed, maxCells: 2000 }), false);
-  w.spawn(1000);
+  w.seedLife(1000);
   for (let i = 0; i < 200; i++) w.tick();
   return w;
 }
@@ -21,6 +21,9 @@ describe('reproducibility', () => {
     );
     expect(Array.from(a.cells.fields.age.slice(0, 1000))).toEqual(
       Array.from(b.cells.fields.age.slice(0, 1000)),
+    );
+    expect(Array.from(a.cells.fields.heading.slice(0, 1000))).toEqual(
+      Array.from(b.cells.fields.heading.slice(0, 1000)),
     );
   });
 
