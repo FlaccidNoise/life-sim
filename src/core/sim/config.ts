@@ -63,33 +63,43 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
   return {
     seed: 1,
     maxCells: 100_000,
-    worldWidth: 4096,
-    worldHeight: 4096,
+    // M2: a 2048² world at ~20k seeded cells is the empirically-tuned "breathing"
+    // regime — dense enough that digestive cells contact prey passively (no movement
+    // until M3), so the 2nd trophic level sustains instead of starving to a PHOTO
+    // monoculture (§10 R1). Headless sweep: stable diversity ~0.2–0.3 through 1000+
+    // ticks. A sparser 4096² world collapses digestives → monoculture.
+    worldWidth: 2048,
+    worldHeight: 2048,
     dt: 1,
     cellRadius: 6,
     repulsion: 2,
     damping: 0.5,
 
-    lightGridCols: 64,
-    lightGridRows: 64,
+    lightGridCols: 32, // 64-unit patches over the 2048 world
+    lightGridRows: 32,
     lightMax: 1,
     lightPatchCount: 32,
     lightPatchRadius: 6,
-    lightRegen: 0.3, // was 0.05 — patches recover fast enough to sustain producers
+    lightRegen: 0.3, // patches recover fast enough to sustain producers (was 0.05)
     lightDiffuse: 0.1,
 
     photoGain: 0.05,
-    photoDepletion: 0.01, // was 0.2 — a photo cell no longer strip-mines its patch in one tick
-    digestRate: 5,
-    digestEfficiency: 0.6,
-    basalCost: 0.02,
+    photoDepletion: 0.01, // a photo cell no longer strip-mines its patch in one tick (was 0.2)
+    // Digestion tuned for stable coexistence: potent enough that passive contact
+    // sustains a digestive, gentle enough not to strip prey and overshoot→crash.
+    digestRate: 7,
+    digestEfficiency: 0.7,
+    basalCost: 0.015, // cheaper upkeep keeps digestives alive between meals (was 0.02)
     meatDecay: 0.5,
     meatEnergyOnDeath: 30,
 
-    divideThreshold: 200,
+    divideThreshold: 150, // lower than 200 → faster prey turnover; also damps predator overshoot
     divideCost: 10,
     divideJitter: 6,
-    initialPhotoFraction: 0.85,
+    // 0.75 = a 3:1 producer:consumer seed (was 0.85); the larger consumer cohort
+    // plus the damping above settles into sustained coexistence rather than a
+    // predator boom-bust that ends in monoculture.
+    initialPhotoFraction: 0.75,
     ...overrides,
   };
 }

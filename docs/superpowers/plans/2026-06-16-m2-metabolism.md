@@ -2047,9 +2047,9 @@ import { defaultConfig } from './core/sim/config';
 
 describe('tier-7 visual smoke — the default economy breathes (does not extinct or explode)', () => {
   it('keeps a living, diverse population after 300 ticks on the committed defaults', () => {
-    const cfg = defaultConfig({ seed: 1, maxCells: 20_000 });
+    const cfg = defaultConfig({ seed: 1, maxCells: 60_000 });
     const w = new World(cfg, false);
-    w.seedLife(5000);
+    w.seedLife(20_000); // dense enough for the food web in the tuned 2048² default world
     for (let i = 0; i < 300; i++) w.tick();
     expect(w.cells.aliveCount).toBeGreaterThan(0);            // not extinct (§10 R1)
     expect(w.cells.aliveCount).toBeLessThan(cfg.maxCells);    // not pinned at the quota
