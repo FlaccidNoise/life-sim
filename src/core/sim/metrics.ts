@@ -13,6 +13,7 @@ export interface Metrics {
   population: number;
   photo: number;
   digestive: number;
+  motile: number;
   meat: number;
   meanEnergy: number;
   diversity: number;
@@ -26,6 +27,7 @@ export function makeMetrics(): Metrics {
     population: 0,
     photo: 0,
     digestive: 0,
+    motile: 0,
     meat: 0,
     meanEnergy: 0,
     diversity: 0,
@@ -45,6 +47,7 @@ export function sampleMetrics(
 ): void {
   let photo = 0;
   let digestive = 0;
+  let motile = 0;
   let meat = 0;
   let energySum = 0;
   for (let k = 0; k < n; k++) {
@@ -56,21 +59,26 @@ export function sampleMetrics(
     } else if (t === CellType.DIGESTIVE) {
       digestive++;
       energySum += f.energy[i]!;
+    } else if (t === CellType.MOTILE) {
+      motile++;
+      energySum += f.energy[i]!;
     } else if (t === CellType.MEAT) {
       meat++;
     }
   }
-  const living = photo + digestive;
+  const living = photo + digestive + motile;
   let diversity = 0;
   if (living > 0) {
     const pp = photo / living;
     const pd = digestive / living;
-    diversity = 1 - (pp * pp + pd * pd);
+    const pm = motile / living;
+    diversity = 1 - (pp * pp + pd * pd + pm * pm);
   }
   out.tick = tick;
   out.population = n;
   out.photo = photo;
   out.digestive = digestive;
+  out.motile = motile;
   out.meat = meat;
   out.meanEnergy = living > 0 ? energySum / living : 0;
   out.diversity = diversity;
