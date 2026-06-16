@@ -27,4 +27,18 @@ describe('Config', () => {
     expect(back.seed).toBe(5);
     expect(back.maxCells).toBe(defaultConfig().maxCells);
   });
+
+  it('provides M2 light/economy/division defaults', () => {
+    const c = defaultConfig();
+    expect(c.lightGridCols).toBeGreaterThanOrEqual(3);
+    expect(c.lightGridRows).toBeGreaterThanOrEqual(3);
+    expect(c.lightMax).toBeGreaterThan(0);
+    expect(c.photoGain).toBeGreaterThan(0);
+    expect(c.basalCost).toBeGreaterThan(0);
+    expect(c.digestEfficiency).toBeGreaterThan(0);
+    expect(c.digestEfficiency).toBeLessThan(1);
+    expect(c.divideThreshold).toBeGreaterThan(c.divideCost);
+    expect(c.initialPhotoFraction).toBeGreaterThan(0);
+    expect(c.initialPhotoFraction).toBeLessThanOrEqual(1);
+  });
 });
