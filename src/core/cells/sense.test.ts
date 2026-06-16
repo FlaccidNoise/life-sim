@@ -45,3 +45,19 @@ describe('sense — food gradient → sensor channel', () => {
     expect(f.senseX[i]).toBeCloseTo(-6, 5);
   });
 });
+
+describe('sense — also samples SENSOR cells (M4)', () => {
+  it('writes the gradient for a SENSOR cell exactly as for a MOTILE', () => {
+    const store = new CellStore(2, false);
+    const f = store.fields;
+    const food = new FoodField(8, 8, 800, 800);
+    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) food.field[r * 8 + c] = c;
+    const i = store.alloc();
+    f.posX[i] = 350;
+    f.posY[i] = 350;
+    f.cellType[i] = CellType.SENSOR;
+    sense(Uint32Array.from([i]), 1, f, food);
+    expect(f.senseX[i]).toBeCloseTo(2, 5); // right(col4)=4 − left(col2)=2
+    expect(f.senseY[i]).toBeCloseTo(0, 5);
+  });
+});
