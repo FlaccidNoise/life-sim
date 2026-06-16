@@ -26,6 +26,10 @@ const KNOBS: Knob[] = [
   { key: 'foodDeposit', label: 'food deposit', min: 0, max: 10, step: 0.5 },
   { key: 'foodDiffuse', label: 'food diffuse', min: 0, max: 0.25, step: 0.005 },
   { key: 'foodDecay', label: 'food decay', min: 0, max: 0.5, step: 0.005 },
+  { key: 'neuralCost', label: 'neural cost', min: 0, max: 0.1, step: 0.005 },
+  { key: 'turnScale', label: 'turn scale', min: 0, max: 1, step: 0.02 },
+  { key: 'thrustScale', label: 'thrust scale', min: 0, max: 8, step: 0.1 },
+  { key: 'thrustBias', label: 'thrust bias', min: -2, max: 6, step: 0.1 },
 ];
 
 /** Build slider rows into `host`, mutating `config` live as they move. */
