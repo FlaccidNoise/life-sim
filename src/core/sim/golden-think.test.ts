@@ -72,7 +72,7 @@ describe('golden tick — SENSE → THINK → ACT through World.tick', () => {
     w.tick();
     w.tick();
     w.tick();
-    expect(f.thrust[critter.mover]!).toBeGreaterThan(0); // brain produces forward thrust
+    expect(f.thrust[critter.mover]!).toBeGreaterThan(0); // motor binding drives the MOVER (cruise + sensor); exact values are pinned by the closed-form test above
     expect(Number.isFinite(f.heading[critter.mover]!)).toBe(true);
     expect(Math.abs(w.net.actCur[critter.turn]!)).toBeLessThanOrEqual(1.0000001);
     expect(Math.abs(w.net.actCur[critter.thrust]!)).toBeLessThanOrEqual(1.0000001);

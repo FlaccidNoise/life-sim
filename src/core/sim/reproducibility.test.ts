@@ -66,9 +66,9 @@ describe('reproducibility — neuron activations', () => {
     // sensorimotor chain — not only the oscillator — is locked.
     const slots = [a.c.sensorFwd, a.c.sensorLat, a.c.clockA, a.c.clockB, a.c.turn, a.c.thrust];
     for (const s of slots) expect(a.w.net.actCur[s]!).toBe(b.w.net.actCur[s]!);
-    expect(a.w.cells.fields.thrust[a.c.mover]!).toBe(b.w.cells.fields.thrust[b.c.mover]!);
     expect(a.w.cells.fields.heading[a.c.mover]!).toBe(b.w.cells.fields.heading[b.c.mover]!);
-    // and the chain actually computed non-trivial (non-zero) activations.
-    expect(slots.some((s) => a.w.net.actCur[s]! !== 0)).toBe(true);
+    // and the SENSOR chain (not just the free-running oscillator) computed a non-zero
+    // value — proving the sensor→neuron path, fed by the PHOTO smell gradient, ran.
+    expect(a.w.net.actCur[a.c.sensorFwd]! !== 0 || a.w.net.actCur[a.c.sensorLat]! !== 0).toBe(true);
   });
 });

@@ -138,12 +138,16 @@ export class NeuralNetwork {
       if (store.isAlive(i) && isNeural(f.cellType[i]!)) this.liveNeurons[nn++] = i;
     }
     this.liveNeuronCount = nn;
-    // Live synapses: alive slot + both endpoints gen-valid, ascending.
+    // Live synapses: alive slot + both endpoints gen-valid AND still neural-typed,
+    // ascending. The neural-type check prunes a synapse whose slot was recycled into a
+    // non-neural cell, so THINK never accumulates onto a slot it won't zero/squash.
     let ns = 0;
     for (let s = 0; s < this.maxSynapses; s++) {
       if (this.synAlive[s] === 0) continue;
-      if (!store.validate(this.pre[s]!, this.preGen[s]!)) continue;
-      if (!store.validate(this.post[s]!, this.postGen[s]!)) continue;
+      const pre = this.pre[s]!;
+      const post = this.post[s]!;
+      if (!store.validate(pre, this.preGen[s]!) || !isNeural(f.cellType[pre]!)) continue;
+      if (!store.validate(post, this.postGen[s]!) || !isNeural(f.cellType[post]!)) continue;
       this.liveSynapses[ns++] = s;
     }
     this.liveSynapseCount = ns;

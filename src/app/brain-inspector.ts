@@ -5,6 +5,9 @@ import { type World } from '../core/sim/world';
  * Nodes are laid out from each neuron's world position (projected into the canvas);
  * node colour encodes activation (blue −1 → grey 0 → orange +1); synapse edges are
  * green (excitatory) / red (inhibitory), width ∝ |weight|. Read-only over core.
+ *
+ * Scoped to a single organism when `organismId` is given (else all neurons), so two
+ * roaming critters don't collapse into one degenerate shared bounding box.
  */
 export class BrainInspector {
   private readonly ctx: CanvasRenderingContext2D;
@@ -14,34 +17,38 @@ export class BrainInspector {
     this.ctx = ctx;
   }
 
-  render(world: World): void {
+  render(world: World, organismId?: number): void {
     const { ctx, canvas } = this;
     const w = canvas.width;
     const h = canvas.height;
     ctx.clearRect(0, 0, w, h);
     const net = world.net;
     const f = world.cells.fields;
-    const n = net.liveNeuronCount;
-    if (n === 0) {
-      ctx.fillStyle = '#789';
-      ctx.font = '12px monospace';
-      ctx.fillText('no neuron cells', 10, 20);
-      return;
-    }
+    const inScope = (i: number): boolean =>
+      organismId === undefined || f.organismId[i] === organismId;
 
-    // Bounding box of the live neurons in world space → fit to canvas with padding.
+    // Bounding box of the in-scope live neurons in world space → fit canvas + padding.
     let minX = Infinity;
     let minY = Infinity;
     let maxX = -Infinity;
     let maxY = -Infinity;
-    for (let k = 0; k < n; k++) {
+    let shown = 0;
+    for (let k = 0; k < net.liveNeuronCount; k++) {
       const i = net.liveNeurons[k]!;
+      if (!inScope(i)) continue;
+      shown++;
       const x = f.posX[i]!;
       const y = f.posY[i]!;
       if (x < minX) minX = x;
       if (x > maxX) maxX = x;
       if (y < minY) minY = y;
       if (y > maxY) maxY = y;
+    }
+    if (shown === 0) {
+      ctx.fillStyle = '#789';
+      ctx.font = '12px monospace';
+      ctx.fillText('no neuron cells', 10, 20);
+      return;
     }
     const pad = 24;
     const spanX = Math.max(1, maxX - minX);
@@ -56,6 +63,7 @@ export class BrainInspector {
     // Edges (synapses).
     for (let k = 0; k < net.liveSynapseCount; k++) {
       const s = net.liveSynapses[k]!;
+      if (!inScope(net.pre[s]!)) continue; // pre & post share an organism
       const a = proj(f.posX[net.pre[s]!]!, f.posY[net.pre[s]!]!);
       const b = proj(f.posX[net.post[s]!]!, f.posY[net.post[s]!]!);
       const wgt = net.weight[s]!;
@@ -68,8 +76,9 @@ export class BrainInspector {
     }
 
     // Nodes (neurons), coloured by activation.
-    for (let k = 0; k < n; k++) {
+    for (let k = 0; k < net.liveNeuronCount; k++) {
       const i = net.liveNeurons[k]!;
+      if (!inScope(i)) continue;
       const [px, py] = proj(f.posX[i]!, f.posY[i]!);
       const a = net.actCur[i]!; // ∈ roughly [−1, 1]
       const t = Math.max(-1, Math.min(1, a));

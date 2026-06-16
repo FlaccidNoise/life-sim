@@ -55,10 +55,9 @@ describe('M4 acceptance — hand-wired critter swims to food via its brain', () 
     const d1 = torusDist(f.posX[start.mover]!, f.posY[start.mover]!, foodX, foodY, 800, 800);
     expect(d1).toBeLessThan(d0 - 150); // closed a clear, substantial distance up-gradient
 
-    // Topology regression guard (audit): neural cells are exempt from lifecycle (Task 1),
-    // and PHOTO food can't divide (divideThreshold 1e9) or die (basalCost 0), so the
-    // population is fixed. If a future edit lets the critter clone/die, aliveCount changes
-    // (clones grow it) or the mover's type changes — this fails loudly.
+    // Coarse population guard: under this config (divideThreshold 1e9, basalCost 0) the
+    // count is fixed, so a gross regression (e.g. the critter exploding into clones) shows
+    // up here. The neural lifecycle EXEMPTION itself is directly tested in lifecycle.test.ts.
     expect(w.cells.aliveCount).toBe(alive0);
     expect(f.cellType[start.mover]!).toBe(CellType.MOVER);
   });
