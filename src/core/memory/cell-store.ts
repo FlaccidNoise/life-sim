@@ -19,6 +19,10 @@ export interface CellArrays {
   genomeRef: Uint32Array;
   brainRef: Uint32Array;
   age: Uint32Array;
+  heading: Float32Array;
+  senseX: Float32Array;
+  senseY: Float32Array;
+  thrust: Float32Array;
   flags: Uint8Array;
   generation: Uint32Array;
 }
@@ -38,6 +42,10 @@ const CELL_FIELDS = [
   { name: 'genomeRef', ctor: Uint32Array },
   { name: 'brainRef', ctor: Uint32Array },
   { name: 'age', ctor: Uint32Array },
+  { name: 'heading', ctor: Float32Array },
+  { name: 'senseX', ctor: Float32Array },
+  { name: 'senseY', ctor: Float32Array },
+  { name: 'thrust', ctor: Float32Array },
   { name: 'flags', ctor: Uint8Array },
   { name: 'generation', ctor: Uint32Array },
 ] as const;
