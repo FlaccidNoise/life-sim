@@ -14,7 +14,7 @@ const m = world.metrics;
 
 console.log(`shared memory: ${world.cells.soa.shared}`);
 console.log(
-  `population:    ${m.population}  (photo ${m.photo}, digestive ${m.digestive}, meat ${m.meat})`,
+  `population:    ${m.population}  (photo ${m.photo}, digestive ${m.digestive}, motile ${m.motile}, meat ${m.meat})`,
 );
 console.log(`mean energy:   ${m.meanEnergy.toFixed(1)}`);
 console.log(
