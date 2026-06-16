@@ -1,13 +1,17 @@
 import { World } from '../core/sim/world';
 import { defaultConfig } from '../core/sim/config';
 import { Renderer, type Camera } from '../render/webgl-renderer';
+import { LightOverlay } from '../render/light-overlay';
+import { TelemetryDashboard } from './telemetry';
+import { inspectAt } from './inspect';
+import { mountControls } from './controls';
 
 const canvas = document.getElementById('view') as HTMLCanvasElement;
 const hud = document.getElementById('hud');
 
 const config = defaultConfig({ maxCells: 100_000 });
 const world = new World(config);
-world.spawn(100_000);
+world.seedLife(20_000);
 const f = world.cells.fields;
 
 function createRenderer(): Renderer {
@@ -22,11 +26,31 @@ function createRenderer(): Renderer {
 const renderer = createRenderer();
 const camera: Camera = { x: config.worldWidth / 2, y: config.worldHeight / 2, scale: 1 };
 
+// Light-field heatmap overlay (toggled with `L`). Shares the renderer's GL context.
+const overlay = new LightOverlay(renderer.gl, world.light);
+let showLight = false;
+
+// Telemetry dashboard + inspect panel + live economy knobs.
+const dash = new TelemetryDashboard(document.getElementById('telemetry') as HTMLCanvasElement);
+const inspectPanel = document.getElementById('inspect') as HTMLElement;
+mountControls(document.getElementById('controls') as HTMLElement, config);
+
 // Previous-step position snapshots, for render interpolation (smooth motion at any speed).
+// prevGen tracks slot generation so recycled-then-reused slots draw statically (no streak).
 const prevX = new Float64Array(config.maxCells);
 const prevY = new Float64Array(config.maxCells);
+const prevGen = new Uint32Array(config.maxCells);
 prevX.set(f.posX);
 prevY.set(f.posY);
+prevGen.set(f.generation);
+
+function drawScene(alpha: number): void {
+  renderer.clear();
+  if (showLight) {
+    overlay.render(camera, world.light, config.lightMax, canvas.width, canvas.height);
+  }
+  renderer.render(world, camera, prevX, prevY, prevGen, alpha);
+}
 
 function fit(): void {
   canvas.width = window.innerWidth;
@@ -47,18 +71,31 @@ const MAX_STEPS = 64;
 function snapshot(): void {
   prevX.set(f.posX);
   prevY.set(f.posY);
+  prevGen.set(f.generation);
 }
 
-// Pan with mouse drag.
+// Pan with mouse drag. A near-stationary press+release (<4px) is a click → inspect.
 let dragging = false;
 let lastX = 0;
 let lastY = 0;
+let downX = 0;
+let downY = 0;
 canvas.addEventListener('mousedown', (e) => {
   dragging = true;
   lastX = e.clientX;
   lastY = e.clientY;
+  downX = e.clientX;
+  downY = e.clientY;
 });
-window.addEventListener('mouseup', () => (dragging = false));
+window.addEventListener('mouseup', (e) => {
+  if (dragging) {
+    const moved = Math.hypot(e.clientX - downX, e.clientY - downY);
+    if (moved < 4) {
+      inspectAt(world, camera, e.clientX, e.clientY, canvas.width, canvas.height, inspectPanel);
+    }
+  }
+  dragging = false;
+});
 window.addEventListener('mousemove', (e) => {
   if (!dragging) return;
   camera.x -= (e.clientX - lastX) / camera.scale;
@@ -91,6 +128,8 @@ window.addEventListener('keydown', (e) => {
     speed = Math.min(16, speed * 1.5);
   } else if (e.key === '[') {
     speed = Math.max(0.02, speed / 1.5);
+  } else if (e.key === 'l' || e.key === 'L') {
+    showLight = !showLight;
   }
 });
 
@@ -100,10 +139,13 @@ let lastFpsT = performance.now();
 
 function updateHud(): void {
   if (!hud) return;
+  const m = world.metrics;
   hud.textContent =
     `cells ${world.cells.aliveCount} | tick ${world.tickCount} | ${fps} fps | ` +
-    `speed ${speed.toFixed(2)}x${paused ? ' (paused)' : ''} | zoom ${camera.scale.toFixed(3)} | ` +
-    `shared ${world.cells.soa.shared}`;
+    `speed ${speed.toFixed(2)}x${paused ? ' (paused)' : ''} | zoom ${camera.scale.toFixed(3)}\n` +
+    `photo ${m.photo} dig ${m.digestive} meat ${m.meat} | div ${m.diversity.toFixed(3)} | ` +
+    `light ${showLight ? 'on' : 'off'}\n` +
+    `space pause | . step | [ ] slower/faster | drag pan | wheel zoom | L light | click inspect`;
 }
 
 function loop(): void {
@@ -120,7 +162,10 @@ function loop(): void {
   }
 
   const alpha = paused ? 1 : Math.min(1, accumulator);
-  renderer.render(world, camera, prevX, prevY, alpha);
+  drawScene(alpha);
+
+  dash.push(world.metrics);
+  dash.draw(world.metrics);
 
   frames++;
   const now = performance.now();
