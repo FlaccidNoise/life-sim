@@ -18,6 +18,14 @@ const KNOBS: Knob[] = [
   { key: 'divideThreshold', label: 'divide thresh', min: 20, max: 600, step: 5 },
   { key: 'lightRegen', label: 'light regen', min: 0, max: 1, step: 0.01 },
   { key: 'lightDiffuse', label: 'light diffuse', min: 0, max: 0.25, step: 0.005 },
+  { key: 'thrustGain', label: 'thrust gain', min: 0, max: 200, step: 1 },
+  { key: 'maxThrust', label: 'max thrust', min: 0, max: 20, step: 0.5 },
+  { key: 'turnRate', label: 'turn rate', min: 0, max: 1, step: 0.01 },
+  { key: 'cruiseThrust', label: 'cruise thrust', min: 0, max: 5, step: 0.1 },
+  { key: 'moveCost', label: 'move cost', min: 0, max: 0.2, step: 0.002 },
+  { key: 'foodDeposit', label: 'food deposit', min: 0, max: 10, step: 0.5 },
+  { key: 'foodDiffuse', label: 'food diffuse', min: 0, max: 0.25, step: 0.005 },
+  { key: 'foodDecay', label: 'food decay', min: 0, max: 0.5, step: 0.005 },
 ];
 
 /** Build slider rows into `host`, mutating `config` live as they move. */
