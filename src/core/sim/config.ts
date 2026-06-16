@@ -24,7 +24,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     worldWidth: 4096,
     worldHeight: 4096,
     dt: 1,
-    cellRadius: 7,
+    cellRadius: 6,
     repulsion: 2,
     damping: 0.5,
     ...overrides,
