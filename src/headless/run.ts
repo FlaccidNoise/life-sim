@@ -1,10 +1,13 @@
 import { World } from '../core/sim/world';
 import { defaultConfig } from '../core/sim/config';
+import { spawnSwimmer } from '../core/sim/critter';
 
 // M2: seed the breathing 2-trophic regime (default 2048² world) and report the
 // economy telemetry so a headless run shows the food web is alive, not collapsed.
 const world = new World(defaultConfig({ seed: 1, maxCells: 60_000 }));
 world.seedLife(20_000);
+// M4: a hand-wired swimmer critter so the neural hot path (THINK/motor/reposition) runs.
+spawnSwimmer(world, world.config.worldWidth * 0.5, world.config.worldHeight * 0.5, 0);
 
 const ticks = 1000;
 const start = performance.now();
@@ -17,6 +20,9 @@ console.log(
   `population:    ${m.population}  (photo ${m.photo}, digestive ${m.digestive}, motile ${m.motile}, meat ${m.meat})`,
 );
 console.log(`mean energy:   ${m.meanEnergy.toFixed(1)}`);
+console.log(
+  `neural:        neurons=${world.net.liveNeuronCount} synapses=${world.net.liveSynapseCount}`,
+);
 console.log(
   `diversity:     ${m.diversity.toFixed(3)}  (phenotypic Simpson; >0 ⇒ 2nd trophic level alive)`,
 );
