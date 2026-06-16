@@ -57,6 +57,32 @@ export interface Config {
   divideJitter: number;
   /** Fraction of initial cells spawned as PHOTO; the rest are DIGESTIVE. */
   initialPhotoFraction: number;
+
+  // Food/smell field (chemotaxis gradient, §4.6). Coarse grid like the light field.
+  foodGridCols: number;
+  foodGridRows: number;
+  /** Smell deposited per edible (PHOTO/MEAT) cell per tick. */
+  foodDeposit: number;
+  /** Toroidal diffusion coefficient per tick, in [0, 0.25] (4·diffuse < 1). */
+  foodDiffuse: number;
+  /** Fraction of smell lost per tick, in [0, 1). Keeps the field at equilibrium. */
+  foodDecay: number;
+
+  // Sensing & movement (§4.4). All live knobs.
+  /** Gradient magnitude below which a mover coasts at cruiseThrust instead of steering. */
+  senseThreshold: number;
+  /** Max radians per tick a mover turns toward the gradient. */
+  turnRate: number;
+  /** Thrust force per unit gradient magnitude. */
+  thrustGain: number;
+  /** Thrust force cap. */
+  maxThrust: number;
+  /** Thrust applied while coasting (no gradient) — deterministic roaming. */
+  cruiseThrust: number;
+  /** Energy per tick = moveCost · thrust². */
+  moveCost: number;
+  /** Fraction of initial cells spawned as MOTILE (rest split photo/digestive). */
+  initialMotileFraction: number;
 }
 
 export function defaultConfig(overrides: Partial<Config> = {}): Config {
@@ -100,6 +126,25 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     // plus the damping above settles into sustained coexistence rather than a
     // predator boom-bust that ends in monoculture.
     initialPhotoFraction: 0.75,
+
+    foodGridCols: 64, // 32-unit patches over the 2048 world — fine enough that a prey cluster stands out above background (32² gave a near-uniform, noisy field in the dense regime)
+    foodGridRows: 64,
+    foodDeposit: 2,
+    foodDiffuse: 0.22, // near the 0.25 stability cap (4·diffuse < 1) → long smell range
+    foodDecay: 0.03, // PERSISTENT field (NOT cleared per tick): deposit balanced by decay → equilibrium ∝ local food density, diffused into a smooth long-range gradient
+
+    senseThreshold: 1e-4,
+    turnRate: 0.25, // ~14°/tick — visibly curves toward food without snapping
+    // thrustGain·|grad| must land in the PROPORTIONAL band, not pin at maxThrust. Saturation
+    // threshold = maxThrust/thrustGain; with 6/3 = 2, thrust ramps proportionally for the
+    // typical |grad| ≈ 0.2–2 and only clamps on the steepest gradients (so the live thrustGain
+    // knob actually does something). thrustGain 40/maxThrust 5 would be pure bang-bang.
+    thrustGain: 3,
+    maxThrust: 6, // terminal speed ≈ 6 world-units/tick (damping 0.5)
+    cruiseThrust: 0.5, // gentle roam so a motile in a flat zone explores until it picks up a scent
+    moveCost: 0.02, // at maxThrust → ~0.72 energy/tick; affordable once it reaches food
+    initialMotileFraction: 0.1,
+
     ...overrides,
   };
 }
