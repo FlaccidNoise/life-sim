@@ -9,7 +9,13 @@ describe('zero-allocation hot loop', () => {
   it('does not grow the heap while ticking in steady state', () => {
     if (!gc) throw new Error('run vitest with --expose-gc (set NODE_OPTIONS in the test script)');
 
-    const w = new World(defaultConfig({ seed: 7, maxCells: 50_000 }), false);
+    // Explicit large world: 50k cells would over-pack the default 2048² M2 world;
+    // a 4096² world keeps them at ~M1 density while still exercising the full M2
+    // tick path (metabolize + lifecycle + division/recycle + light) at scale.
+    const w = new World(
+      defaultConfig({ seed: 7, maxCells: 50_000, worldWidth: 4096, worldHeight: 4096 }),
+      false,
+    );
     w.spawn(50_000);
 
     for (let i = 0; i < 50; i++) w.tick(); // warm up JIT
