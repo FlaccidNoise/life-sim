@@ -135,11 +135,12 @@ export class Renderer {
    * previous physics step (`prevX/prevY`) to the current one (along the shortest
    * toroidal path), so motion is smooth at any sim speed. `alpha` ∈ [0, 1].
    *
-   * `prevGen` is the per-slot `generation[]` snapshot from the previous step. A
-   * corpse freed and re-allocated as a division child the same tick keeps a stale
-   * `prevX/prevY` from the dead occupant — interpolating that would streak the
-   * point across the world. When a slot's generation changed, draw it statically
-   * at its current position instead of interpolating.
+   * `prevGen` is the per-slot `generation[]` snapshot from the previous step, and
+   * `prevX/prevY` carry NaN for slots never snapshotted while live. A division child
+   * would otherwise streak from a stale position: a recycled corpse slot keeps the
+   * dead occupant's `prevX/prevY` (caught by the generation change), and a pristine
+   * slot keeps NaN (caught by the NaN check). Either way the newborn is drawn
+   * statically at its current position instead of interpolated.
    *
    * Does NOT clear the framebuffer — call `clear()` once per frame first, so an
    * overlay (e.g. the light heatmap) can be drawn underneath the points.
@@ -163,9 +164,16 @@ export class Renderer {
     for (let k = 0; k < n; k++) {
       const i = live[k]!;
       const o = k * 3;
-      const same = prevGen[i] === f.generation[i]!; // identity unchanged → interpolate
-      data[o] = same ? lerpWrapped(prevX[i]!, f.posX[i]!, alpha, w) : f.posX[i]!;
-      data[o + 1] = same ? lerpWrapped(prevY[i]!, f.posY[i]!, alpha, h) : f.posY[i]!;
+      const px = prevX[i]!;
+      const py = prevY[i]!;
+      // Interpolate only if this slot held the SAME cell at the last snapshot:
+      // generation unchanged AND we have a previous position. NaN prev = a
+      // never-snapshotted newborn (incl. a division child in a pristine slot) →
+      // draw static so it doesn't streak from (0,0); a recycled-corpse child has a
+      // stale-but-finite prev caught by the generation check.
+      const same = prevGen[i] === f.generation[i]! && !Number.isNaN(px);
+      data[o] = same ? lerpWrapped(px, f.posX[i]!, alpha, w) : f.posX[i]!;
+      data[o + 1] = same ? lerpWrapped(py, f.posY[i]!, alpha, h) : f.posY[i]!;
       data[o + 2] = f.cellType[i]!;
     }
 
