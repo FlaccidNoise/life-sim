@@ -1,5 +1,5 @@
 import { type CellStore } from '../memory/cell-store';
-import { CellType, isLiving } from './types';
+import { CellType, isLiving, isNeural } from './types';
 import { hashFloat3 } from '../math/rng';
 import { wrap } from '../math/vec2';
 
@@ -19,6 +19,10 @@ export interface LifecycleResult {
  *              slot, 50/50 energy split minus divideCost; child placed at parent +
  *              seeded jitter (stateless hashFloat3 → reproducible, order-free).
  * Children are NOT added to `live`; they first act next tick.
+ *
+ * Neural cells (SENSOR/NEURON/MOVER) are exempt from passes 1 and 3: the M4
+ * hand-wired critter topology must never die or divide (M5 owns organism-level
+ * lifecycle). Their slots are stable for the whole run, so synapses never dangle.
  */
 export function lifecycle(
   live: Uint32Array,
@@ -43,6 +47,7 @@ export function lifecycle(
     const i = live[k]!;
     const type = f.cellType[i]!;
     if (isLiving(type)) {
+      if (isNeural(type)) continue; // M4: hand-wired critter cells never die (M5 organism lifecycle)
       if (f.energy[i]! <= 0) {
         f.cellType[i] = CellType.MEAT;
         f.energy[i] = f.mass[i]! * meatEnergyOnDeath;
@@ -59,7 +64,9 @@ export function lifecycle(
   // Pass 3: division. (Slots freed in pass 2 are available for reuse.)
   for (let k = 0; k < n; k++) {
     const i = live[k]!;
-    if (!isLiving(f.cellType[i]!)) continue;
+    const type = f.cellType[i]!;
+    if (!isLiving(type)) continue;
+    if (isNeural(type)) continue; // M4: hand-wired topology must not divide (M5 reproduces organisms)
     if (f.energy[i]! < divideThreshold) continue;
     const child = store.alloc();
     if (child < 0) break; // at capacity — refuse-new
