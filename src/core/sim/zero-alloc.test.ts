@@ -3,6 +3,9 @@ import { World } from './world';
 import { defaultConfig } from './config';
 import { CellType } from '../cells/types';
 import { spawnSwimmer } from './critter';
+import { develop } from '../genome/develop';
+import { buildAutotrophGenome } from '../genome/critter-genome';
+import { instantiateBody } from '../organism/instantiate';
 
 // Requires --expose-gc (passed via NODE_OPTIONS in the package.json "test" script).
 const gc = (globalThis as { gc?: () => void }).gc;
@@ -17,7 +20,14 @@ describe('zero-allocation hot loop', () => {
     // Headroom for all populations: 48_000 PHOTO + 2_000 MOTILE + 20×7 critter cells
     // + 200×4 bonded digestive cluster cells = 50_940 < 52_500 cap.
     const w = new World(
-      defaultConfig({ seed: 7, maxCells: 52_500, worldWidth: 4096, worldHeight: 4096 }),
+      defaultConfig({
+        seed: 7,
+        maxCells: 52_500,
+        worldWidth: 4096,
+        worldHeight: 4096,
+        reproThreshold: 1e12, // no birth fires in the measured window (births allocate, by design)
+        organismDeathFloor: -1e12, // no atomic death fires either; the SCANS still run each tick
+      }),
       false,
     );
     // Spawn the swimmers FIRST so ordering can't starve them; assert every spawn succeeds.
@@ -43,6 +53,30 @@ describe('zero-allocation hot loop', () => {
       }
     }
     w.bonds.rebuildLive(w.cells);
+    // A genome-bearing organism so the M6 per-tick scans exercise the genome path
+    // (no birth/death fires — thresholds are pinned out of range).
+    {
+      const ref = w.genomes.register(buildAutotrophGenome(w.config.cellRadius));
+      const body = develop(
+        buildAutotrophGenome(w.config.cellRadius),
+        w.config.maxCellsPerOrganism,
+        w.config.maxRecursionDepth,
+      );
+      instantiateBody(
+        body,
+        w.cells,
+        w.net,
+        w.bonds,
+        w.organisms,
+        ref,
+        200,
+        200,
+        0,
+        w.config.worldWidth,
+        w.config.worldHeight,
+        w.instantiateScratch,
+      );
+    }
     expect(w.spawn(48_000)).toBe(48_000);
     expect(w.spawn(2_000, CellType.MOTILE)).toBe(2_000); // exercise SENSE/ACT/thrust/food deposit
 
@@ -72,5 +106,10 @@ describe('zero-allocation hot loop', () => {
     // The neural path must actually run: live synapses present + non-zero activations.
     expect(w.net.liveSynapseCount).toBeGreaterThan(0);
     expect(w.net.actCur.some((v) => v !== 0)).toBe(true);
+
+    // The M6 reproduction/death SCANS ran every tick, but no structural event fired:
+    // thresholds are pinned out of range, so develop/instantiate (which allocate) never run.
+    expect(w.lastOrganismBirths).toBe(0);
+    expect(w.lastOrganismDeaths).toBe(0);
   }, 30_000); // 50k cells × 550 ticks through the full M3 path exceeds vitest's 5s default
 });
