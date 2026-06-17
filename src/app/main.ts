@@ -11,6 +11,7 @@ import { mountControls } from './controls';
 import { BrainInspector } from './brain-inspector';
 import { renderGenomeInspector } from './genome-inspector';
 import { renderHallOfFame } from './hall-of-fame';
+import { renderPhylogeny } from './phylogeny-panel';
 import { develop } from '../core/genome/develop';
 import {
   buildCritterGenome,
@@ -131,6 +132,10 @@ let showGenome = false;
 const hallPanel = document.getElementById('hall-of-fame') as HTMLElement;
 let showHall = false;
 
+// Phylogeny overlay (toggled with `Y`): indented text tree of the live lineage.
+const phyloPanel = document.getElementById('phylogeny') as HTMLElement;
+let showPhylo = false;
+
 // Legend / "what am I seeing" overlay (toggled with `H`); shown by default.
 const legend = document.getElementById('legend');
 
@@ -237,6 +242,7 @@ function drawScene(alpha: number): void {
     renderGenomeInspector(world, org, genomePanel);
   }
   if (showHall) renderHallOfFame(world, hallPanel);
+  if (showPhylo) renderPhylogeny(world, phyloPanel);
 }
 
 function fit(): void {
@@ -354,6 +360,9 @@ window.addEventListener('keydown', (e) => {
   } else if (e.key === 'j' || e.key === 'J') {
     showHall = !showHall;
     hallPanel.classList.toggle('hidden', !showHall);
+  } else if (e.key === 'y' || e.key === 'Y') {
+    showPhylo = !showPhylo;
+    phyloPanel.classList.toggle('hidden', !showPhylo);
   } else if (e.key === 'c' || e.key === 'C' || e.key === 'Escape') {
     followId = -1;
   }
