@@ -1,0 +1,96 @@
+import { describe, it, expect } from 'vitest';
+import {
+  type Genome,
+  cloneGenome,
+  serializeGenome,
+  deserializeGenome,
+  GenomeStore,
+} from './genome';
+import { CellType } from '../cells/types';
+
+function tinyGenome(): Genome {
+  return {
+    seedGene: 0,
+    genes: [
+      {
+        innovation: 0,
+        cellType: CellType.PHOTO,
+        radius: 6,
+        mass: 2,
+        initialEnergy: 100,
+        bias: 0,
+        sensorChannel: -1,
+      },
+      {
+        innovation: 1,
+        cellType: CellType.PHOTO,
+        radius: 6,
+        mass: 2,
+        initialEnergy: 100,
+        bias: 0,
+        sensorChannel: -1,
+      },
+    ],
+    divisionRules: [{ parentGene: 0, childGene: 1, angle: 0, dist: 15, stiffness: 1, repeat: 1 }],
+    bondRules: [],
+    connectionRules: [],
+    motorRules: [],
+    parentRef: -1,
+    generation: 0,
+  };
+}
+
+describe('Genome — clone + serialize', () => {
+  it('cloneGenome deep-copies (mutating the clone never touches the original)', () => {
+    const a = tinyGenome();
+    const b = cloneGenome(a);
+    b.genes[0]!.mass = 999;
+    b.divisionRules[0]!.dist = 42;
+    b.genes.push({
+      innovation: 2,
+      cellType: CellType.MOVER,
+      radius: 6,
+      mass: 2,
+      initialEnergy: 0,
+      bias: 0,
+      sensorChannel: -1,
+    });
+    expect(a.genes[0]!.mass).toBe(2);
+    expect(a.divisionRules[0]!.dist).toBe(15);
+    expect(a.genes.length).toBe(2);
+  });
+
+  it('serialize/deserialize round-trips exactly', () => {
+    const a = tinyGenome();
+    const back = deserializeGenome(serializeGenome(a));
+    expect(back).toEqual(a);
+  });
+});
+
+describe('GenomeStore', () => {
+  it('assigns monotonically increasing refs from 0 (deterministic)', () => {
+    const s = new GenomeStore();
+    expect(s.register(tinyGenome())).toBe(0);
+    expect(s.register(tinyGenome())).toBe(1);
+    expect(s.register(tinyGenome())).toBe(2);
+    expect(s.size).toBe(3);
+  });
+
+  it('get returns the stored genome; free removes it but does NOT recycle the ref', () => {
+    const s = new GenomeStore();
+    const r = s.register(tinyGenome());
+    expect(s.get(r)!.seedGene).toBe(0);
+    s.free(r);
+    expect(s.get(r)).toBeUndefined();
+    // Next ref keeps climbing — refs are never reused (lineage stays unambiguous, determinism).
+    expect(s.register(tinyGenome())).toBe(1);
+  });
+
+  it('nextInnovationId is a monotonic counter independent of refs', () => {
+    const s = new GenomeStore();
+    expect(s.nextInnovationId()).toBe(0);
+    expect(s.nextInnovationId()).toBe(1);
+    s.register(tinyGenome());
+    expect(s.nextInnovationId()).toBe(2);
+  });
+});
