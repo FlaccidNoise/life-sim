@@ -22,6 +22,7 @@ import { instantiateBody } from '../core/organism/instantiate';
 import { CellType } from '../core/cells/types';
 import { cloneGenome, type Genome } from '../core/genome/genome';
 import type { LineageSummary } from '../core/sim/lineage-board';
+import type { SpeciesSummary } from '../core/sim/species-board';
 
 const canvas = document.getElementById('view') as HTMLCanvasElement;
 const hud = document.getElementById('hud');
@@ -441,6 +442,9 @@ interface SimHandle {
   organisms: () => { org: number; cells: number; energy: number; gen: number; ref: number }[];
   /** Current champion board: top live founding lineages by member count (M7 telemetry). */
   champions: () => LineageSummary[];
+  /** Current species board: live genome population greedily clustered by genomeDistance (M7
+   * telemetry, ranked by liveCount desc). */
+  species: () => SpeciesSummary[];
   /** Manual debug spawn of champion `k`'s representative genome (clone keeps its founderId). */
   spawnChampion: (k?: number) => number;
 }
@@ -536,6 +540,7 @@ function nearestGenomeOrg(x: number, y: number): number {
     return out;
   },
   champions: () => world.lineageBoard.slice(),
+  species: () => world.speciesBoard.slice(),
   spawnChampion: (k = 0) => {
     const board = world.lineageBoard;
     if (k < 0 || k >= board.length) return -1;

@@ -26,6 +26,7 @@ import { OrganismTable, aggregateOrganisms } from '../organism/organisms';
 import { SplitChecker } from '../organism/split';
 import { makeMetrics, sampleMetrics, sampleEvolutionMetrics, type Metrics } from './metrics';
 import { sampleLineages, type LineageSummary, type LineageStat } from './lineage-board';
+import { sampleSpecies, type SpeciesSummary } from './species-board';
 import { GenomeStore } from '../genome/genome';
 import { LineageLog } from '../genome/lineage-log';
 import { reproduceOrganisms, type ReproParams } from '../organism/reproduction';
@@ -81,6 +82,9 @@ export class World {
   /** M7 champion board: top live founding lineages by member count (sampled telemetry, not the
    * SoA determinism contract). Refreshed at metricsEvolutionInterval cadence. */
   lineageBoard: readonly LineageSummary[] = [];
+  /** M7 species board: live genome population greedily clustered by genomeDistance (sampled
+   * telemetry, not the SoA determinism contract). Refreshed at metricsEvolutionInterval cadence. */
+  speciesBoard: readonly SpeciesSummary[] = [];
   /** Persistent per-lineage peak + first-seen accumulator backing lineageBoard. */
   private readonly lineageStats = new Map<number, LineageStat>();
   /** Pre-allocated so lifecycle writes counts without a per-tick object (zero-alloc). */
@@ -552,6 +556,7 @@ export class World {
         8,
       );
       this.lineage.prune(cfg.maxLineageNodes);
+      this.speciesBoard = sampleSpecies(this.organisms, this.genomes);
     }
 
     this.tickCount++;
