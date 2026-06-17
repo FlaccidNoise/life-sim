@@ -102,6 +102,7 @@ export function lifecycle(
     f.senseX[child] = 0;
     f.senseY[child] = 0;
     f.thrust[child] = 0;
+    f.localDensity[child] = 0; // clear the recycled slot's stale density (next fillDensity overwrites it; reset so no mid-tick reader ever sees a prior occupant's value)
     births++;
   }
 
