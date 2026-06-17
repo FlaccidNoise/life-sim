@@ -28,6 +28,9 @@ order means changing this table first.
 | 11 | rebuildLive (again) | flags | liveIndices, liveCount |
 | 11b | **ENVIRONMENT (food)** | cellType, pos (**post-lifecycle live set**) | persistent food field (deposit + diffuse + decay; double-buffer swap) |
 | 11c | **aggregateOrganisms** (M5) | post-lifecycle liveIndices; organismId; energy; posX/posY | `organisms` energy/cellCount/centroidX/centroidY (the authoritative per-organism numbers) |
+| 11d | **killStarvedOrganisms** (M6) | organisms.energy/cellCount/genomeRef; organismId; mass; cellType; cfg.organismDeathFloor/meatEnergyOnDeath | atomic organism death: a dying organism's cells → MEAT (organismId→0, energy=mass·meatEnergyOnDeath), reaps their bonds, zeroes their net.actCur/actNxt, frees the org id + genome. If any died → net.rebuildLive + bonds.rebuildLive |
+| 11e | **reproduceOrganisms** (M6) | organisms.energy/genomeRef/centroid; genomeStore; mutationRng (rng.split(2)); cfg.reproThreshold/reproParentFloor/offspringOffset/caps/maxBirthsPerTick + mutation rates | structural: a provisioned organism copy+mutates+develops an offspring, instantiates it near the parent (clean abort if under-provisioned/over-capacity/truncated), deducts body.totalEnergy from the parent's cells, registers the child genome + sets organisms.genomeRef/birthTick |
+| 11f | **adulthood + live-organism scan** (M6) | organisms.isAlive/cellCount/energy/reachedAdulthood; cfg.reproThreshold | organisms.reachedAdulthood (set on first reaching reproThreshold); metrics.birthsReachedAdulthood/liveOrganisms |
 | 12 | sampleMetrics | cellType, energy (current live set) | metrics |
 
 ## Ordering notes (the contract the golden-tick + integration tests assert against)
@@ -139,3 +142,32 @@ integrate dynamically like any other; nothing snaps them to a body frame.
   spoke can break during an aggressive no-food spin, but the cross-bracing keeps every
   cell in ONE organism — the body never flies apart (asserted in golden-think's cohesion
   case as an organism-membership invariant, not an exact spoke length).
+
+## Genome / reproduction / death coupling notes (M6)
+
+- **Development is RNG-free + isolated.** `develop(genome)` grows the body in abstract local
+  space via a fixed BFS rule-firing order (a PURE function — the seed→reproducible-body
+  guarantee); `instantiateBody` rotates+translates it into the world and computes each bond's
+  rest length from world positions (like spawnSwimmer). Mutation is the ONLY stochastic M6
+  step → `rng.split(2)` (light=split(1); M3/M4/M5 draw none). Reproduction scans ascending
+  organism id, so per-organism mutation draws are canonically ordered → byte-reproducible.
+- **Death BEFORE reproduction.** 11d runs before 11e so a starved organism cannot reproduce
+  the tick it dies. Both read the 11c energy aggregate (pre-death/pre-deduction); cell energy
+  is authoritative and the aggregate refreshes next tick. Each organism reproduces at most once
+  per tick (the scan visits it once), so no double-birth.
+- **Organism-id freeing is owned by death (11d), not a separate sweep.** In M6 an organism
+  only empties via atomic death (which frees the id) — organism cells are lifecycle-exempt
+  (no per-cell death/division), and a strain-split relabels the smaller component to a NEW id
+  without emptying the parent. So no free-empty pass is needed.
+- **Maternal provisioning + clean abort (§4.5).** Reproduction aborts WITHOUT allocating if
+  the parent can't afford `body.totalEnergy` while keeping `reproParentFloor`, if development
+  truncated, or if `instantiateBody` fails its capacity pre-check — never a half-grown corpse.
+- **Global brain across organisms.** No synapse crosses organisms (development wires within
+  one body), so the single global NeuralNetwork THINK pass is correct for many simultaneous
+  brains; per-organism partitioning stays an M8 perf optimisation. A dead organism's neural
+  cells become MEAT → `net.rebuildLive` (called after a death) de-lists their synapses; their
+  motor/sensor bindings are reclaimed (removeMotorsFor/removeSensorsFor) and their activations +
+  thrust zeroed in 11d.
+- **spawnSwimmer stays genome-less** (organisms.genomeRef −1) → it never reproduces/dies
+  spuriously; only `instantiateBody`-built organisms carry a genomeRef. A strain-split fragment
+  inherits no genome ref (sterile until it dies) — a documented M6 degradation (rare event).
