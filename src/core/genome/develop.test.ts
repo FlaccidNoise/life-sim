@@ -140,3 +140,84 @@ describe('develop — cells + tree bonds (pure, deterministic)', () => {
     expect(b.truncated).toBe(true);
   });
 });
+
+describe('develop — gene-keyed bond/connection/motor tables', () => {
+  it('bond rules add a bond between distinct-gene instance pairs (on top of tree bonds)', () => {
+    // seed(0) → two children (1 of geneB, 1 of geneC); a bond rule bonds geneB↔geneC.
+    const g: Genome = {
+      seedGene: 0,
+      genes: [gene(CellType.MOVER), gene(CellType.SENSOR), gene(CellType.SENSOR)],
+      divisionRules: [
+        { parentGene: 0, childGene: 1, angle: 0, dist: 10, stiffness: 1, repeat: 1 },
+        { parentGene: 0, childGene: 2, angle: Math.PI, dist: 10, stiffness: 1, repeat: 1 },
+      ],
+      bondRules: [{ geneA: 1, geneB: 2, stiffness: 0.5 }],
+      connectionRules: [],
+      motorRules: [],
+      parentRef: -1,
+      generation: 0,
+    };
+    const b = develop(g, 256, 16);
+    expect(b.bonds).toContainEqual({ a: 0, b: 1, stiffness: 1 }); // tree
+    expect(b.bonds).toContainEqual({ a: 0, b: 2, stiffness: 1 }); // tree
+    expect(b.bonds).toContainEqual({ a: 1, b: 2, stiffness: 0.5 }); // rule (instances 1,2)
+    expect(b.bonds.length).toBe(3);
+  });
+
+  it('connection rules add a synapse per instance pair (decision 2; bond-decoupled)', () => {
+    const g: Genome = {
+      seedGene: 0,
+      genes: [gene(CellType.MOVER), gene(CellType.NEURON), gene(CellType.NEURON)],
+      divisionRules: [
+        { parentGene: 0, childGene: 1, angle: 0, dist: 10, stiffness: 1, repeat: 1 },
+        { parentGene: 0, childGene: 2, angle: 1, dist: 10, stiffness: 1, repeat: 1 },
+      ],
+      // gene1 → gene2 weight 0.9, and gene2 → gene1 weight -0.9 (asymmetric, like the clock).
+      connectionRules: [
+        { preGene: 1, postGene: 2, weight: 0.9 },
+        { preGene: 2, postGene: 1, weight: -0.9 },
+      ],
+      bondRules: [],
+      motorRules: [],
+      parentRef: -1,
+      generation: 0,
+    };
+    const b = develop(g, 256, 16);
+    expect(b.synapses).toContainEqual({ pre: 1, post: 2, weight: 0.9 });
+    expect(b.synapses).toContainEqual({ pre: 2, post: 1, weight: -0.9 });
+    expect(b.synapses.length).toBe(2);
+  });
+
+  it('a self-gene connection rule never wires an instance to itself', () => {
+    const g: Genome = {
+      seedGene: 0,
+      genes: [gene(CellType.NEURON)],
+      divisionRules: [],
+      connectionRules: [{ preGene: 0, postGene: 0, weight: 1 }],
+      bondRules: [],
+      motorRules: [],
+      parentRef: -1,
+      generation: 0,
+    };
+    const b = develop(g, 256, 16);
+    expect(b.synapses.length).toBe(0); // only the seed instance; pre===post skipped
+  });
+
+  it('motor rules bind the k-th mover/turn/thrust instances', () => {
+    const g: Genome = {
+      seedGene: 0,
+      genes: [gene(CellType.MOVER), gene(CellType.NEURON), gene(CellType.NEURON)],
+      divisionRules: [
+        { parentGene: 0, childGene: 1, angle: 0, dist: 10, stiffness: 1, repeat: 1 },
+        { parentGene: 0, childGene: 2, angle: 1, dist: 10, stiffness: 1, repeat: 1 },
+      ],
+      motorRules: [{ moverGene: 0, turnGene: 1, thrustGene: 2 }],
+      bondRules: [],
+      connectionRules: [],
+      parentRef: -1,
+      generation: 0,
+    };
+    const b = develop(g, 256, 16);
+    expect(b.motors).toEqual([{ mover: 0, turn: 1, thrust: 2 }]);
+  });
+});

@@ -108,5 +108,53 @@ export function develop(genome: Genome, maxCells: number, maxDepth: number): Dev
       }
     }
   }
+
+  // Gene → its instance indices, for the gene-keyed rule tables.
+  const instOf: number[][] = [];
+  for (let gi = 0; gi < genes.length; gi++) instOf[gi] = [];
+  for (let i = 0; i < body.count; i++) instOf[body.geneOf[i]!]!.push(i);
+
+  // Bond rules: a bond between every instance-pair of (geneA, geneB) — non-tree cohesion.
+  for (let ri = 0; ri < genome.bondRules.length; ri++) {
+    const r = genome.bondRules[ri]!;
+    const as = instOf[r.geneA];
+    const bs = instOf[r.geneB];
+    if (!as || !bs) continue;
+    if (r.geneA === r.geneB) {
+      for (let p = 0; p < as.length; p++)
+        for (let q = p + 1; q < as.length; q++)
+          body.bonds.push({ a: as[p]!, b: as[q]!, stiffness: r.stiffness });
+    } else {
+      for (let p = 0; p < as.length; p++)
+        for (let q = 0; q < bs.length; q++)
+          body.bonds.push({ a: as[p]!, b: bs[q]!, stiffness: r.stiffness });
+    }
+  }
+
+  // Connection rules: a synapse between every instance-pair (preGene → postGene), §4.6.
+  for (let ri = 0; ri < genome.connectionRules.length; ri++) {
+    const r = genome.connectionRules[ri]!;
+    const ps = instOf[r.preGene];
+    const qs = instOf[r.postGene];
+    if (!ps || !qs) continue;
+    for (let p = 0; p < ps.length; p++)
+      for (let q = 0; q < qs.length; q++) {
+        const pre = ps[p]!;
+        const post = qs[q]!;
+        if (pre !== post) body.synapses.push({ pre, post, weight: r.weight });
+      }
+  }
+
+  // Motor rules: bind the k-th instances (1:1 for singleton genes — the critter).
+  for (let ri = 0; ri < genome.motorRules.length; ri++) {
+    const r = genome.motorRules[ri]!;
+    const ms = instOf[r.moverGene];
+    const ts = instOf[r.turnGene];
+    const hs = instOf[r.thrustGene];
+    if (!ms || !ts || !hs) continue;
+    const n = Math.min(ms.length, ts.length, hs.length);
+    for (let k = 0; k < n; k++) body.motors.push({ mover: ms[k]!, turn: ts[k]!, thrust: hs[k]! });
+  }
+
   return body;
 }
