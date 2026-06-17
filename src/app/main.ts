@@ -10,6 +10,7 @@ import { inspectAt } from './inspect';
 import { mountControls } from './controls';
 import { BrainInspector } from './brain-inspector';
 import { renderGenomeInspector } from './genome-inspector';
+import { renderHallOfFame } from './hall-of-fame';
 import { develop } from '../core/genome/develop';
 import {
   buildCritterGenome,
@@ -126,6 +127,10 @@ let showBrain = false;
 const genomePanel = document.getElementById('genome') as HTMLElement;
 let showGenome = false;
 
+// Hall-of-fame overlay (toggled with `J`): ranked board of the largest live lineages.
+const hallPanel = document.getElementById('hall-of-fame') as HTMLElement;
+let showHall = false;
+
 // Legend / "what am I seeing" overlay (toggled with `H`); shown by default.
 const legend = document.getElementById('legend');
 
@@ -231,6 +236,7 @@ function drawScene(alpha: number): void {
     const org = followId >= 0 && world.cells.isAlive(followId) ? f.organismId[followId]! : 0;
     renderGenomeInspector(world, org, genomePanel);
   }
+  if (showHall) renderHallOfFame(world, hallPanel);
 }
 
 function fit(): void {
@@ -345,6 +351,9 @@ window.addEventListener('keydown', (e) => {
     genomePanel.classList.toggle('hidden', !showGenome);
   } else if (e.key === 'h' || e.key === 'H') {
     legend?.classList.toggle('hidden');
+  } else if (e.key === 'j' || e.key === 'J') {
+    showHall = !showHall;
+    hallPanel.classList.toggle('hidden', !showHall);
   } else if (e.key === 'c' || e.key === 'C' || e.key === 'Escape') {
     followId = -1;
   }
