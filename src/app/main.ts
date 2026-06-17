@@ -368,6 +368,8 @@ interface SimHandle {
   world: World;
   camera: Camera;
   setSpeed: (s: number) => void;
+  /** "Hand of god": develop+instantiate a fresh autotroph organism from its genome (§11). */
+  spawnAutotroph: (x?: number, y?: number) => number;
 }
 (globalThis as unknown as { sim: SimHandle }).sim = {
   world,
@@ -375,4 +377,6 @@ interface SimHandle {
   setSpeed: (s) => {
     speed = s;
   },
+  spawnAutotroph: (x = world.config.worldWidth * 0.5, y = world.config.worldHeight * 0.5) =>
+    developInto(buildAutotrophGenome(world.config.cellRadius), x, y, 0),
 };
