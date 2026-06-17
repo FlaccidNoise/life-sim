@@ -116,7 +116,13 @@ describe('buildForagerGenome — a viable brain-driven forager (sense→move→e
 });
 
 describe('buildHandicappedForagerGenome', () => {
-  it('matches the forager but with both steering-loop weights knocked down', () => {
+  // The lat→turn rule is the trait under selection (preGene 2 → postGene 3).
+  const latTurn = (g: ReturnType<typeof buildForagerGenome>) =>
+    g.connectionRules.find((c) => c.preGene === 2 && c.postGene === 3)!;
+  const fwdThrust = (g: ReturnType<typeof buildForagerGenome>) =>
+    g.connectionRules.find((c) => c.preGene === 1 && c.postGene === 4)!;
+
+  it('knocks ONLY sensorLat→turn, leaving sensorFwd→thrust at the fit 1.5', () => {
     const fit = buildForagerGenome(6, 100);
     const weak = buildHandicappedForagerGenome(6, 100, 0.2);
     // Same morphology + wiring topology.
@@ -124,13 +130,17 @@ describe('buildHandicappedForagerGenome', () => {
     expect(weak.divisionRules.length).toBe(fit.divisionRules.length);
     expect(weak.connectionRules.length).toBe(fit.connectionRules.length);
     expect(weak.motorRules).toEqual(fit.motorRules);
-    // Both connection weights handicapped to 0.2 (fit is 1.5).
-    for (const c of weak.connectionRules) expect(c.weight).toBeCloseTo(0.2, 6);
-    for (const c of fit.connectionRules) expect(c.weight).toBeCloseTo(1.5, 6);
+    // lat→turn handicapped to 0.2; fwd→thrust untouched at the fit 1.5.
+    expect(latTurn(weak).weight).toBeCloseTo(0.2, 6);
+    expect(fwdThrust(weak).weight).toBeCloseTo(1.5, 6);
+    // The fit forager has both at 1.5.
+    expect(latTurn(fit).weight).toBeCloseTo(1.5, 6);
+    expect(fwdThrust(fit).weight).toBeCloseTo(1.5, 6);
   });
 
-  it('defaults the weight to 0.2', () => {
+  it('defaults the lat→turn weight to 0.2', () => {
     const weak = buildHandicappedForagerGenome();
-    for (const c of weak.connectionRules) expect(c.weight).toBeCloseTo(0.2, 6);
+    expect(latTurn(weak).weight).toBeCloseTo(0.2, 6);
+    expect(fwdThrust(weak).weight).toBeCloseTo(1.5, 6);
   });
 });
