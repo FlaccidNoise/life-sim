@@ -1,5 +1,14 @@
-import { type Genome, cloneGenome } from './genome';
+import { type Genome, type Gene, cloneGenome, GenomeStore } from './genome';
 import { type Rng } from '../math/rng';
+import { CellType } from '../cells/types';
+
+const PALETTE = [
+  CellType.PHOTO,
+  CellType.DIGESTIVE,
+  CellType.SENSOR,
+  CellType.NEURON,
+  CellType.MOVER,
+];
 
 /** Per-operator mutation rates + Gaussian σ (all live Config knobs; default 0 in M6). */
 export interface MutationRates {
@@ -31,7 +40,12 @@ export function gaussian(rng: Rng): number {
  * the caller, not here. Tasks 10–11 add the structural operators (which take a `GenomeStore`
  * for fresh innovation ids).
  */
-export function mutateGenome(parent: Genome, rng: Rng, rates: MutationRates): Genome {
+export function mutateGenome(
+  parent: Genome,
+  rng: Rng,
+  rates: MutationRates,
+  store: GenomeStore,
+): Genome {
   const child = cloneGenome(parent);
 
   // Numeric gene-param perturbation.
@@ -50,6 +64,61 @@ export function mutateGenome(parent: Genome, rng: Rng, rates: MutationRates): Ge
     if (rng.float() < rates.weightRate) {
       child.connectionRules[ci]!.weight += gaussian(rng) * rates.weightSigma;
     }
+  }
+
+  // Change a gene's cell type to a different palette value.
+  if (child.genes.length > 0 && rng.float() < rates.changeTypeRate) {
+    const gi = rng.int(child.genes.length);
+    const cur = child.genes[gi]!.cellType;
+    let t = PALETTE[rng.int(PALETTE.length)]!;
+    if (t === cur) t = PALETTE[(PALETTE.indexOf(cur) + 1) % PALETTE.length]!;
+    child.genes[gi]!.cellType = t;
+  }
+
+  // Rewire a division rule to a different child gene.
+  if (child.divisionRules.length > 0 && child.genes.length > 1 && rng.float() < rates.rewireRate) {
+    const ri = rng.int(child.divisionRules.length);
+    const rule = child.divisionRules[ri]!;
+    let cg = rng.int(child.genes.length);
+    if (cg === rule.childGene) cg = (cg + 1) % child.genes.length;
+    rule.childGene = cg;
+  }
+
+  // Duplicate an existing gene (fresh innovation id) + a division rule from the seed.
+  if (child.genes.length > 0 && rng.float() < rates.duplicateGeneRate) {
+    const src = child.genes[rng.int(child.genes.length)]!;
+    const copy: Gene = { ...src, innovation: store.nextInnovationId() };
+    const newIndex = child.genes.push(copy) - 1;
+    child.divisionRules.push({
+      parentGene: child.seedGene,
+      childGene: newIndex,
+      angle: rng.range(0, Math.PI * 2),
+      dist: rng.range(2 * src.radius, 5 * src.radius),
+      stiffness: 1,
+      repeat: 1,
+    });
+  }
+
+  // Add a brand-new gene (random palette type, fresh innovation id) + a division rule.
+  if (rng.float() < rates.addGeneRate) {
+    const gene: Gene = {
+      innovation: store.nextInnovationId(),
+      cellType: PALETTE[rng.int(PALETTE.length)]!,
+      radius: 6,
+      mass: 2,
+      initialEnergy: 100,
+      bias: 0,
+      sensorChannel: -1,
+    };
+    const newIndex = child.genes.push(gene) - 1;
+    child.divisionRules.push({
+      parentGene: child.seedGene,
+      childGene: newIndex,
+      angle: rng.range(0, Math.PI * 2),
+      dist: rng.range(12, 30),
+      stiffness: 1,
+      repeat: 1,
+    });
   }
 
   return child;
