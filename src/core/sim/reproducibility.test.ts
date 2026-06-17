@@ -274,3 +274,43 @@ describe('reproducibility — M7 mutation>0 with births AND deaths', () => {
     expect(a.w.genomes.size).toBeGreaterThan(0);
   }, 30000); // two 700-tick / 6000-cell forager runs exceed the 5s default (first death ~tick 481)
 });
+
+describe('reproducibility — crowdDivideCap (density-dependent division)', () => {
+  // The default OFF path (cap 65535) is already covered by the suites above (those configs leave
+  // crowdDivideCap at its default). These pin the cap-ON code path: the World.fillDensity grid pass
+  // + the lifecycle guard must be byte-deterministic AND non-vacuously active.
+  function runCapped(seed: number, cap: number): World {
+    const w = new World(
+      defaultConfig({
+        seed,
+        maxCells: 6000,
+        worldWidth: 512,
+        worldHeight: 512,
+        crowdDivideCap: cap,
+        crowdGridSize: 32,
+      }),
+      false,
+    );
+    w.seedLife(800);
+    for (let t = 0; t < 400; t++) w.tick();
+    return w;
+  }
+
+  it('produces byte-identical SoA across two runs with the cap ON', () => {
+    const a = runCapped(7, 3);
+    const b = runCapped(7, 3);
+    const fa = a.cells.fields;
+    const fb = b.cells.fields;
+    expect(Array.from(fa.energy)).toEqual(Array.from(fb.energy));
+    expect(Array.from(fa.posX)).toEqual(Array.from(fb.posX));
+    expect(Array.from(fa.posY)).toEqual(Array.from(fb.posY));
+    expect(Array.from(fa.cellType)).toEqual(Array.from(fb.cellType));
+    expect(a.cells.aliveCount).toBe(b.cells.aliveCount);
+  });
+
+  it('is non-vacuous: the cap suppresses plant growth vs the OFF default', () => {
+    const capped = runCapped(7, 3).cells.aliveCount;
+    const uncapped = runCapped(7, 65535).cells.aliveCount; // OFF sentinel = the un-capped sim
+    expect(uncapped).toBeGreaterThan(capped); // the cap actually limited the field (guard fired)
+  });
+});
