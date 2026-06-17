@@ -13,7 +13,7 @@ interface Section {
   knobs: Knob[];
 }
 
-// Grouped so the 28 live knobs are scannable rather than one long wall of sliders.
+// Grouped so the 36 live knobs are scannable rather than one long wall of sliders.
 const SECTIONS: Section[] = [
   {
     title: 'economy',
@@ -72,6 +72,25 @@ const SECTIONS: Section[] = [
       { key: 'adhesionStrength', label: 'adhesion str', min: 0, max: 5, step: 0.05 },
       { key: 'adhesionRange', label: 'adhesion range', min: 6, max: 36, step: 1 },
       { key: 'digestClusterBonus', label: 'digest cluster', min: 0, max: 2, step: 0.05 },
+    ],
+  },
+  {
+    title: 'genome + reproduction (M6)',
+    knobs: [
+      { key: 'reproThreshold', label: 'repro thresh', min: 50, max: 5000, step: 50 },
+      { key: 'reproParentFloor', label: 'parent floor', min: 0, max: 2000, step: 50 },
+      { key: 'offspringOffset', label: 'offspring offset', min: 8, max: 200, step: 4 },
+      { key: 'organismDeathFloor', label: 'death floor', min: -100, max: 500, step: 10 },
+      { key: 'mutationParamRate', label: 'mut param rate', min: 0, max: 1, step: 0.02 },
+      { key: 'mutationParamSigma', label: 'mut param σ', min: 0, max: 1, step: 0.01 },
+      { key: 'mutationWeightRate', label: 'mut weight rate', min: 0, max: 1, step: 0.02 },
+      {
+        key: 'mutationDuplicateSubgraphRate',
+        label: 'mut dup-subgraph',
+        min: 0,
+        max: 1,
+        step: 0.02,
+      },
     ],
   },
 ];
