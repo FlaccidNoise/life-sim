@@ -4,8 +4,9 @@ import { defaultConfig } from './config';
 import { spawnSwimmer, type Critter } from './critter';
 import { CellType } from '../cells/types';
 import { develop } from '../genome/develop';
-import { buildAutotrophGenome } from '../genome/critter-genome';
+import { buildAutotrophGenome, buildForagerGenome } from '../genome/critter-genome';
 import { instantiateBody } from '../organism/instantiate';
+import { serializeGenomeLibrary } from '../genome/genome';
 
 function runWorld(seed: number): World {
   const w = new World(defaultConfig({ seed, maxCells: 2000 }), false);
@@ -193,4 +194,80 @@ describe('reproducibility — M6 genome reproduction + mutation', () => {
     expect(a.genomes.size).toBe(b.genomes.size);
     expect(a.cells.aliveCount).toBeGreaterThan(4); // reproduction actually happened
   });
+});
+
+describe('reproducibility — M7 mutation>0 with births AND deaths', () => {
+  // Organism births/deaths are per-tick snapshots that, in this regime, fire
+  // early (food gets consumed, then a declining steady state — no births land on
+  // the final tick). Accumulate them across the run so the non-vacuity check
+  // sees the whole trajectory, not just tick 1499.
+  function runForagers(): { w: World; births: number; deaths: number } {
+    const cfg = defaultConfig({
+      seed: 11,
+      maxCells: 6000,
+      worldWidth: 512,
+      worldHeight: 512,
+      initialPhotoFraction: 1,
+      initialMotileFraction: 0,
+      reproThreshold: 700,
+      reproParentFloor: 120,
+      organismDeathFloor: 0, // foragers that can't feed starve → atomic death
+      mutationWeightRate: 0.5,
+      mutationWeightSigma: 0.15,
+      mutationParamRate: 0.2,
+      mutationParamSigma: 0.1,
+    });
+    const w = new World(cfg, false);
+    w.seedLife(2500);
+    for (let k = 0; k < 16; k++) {
+      const ref = w.genomes.register(buildForagerGenome(cfg.cellRadius, 100));
+      const body = develop(
+        buildForagerGenome(cfg.cellRadius, 100),
+        cfg.maxCellsPerOrganism,
+        cfg.maxRecursionDepth,
+      );
+      instantiateBody(
+        body,
+        w.cells,
+        w.net,
+        w.bonds,
+        w.organisms,
+        ref,
+        cfg.worldWidth * (0.15 + 0.7 * (k / 16)),
+        cfg.worldHeight * 0.5,
+        0,
+        cfg.worldWidth,
+        cfg.worldHeight,
+        w.instantiateScratch,
+      );
+    }
+    let births = 0;
+    let deaths = 0;
+    for (let t = 0; t < 1500; t++) {
+      w.tick();
+      births += w.lastOrganismBirths;
+      deaths += w.lastOrganismDeaths;
+    }
+    return { w, births, deaths };
+  }
+
+  it('produces byte-identical SoA and genome library across two runs (births + deaths)', () => {
+    const a = runForagers();
+    const b = runForagers();
+    const fa = a.w.cells.fields;
+    const fb = b.w.cells.fields;
+    expect(Array.from(fa.energy)).toEqual(Array.from(fb.energy));
+    expect(Array.from(fa.posX)).toEqual(Array.from(fb.posX));
+    expect(Array.from(fa.posY)).toEqual(Array.from(fb.posY));
+    expect(Array.from(fa.organismId)).toEqual(Array.from(fb.organismId));
+    expect(Array.from(fa.genomeRef)).toEqual(Array.from(fb.genomeRef));
+    expect(serializeGenomeLibrary(a.w.genomes)).toBe(serializeGenomeLibrary(b.w.genomes));
+    // The run actually exercised BOTH structural events (else the guard is vacuous),
+    // and did so identically across the two runs.
+    expect(a.births).toBeGreaterThan(0);
+    expect(a.deaths).toBeGreaterThan(0);
+    expect(a.births).toBe(b.births);
+    expect(a.deaths).toBe(b.deaths);
+    expect(a.w.genomes.size).toBeGreaterThan(0);
+  }, 30000); // two 1500-tick / 6000-cell forager runs exceed the 5s default
 });
