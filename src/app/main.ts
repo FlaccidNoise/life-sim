@@ -37,12 +37,19 @@ const config = defaultConfig({
   reproThreshold: 700,
   reproParentFloor: 120,
   organismDeathFloor: 0, // an unfed forager starves to MEAT, feeding the next generation
-  // M7: mutation ON so the forager population ADAPTS live (library defaults stay 0).
+  // M7: mutation ON so the forager population ADAPTS and DIVERSIFIES live (library defaults stay 0).
   // Tuned-safe: explores steering weights/params without collapsing the predator-prey cycle.
   mutationWeightRate: 0.25,
   mutationWeightSigma: 0.1,
   mutationParamRate: 0.1,
   mutationParamSigma: 0.1,
+  // One structural operator, ON small, gives OPEN-ENDED emergence: weight/param mutation only
+  // tunes a FIXED body plan (genotypic diversity stays 0), so changeType lets body plans actually
+  // diverge → the `geno-div` HUD readout climbs to ~0.55 and holds. Tuned at 0.015 via headless
+  // sweep (_t8probe): preserves the boom-bust early, zero genome bloat (changeType adds no cells),
+  // no extinction over 12k ticks. Higher (0.02) locks the population; combos with add/delete-gene
+  // EXTINCT it. Other structural rates stay 0.
+  mutationChangeTypeRate: 0.015,
 });
 const world = new World(config);
 world.seedLife(8000);
