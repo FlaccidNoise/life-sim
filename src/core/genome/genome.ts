@@ -127,6 +127,16 @@ export class GenomeStore {
     return this.genomes.get(ref);
   }
 
+  /** All live genomes as `{ ref, genome }`, ascending by ref (for inspector + save). */
+  list(): { ref: number; genome: Genome }[] {
+    const out: { ref: number; genome: Genome }[] = [];
+    for (let ref = 0; ref < this.nextRef; ref++) {
+      const g = this.genomes.get(ref);
+      if (g !== undefined) out.push({ ref, genome: g });
+    }
+    return out;
+  }
+
   /** Drop a genome (its organism died). The ref is not recycled. */
   free(ref: number): void {
     this.genomes.delete(ref);
@@ -140,4 +150,14 @@ export class GenomeStore {
   get size(): number {
     return this.genomes.size;
   }
+}
+
+/** Serialize a genome library (shareable "the seed that grew this creature", §11 M6). */
+export function serializeGenomeLibrary(store: GenomeStore): string {
+  return JSON.stringify(store.list());
+}
+
+/** Parse a serialized genome library back into `{ ref, genome }` entries. */
+export function loadGenomeLibrary(json: string): { ref: number; genome: Genome }[] {
+  return JSON.parse(json) as { ref: number; genome: Genome }[];
 }

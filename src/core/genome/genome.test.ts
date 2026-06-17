@@ -5,6 +5,8 @@ import {
   serializeGenome,
   deserializeGenome,
   GenomeStore,
+  serializeGenomeLibrary,
+  loadGenomeLibrary,
 } from './genome';
 import { CellType } from '../cells/types';
 
@@ -92,5 +94,26 @@ describe('GenomeStore', () => {
     expect(s.nextInnovationId()).toBe(1);
     s.register(tinyGenome());
     expect(s.nextInnovationId()).toBe(2);
+  });
+});
+
+describe('GenomeStore — list + library save/load', () => {
+  it('list() returns refs + genomes in ascending ref order', () => {
+    const s = new GenomeStore();
+    s.register(tinyGenome());
+    s.register(tinyGenome());
+    const l = s.list();
+    expect(l.map((e) => e.ref)).toEqual([0, 1]);
+  });
+
+  it('serialize/load the library round-trips the genomes', () => {
+    const s = new GenomeStore();
+    s.register(tinyGenome());
+    s.register(tinyGenome());
+    const json = serializeGenomeLibrary(s);
+    const back = loadGenomeLibrary(json);
+    expect(back.length).toBe(2);
+    expect(back[0]!.genome).toEqual(tinyGenome());
+    expect(back[0]!.ref).toBe(0);
   });
 });
