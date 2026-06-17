@@ -68,3 +68,20 @@ describe('aggregateOrganisms — per-tick recompute', () => {
     expect(t.cellCount[o1]).toBe(0);
   });
 });
+
+describe('OrganismTable — lineage fields', () => {
+  it('alloc resets genomeRef/birthTick to -1 and reachedAdulthood to 0', () => {
+    const t = new OrganismTable(8);
+    const o = t.alloc();
+    expect(t.genomeRef[o]).toBe(-1);
+    expect(t.birthTick[o]).toBe(-1);
+    expect(t.reachedAdulthood[o]).toBe(0);
+    t.genomeRef[o] = 5;
+    t.reachedAdulthood[o] = 1;
+    t.free(o);
+    const o2 = t.alloc(); // recycles the id
+    expect(o2).toBe(o);
+    expect(t.genomeRef[o2]).toBe(-1); // reset on alloc
+    expect(t.reachedAdulthood[o2]).toBe(0);
+  });
+});

@@ -86,3 +86,30 @@ describe('NeuralNetwork', () => {
     expect(net.thrustNeuron[0]).toBe(8);
   });
 });
+
+describe('NeuralNetwork — synFreeCount', () => {
+  it('reports remaining synapse slots', () => {
+    const n = new NeuralNetwork(8, 4, 8);
+    expect(n.synFreeCount).toBe(4);
+    n.addSynapse(0, 0, 1, 0, 0.5);
+    expect(n.synFreeCount).toBe(3);
+  });
+});
+
+describe('NeuralNetwork — removeMotorsFor / removeSensorsFor', () => {
+  it("swap-removes a cell's motor + sensor bindings (death reclaim)", () => {
+    const n = new NeuralNetwork(8, 4, 8);
+    n.addMotor(2, 3, 4);
+    n.addMotor(5, 6, 7); // a second, unrelated motor
+    n.addSensor(2, 0);
+    n.addSensor(1, 1);
+    expect(n.motorCount).toBe(2);
+    expect(n.sensorCount).toBe(2);
+    n.removeMotorsFor(2); // mover cell 2 dies
+    n.removeSensorsFor(2); // sensor cell 2 dies
+    expect(n.motorCount).toBe(1);
+    expect(n.moverCell[0]).toBe(5); // the surviving motor
+    expect(n.sensorCount).toBe(1);
+    expect(n.sensorCell[0]).toBe(1); // the surviving sensor
+  });
+});

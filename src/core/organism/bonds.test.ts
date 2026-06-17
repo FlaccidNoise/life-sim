@@ -86,3 +86,14 @@ describe('BondNetwork', () => {
     expect(sBad).toBe(1);
   });
 });
+
+describe('BondNetwork — freeCount', () => {
+  it('reports remaining pool slots (decrements on add, restores on remove)', () => {
+    const b = new BondNetwork(8, 4, 4);
+    expect(b.freeCount).toBe(4);
+    const s = b.addBond(0, 0, 1, 0, 1, 1);
+    expect(b.freeCount).toBe(3);
+    b.removeBond(s);
+    expect(b.freeCount).toBe(4);
+  });
+});

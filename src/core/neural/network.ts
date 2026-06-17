@@ -91,6 +91,32 @@ export class NeuralNetwork {
     this.motorCount = 0;
   }
 
+  /** Remaining free synapse slots (for a capacity pre-check before a structural build). */
+  get synFreeCount(): number {
+    return this.synFreeTop;
+  }
+
+  /** Swap-remove every motor binding whose mover is `cell` (organism death reclaim). */
+  removeMotorsFor(cell: number): void {
+    for (let k = this.motorCount - 1; k >= 0; k--) {
+      if (this.moverCell[k] !== cell) continue;
+      const last = --this.motorCount;
+      this.moverCell[k] = this.moverCell[last]!;
+      this.turnNeuron[k] = this.turnNeuron[last]!;
+      this.thrustNeuron[k] = this.thrustNeuron[last]!;
+    }
+  }
+
+  /** Swap-remove every sensor binding on `cell` (organism death reclaim). */
+  removeSensorsFor(cell: number): void {
+    for (let k = this.sensorCount - 1; k >= 0; k--) {
+      if (this.sensorCell[k] !== cell) continue;
+      const last = --this.sensorCount;
+      this.sensorCell[k] = this.sensorCell[last]!;
+      this.sensorChannel[k] = this.sensorChannel[last]!;
+    }
+  }
+
   /** Allocate a synapse; returns slot or -1 if the pool is full (refuse-new policy). */
   addSynapse(pre: number, preGen: number, post: number, postGen: number, weight: number): number {
     if (this.synFreeTop === 0) return -1;
