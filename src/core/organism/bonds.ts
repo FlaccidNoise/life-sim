@@ -63,6 +63,11 @@ export class BondNetwork {
     return this.bondAlive[s] === 1;
   }
 
+  /** Remaining free bond slots (for a capacity pre-check before a structural build). */
+  get freeCount(): number {
+    return this.bondFreeTop;
+  }
+
   /** Allocate a bond; -1 if the pool is full OR either endpoint is at the degree cap. */
   addBond(
     a: number,

@@ -13,6 +13,12 @@ export class OrganismTable {
   readonly centroidY: Float32Array;
   /** The organism's MOVER cell slot for orientation (−1 = none). */
   readonly mover: Int32Array;
+  /** The organism's genome store ref (−1 = none — never reproduces). */
+  readonly genomeRef: Int32Array;
+  /** The tick the organism was born (−1 = founder/unknown), for the adulthood metric. */
+  readonly birthTick: Int32Array;
+  /** 1 once the organism first reached reproThreshold (births-reaching-adulthood, §8 M6). */
+  readonly reachedAdulthood: Uint8Array;
 
   private readonly orgAlive: Uint8Array;
   private readonly orgFree: Int32Array;
@@ -25,6 +31,9 @@ export class OrganismTable {
     this.centroidX = new Float32Array(maxOrganisms);
     this.centroidY = new Float32Array(maxOrganisms);
     this.mover = new Int32Array(maxOrganisms).fill(-1);
+    this.genomeRef = new Int32Array(maxOrganisms).fill(-1);
+    this.birthTick = new Int32Array(maxOrganisms).fill(-1);
+    this.reachedAdulthood = new Uint8Array(maxOrganisms);
     this.orgAlive = new Uint8Array(maxOrganisms);
     // Free-list of ids 1..maxOrganisms-1 (0 reserved). Pop returns 1, 2, 3, … ascending.
     const n = maxOrganisms - 1;
@@ -39,6 +48,9 @@ export class OrganismTable {
     const id = this.orgFree[--this.orgFreeTop]!;
     this.orgAlive[id] = 1;
     this.mover[id] = -1;
+    this.genomeRef[id] = -1;
+    this.birthTick[id] = -1;
+    this.reachedAdulthood[id] = 0;
     this.energy[id] = 0;
     this.cellCount[id] = 0;
     return id;
@@ -49,6 +61,9 @@ export class OrganismTable {
     if (this.orgAlive[id] === 0) return;
     this.orgAlive[id] = 0;
     this.mover[id] = -1;
+    this.genomeRef[id] = -1;
+    this.birthTick[id] = -1;
+    this.reachedAdulthood[id] = 0;
     this.orgFree[this.orgFreeTop++] = id;
   }
 
