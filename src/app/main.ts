@@ -18,7 +18,8 @@ import {
 } from '../core/genome/critter-genome';
 import { instantiateBody } from '../core/organism/instantiate';
 import { CellType } from '../core/cells/types';
-import type { Genome } from '../core/genome/genome';
+import { cloneGenome, type Genome } from '../core/genome/genome';
+import type { LineageSummary } from '../core/sim/lineage-board';
 
 const canvas = document.getElementById('view') as HTMLCanvasElement;
 const hud = document.getElementById('hud');
@@ -420,6 +421,10 @@ interface SimHandle {
   feedAll: (e?: number) => number;
   /** Print/return live genome organisms with cell-count, energy, genome ref + generation. */
   organisms: () => { org: number; cells: number; energy: number; gen: number; ref: number }[];
+  /** Current champion board: top live founding lineages by member count (M7 telemetry). */
+  champions: () => LineageSummary[];
+  /** Manual debug spawn of champion `k`'s representative genome (clone keeps its founderId). */
+  spawnChampion: (k?: number) => number;
 }
 const cx0 = () => world.config.worldWidth * 0.5;
 const cy0 = () => world.config.worldHeight * 0.5;
@@ -511,5 +516,14 @@ function nearestGenomeOrg(x: number, y: number): number {
       }
     }
     return out;
+  },
+  champions: () => world.lineageBoard.slice(),
+  spawnChampion: (k = 0) => {
+    const board = world.lineageBoard;
+    if (k < 0 || k >= board.length) return -1;
+    const g = world.genomes.get(board[k]!.representativeRef);
+    if (g === undefined) return -1;
+    // Clone keeps founderId → the spawned champion joins its own dynasty (a member, not a new founder).
+    return developInto(cloneGenome(g), cx0(), cy0(), 0);
   },
 };

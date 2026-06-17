@@ -25,6 +25,7 @@ import { BondNetwork } from '../organism/bonds';
 import { OrganismTable, aggregateOrganisms } from '../organism/organisms';
 import { SplitChecker } from '../organism/split';
 import { makeMetrics, sampleMetrics, sampleEvolutionMetrics, type Metrics } from './metrics';
+import { sampleLineages, type LineageSummary, type LineageStat } from './lineage-board';
 import { GenomeStore } from '../genome/genome';
 import { reproduceOrganisms, type ReproParams } from '../organism/reproduction';
 import { killStarvedOrganisms } from '../organism/organism-death';
@@ -73,6 +74,11 @@ export class World {
   /** Per-cell bonded-DIGESTIVE-neighbour count (the digestion-clustering payoff input). */
   readonly digestBonus: Uint8Array;
   readonly metrics: Metrics;
+  /** M7 champion board: top live founding lineages by member count (sampled telemetry, not the
+   * SoA determinism contract). Refreshed at metricsEvolutionInterval cadence. */
+  lineageBoard: readonly LineageSummary[] = [];
+  /** Persistent per-lineage peak + first-seen accumulator backing lineageBoard. */
+  private readonly lineageStats = new Map<number, LineageStat>();
   /** Pre-allocated so lifecycle writes counts without a per-tick object (zero-alloc). */
   readonly lifecycleResult: LifecycleResult;
   lastBirths: number;
@@ -525,6 +531,13 @@ export class World {
     // hot loop). Read-only; not part of the SoA determinism contract.
     if (this.tickCount % cfg.metricsEvolutionInterval === 0) {
       sampleEvolutionMetrics(this.metrics, this.organisms, this.genomes);
+      this.lineageBoard = sampleLineages(
+        this.organisms,
+        this.genomes,
+        this.lineageStats,
+        this.tickCount,
+        8,
+      );
     }
 
     this.tickCount++;
