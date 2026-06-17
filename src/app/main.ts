@@ -28,20 +28,38 @@ import type { SpeciesSummary } from '../core/sim/species-board';
 const canvas = document.getElementById('view') as HTMLCanvasElement;
 const hud = document.getElementById('hud');
 
-// A petri-dish world tuned (via headless/forager-probe.ts) so the brain-driven FORAGER organisms
-// sustain a multicellular predator-prey limit cycle: a dense PHOTO plant field is the only food and
-// the foragers are the only heterotroph, so they boom (sensing→swimming→eating→reproducing), strip
-// the plants, crash (starve→MEAT), the plants regrow, and they recover — generation after generation.
+// A petri-dish world tuned (via headless/feel-probe.ts) so the brain-driven FORAGER organisms
+// sustain a multicellular predator-prey limit cycle: a PHOTO plant field is the only food and the
+// foragers are the only heterotroph, so they boom (sensing→swimming→eating→reproducing), strip the
+// plants, crash (starve→MEAT), the plants regrow, and they recover — generation after generation.
+// The plant field has a density carrying capacity (crowdDivideCap) so it stays de-jammed — open
+// water between food you can actually watch the foragers swim through, not a wall-to-wall carpet.
 const config = defaultConfig({
   seed: 3,
   maxCells: 100_000,
-  worldWidth: 1024,
-  worldHeight: 1024,
+  // A bigger dish (1536² vs the old 1024²) gives the foragers room to actually swim and be SEEN
+  // rather than jostle shoulder-to-shoulder. Paired with crowdDivideCap below — without a plant
+  // carrying capacity, a bigger world just fills with more plants to the same jam.
+  worldWidth: 1536,
+  worldHeight: 1536,
   initialPhotoFraction: 1, // all-plant seed: pure food, no competing single-cell eaters
   initialMotileFraction: 0,
-  reproThreshold: 700,
+  // De-jam the plant field. Without this the producers divide unchecked until they PHYSICALLY jam
+  // at ~90% packing (cells permanently overlap → endless repulsion jiggle, nothing legible). The
+  // cap gives plants a logistic carrying capacity: a PHOTO cell whose 32-unit density-grid bucket
+  // already holds >2 cells skips division, pinning the field near ~30% (seed-independent) so there
+  // is open water between food. It caps DENSITY, not regrowth (a thinned patch refills at full
+  // rate), so the predator-prey cycle survives — unlike photoDepletion, which strangles regrowth
+  // and collapses the food web. Found via headless/feel-probe.ts.
+  crowdDivideCap: 2,
+  crowdGridSize: 32,
+  reproThreshold: 600,
   reproParentFloor: 120,
   organismDeathFloor: 0, // an unfed forager starves to MEAT, feeding the next generation
+  basalCost: 0.012, // slightly cheaper upkeep so foragers survive the SPARSER (de-jammed) food and
+  // establish across seeds — at baseline 0.015 the de-jammed dish starved them on unlucky seeds.
+  cruiseThrust: 1, // friskier roam (was 0.5) so a searching forager visibly explores the open water
+  maxThrust: 8, // a little faster top speed (was 6) — more mobile, more watchable
   // M7: mutation ON so the forager population ADAPTS and DIVERSIFIES live (library defaults stay 0).
   // Tuned-safe: explores steering weights/params without collapsing the predator-prey cycle.
   mutationWeightRate: 0.25,
@@ -50,14 +68,15 @@ const config = defaultConfig({
   mutationParamSigma: 0.1,
   // One structural operator, ON small, gives OPEN-ENDED emergence: weight/param mutation only
   // tunes a FIXED body plan (genotypic diversity stays 0), so changeType lets body plans actually
-  // diverge → the `geno-div` HUD readout climbs to ~0.55 and holds. Tuned at 0.015 via headless
-  // sweep (_t8probe): preserves the boom-bust early, zero genome bloat (changeType adds no cells),
-  // no extinction over 12k ticks. Higher (0.02) locks the population; combos with add/delete-gene
-  // EXTINCT it. Other structural rates stay 0.
+  // diverge → the `geno-div` HUD readout climbs and holds. Tuned at 0.015 via headless sweep:
+  // preserves the boom-bust early, zero genome bloat (changeType adds no cells). Higher (0.02)
+  // locks the population; combos with add/delete-gene EXTINCT it. Other structural rates stay 0.
   mutationChangeTypeRate: 0.015,
 });
 const world = new World(config);
-world.seedLife(8000);
+// ~6500 PHOTO plants ≈ the crowdDivideCap equilibrium density, so food is plentiful from tick 0
+// and the foragers establish before the plant field finishes settling (avoids an early starve-out).
+world.seedLife(6500);
 
 // M6 demo: organisms DEVELOPED from a genome (proves the encoding drives the live demo).
 function developInto(genome: Genome, x: number, y: number, heading: number): number {
@@ -83,7 +102,7 @@ function developInto(genome: Genome, x: number, y: number, heading: number): num
 // starve→MEAT when they can't — a multicellular predator-prey cycle you can watch. Each forager
 // is itself a legible brain (2 sensors → 2 motor-neurons → motor), so the brain inspector (B)
 // shows a LIVE foraging network. The §8 encoding-hero critter lives in tests + `sim.spawnCritter()`.
-for (let k = 0; k < 20; k++) {
+for (let k = 0; k < 40; k++) {
   developInto(
     buildForagerGenome(world.config.cellRadius),
     world.config.worldWidth * (0.1 + (0.8 * ((k * 7) % 20)) / 20),
