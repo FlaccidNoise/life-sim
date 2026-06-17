@@ -158,6 +158,8 @@ export interface Config {
   mutationChangeTypeRate: number;
   /** Probability of a duplicate-subgraph mutation per reproduction (the complexity driver). */
   mutationDuplicateSubgraphRate: number;
+  /** Ticks between evolution-telemetry samples (read-only; keeps the hot loop alloc-free). */
+  metricsEvolutionInterval: number;
 }
 
 export function defaultConfig(overrides: Partial<Config> = {}): Config {
@@ -259,6 +261,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     mutationRewireRate: 0,
     mutationChangeTypeRate: 0,
     mutationDuplicateSubgraphRate: 0,
+    metricsEvolutionInterval: 16,
 
     ...overrides,
   };
