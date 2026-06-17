@@ -68,8 +68,9 @@ export interface Config {
    * density pass is skipped entirely and the M2/M3 economy is byte-identical to before.
    */
   crowdDivideCap: number;
-  /** Side length (world units) of a density-grid bucket for crowdDivideCap. ~3 cell-diameters
-   *  (≈ 4·cellRadius·...) gives a smooth carrying-capacity signal; only used when the cap is on. */
+  /** Side length (world units) of a density-grid bucket for crowdDivideCap. At the default 32 (~2.7
+   *  cell-diameters at cellRadius 6) a bucket holds ~9 cells at full pack, so a cap of 2-3 yields a
+   *  ~30-50% de-jammed field. Only used when the cap is on. */
   crowdGridSize: number;
   /** Fraction of initial cells spawned as PHOTO; the rest are DIGESTIVE. */
   initialPhotoFraction: number;
