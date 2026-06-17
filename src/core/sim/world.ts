@@ -24,7 +24,7 @@ import { orientSensors } from '../neural/orient';
 import { BondNetwork } from '../organism/bonds';
 import { OrganismTable, aggregateOrganisms } from '../organism/organisms';
 import { SplitChecker } from '../organism/split';
-import { makeMetrics, sampleMetrics, type Metrics } from './metrics';
+import { makeMetrics, sampleMetrics, sampleEvolutionMetrics, type Metrics } from './metrics';
 import { GenomeStore } from '../genome/genome';
 import { reproduceOrganisms, type ReproParams } from '../organism/reproduction';
 import { killStarvedOrganisms } from '../organism/organism-death';
@@ -520,6 +520,12 @@ export class World {
       this.lastOrganismDeaths,
       this.birthsReachedAdulthood,
     );
+
+    // M7: evolution telemetry at reduced cadence (allocates a Map → kept off the per-tick
+    // hot loop). Read-only; not part of the SoA determinism contract.
+    if (this.tickCount % cfg.metricsEvolutionInterval === 0) {
+      sampleEvolutionMetrics(this.metrics, this.organisms, this.genomes);
+    }
 
     this.tickCount++;
   }
