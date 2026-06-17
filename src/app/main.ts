@@ -102,13 +102,15 @@ function developInto(genome: Genome, x: number, y: number, heading: number): num
 // starve→MEAT when they can't — a multicellular predator-prey cycle you can watch. Each forager
 // is itself a legible brain (2 sensors → 2 motor-neurons → motor), so the brain inspector (B)
 // shows a LIVE foraging network. The §8 encoding-hero critter lives in tests + `sim.spawnCritter()`.
+let firstForagerOrg = -1;
 for (let k = 0; k < 40; k++) {
-  developInto(
+  const org = developInto(
     buildForagerGenome(world.config.cellRadius),
     world.config.worldWidth * (0.1 + (0.8 * ((k * 7) % 20)) / 20),
     world.config.worldHeight * (0.1 + (0.8 * ((k * 13) % 20)) / 20),
     (k * 2.39996) % (Math.PI * 2),
   );
+  if (k === 0) firstForagerOrg = org;
 }
 
 const f = world.cells.fields;
@@ -192,6 +194,18 @@ for (let i = 0; i < config.maxCells; i++) {
 // its slot is recycled into a different cell.
 let followId = -1;
 let followGen = 0;
+// Start locked onto a forager so the first thing you see is a creature swimming/eating, not a
+// distant field. The follow auto-releases when it dies (generation check below); press C/Escape to
+// release, or click any cell to follow it. Centering on the organism uses its centroid (updateFollow).
+{
+  const mover = firstForagerOrg >= 0 ? world.organisms.mover[firstForagerOrg]! : -1;
+  if (mover >= 0 && world.cells.isAlive(mover)) {
+    followId = mover;
+    followGen = f.generation[mover]!;
+    camera.x = f.posX[mover]!;
+    camera.y = f.posY[mover]!;
+  }
+}
 
 // The brain inspector's default subject when you aren't following anyone: the first live
 // organism that owns a NEURON cell (a forager). Returns 0 (nothing to draw) if none are alive.
@@ -271,16 +285,19 @@ function drawScene(alpha: number): void {
   if (showMenag) renderMenagerie(world, menagPanel);
 }
 
-function fit(): void {
+// Default view spans ~520 world units across the smaller screen axis (~6 cell-diameters of detail),
+// so individual foragers are legible from the start instead of specks in a whole-world fit. The
+// wheel zooms out to the full ecosystem; resize preserves the user's current zoom.
+const DEFAULT_VIEW_SPAN = 520;
+function fit(initial: boolean): void {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
   renderer.resize(canvas.width, canvas.height);
   bondOverlay.resize(canvas.width, canvas.height);
-  camera.scale =
-    Math.min(canvas.width / config.worldWidth, canvas.height / config.worldHeight) * 0.95;
+  if (initial) camera.scale = Math.min(canvas.width, canvas.height) / DEFAULT_VIEW_SPAN;
 }
-window.addEventListener('resize', fit);
-fit();
+window.addEventListener('resize', () => fit(false));
+fit(true);
 
 // Fixed-timestep state.
 let speed = 0.25; // physics ticks advanced per rendered frame (fractional = slow-mo)
