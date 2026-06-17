@@ -107,6 +107,45 @@ describe('SplitChecker — split-on-break (§4.8)', () => {
     expect(f.organismId[cells[0]!]).not.toBe(f.organismId[cells[1]!]);
   });
 
+  it('count≥2 BFS relabel + mover migration is byte-identical across two independent runs', () => {
+    // The reproducibility harness only ever peels count=1 components, so the count≥2
+    // smaller-side/tiebreak relabel + mover-migration path is not otherwise determinism-
+    // locked. Build the SAME chain twice and assert byte-identical results.
+    function run() {
+      const store = new CellStore(16, false);
+      const bonds = new BondNetwork(16, 32, 4);
+      const organisms = new OrganismTable(16);
+      const splitter = new SplitChecker(16);
+      // 5-cell chain c0-c1-c2-c3-c4 (bonds 0..3). Break bond 1 (c1-c2) → the {c0,c1}
+      // component (2 cells, ≥2) severs and is the smaller/first-closed side → relabelled.
+      const { org, cells } = chain(store, bonds, organisms, [10, 20, 30, 40, 50]);
+      const f = store.fields;
+      organisms.mover[org] = cells[0]!; // mover on the severed (relabelled) side
+      bonds.removeBond(1);
+      const newOrg = splitter.check(bonds, f.organismId, organisms, cells[1]!, cells[2]!);
+      return {
+        newOrg,
+        ids: Uint32Array.from(cells.map((c) => f.organismId[c]!)),
+        mover: Int32Array.from(organisms.mover.subarray(0, 4)),
+      };
+    }
+
+    const r1 = run();
+    const r2 = run();
+
+    // The relabel actually happened and severed a ≥2-cell component.
+    expect(r1.newOrg).toBeGreaterThan(0);
+    expect(r1.ids[0]).toBe(r1.ids[1]); // {c0,c1} share the fresh id
+    expect(r1.ids[2]).toBe(r1.ids[3]);
+    expect(r1.ids[3]).toBe(r1.ids[4]); // {c2,c3,c4} share the other id
+    expect(r1.ids[0]).not.toBe(r1.ids[2]); // the two components differ
+
+    // Byte-identical relabel + mover migration across the two independent runs.
+    expect(r2.newOrg).toBe(r1.newOrg);
+    expect(Array.from(r2.ids)).toEqual(Array.from(r1.ids));
+    expect(Array.from(r2.mover)).toEqual(Array.from(r1.mover));
+  });
+
   it('migrates organisms.mover to the new id when the mover lands on the severed side', () => {
     const store = new CellStore(16, false);
     const bonds = new BondNetwork(16, 32, 4);
