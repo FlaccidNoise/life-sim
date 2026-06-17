@@ -13,7 +13,7 @@ interface Section {
   knobs: Knob[];
 }
 
-// Grouped so the 21 live knobs are scannable rather than one long wall of sliders.
+// Grouped so the 28 live knobs are scannable rather than one long wall of sliders.
 const SECTIONS: Section[] = [
   {
     title: 'economy',
@@ -54,6 +54,24 @@ const SECTIONS: Section[] = [
       { key: 'turnScale', label: 'turn scale', min: 0, max: 1, step: 0.02 },
       { key: 'thrustScale', label: 'thrust scale', min: 0, max: 8, step: 0.1 },
       { key: 'thrustBias', label: 'thrust bias', min: -2, max: 6, step: 0.1 },
+    ],
+  },
+  {
+    // The buffer-resize knobs maxBonds/maxOrganisms/bondDegreeCap are restart-required
+    // (pool capacities, not derivable from maxCells) and are intentionally NOT live
+    // sliders — same as maxCells/maxSynapses, which are also omitted here.
+    title: 'bonds / organisms (M5)',
+    knobs: [
+      // bondStiffness CAP is 2.5: the symplectic-Euler stability ceiling (k>~3 diverges
+      // to Inf/NaN; a multi-spoke hub is tighter still). Rigidity comes from bracing
+      // geometry + low strain tolerance, not large k. Do NOT raise this max.
+      { key: 'bondStiffness', label: 'bond stiffness', min: 0, max: 2.5, step: 0.05 },
+      { key: 'bondMaxStrain', label: 'bond max strain', min: 0.1, max: 2, step: 0.05 },
+      { key: 'transferRate', label: 'transfer rate', min: 0, max: 0.5, step: 0.01 },
+      { key: 'transferEfficiency', label: 'transfer eff', min: 0, max: 1, step: 0.01 },
+      { key: 'adhesionStrength', label: 'adhesion str', min: 0, max: 5, step: 0.05 },
+      { key: 'adhesionRange', label: 'adhesion range', min: 6, max: 36, step: 1 },
+      { key: 'digestClusterBonus', label: 'digest cluster', min: 0, max: 2, step: 0.05 },
     ],
   },
 ];
