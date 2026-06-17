@@ -542,9 +542,17 @@ git commit --no-verify -m "feat(M7): headless adaptation probe (economic selecti
 
 **Interfaces:**
 - Consumes: `World`, `defaultConfig`, `develop`, `buildForagerGenome`, `buildHandicappedForagerGenome`, `instantiateBody`.
-- Produces: a fast, deterministic, committed test proving **within-world selection**: fit foragers (weight 1.5) out-reproduce unfit (weight 0.2) competing in the *same* economy, mutation OFF. Attribution is by the genome's `sensorFwd→thrust` weight (clones preserve it exactly with mutation off).
+- Produces: a fast, deterministic, committed test proving **within-world selection**: fit foragers (lat→turn weight 1.5) out-reproduce unfit (lat→turn weight 0.2) competing in the *same* economy, mutation OFF. Attribution is by the genome's `sensorLat→turn` connection weight (`preGene 2 → postGene 3`; clones preserve it exactly with mutation off).
 
-**Context (from Task 4):** the controller will give you the viable mutation-off forager regime confirmed by the probe. The numbers below are a starting point validated against the forager regime; **run the test and confirm** fit > unfit with a comfortable margin (target fit ≥ 1.5× unfit) and runtime < ~3 s. If the margin is thin or it's slow, tune within these bounds, in order: raise `TICKS` (2000→3500), raise plant density (`seedLife`), raise forager counts (12→20 each). **Do NOT weaken the assertion to make it pass.** If fit does not out-reproduce unfit, that contradicts the probe — escalate.
+**Context (from the Task 4 pivot — READ THIS, the regime is empirically validated, do not change it):**
+
+The selected trait is **`sensorLat→turn` (preGene 2 → postGene 3)**, NOT `sensorFwd→thrust`. Task 4 proved `sensorFwd→thrust` is *anti*-selected (the thrust² move-cost trap) and that selection only manifests under **scarcity** — under abundant food foragers barely reproduce, so there's no reproduction-differential for selection to act through (the ADAPT-abundant control stayed flat). The regime below (seed 4, 512², `lightRegen: 0.07`, 2500 plants, 12 pairs) was validated by a throwaway sweep: fit out-reproduces unfit **2.75–4.0× sustained across every post-bottleneck checkpoint**, accumulating to **sumFit≈629 vs sumUnfit≈211 (ratio ≈2.98×)** over the back-half samples, fit never extinct, ~4.5 s runtime.
+
+The forager economy runs a violent **boom-bust limit cycle** (population swings ~5× every ~1500–2000 ticks; troughs drop to single digits). Two consequences baked into the test design — **do not "simplify" them away:**
+1. A single endpoint snapshot is cycle-phase noise. The test **accumulates** fit/unfit counts over many samples in the post-bottleneck back-half (t > 1200) and compares the *totals* — integrating over the cycle is what makes the signal robust, not lucky.
+2. The outcome is **population-size (Ne) sensitive**: the same seed at a *smaller* world (448²/2000 plants) drift-extincted the fit lineage. The 512²/2500-plant/12-pair scale is chosen deliberately to keep Ne high enough that selection dominates drift. **This is one deterministic seed-4 realization, not a cross-seed guarantee** (note for the controller's uncertainty list).
+
+**run the test and confirm** the ratio assertion passes with the comfortable margin (observed 2.98× vs the 1.5× bar) and capture the runtime. Runtime is ~4.5 s — over the soft 3 s target but under the suite's current slowest file (Task 2, 6.77 s); acceptable, flag it in your report. If you must speed it up, lower `TICKS` toward 2500 (keeps ≥13 back-half samples) — do **NOT** shrink the world (drift-extincts fit) and do **NOT** weaken the assertion. If fit does not out-reproduce unfit, that contradicts the probe — escalate.
 
 - [ ] **Step 1: Write the test** — `src/core/sim/selection.test.ts`
 
@@ -560,7 +568,10 @@ import { type Genome } from '../genome/genome';
 const FIT = 1.5;
 const UNFIT = 0.2;
 const PAIRS = 12; // FIT + UNFIT foragers each
-const TICKS = 2500;
+const PLANTS = 2500;
+const TICKS = 3000;
+const SAMPLE_FROM = 1200; // start sampling after the first boom-bust bottleneck has separated the alleles
+const SAMPLE_EVERY = 100;
 
 function spawn(w: World, genome: Genome, x: number, y: number): void {
   const cfg = w.config;
@@ -572,7 +583,10 @@ function spawn(w: World, genome: Genome, x: number, y: number): void {
   );
 }
 
-/** Bucket live genome-organisms by their steering weight (mutation OFF → clones preserve it). */
+/**
+ * Bucket live genome-organisms by their sensorLat→turn weight (preGene 2 → postGene 3).
+ * Mutation is OFF, so clones preserve the founder's weight exactly — attribution is exact.
+ */
 function countByFitness(w: World): { fit: number; unfit: number } {
   const o = w.organisms;
   let fit = 0;
@@ -583,7 +597,7 @@ function countByFitness(w: World): { fit: number; unfit: number } {
     if (ref < 0) continue;
     const g = w.genomes.get(ref);
     if (!g) continue;
-    const c = g.connectionRules.find((r) => r.preGene === 1 && r.postGene === 4);
+    const c = g.connectionRules.find((r) => r.preGene === 2 && r.postGene === 3);
     if (!c) continue;
     if (c.weight >= 1.0) fit++;
     else unfit++;
@@ -592,24 +606,25 @@ function countByFitness(w: World): { fit: number; unfit: number } {
 }
 
 describe('economic selection (no fitness function)', () => {
-  it('fit foragers out-reproduce unfit competing in the same economy', () => {
+  it('fit foragers out-reproduce unfit competing in the same scarce economy', () => {
     const cfg = defaultConfig({
       seed: 4,
-      maxCells: 4000,
-      worldWidth: 400,
-      worldHeight: 400,
+      maxCells: 6000,
+      worldWidth: 512,
+      worldHeight: 512,
       initialPhotoFraction: 1,
       initialMotileFraction: 0,
       reproThreshold: 700,
       reproParentFloor: 120,
       organismDeathFloor: 0,
+      lightRegen: 0.07, // scarcity — the binding constraint that makes steering-toward-food selectable
       // mutation OFF (defaults) — clones preserve the steering weight, so attribution is exact.
     });
     const w = new World(cfg, false);
-    w.seedLife(1500);
+    w.seedLife(PLANTS);
     // Interleave fit/unfit at mirrored positions so neither gets a spatial advantage.
     for (let k = 0; k < PAIRS; k++) {
-      const x = cfg.worldWidth * (0.15 + 0.7 * (k / PAIRS));
+      const x = cfg.worldWidth * (0.12 + 0.76 * (k / PAIRS));
       spawn(w, buildForagerGenome(cfg.cellRadius, 100), x, cfg.worldHeight * 0.4);
       spawn(w, buildHandicappedForagerGenome(cfg.cellRadius, 100, UNFIT), x, cfg.worldHeight * 0.6);
     }
@@ -617,13 +632,28 @@ describe('economic selection (no fitness function)', () => {
     expect(start.fit).toBe(PAIRS);
     expect(start.unfit).toBe(PAIRS);
 
-    for (let t = 0; t < TICKS; t++) w.tick();
+    // Accumulate counts over the post-bottleneck back-half. A single endpoint snapshot is
+    // boom-bust cycle-phase noise; integrating over many samples is what makes the signal robust.
+    let sumFit = 0;
+    let sumUnfit = 0;
+    let fitEverExtinct = false;
+    for (let t = 1; t <= TICKS; t++) {
+      w.tick();
+      if (t > SAMPLE_FROM && t % SAMPLE_EVERY === 0) {
+        const c = countByFitness(w);
+        sumFit += c.fit;
+        sumUnfit += c.unfit;
+        if (c.fit === 0) fitEverExtinct = true;
+      }
+    }
 
-    const end = countByFitness(w);
-    // Selection: the fit lineage reproduces more, so it dominates the survivors.
-    expect(end.fit).toBeGreaterThan(end.unfit);
-    // And the fit lineage actually grew (reproduction happened, not just unfit dying out).
-    expect(end.fit).toBeGreaterThan(PAIRS);
+    // Non-vacuity: both alleles were actually present to compete (the unfit lineage didn't
+    // vanish at t=0), and the fit lineage never drift-extincted.
+    expect(sumUnfit).toBeGreaterThan(0);
+    expect(fitEverExtinct).toBe(false);
+    // Selection: integrated over the cycle, the fit lineage out-reproduces the unfit one by a
+    // comfortable margin (observed ratio ≈2.98× — the 1.5× bar leaves wide headroom).
+    expect(sumFit).toBeGreaterThan(sumUnfit * 1.5);
     void FIT;
   });
 });
@@ -632,7 +662,7 @@ describe('economic selection (no fitness function)', () => {
 - [ ] **Step 2: Run the test**
 
 Run: `pnpm vitest run src/core/sim/selection.test.ts`
-Expected: PASS, runtime < ~3 s. Tune per the Context note if the margin is thin or it's slow.
+Expected: PASS, runtime ~4.5 s (`sumFit≈629`, `sumUnfit≈211`). Per the Context note, do not weaken the assertion or shrink the world; if it fails, escalate.
 
 - [ ] **Step 3: Run the gate and commit**
 
