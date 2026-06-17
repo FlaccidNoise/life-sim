@@ -3,6 +3,9 @@ import { World } from './world';
 import { defaultConfig } from './config';
 import { spawnSwimmer, type Critter } from './critter';
 import { CellType } from '../cells/types';
+import { develop } from '../genome/develop';
+import { buildAutotrophGenome } from '../genome/critter-genome';
+import { instantiateBody } from '../organism/instantiate';
 
 function runWorld(seed: number): World {
   const w = new World(defaultConfig({ seed, maxCells: 2000 }), false);
@@ -124,5 +127,70 @@ describe('reproducibility — bonds + organism state', () => {
       expect(a.organisms.energy[org]!).toBe(b.organisms.energy[org]!);
       expect(a.organisms.cellCount[org]!).toBe(b.organisms.cellCount[org]!);
     }
+  });
+});
+
+describe('reproducibility — M6 genome reproduction + mutation', () => {
+  function spawnAutotroph(w: World, energy: number): void {
+    const ref = w.genomes.register(buildAutotrophGenome(w.config.cellRadius));
+    const body = develop(
+      buildAutotrophGenome(w.config.cellRadius),
+      w.config.maxCellsPerOrganism,
+      w.config.maxRecursionDepth,
+    );
+    const org = instantiateBody(
+      body,
+      w.cells,
+      w.net,
+      w.bonds,
+      w.organisms,
+      ref,
+      1000,
+      1000,
+      0,
+      w.config.worldWidth,
+      w.config.worldHeight,
+      w.instantiateScratch,
+    );
+    const f = w.cells.fields;
+    for (let i = 0; i < w.cells.capacity; i++) if (f.organismId[i] === org) f.energy[i] = energy;
+  }
+
+  function run(): World {
+    const cfg = defaultConfig({
+      seed: 5,
+      maxCells: 256,
+      reproThreshold: 600,
+      basalCost: 0,
+      photoGain: 0,
+      organismDeathFloor: -1,
+      mutationParamRate: 0.5,
+      mutationWeightRate: 0.5,
+      mutationParamSigma: 0.2,
+      mutationWeightSigma: 0.2,
+      mutationDuplicateGeneRate: 0.2,
+    });
+    const w = new World(cfg, false);
+    spawnAutotroph(w, 300);
+    for (let t = 0; t < 20; t++) {
+      const f = w.cells.fields;
+      for (let i = 0; i < w.cells.capacity; i++)
+        if (w.cells.isAlive(i) && f.cellType[i] === CellType.PHOTO) f.energy[i] = 300; // deterministic top-up
+      w.tick();
+    }
+    return w;
+  }
+
+  it('produces byte-identical energy/organismId/genomeRef/posX for the same (Config, seed)', () => {
+    const a = run();
+    const b = run();
+    const fa = a.cells.fields;
+    const fb = b.cells.fields;
+    expect(Array.from(fa.energy)).toEqual(Array.from(fb.energy));
+    expect(Array.from(fa.organismId)).toEqual(Array.from(fb.organismId));
+    expect(Array.from(fa.genomeRef)).toEqual(Array.from(fb.genomeRef));
+    expect(Array.from(fa.posX)).toEqual(Array.from(fb.posX));
+    expect(a.genomes.size).toBe(b.genomes.size);
+    expect(a.cells.aliveCount).toBeGreaterThan(4); // reproduction actually happened
   });
 });
