@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { gaussian, mutateGenome, type MutationRates } from './mutate';
 import { type Genome, GenomeStore } from './genome';
+import { develop } from './develop';
 import { Rng } from '../math/rng';
 import { CellType } from '../cells/types';
 
@@ -148,5 +149,84 @@ describe('mutateGenome — structural operators (add/duplicate/rewire/changeType
   it('still produces a clone when all rates are 0 (store unused)', () => {
     const p = demoGenome();
     expect(mutateGenome(p, new Rng(1), NO_MUT, store())).toEqual(p);
+  });
+});
+
+describe('mutateGenome — delete + duplicate-subgraph (index ops)', () => {
+  const store = () => new GenomeStore();
+
+  it('deleteGene removes a non-seed gene + its rules and keeps refs valid', () => {
+    const p = demoGenome(); // genes [MOVER(seed), NEURON]; a division rule 0→1; a self-synapse 1→1
+    const c = mutateGenome(p, new Rng(6), { ...NO_MUT, deleteGeneRate: 1 }, store());
+    expect(c.genes.length).toBe(1); // the NEURON gene removed
+    expect(c.seedGene).toBe(0); // seed preserved
+    // No rule references the deleted gene; all refs are in range.
+    for (const r of c.divisionRules) {
+      expect(r.parentGene).toBeLessThan(c.genes.length);
+      expect(r.childGene).toBeLessThan(c.genes.length);
+    }
+    for (const r of c.connectionRules) {
+      expect(r.preGene).toBeLessThan(c.genes.length);
+      expect(r.postGene).toBeLessThan(c.genes.length);
+    }
+    // develop still works (no crash, body is just the seed).
+    expect(develop(c, 256, 16).count).toBe(1);
+  });
+
+  it('never deletes the seed gene (genome with only the seed is unchanged by delete)', () => {
+    const p: Genome = {
+      seedGene: 0,
+      genes: [
+        {
+          innovation: 0,
+          cellType: CellType.PHOTO,
+          radius: 6,
+          mass: 2,
+          initialEnergy: 100,
+          bias: 0,
+          sensorChannel: -1,
+        },
+      ],
+      divisionRules: [],
+      bondRules: [],
+      connectionRules: [],
+      motorRules: [],
+      parentRef: -1,
+      generation: 0,
+    };
+    const c = mutateGenome(p, new Rng(6), { ...NO_MUT, deleteGeneRate: 1 }, store());
+    expect(c.genes.length).toBe(1);
+  });
+
+  it('duplicateSubgraph grows the genome and develops into a larger body', () => {
+    const p = demoGenome();
+    const before = develop(p, 256, 16).count;
+    const c = mutateGenome(p, new Rng(11), { ...NO_MUT, duplicateSubgraphRate: 1 }, store());
+    expect(c.genes.length).toBeGreaterThan(p.genes.length);
+    // every gene ref stays valid, and the duplicated copies carry fresh innovation ids
+    for (const r of c.divisionRules) {
+      expect(r.childGene).toBeLessThan(c.genes.length);
+      expect(r.parentGene).toBeLessThan(c.genes.length);
+    }
+    expect(develop(c, 256, 16).count).toBeGreaterThan(before);
+  });
+
+  it('stays deterministic with everything on', () => {
+    const p = demoGenome();
+    const rates: MutationRates = {
+      paramSigma: 0.2,
+      paramRate: 0.5,
+      weightSigma: 0.2,
+      weightRate: 0.5,
+      addGeneRate: 0.5,
+      deleteGeneRate: 0.3,
+      duplicateGeneRate: 0.5,
+      rewireRate: 0.5,
+      changeTypeRate: 0.5,
+      duplicateSubgraphRate: 0.5,
+    };
+    const a = mutateGenome(p, new Rng(99), rates, store());
+    const b = mutateGenome(p, new Rng(99), rates, store());
+    expect(a).toEqual(b);
   });
 });

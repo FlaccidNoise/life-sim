@@ -121,5 +121,84 @@ export function mutateGenome(
     });
   }
 
+  // Delete a non-seed gene: filter it out + remap every gene reference; drop rules touching it.
+  if (rng.float() < rates.deleteGeneRate && child.genes.length > 1) {
+    // Pick a victim among non-seed genes.
+    let victim = rng.int(child.genes.length);
+    if (victim === child.seedGene) victim = (victim + 1) % child.genes.length;
+    if (victim !== child.seedGene) {
+      const remap: number[] = [];
+      let next = 0;
+      for (let i = 0; i < child.genes.length; i++) remap[i] = i === victim ? -1 : next++;
+      child.genes = child.genes.filter((_, i) => i !== victim);
+      child.seedGene = remap[child.seedGene]!;
+      child.divisionRules = child.divisionRules
+        .filter((r) => r.parentGene !== victim && r.childGene !== victim)
+        .map((r) => ({ ...r, parentGene: remap[r.parentGene]!, childGene: remap[r.childGene]! }));
+      child.bondRules = child.bondRules
+        .filter((r) => r.geneA !== victim && r.geneB !== victim)
+        .map((r) => ({ ...r, geneA: remap[r.geneA]!, geneB: remap[r.geneB]! }));
+      child.connectionRules = child.connectionRules
+        .filter((r) => r.preGene !== victim && r.postGene !== victim)
+        .map((r) => ({ ...r, preGene: remap[r.preGene]!, postGene: remap[r.postGene]! }));
+      child.motorRules = child.motorRules
+        .filter((r) => r.moverGene !== victim && r.turnGene !== victim && r.thrustGene !== victim)
+        .map((r) => ({
+          ...r,
+          moverGene: remap[r.moverGene]!,
+          turnGene: remap[r.turnGene]!,
+          thrustGene: remap[r.thrustGene]!,
+        }));
+    }
+  }
+
+  // Duplicate a subgraph: copy a root gene + the genes reachable via division rules from it,
+  // with fresh innovation ids + remapped division rules, and attach the copied root to the
+  // seed. The key complexity driver (§4.7).
+  if (rng.float() < rates.duplicateSubgraphRate && child.genes.length > 0) {
+    const root = rng.int(child.genes.length);
+    // BFS the subtree of genes reachable from `root` via division rules.
+    const inSub: number[] = [root];
+    const seen = new Set<number>([root]);
+    for (let h = 0; h < inSub.length; h++) {
+      const gp = inSub[h]!;
+      for (let ri = 0; ri < child.divisionRules.length; ri++) {
+        const r = child.divisionRules[ri]!;
+        if (r.parentGene === gp && !seen.has(r.childGene)) {
+          seen.add(r.childGene);
+          inSub.push(r.childGene);
+        }
+      }
+    }
+    // Copy each subtree gene with a fresh innovation id; map old → new index.
+    const copyIndex = new Map<number, number>();
+    for (let k = 0; k < inSub.length; k++) {
+      const old = inSub[k]!;
+      const copy: Gene = { ...child.genes[old]!, innovation: store.nextInnovationId() };
+      copyIndex.set(old, child.genes.push(copy) - 1);
+    }
+    // Replicate the internal division rules among the copies.
+    const internal = child.divisionRules.filter(
+      (r) => copyIndex.has(r.parentGene) && copyIndex.has(r.childGene),
+    );
+    for (let ri = 0; ri < internal.length; ri++) {
+      const r = internal[ri]!;
+      child.divisionRules.push({
+        ...r,
+        parentGene: copyIndex.get(r.parentGene)!,
+        childGene: copyIndex.get(r.childGene)!,
+      });
+    }
+    // Attach the copied root to the seed so the duplicated limb actually develops.
+    child.divisionRules.push({
+      parentGene: child.seedGene,
+      childGene: copyIndex.get(root)!,
+      angle: rng.range(0, Math.PI * 2),
+      dist: rng.range(12, 30),
+      stiffness: 1,
+      repeat: 1,
+    });
+  }
+
   return child;
 }
