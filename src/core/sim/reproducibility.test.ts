@@ -7,6 +7,7 @@ import { develop } from '../genome/develop';
 import { buildAutotrophGenome, buildForagerGenome } from '../genome/critter-genome';
 import { instantiateBody } from '../organism/instantiate';
 import { serializeGenomeLibrary } from '../genome/genome';
+import { serializeLineageLog } from '../genome/lineage-log';
 
 function runWorld(seed: number): World {
   const w = new World(defaultConfig({ seed, maxCells: 2000 }), false);
@@ -262,6 +263,8 @@ describe('reproducibility — M7 mutation>0 with births AND deaths', () => {
     expect(Array.from(fa.organismId)).toEqual(Array.from(fb.organismId));
     expect(Array.from(fa.genomeRef)).toEqual(Array.from(fb.genomeRef));
     expect(serializeGenomeLibrary(a.w.genomes)).toBe(serializeGenomeLibrary(b.w.genomes));
+    expect(serializeLineageLog(a.w.lineage)).toBe(serializeLineageLog(b.w.lineage));
+    expect(a.w.lineage.size).toBeGreaterThan(0); // non-vacuity: the run actually populated the log
     // The run actually exercised BOTH structural events (else the guard is vacuous),
     // and did so identically across the two runs.
     expect(a.births).toBeGreaterThan(0);

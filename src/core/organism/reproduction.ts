@@ -44,7 +44,7 @@ export function reproduceOrganisms(
   rates: MutationRates,
   params: ReproParams,
   slotScratch: Int32Array,
-  out: { births: number },
+  out: { births: number; bornRefs?: number[] },
 ): void {
   const f = cells.fields;
   let births = 0;
@@ -95,6 +95,7 @@ export function reproduceOrganisms(
       continue;
     }
     organisms.birthTick[newOrg] = params.tick;
+    if (out.bornRefs !== undefined) out.bornRefs.push(childRef);
 
     // Maternal provisioning: deduct body.totalEnergy from the parent's cells proportionally.
     const scale = orgEnergy > 0 ? (orgEnergy - body.totalEnergy) / orgEnergy : 0;

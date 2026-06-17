@@ -160,6 +160,8 @@ export interface Config {
   mutationDuplicateSubgraphRate: number;
   /** Ticks between evolution-telemetry samples (read-only; keeps the hot loop alloc-free). */
   metricsEvolutionInterval: number;
+  /** Cap on phylogeny LineageLog nodes; dead subtrees are pruned (leaves-up) beyond this. */
+  maxLineageNodes: number;
 }
 
 export function defaultConfig(overrides: Partial<Config> = {}): Config {
@@ -262,6 +264,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     mutationChangeTypeRate: 0,
     mutationDuplicateSubgraphRate: 0,
     metricsEvolutionInterval: 16,
+    maxLineageNodes: 4000,
 
     ...overrides,
   };

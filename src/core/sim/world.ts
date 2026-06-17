@@ -27,6 +27,7 @@ import { SplitChecker } from '../organism/split';
 import { makeMetrics, sampleMetrics, sampleEvolutionMetrics, type Metrics } from './metrics';
 import { sampleLineages, type LineageSummary, type LineageStat } from './lineage-board';
 import { GenomeStore } from '../genome/genome';
+import { LineageLog } from '../genome/lineage-log';
 import { reproduceOrganisms, type ReproParams } from '../organism/reproduction';
 import { killStarvedOrganisms } from '../organism/organism-death';
 import { type MutationRates } from '../genome/mutate';
@@ -57,6 +58,9 @@ export class World {
   readonly splitter: SplitChecker;
   /** Genome store (developmental recipes by ref). */
   readonly genomes: GenomeStore;
+  /** M7 phylogeny: births/deaths recorded by genome ref; pruned at metrics cadence. Part of the
+   * determinism contract (canonical-order recording, no RNG — the reproducibility test hashes it). */
+  readonly lineage: LineageLog;
   /** Dedicated RNG substream for mutation (rng.split(2)); keeps mutation independent. */
   readonly mutationRng: Rng;
   /** Pre-allocated per-organism death flags (zero-alloc death scan). */
@@ -65,8 +69,8 @@ export class World {
   readonly instantiateScratch: Int32Array;
   private readonly mutationRates: MutationRates;
   private readonly reproParams: ReproParams;
-  private readonly reproOut: { births: number };
-  private readonly deathOut: { deaths: number };
+  private readonly reproOut: { births: number; bornRefs: number[] };
+  private readonly deathOut: { deaths: number; deadRefs: number[] };
   /** Cumulative organisms that ever reached reproThreshold (births-reaching-adulthood). */
   birthsReachedAdulthood: number;
   lastOrganismBirths: number;
@@ -124,6 +128,7 @@ export class World {
     this.organisms = new OrganismTable(config.maxOrganisms);
     this.splitter = new SplitChecker(config.maxCells);
     this.genomes = new GenomeStore();
+    this.lineage = new LineageLog(this.genomes);
     this.mutationRng = this.rng.split(2 /* STREAM_MUTATION */);
     this.dyingScratch = new Uint8Array(config.maxOrganisms);
     this.instantiateScratch = new Int32Array(config.maxCellsPerOrganism);
@@ -150,8 +155,8 @@ export class World {
       worldHeight: config.worldHeight,
       tick: 0,
     };
-    this.reproOut = { births: 0 };
-    this.deathOut = { deaths: 0 };
+    this.reproOut = { births: 0, bornRefs: [] };
+    this.deathOut = { deaths: 0, deadRefs: [] };
     this.birthsReachedAdulthood = 0;
     this.lastOrganismBirths = 0;
     this.lastOrganismDeaths = 0;
@@ -459,6 +464,7 @@ export class World {
 
     // 11d M6: atomic organism death (starved) — BEFORE reproduction so a dead organism
     // cannot reproduce the same tick. Reaps bonds + frees ids/genomes; rebuild nets if any died.
+    this.deathOut.deadRefs.length = 0;
     const orgDied = killStarvedOrganisms(
       this.cells,
       this.net,
@@ -477,10 +483,14 @@ export class World {
       this.bonds.rebuildLive(this.cells);
     }
     this.lastOrganismDeaths = this.deathOut.deaths;
+    // M7: record deaths for the just-freed orgs (recordDeath only stamps an existing node's
+    // deathTick — it never reads the store, so draining after store.free is safe).
+    for (const ref of this.deathOut.deadRefs) this.lineage.recordDeath(ref, this.tickCount);
 
     // 11e M6: asexual reproduction (threshold + maternal provisioning). Structural; allocates
     // only on an actual birth (the scan is allocation-free).
     this.syncReproParams();
+    this.reproOut.bornRefs.length = 0;
     reproduceOrganisms(
       this.cells,
       this.net,
@@ -496,6 +506,9 @@ export class World {
       this.reproOut,
     );
     this.lastOrganismBirths = this.reproOut.births;
+    // M7: record births for the just-committed children (recordBirth reads the store; the
+    // children are registered — not freed — during reproduce, so present at drain time).
+    for (const ref of this.reproOut.bornRefs) this.lineage.recordBirth(ref, this.tickCount);
 
     // 11f M6: adulthood tracking + live-organism count (one O(maxOrganisms) scan).
     let liveOrgs = 0;
@@ -538,6 +551,7 @@ export class World {
         this.tickCount,
         8,
       );
+      this.lineage.prune(cfg.maxLineageNodes);
     }
 
     this.tickCount++;
