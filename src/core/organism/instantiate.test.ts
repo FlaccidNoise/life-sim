@@ -47,6 +47,7 @@ function miniGenome(): Genome {
     motorRules: [{ moverGene: 0, turnGene: 2, thrustGene: 2 }],
     parentRef: -1,
     generation: 0,
+    founderId: -1,
   };
 }
 
@@ -138,6 +139,7 @@ describe('instantiateBody', () => {
       motorRules: [],
       parentRef: -1,
       generation: 0,
+      founderId: -1,
     };
     const body = develop(star, 256, 16);
     const org = instantiateBody(
