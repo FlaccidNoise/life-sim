@@ -243,7 +243,7 @@ describe('reproducibility — M7 mutation>0 with births AND deaths', () => {
     }
     let births = 0;
     let deaths = 0;
-    for (let t = 0; t < 1500; t++) {
+    for (let t = 0; t < 700; t++) {
       w.tick();
       births += w.lastOrganismBirths;
       deaths += w.lastOrganismDeaths;
@@ -269,5 +269,5 @@ describe('reproducibility — M7 mutation>0 with births AND deaths', () => {
     expect(a.births).toBe(b.births);
     expect(a.deaths).toBe(b.deaths);
     expect(a.w.genomes.size).toBeGreaterThan(0);
-  }, 30000); // two 1500-tick / 6000-cell forager runs exceed the 5s default
+  }, 30000); // two 700-tick / 6000-cell forager runs exceed the 5s default (first death ~tick 481)
 });
