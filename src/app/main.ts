@@ -12,6 +12,7 @@ import { BrainInspector } from './brain-inspector';
 import { renderGenomeInspector } from './genome-inspector';
 import { renderHallOfFame } from './hall-of-fame';
 import { renderPhylogeny } from './phylogeny-panel';
+import { renderMenagerie } from './menagerie-panel';
 import { develop } from '../core/genome/develop';
 import {
   buildCritterGenome,
@@ -137,6 +138,10 @@ let showHall = false;
 const phyloPanel = document.getElementById('phylogeny') as HTMLElement;
 let showPhylo = false;
 
+// Menagerie overlay (toggled with `K`): text board of the live species.
+const menagPanel = document.getElementById('menagerie') as HTMLElement;
+let showMenag = false;
+
 // Legend / "what am I seeing" overlay (toggled with `H`); shown by default.
 const legend = document.getElementById('legend');
 
@@ -244,6 +249,7 @@ function drawScene(alpha: number): void {
   }
   if (showHall) renderHallOfFame(world, hallPanel);
   if (showPhylo) renderPhylogeny(world, phyloPanel);
+  if (showMenag) renderMenagerie(world, menagPanel);
 }
 
 function fit(): void {
@@ -364,6 +370,9 @@ window.addEventListener('keydown', (e) => {
   } else if (e.key === 'y' || e.key === 'Y') {
     showPhylo = !showPhylo;
     phyloPanel.classList.toggle('hidden', !showPhylo);
+  } else if (e.key === 'k' || e.key === 'K') {
+    showMenag = !showMenag;
+    menagPanel.classList.toggle('hidden', !showMenag);
   } else if (e.key === 'c' || e.key === 'C' || e.key === 'Escape') {
     followId = -1;
   }
