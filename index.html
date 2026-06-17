@@ -142,6 +142,21 @@
         visibility: hidden;
       }
 
+      /* ── Genome inspector (toggle G) — right side, under telemetry ───── */
+      #genome {
+        top: 256px;
+        right: var(--gap);
+        max-width: 360px;
+        max-height: 60vh;
+        overflow-y: auto;
+        padding: 7px 10px;
+        background: var(--panel-solid);
+        white-space: pre;
+        font-family: var(--mono);
+        pointer-events: none;
+        color: var(--value);
+      }
+
       /* ── Controls (bottom-right sliders) ─────────────────────────────── */
       #controls {
         bottom: var(--gap);
@@ -229,6 +244,12 @@
       height="220"
       aria-label="brain inspector: neuron-cell network with live activations"
     ></canvas>
+    <div
+      id="genome"
+      class="panel hidden"
+      role="status"
+      aria-label="genome inspector: followed organism's genome and lineage"
+    ></div>
     <aside id="legend" class="panel" aria-label="legend">
       <div class="panel-title">life-sim — what you're seeing</div>
       <hr />
@@ -278,8 +299,8 @@
       <div>
         <b>Keys:</b>
         <span class="note"
-          >L light · F smell · O bonds · B brain · H legend · click follow · space pause · [ ]
-          speed</span
+          >L light · F smell · O bonds · B brain · G genome · H legend · click follow · space pause
+          · [ ] speed</span
         >
       </div>
     </aside>

@@ -9,7 +9,12 @@ import { TelemetryDashboard } from './telemetry';
 import { inspectAt } from './inspect';
 import { mountControls } from './controls';
 import { BrainInspector } from './brain-inspector';
+import { renderGenomeInspector } from './genome-inspector';
 import { spawnSwimmer } from '../core/sim/critter';
+import { develop } from '../core/genome/develop';
+import { buildCritterGenome, buildAutotrophGenome } from '../core/genome/critter-genome';
+import { instantiateBody } from '../core/organism/instantiate';
+import type { Genome } from '../core/genome/genome';
 
 const canvas = document.getElementById('view') as HTMLCanvasElement;
 const hud = document.getElementById('hud');
@@ -27,6 +32,42 @@ const demoCritter = spawnSwimmer(
   0,
 );
 spawnSwimmer(world, world.config.worldWidth * 0.5 + 120, world.config.worldHeight * 0.5, Math.PI);
+
+// M6 demo: a critter DEVELOPED from its genome (proves the encoding drives the live demo),
+// plus a cluster of autotrophs that photosynthesise, accumulate energy, and REPRODUCE —
+// offspring resemble the parent (clone-only at the default mutation rates).
+function developInto(genome: Genome, x: number, y: number, heading: number): number {
+  const ref = world.genomes.register(genome);
+  const body = develop(genome, world.config.maxCellsPerOrganism, world.config.maxRecursionDepth);
+  return instantiateBody(
+    body,
+    world.cells,
+    world.net,
+    world.bonds,
+    world.organisms,
+    ref,
+    x,
+    y,
+    heading,
+    world.config.worldWidth,
+    world.config.worldHeight,
+    world.instantiateScratch,
+  );
+}
+developInto(
+  buildCritterGenome(world.config.cellRadius),
+  world.config.worldWidth * 0.5 - 120,
+  world.config.worldHeight * 0.5,
+  0,
+);
+for (let k = 0; k < 12; k++) {
+  developInto(
+    buildAutotrophGenome(world.config.cellRadius),
+    world.config.worldWidth * 0.5 + 200 + (k % 4) * 60,
+    world.config.worldHeight * 0.5 + ((k / 4) | 0) * 60,
+    0,
+  );
+}
 
 const f = world.cells.fields;
 
@@ -61,6 +102,10 @@ let showBonds = false;
 const brainCanvas = document.getElementById('brain') as HTMLCanvasElement;
 const brain = new BrainInspector(brainCanvas);
 let showBrain = false;
+
+// Genome inspector overlay (toggled with `G`): the followed organism's genome + lineage.
+const genomePanel = document.getElementById('genome') as HTMLElement;
+let showGenome = false;
 
 // Legend / "what am I seeing" overlay (toggled with `H`); shown by default.
 const legend = document.getElementById('legend');
@@ -151,6 +196,10 @@ function drawScene(alpha: number): void {
         ? f.organismId[followId]!
         : demoCritter.organismId;
     brain.render(world, followOrg);
+  }
+  if (showGenome) {
+    const org = followId >= 0 && world.cells.isAlive(followId) ? f.organismId[followId]! : 0;
+    renderGenomeInspector(world, org, genomePanel);
   }
 }
 
@@ -253,6 +302,9 @@ window.addEventListener('keydown', (e) => {
   } else if (e.key === 'b' || e.key === 'B') {
     showBrain = !showBrain;
     brainCanvas.classList.toggle('hidden', !showBrain);
+  } else if (e.key === 'g' || e.key === 'G') {
+    showGenome = !showGenome;
+    genomePanel.classList.toggle('hidden', !showGenome);
   } else if (e.key === 'h' || e.key === 'H') {
     legend?.classList.toggle('hidden');
   } else if (e.key === 'c' || e.key === 'C' || e.key === 'Escape') {
