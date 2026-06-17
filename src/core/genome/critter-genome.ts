@@ -136,3 +136,77 @@ export function buildAutotrophGenome(cellRadius = 6): Genome {
     generation: 0,
   };
 }
+
+/**
+ * A VIABLE brain-driven forager: the M5 critter's sense→steer→thrust loop PLUS a leading
+ * DIGESTIVE "mouth" (gene 5) so the body actually eats the PHOTO/MEAT it swims into — closing
+ * the sense→move→EAT→reproduce→die loop the bare critter lacks. Mortal: modest seed energy
+ * (no 5000 reserve), so it must forage to survive and earns reproduction by eating. 6 cells:
+ * MOVER(0) + sensorFwd(1)/sensorLat(2) + turn(3)/thrust(4) neurons + digestive(5). mass 2 for
+ * cohesion. `initialEnergy` is low so a 6-cell offspring (~6·initial) is affordable under a
+ * reproThreshold a fed forager can reach.
+ */
+export function buildForagerGenome(cellRadius = 6, initialEnergy = 100): Genome {
+  const r = cellRadius;
+  const off = 4 * r;
+  const lat = off * 0.6;
+  const aft = off * 1.8;
+  const g = (cellType: number, over: Partial<Gene> = {}): Gene => ({
+    innovation: 0,
+    cellType,
+    radius: r,
+    mass: 2,
+    initialEnergy,
+    bias: 0,
+    sensorChannel: -1,
+    ...over,
+  });
+  // 0 mover, 1 sensorFwd, 2 sensorLat, 3 turn, 4 thrust, 5 digestive (mouth).
+  const genes: Gene[] = [
+    g(CellType.MOVER),
+    g(CellType.SENSOR, { sensorChannel: SensorChannel.FWD_GRAD }),
+    g(CellType.SENSOR, { sensorChannel: SensorChannel.LAT_GRAD }),
+    g(CellType.NEURON),
+    g(CellType.NEURON, { bias: 0.5 }),
+    g(CellType.DIGESTIVE),
+  ];
+  const spoke = (childGene: number, ox: number, oy: number): DivisionRule => ({
+    parentGene: 0,
+    childGene,
+    angle: Math.atan2(oy, ox),
+    dist: Math.hypot(ox, oy),
+    stiffness: 1,
+    repeat: 1,
+  });
+  const divisionRules: DivisionRule[] = [
+    spoke(1, off, -lat),
+    spoke(2, off, lat),
+    spoke(3, -aft, -lat),
+    spoke(4, -aft, lat),
+    spoke(5, off * 1.6, 0), // the digestive mouth leads the body
+  ];
+  const brace = (geneA: number, geneB: number): BondRule => ({ geneA, geneB, stiffness: 1 });
+  const bondRules: BondRule[] = [
+    brace(1, 2), // front sensors
+    brace(1, 5),
+    brace(2, 5), // front triangle incl. the mouth
+    brace(3, 4), // back neurons
+    brace(1, 3),
+    brace(2, 4), // cross-body bracing
+  ];
+  const connectionRules: ConnectionRule[] = [
+    { preGene: 2, postGene: 3, weight: 1.5 }, // sensorLat → turn (steer toward food)
+    { preGene: 1, postGene: 4, weight: 1.5 }, // sensorFwd → thrust (advance into food)
+  ];
+  const motorRules: MotorRule[] = [{ moverGene: 0, turnGene: 3, thrustGene: 4 }];
+  return {
+    seedGene: 0,
+    genes,
+    divisionRules,
+    bondRules,
+    connectionRules,
+    motorRules,
+    parentRef: -1,
+    generation: 0,
+  };
+}
