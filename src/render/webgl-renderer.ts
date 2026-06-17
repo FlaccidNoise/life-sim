@@ -47,9 +47,9 @@ void main() {
   }
   if (dot(c, c) > 0.25) discard;            // disc for the rest
   vec3 col;
-  if (v_type < 0.5)       col = vec3(0.30, 0.80, 0.35);  // PHOTO    green
+  if (v_type < 0.5)       col = vec3(0.13, 0.34, 0.17);  // PHOTO    dim green (plants recede so foragers pop)
   else if (v_type < 1.5)  col = vec3(0.95, 0.45, 0.20);  // DIGEST   orange-red
-  else if (v_type < 2.5)  col = vec3(0.55, 0.50, 0.45);  // MEAT     grey-brown
+  else if (v_type < 2.5)  col = vec3(0.34, 0.30, 0.26);  // MEAT     dim grey-brown
   else if (v_type < 4.5)  col = vec3(0.85, 0.35, 0.85);  // SENSOR   magenta
   else                    col = vec3(0.45, 0.55, 0.95);  // NEURON   blue
   frag = vec4(col, 1.0);

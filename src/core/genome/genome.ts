@@ -75,6 +75,9 @@ export interface Genome {
   parentRef: number;
   /** Lineage depth (0 for a founder). */
   generation: number;
+  /** Founding-lineage id: a founder gets a fresh monotonic id at register; descendants inherit it
+   * (rides cloneGenome). -1 until the founder is registered. Part of the determinism contract. */
+  founderId: number;
 }
 
 /** Deep copy. Genes/rules are flat records, so a per-field copy is exact + allocation-cheap. */
@@ -88,6 +91,7 @@ export function cloneGenome(g: Genome): Genome {
     motorRules: g.motorRules.map((x) => ({ ...x })),
     parentRef: g.parentRef,
     generation: g.generation,
+    founderId: g.founderId,
   };
 }
 
@@ -109,15 +113,19 @@ export class GenomeStore {
   private readonly genomes: Map<number, Genome>;
   private nextRef: number;
   private innovation: number;
+  private founder: number;
 
   constructor() {
     this.genomes = new Map<number, Genome>();
     this.nextRef = 0;
     this.innovation = 0;
+    this.founder = 0;
   }
 
-  /** Register a genome, returning its fresh ref. */
+  /** Register a genome, returning its fresh ref. A founder (founderId < 0) is lazily stamped with a
+   * fresh founder id here — deterministic, since register order is canonical (init + ascending repro). */
   register(g: Genome): number {
+    if (g.founderId < 0) g.founderId = this.founder++;
     const ref = this.nextRef++;
     this.genomes.set(ref, g);
     return ref;

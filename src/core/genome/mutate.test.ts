@@ -38,6 +38,7 @@ function demoGenome(): Genome {
     motorRules: [],
     parentRef: -1,
     generation: 0,
+    founderId: -1,
   };
 }
 
@@ -193,6 +194,7 @@ describe('mutateGenome — delete + duplicate-subgraph (index ops)', () => {
       motorRules: [],
       parentRef: -1,
       generation: 0,
+      founderId: -1,
     };
     const c = mutateGenome(p, new Rng(6), { ...NO_MUT, deleteGeneRate: 1 }, store());
     expect(c.genes.length).toBe(1);

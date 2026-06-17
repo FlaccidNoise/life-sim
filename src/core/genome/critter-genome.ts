@@ -92,6 +92,7 @@ export function buildCritterGenome(cellRadius = 6): Genome {
     motorRules,
     parentRef: -1,
     generation: 0,
+    founderId: -1,
   };
 }
 
@@ -134,6 +135,7 @@ export function buildAutotrophGenome(cellRadius = 6): Genome {
     motorRules: [],
     parentRef: -1,
     generation: 0,
+    founderId: -1,
   };
 }
 
@@ -208,5 +210,29 @@ export function buildForagerGenome(cellRadius = 6, initialEnergy = 100): Genome 
     motorRules,
     parentRef: -1,
     generation: 0,
+    founderId: -1,
   };
+}
+
+/**
+ * The forager handicapped at TURNING TOWARD FOOD: the `sensorLat→turn` connection weight
+ * (preGene 2 → postGene 3) is knocked from the hand-tuned 1.5 down to `weight` (default 0.2),
+ * while `sensorFwd→thrust` is left at the fit 1.5. A forager that can't steer toward off-axis
+ * food passes it by → eats less → reproduces less under a SCARCE food field. This is the M7
+ * adaptation-proof seed: turning is governed by `turnScale`, not `moveCost ∝ thrust²`, so it
+ * carries a clean monotonic-positive economic gradient (verified — see the headless probe).
+ * Only the lat→turn weight is overridden so the proof isolates THAT trait; `sensorFwd→thrust`
+ * stays fit because in an abundant field a high thrust weight is actually anti-selected (it
+ * overshoots patches and pays quadratic move-cost), which would confound the measurement.
+ * DRY over buildForagerGenome — identical body, one connection-rule weight overridden.
+ */
+export function buildHandicappedForagerGenome(
+  cellRadius = 6,
+  initialEnergy = 100,
+  weight = 0.2,
+): Genome {
+  const g = buildForagerGenome(cellRadius, initialEnergy);
+  const latTurn = g.connectionRules.find((c) => c.preGene === 2 && c.postGene === 3);
+  if (latTurn) latTurn.weight = weight;
+  return g;
 }

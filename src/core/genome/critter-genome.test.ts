@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { buildCritterGenome, buildForagerGenome } from './critter-genome';
+import {
+  buildCritterGenome,
+  buildForagerGenome,
+  buildHandicappedForagerGenome,
+} from './critter-genome';
 import { develop } from './develop';
 import { CellType } from '../cells/types';
 import { SensorChannel } from '../neural/network';
@@ -108,5 +112,35 @@ describe('buildForagerGenome — a viable brain-driven forager (sense→move→e
   it('is mortal: modest seed energy (no 5000 reserve) so it must forage to live', () => {
     expect(body.totalEnergy).toBeCloseTo(6 * 100, 1);
     expect(body.mass.every((m) => m === 2)).toBe(true);
+  });
+});
+
+describe('buildHandicappedForagerGenome', () => {
+  // The lat→turn rule is the trait under selection (preGene 2 → postGene 3).
+  const latTurn = (g: ReturnType<typeof buildForagerGenome>) =>
+    g.connectionRules.find((c) => c.preGene === 2 && c.postGene === 3)!;
+  const fwdThrust = (g: ReturnType<typeof buildForagerGenome>) =>
+    g.connectionRules.find((c) => c.preGene === 1 && c.postGene === 4)!;
+
+  it('knocks ONLY sensorLat→turn, leaving sensorFwd→thrust at the fit 1.5', () => {
+    const fit = buildForagerGenome(6, 100);
+    const weak = buildHandicappedForagerGenome(6, 100, 0.2);
+    // Same morphology + wiring topology.
+    expect(weak.genes.length).toBe(fit.genes.length);
+    expect(weak.divisionRules.length).toBe(fit.divisionRules.length);
+    expect(weak.connectionRules.length).toBe(fit.connectionRules.length);
+    expect(weak.motorRules).toEqual(fit.motorRules);
+    // lat→turn handicapped to 0.2; fwd→thrust untouched at the fit 1.5.
+    expect(latTurn(weak).weight).toBeCloseTo(0.2, 6);
+    expect(fwdThrust(weak).weight).toBeCloseTo(1.5, 6);
+    // The fit forager has both at 1.5.
+    expect(latTurn(fit).weight).toBeCloseTo(1.5, 6);
+    expect(fwdThrust(fit).weight).toBeCloseTo(1.5, 6);
+  });
+
+  it('defaults the lat→turn weight to 0.2', () => {
+    const weak = buildHandicappedForagerGenome();
+    expect(latTurn(weak).weight).toBeCloseTo(0.2, 6);
+    expect(fwdThrust(weak).weight).toBeCloseTo(1.5, 6);
   });
 });

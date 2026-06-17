@@ -36,6 +36,7 @@ describe('develop — cells + tree bonds (pure, deterministic)', () => {
       motorRules: [],
       parentRef: -1,
       generation: 0,
+      founderId: -1,
     };
     const b = develop(g, 256, 16);
     expect(b.count).toBe(2);
@@ -60,6 +61,7 @@ describe('develop — cells + tree bonds (pure, deterministic)', () => {
       motorRules: [],
       parentRef: -1,
       generation: 0,
+      founderId: -1,
     };
     const b = develop(g, 256, 16);
     expect(b.localX[1]).toBeCloseTo(0, 9); // cos(π/2)·10 ≈ 0
@@ -77,6 +79,7 @@ describe('develop — cells + tree bonds (pure, deterministic)', () => {
       motorRules: [],
       parentRef: -1,
       generation: 0,
+      founderId: -1,
     };
     const b = develop(g, 256, 16);
     expect(b.count).toBe(5); // seed + 4
@@ -100,6 +103,7 @@ describe('develop — cells + tree bonds (pure, deterministic)', () => {
       motorRules: [],
       parentRef: -1,
       generation: 0,
+      founderId: -1,
     };
     expect(develop(g, 256, 16)).toEqual(develop(g, 256, 16));
   });
@@ -116,6 +120,7 @@ describe('develop — cells + tree bonds (pure, deterministic)', () => {
       motorRules: [],
       parentRef: -1,
       generation: 0,
+      founderId: -1,
     };
     const b = develop(g, 10, 1000);
     expect(b.count).toBe(10); // capped
@@ -134,6 +139,7 @@ describe('develop — cells + tree bonds (pure, deterministic)', () => {
       motorRules: [],
       parentRef: -1,
       generation: 0,
+      founderId: -1,
     };
     const b = develop(g, 1000, 3);
     expect(b.count).toBe(4); // seed (depth 0) + depths 1,2,3
@@ -156,6 +162,7 @@ describe('develop — gene-keyed bond/connection/motor tables', () => {
       motorRules: [],
       parentRef: -1,
       generation: 0,
+      founderId: -1,
     };
     const b = develop(g, 256, 16);
     expect(b.bonds).toContainEqual({ a: 0, b: 1, stiffness: 1 }); // tree
@@ -181,6 +188,7 @@ describe('develop — gene-keyed bond/connection/motor tables', () => {
       motorRules: [],
       parentRef: -1,
       generation: 0,
+      founderId: -1,
     };
     const b = develop(g, 256, 16);
     expect(b.synapses).toContainEqual({ pre: 1, post: 2, weight: 0.9 });
@@ -198,6 +206,7 @@ describe('develop — gene-keyed bond/connection/motor tables', () => {
       motorRules: [],
       parentRef: -1,
       generation: 0,
+      founderId: -1,
     };
     const b = develop(g, 256, 16);
     expect(b.synapses.length).toBe(0); // only the seed instance; pre===post skipped
@@ -216,6 +225,7 @@ describe('develop — gene-keyed bond/connection/motor tables', () => {
       connectionRules: [],
       parentRef: -1,
       generation: 0,
+      founderId: -1,
     };
     const b = develop(g, 256, 16);
     expect(b.motors).toEqual([{ mover: 0, turn: 1, thrust: 2 }]);

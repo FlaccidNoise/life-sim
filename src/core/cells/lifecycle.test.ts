@@ -25,6 +25,7 @@ function run(
     cfg.divideThreshold,
     cfg.divideCost,
     cfg.divideJitter,
+    cfg.crowdDivideCap,
     tick,
     out,
   );
@@ -152,10 +153,80 @@ describe('lifecycle — division', () => {
     f.heading[parent] = 0.5;
     const live = new Uint32Array([corpse, parent]);
     const out = { births: 0, deaths: 0 };
-    lifecycle(live, 2, store, 1, 256, 256, 30, 100 /*divideThreshold*/, 10, 6, 0, out);
+    lifecycle(live, 2, store, 1, 256, 256, 30, 100 /*divideThreshold*/, 10, 6, 65535, 0, out);
     // The child recycles slot 0 (LIFO). It must carry thrust=0 and the PARENT's heading.
     expect(f.thrust[0]).toBe(0);
     expect(f.heading[0]).toBeCloseTo(0.5, 6);
+  });
+});
+
+describe('lifecycle — density-dependent PHOTO division cap (carrying capacity)', () => {
+  function photoAt(store: CellStore, energy: number, density: number): number {
+    const f = store.fields;
+    const i = store.alloc();
+    f.cellType[i] = CellType.PHOTO;
+    f.energy[i] = energy;
+    f.mass[i] = 1;
+    f.radius[i] = 6;
+    f.posX[i] = 100;
+    f.posY[i] = 100;
+    f.localDensity[i] = density;
+    return i;
+  }
+
+  it('a crowded PHOTO (localDensity > cap) does NOT divide despite ample energy', () => {
+    const store = new CellStore(8, false);
+    const i = photoAt(store, 500, 7); // bucket holds 7 cells, cap 6
+    const out = { births: 0, deaths: 0 };
+    lifecycle(Uint32Array.from([i]), 1, store, 1, 1024, 1024, 30, 150, 10, 6, /*cap*/ 6, 0, out);
+    expect(out.births).toBe(0);
+    expect(store.aliveCount).toBe(1);
+    expect(store.fields.energy[i]).toBe(500); // untouched — no division occurred
+  });
+
+  it('an uncrowded PHOTO (localDensity <= cap) divides normally', () => {
+    const store = new CellStore(8, false);
+    const i = photoAt(store, 500, 6); // exactly at cap — still allowed
+    const out = { births: 0, deaths: 0 };
+    lifecycle(Uint32Array.from([i]), 1, store, 1, 1024, 1024, 30, 150, 10, 6, /*cap*/ 6, 0, out);
+    expect(out.births).toBe(1);
+    expect(store.aliveCount).toBe(2);
+  });
+
+  it('the OFF sentinel (65535) never suppresses division however crowded', () => {
+    const store = new CellStore(8, false);
+    const i = photoAt(store, 500, 60000); // extreme crowding
+    const out = { births: 0, deaths: 0 };
+    lifecycle(
+      Uint32Array.from([i]),
+      1,
+      store,
+      1,
+      1024,
+      1024,
+      30,
+      150,
+      10,
+      6,
+      /*cap*/ 65535,
+      0,
+      out,
+    );
+    expect(out.births).toBe(1);
+  });
+
+  it('the cap is PHOTO-only: a crowded free DIGESTIVE still divides', () => {
+    const store = new CellStore(8, false);
+    const f = store.fields;
+    const i = store.alloc();
+    f.cellType[i] = CellType.DIGESTIVE;
+    f.energy[i] = 500;
+    f.mass[i] = 1;
+    f.radius[i] = 6;
+    f.localDensity[i] = 7; // crowded, but the cap targets only the PHOTO producer
+    const out = { births: 0, deaths: 0 };
+    lifecycle(Uint32Array.from([i]), 1, store, 1, 1024, 1024, 30, 150, 10, 6, /*cap*/ 6, 0, out);
+    expect(out.births).toBe(1);
   });
 });
 
@@ -173,7 +244,7 @@ describe('lifecycle — neural cells are exempt from death + division (M4)', () 
     f.mass[b] = 1;
     const before = store.aliveCount;
     const out = { births: 0, deaths: 0 };
-    lifecycle(Uint32Array.from([a, b]), 2, store, 1, 1024, 1024, 30, 150, 10, 6, 0, out);
+    lifecycle(Uint32Array.from([a, b]), 2, store, 1, 1024, 1024, 30, 150, 10, 6, 65535, 0, out);
     expect(out.births).toBe(0);
     expect(store.aliveCount).toBe(before); // no clones allocated
   });
@@ -186,7 +257,7 @@ describe('lifecycle — neural cells are exempt from death + division (M4)', () 
     f.energy[a] = -5; // would normally die
     f.mass[a] = 1;
     const out = { births: 0, deaths: 0 };
-    lifecycle(Uint32Array.from([a]), 1, store, 1, 1024, 1024, 30, 150, 10, 6, 0, out);
+    lifecycle(Uint32Array.from([a]), 1, store, 1, 1024, 1024, 30, 150, 10, 6, 65535, 0, out);
     expect(out.deaths).toBe(0);
     expect(f.cellType[a]).toBe(CellType.SENSOR); // still a sensor, not MEAT
   });
@@ -200,7 +271,7 @@ describe('lifecycle — neural cells are exempt from death + division (M4)', () 
     f.mass[a] = 1;
     f.radius[a] = 6;
     const out = { births: 0, deaths: 0 };
-    lifecycle(Uint32Array.from([a]), 1, store, 1, 1024, 1024, 30, 150, 10, 6, 0, out);
+    lifecycle(Uint32Array.from([a]), 1, store, 1, 1024, 1024, 30, 150, 10, 6, 65535, 0, out);
     expect(out.births).toBe(1);
   });
 });
@@ -215,7 +286,7 @@ describe('lifecycle — organism cells are exempt from death + division (M5)', (
     f.energy[a] = -5; // would normally die
     f.mass[a] = 1;
     const out = { births: 0, deaths: 0 };
-    lifecycle(Uint32Array.from([a]), 1, store, 1, 1024, 1024, 30, 150, 10, 6, 0, out);
+    lifecycle(Uint32Array.from([a]), 1, store, 1, 1024, 1024, 30, 150, 10, 6, 65535, 0, out);
     expect(out.deaths).toBe(0);
     expect(f.cellType[a]).toBe(CellType.DIGESTIVE); // still alive, not MEAT
   });
@@ -231,7 +302,7 @@ describe('lifecycle — organism cells are exempt from death + division (M5)', (
     f.radius[a] = 6;
     const before = store.aliveCount;
     const out = { births: 0, deaths: 0 };
-    lifecycle(Uint32Array.from([a]), 1, store, 1, 1024, 1024, 30, 150, 10, 6, 0, out);
+    lifecycle(Uint32Array.from([a]), 1, store, 1, 1024, 1024, 30, 150, 10, 6, 65535, 0, out);
     expect(out.births).toBe(0);
     expect(store.aliveCount).toBe(before);
   });
@@ -251,7 +322,21 @@ describe('lifecycle — organism cells are exempt from death + division (M5)', (
     f.mass[big] = 1;
     f.radius[big] = 6;
     const out = { births: 0, deaths: 0 };
-    lifecycle(Uint32Array.from([dead, big]), 2, store, 1, 1024, 1024, 30, 150, 10, 6, 0, out);
+    lifecycle(
+      Uint32Array.from([dead, big]),
+      2,
+      store,
+      1,
+      1024,
+      1024,
+      30,
+      150,
+      10,
+      6,
+      65535,
+      0,
+      out,
+    );
     expect(out.deaths).toBe(1);
     expect(f.cellType[dead]).toBe(CellType.MEAT);
     expect(out.births).toBe(1);

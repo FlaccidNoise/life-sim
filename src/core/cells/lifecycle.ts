@@ -38,6 +38,7 @@ export function lifecycle(
   divideThreshold: number,
   divideCost: number,
   divideJitter: number,
+  crowdDivideCap: number,
   tick: number,
   out: LifecycleResult,
 ): void {
@@ -70,6 +71,13 @@ export function lifecycle(
     const type = f.cellType[i]!;
     if (!isLiving(type)) continue;
     if (isNeural(type) || f.organismId[i]! !== 0) continue; // M5: organism cells don't divide (M6 reproduces organisms)
+    // Density-dependent carrying capacity for the plant field: a PHOTO cell whose coarse
+    // density-grid bucket is already full (localDensity > cap) skips division. localDensity is the
+    // type-blind per-bucket cell count filled by World.fillDensity this tick (a grid measure, not an
+    // overlap count — a repulsion-relaxed packed field has no strict overlaps but high grid density).
+    // crowdDivideCap defaults to 65535 (OFF → density never filled → guard never fires). PHOTO only:
+    // free DIGESTIVE predators are prey-limited not space-limited, and organism cells returned above.
+    if (type === CellType.PHOTO && f.localDensity[i]! > crowdDivideCap) continue;
     if (f.energy[i]! < divideThreshold) continue;
     const child = store.alloc();
     if (child < 0) break; // at capacity — refuse-new
