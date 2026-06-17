@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { buildCritterGenome, buildForagerGenome } from './critter-genome';
+import {
+  buildCritterGenome,
+  buildForagerGenome,
+  buildHandicappedForagerGenome,
+} from './critter-genome';
 import { develop } from './develop';
 import { CellType } from '../cells/types';
 import { SensorChannel } from '../neural/network';
@@ -108,5 +112,25 @@ describe('buildForagerGenome — a viable brain-driven forager (sense→move→e
   it('is mortal: modest seed energy (no 5000 reserve) so it must forage to live', () => {
     expect(body.totalEnergy).toBeCloseTo(6 * 100, 1);
     expect(body.mass.every((m) => m === 2)).toBe(true);
+  });
+});
+
+describe('buildHandicappedForagerGenome', () => {
+  it('matches the forager but with both steering-loop weights knocked down', () => {
+    const fit = buildForagerGenome(6, 100);
+    const weak = buildHandicappedForagerGenome(6, 100, 0.2);
+    // Same morphology + wiring topology.
+    expect(weak.genes.length).toBe(fit.genes.length);
+    expect(weak.divisionRules.length).toBe(fit.divisionRules.length);
+    expect(weak.connectionRules.length).toBe(fit.connectionRules.length);
+    expect(weak.motorRules).toEqual(fit.motorRules);
+    // Both connection weights handicapped to 0.2 (fit is 1.5).
+    for (const c of weak.connectionRules) expect(c.weight).toBeCloseTo(0.2, 6);
+    for (const c of fit.connectionRules) expect(c.weight).toBeCloseTo(1.5, 6);
+  });
+
+  it('defaults the weight to 0.2', () => {
+    const weak = buildHandicappedForagerGenome();
+    for (const c of weak.connectionRules) expect(c.weight).toBeCloseTo(0.2, 6);
   });
 });

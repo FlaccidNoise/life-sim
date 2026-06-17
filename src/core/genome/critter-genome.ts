@@ -210,3 +210,21 @@ export function buildForagerGenome(cellRadius = 6, initialEnergy = 100): Genome 
     generation: 0,
   };
 }
+
+/**
+ * The forager with its steering loop SABOTAGED: both connection weights (sensorLat→turn
+ * and sensorFwd→thrust) knocked from the hand-tuned 1.5 down to `weight` (default 0.2).
+ * A sluggish forager steers/advances weakly → reaches less food → reproduces less. Seeds
+ * the M7 adaptation proof: under weight mutation + economic selection, the population-mean
+ * weight should climb back toward fit values. DRY over buildForagerGenome — identical body,
+ * only the two connection-rule weights overridden.
+ */
+export function buildHandicappedForagerGenome(
+  cellRadius = 6,
+  initialEnergy = 100,
+  weight = 0.2,
+): Genome {
+  const g = buildForagerGenome(cellRadius, initialEnergy);
+  for (let i = 0; i < g.connectionRules.length; i++) g.connectionRules[i]!.weight = weight;
+  return g;
+}
