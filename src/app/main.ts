@@ -10,6 +10,9 @@ import { inspectAt } from './inspect';
 import { mountControls } from './controls';
 import { BrainInspector } from './brain-inspector';
 import { renderGenomeInspector } from './genome-inspector';
+import { renderHallOfFame } from './hall-of-fame';
+import { renderPhylogeny } from './phylogeny-panel';
+import { renderMenagerie } from './menagerie-panel';
 import { develop } from '../core/genome/develop';
 import {
   buildCritterGenome,
@@ -18,28 +21,62 @@ import {
 } from '../core/genome/critter-genome';
 import { instantiateBody } from '../core/organism/instantiate';
 import { CellType } from '../core/cells/types';
-import type { Genome } from '../core/genome/genome';
+import { cloneGenome, type Genome } from '../core/genome/genome';
+import type { LineageSummary } from '../core/sim/lineage-board';
+import type { SpeciesSummary } from '../core/sim/species-board';
 
 const canvas = document.getElementById('view') as HTMLCanvasElement;
 const hud = document.getElementById('hud');
 
-// A petri-dish world tuned (via headless/forager-probe.ts) so the brain-driven FORAGER organisms
-// sustain a multicellular predator-prey limit cycle: a dense PHOTO plant field is the only food and
-// the foragers are the only heterotroph, so they boom (sensing→swimming→eating→reproducing), strip
-// the plants, crash (starve→MEAT), the plants regrow, and they recover — generation after generation.
+// A petri-dish world tuned (via headless/feel-probe.ts) so the brain-driven FORAGER organisms
+// sustain a multicellular predator-prey limit cycle: a PHOTO plant field is the only food and the
+// foragers are the only heterotroph, so they boom (sensing→swimming→eating→reproducing), strip the
+// plants, crash (starve→MEAT), the plants regrow, and they recover — generation after generation.
+// The plant field has a density carrying capacity (crowdDivideCap) so it stays de-jammed — open
+// water between food you can actually watch the foragers swim through, not a wall-to-wall carpet.
 const config = defaultConfig({
   seed: 3,
   maxCells: 100_000,
-  worldWidth: 1024,
-  worldHeight: 1024,
+  // A bigger dish (1536² vs the old 1024²) gives the foragers room to actually swim and be SEEN
+  // rather than jostle shoulder-to-shoulder. Paired with crowdDivideCap below — without a plant
+  // carrying capacity, a bigger world just fills with more plants to the same jam.
+  worldWidth: 1536,
+  worldHeight: 1536,
   initialPhotoFraction: 1, // all-plant seed: pure food, no competing single-cell eaters
   initialMotileFraction: 0,
-  reproThreshold: 700,
+  // De-jam the plant field. Without this the producers divide unchecked until they PHYSICALLY jam
+  // at ~90% packing (cells permanently overlap → endless repulsion jiggle, nothing legible). The
+  // cap gives plants a logistic carrying capacity: a PHOTO cell whose 32-unit density-grid bucket
+  // already holds >2 cells skips division, pinning the field near ~30% (seed-independent) so there
+  // is open water between food. It caps DENSITY, not regrowth (a thinned patch refills at full
+  // rate), so the predator-prey cycle survives — unlike photoDepletion, which strangles regrowth
+  // and collapses the food web. Found via headless/feel-probe.ts.
+  crowdDivideCap: 2,
+  crowdGridSize: 32,
+  reproThreshold: 600,
   reproParentFloor: 120,
   organismDeathFloor: 0, // an unfed forager starves to MEAT, feeding the next generation
+  basalCost: 0.012, // slightly cheaper upkeep so foragers survive the SPARSER (de-jammed) food and
+  // establish across seeds — at baseline 0.015 the de-jammed dish starved them on unlucky seeds.
+  cruiseThrust: 1, // friskier roam (was 0.5) so a searching forager visibly explores the open water
+  maxThrust: 8, // a little faster top speed (was 6) — more mobile, more watchable
+  // M7: mutation ON so the forager population ADAPTS and DIVERSIFIES live (library defaults stay 0).
+  // Tuned-safe: explores steering weights/params without collapsing the predator-prey cycle.
+  mutationWeightRate: 0.25,
+  mutationWeightSigma: 0.1,
+  mutationParamRate: 0.1,
+  mutationParamSigma: 0.1,
+  // One structural operator, ON small, gives OPEN-ENDED emergence: weight/param mutation only
+  // tunes a FIXED body plan (genotypic diversity stays 0), so changeType lets body plans actually
+  // diverge → the `geno-div` HUD readout climbs and holds. Tuned at 0.015 via headless sweep:
+  // preserves the boom-bust early, zero genome bloat (changeType adds no cells). Higher (0.02)
+  // locks the population; combos with add/delete-gene EXTINCT it. Other structural rates stay 0.
+  mutationChangeTypeRate: 0.015,
 });
 const world = new World(config);
-world.seedLife(8000);
+// ~6500 PHOTO plants ≈ the crowdDivideCap equilibrium density, so food is plentiful from tick 0
+// and the foragers establish before the plant field finishes settling (avoids an early starve-out).
+world.seedLife(6500);
 
 // M6 demo: organisms DEVELOPED from a genome (proves the encoding drives the live demo).
 function developInto(genome: Genome, x: number, y: number, heading: number): number {
@@ -65,13 +102,15 @@ function developInto(genome: Genome, x: number, y: number, heading: number): num
 // starve→MEAT when they can't — a multicellular predator-prey cycle you can watch. Each forager
 // is itself a legible brain (2 sensors → 2 motor-neurons → motor), so the brain inspector (B)
 // shows a LIVE foraging network. The §8 encoding-hero critter lives in tests + `sim.spawnCritter()`.
-for (let k = 0; k < 20; k++) {
-  developInto(
+let firstForagerOrg = -1;
+for (let k = 0; k < 40; k++) {
+  const org = developInto(
     buildForagerGenome(world.config.cellRadius),
     world.config.worldWidth * (0.1 + (0.8 * ((k * 7) % 20)) / 20),
     world.config.worldHeight * (0.1 + (0.8 * ((k * 13) % 20)) / 20),
     (k * 2.39996) % (Math.PI * 2),
   );
+  if (k === 0) firstForagerOrg = org;
 }
 
 const f = world.cells.fields;
@@ -112,6 +151,18 @@ let showBrain = false;
 const genomePanel = document.getElementById('genome') as HTMLElement;
 let showGenome = false;
 
+// Hall-of-fame overlay (toggled with `J`): ranked board of the largest live lineages.
+const hallPanel = document.getElementById('hall-of-fame') as HTMLElement;
+let showHall = false;
+
+// Phylogeny overlay (toggled with `Y`): indented text tree of the live lineage.
+const phyloPanel = document.getElementById('phylogeny') as HTMLElement;
+let showPhylo = false;
+
+// Menagerie overlay (toggled with `K`): text board of the live species.
+const menagPanel = document.getElementById('menagerie') as HTMLElement;
+let showMenag = false;
+
 // Legend / "what am I seeing" overlay (toggled with `H`); shown by default.
 const legend = document.getElementById('legend');
 
@@ -143,6 +194,18 @@ for (let i = 0; i < config.maxCells; i++) {
 // its slot is recycled into a different cell.
 let followId = -1;
 let followGen = 0;
+// Start locked onto a forager so the first thing you see is a creature swimming/eating, not a
+// distant field. The follow auto-releases when it dies (generation check below); press C/Escape to
+// release, or click any cell to follow it. Centering on the organism uses its centroid (updateFollow).
+{
+  const mover = firstForagerOrg >= 0 ? world.organisms.mover[firstForagerOrg]! : -1;
+  if (mover >= 0 && world.cells.isAlive(mover)) {
+    followId = mover;
+    followGen = f.generation[mover]!;
+    camera.x = f.posX[mover]!;
+    camera.y = f.posY[mover]!;
+  }
+}
 
 // The brain inspector's default subject when you aren't following anyone: the first live
 // organism that owns a NEURON cell (a forager). Returns 0 (nothing to draw) if none are alive.
@@ -217,18 +280,24 @@ function drawScene(alpha: number): void {
     const org = followId >= 0 && world.cells.isAlive(followId) ? f.organismId[followId]! : 0;
     renderGenomeInspector(world, org, genomePanel);
   }
+  if (showHall) renderHallOfFame(world, hallPanel);
+  if (showPhylo) renderPhylogeny(world, phyloPanel);
+  if (showMenag) renderMenagerie(world, menagPanel);
 }
 
-function fit(): void {
+// Default view spans ~520 world units across the smaller screen axis (~6 cell-diameters of detail),
+// so individual foragers are legible from the start instead of specks in a whole-world fit. The
+// wheel zooms out to the full ecosystem; resize preserves the user's current zoom.
+const DEFAULT_VIEW_SPAN = 520;
+function fit(initial: boolean): void {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
   renderer.resize(canvas.width, canvas.height);
   bondOverlay.resize(canvas.width, canvas.height);
-  camera.scale =
-    Math.min(canvas.width / config.worldWidth, canvas.height / config.worldHeight) * 0.95;
+  if (initial) camera.scale = Math.min(canvas.width, canvas.height) / DEFAULT_VIEW_SPAN;
 }
-window.addEventListener('resize', fit);
-fit();
+window.addEventListener('resize', () => fit(false));
+fit(true);
 
 // Fixed-timestep state.
 let speed = 0.25; // physics ticks advanced per rendered frame (fractional = slow-mo)
@@ -331,6 +400,15 @@ window.addEventListener('keydown', (e) => {
     genomePanel.classList.toggle('hidden', !showGenome);
   } else if (e.key === 'h' || e.key === 'H') {
     legend?.classList.toggle('hidden');
+  } else if (e.key === 'j' || e.key === 'J') {
+    showHall = !showHall;
+    hallPanel.classList.toggle('hidden', !showHall);
+  } else if (e.key === 'y' || e.key === 'Y') {
+    showPhylo = !showPhylo;
+    phyloPanel.classList.toggle('hidden', !showPhylo);
+  } else if (e.key === 'k' || e.key === 'K') {
+    showMenag = !showMenag;
+    menagPanel.classList.toggle('hidden', !showMenag);
   } else if (e.key === 'c' || e.key === 'C' || e.key === 'Escape') {
     followId = -1;
   }
@@ -349,6 +427,7 @@ function updateHud(): void {
     `${speed.toFixed(2)}×${paused ? ' paused' : ''}  ·  zoom ${camera.scale.toFixed(2)}\n` +
     `photo ${m.photo}  dig ${m.digestive}  motile ${m.motile}  meat ${m.meat}` +
     `   ·   ⌀energy ${m.meanEnergy.toFixed(0)}  ·  diversity ${m.diversity.toFixed(3)}\n` +
+    `evolve: geno-div ${m.genotypicDiversity.toFixed(3)}  ·  gen ${m.maxGeneration}  ·  ⌀genome ${m.meanGenomeSize.toFixed(1)} cells/org ${m.meanCellsPerOrganism.toFixed(1)}\n` +
     `brain: ${net.liveNeuronCount} neurons · ${net.liveSynapseCount} synapses` +
     `   ·   light ${showLight ? 'on' : 'off'}  smell ${showFood ? 'on' : 'off'}  bonds ${showBonds ? 'on' : 'off'}` +
     `${followId >= 0 ? `  ·  follow #${followId}` : ''}   ·   ${legend && !legend.classList.contains('hidden') ? 'H hide legend' : 'H legend'}`;
@@ -406,6 +485,13 @@ interface SimHandle {
   feedAll: (e?: number) => number;
   /** Print/return live genome organisms with cell-count, energy, genome ref + generation. */
   organisms: () => { org: number; cells: number; energy: number; gen: number; ref: number }[];
+  /** Current champion board: top live founding lineages by member count (M7 telemetry). */
+  champions: () => LineageSummary[];
+  /** Current species board: live genome population greedily clustered by genomeDistance (M7
+   * telemetry, ranked by liveCount desc). */
+  species: () => SpeciesSummary[];
+  /** Manual debug spawn of champion `k`'s representative genome (clone keeps its founderId). */
+  spawnChampion: (k?: number) => number;
 }
 const cx0 = () => world.config.worldWidth * 0.5;
 const cy0 = () => world.config.worldHeight * 0.5;
@@ -497,5 +583,15 @@ function nearestGenomeOrg(x: number, y: number): number {
       }
     }
     return out;
+  },
+  champions: () => world.lineageBoard.slice(),
+  species: () => world.speciesBoard.slice(),
+  spawnChampion: (k = 0) => {
+    const board = world.lineageBoard;
+    if (k < 0 || k >= board.length) return -1;
+    const g = world.genomes.get(board[k]!.representativeRef);
+    if (g === undefined) return -1;
+    // Clone keeps founderId → the spawned champion joins its own dynasty (a member, not a new founder).
+    return developInto(cloneGenome(g), cx0(), cy0(), 0);
   },
 };

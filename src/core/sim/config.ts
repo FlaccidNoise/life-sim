@@ -55,6 +55,22 @@ export interface Config {
   divideCost: number;
   /** Child placement offset from the parent, in world units. */
   divideJitter: number;
+  /**
+   * Density-dependent PHOTO division cap — a logistic carrying capacity for the plant field.
+   * A PHOTO cell whose coarse density-grid bucket already holds more than this many live cells
+   * (count recomputed each tick in World.fillDensity, bucket size = crowdGridSize) skips division,
+   * so plant density self-limits BELOW the physical close-pack jam instead of growing until cells
+   * permanently overlap (the "jiggle"). It caps DENSITY directly without touching any light/energy
+   * term, so a thinned patch still regrows at full rate (unlike photoDepletion, which couples the
+   * cap to the regrowth clock and collapses the food web). NB: density is measured on a grid, not by
+   * cell overlap — a repulsion-relaxed packed field sits at center-distance ≈ 2r with ZERO strict
+   * overlaps, so an overlap count cannot see density; the grid can. 65535 (Uint16 max) = OFF: the
+   * density pass is skipped entirely and the M2/M3 economy is byte-identical to before.
+   */
+  crowdDivideCap: number;
+  /** Side length (world units) of a density-grid bucket for crowdDivideCap. ~3 cell-diameters
+   *  (≈ 4·cellRadius·...) gives a smooth carrying-capacity signal; only used when the cap is on. */
+  crowdGridSize: number;
   /** Fraction of initial cells spawned as PHOTO; the rest are DIGESTIVE. */
   initialPhotoFraction: number;
 
@@ -158,6 +174,10 @@ export interface Config {
   mutationChangeTypeRate: number;
   /** Probability of a duplicate-subgraph mutation per reproduction (the complexity driver). */
   mutationDuplicateSubgraphRate: number;
+  /** Ticks between evolution-telemetry samples (read-only; keeps the hot loop alloc-free). */
+  metricsEvolutionInterval: number;
+  /** Cap on phylogeny LineageLog nodes; dead subtrees are pruned (leaves-up) beyond this. */
+  maxLineageNodes: number;
 }
 
 export function defaultConfig(overrides: Partial<Config> = {}): Config {
@@ -197,6 +217,9 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     divideThreshold: 150, // lower than 200 → faster prey turnover; also damps predator overshoot
     divideCost: 10,
     divideJitter: 6,
+    crowdDivideCap: 65535, // OFF by default (Uint16 max) — the M2/M3 economy is unperturbed; the live demo (main.ts) opts in, mirroring the mutation-rate-default-0 pattern
+    crowdGridSize: 32, // ~2.7 cell-diameters per density bucket (only used when crowdDivideCap is on)
+
     // 0.75 = a 3:1 producer:consumer seed (was 0.85); the larger consumer cohort
     // plus the damping above settles into sustained coexistence rather than a
     // predator boom-bust that ends in monoculture.
@@ -226,8 +249,14 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     thrustScale: 3, // a_thrust∈(−1,1) → ±3, plus bias
     thrustBias: 2, // baseline cruise so the critter keeps moving while searching
 
-    maxBonds: 4096, // ample for hand-built M5 organisms; grows in M6 (developmental genome)
-    maxOrganisms: 4096,
+    // A forager body develops to 11 bonds (5 division-tree + 6 brace rules), so maxBonds 4096
+    // capped the live forager population at exactly floor(4096/11)=372 organisms — a HARD plateau
+    // (instantiateBody refuses a birth when bonds.freeCount < body.bonds.length, instantiate.ts).
+    // M5's 4096 predates M6/M7 organism reproduction; 16384 lifts the ceiling to ~1489 foragers so
+    // the population is ECOLOGY-limited (boom-bust), not buffer-limited (frozen). +405 KiB, ~0/tick
+    // (the force/transfer kernels iterate the COMPACT live-bond list, not the pool). Restart-required.
+    maxBonds: 16384,
+    maxOrganisms: 8192, // stay ahead of maxBonds/11≈1489 foragers; sizes an O(maxOrganisms) per-tick scan (trivial)
     bondDegreeCap: 8, // the braced critter peaks at 6 bonds/cell; headroom for clusters
     bondStiffness: 1.5, // SYMPLECTIC-EULER STABILITY (audit blocker): the bond force's effective spring constant is k_eff = bondStiffness·perBondStiffness (the /d in the kernel cancels the ddx=±d projection — see bond-force.ts). The two-free-mass ceiling for dt=1/damping=0.5/mass=1 is ~3, and a multi-spoke hub like the MOVER is TIGHTER, so keep ≤2.5. k=8 diverges to ~1e162 in a few ticks. Cohesion comes from bracing geometry + low strain tolerance, NOT large k. Live knob (tune via golden-bond / critter-swim within the ceiling).
     bondMaxStrain: 1.0, // break at 100% stretch. M5 RETUNE (Task 14): the bonded hand-wired critter is a SOFT body — its single MOVER yanks 6 soft spokes (k_eff=bondStiffness·1=1.5) which transiently stretch to ~2× rest under thrust+turn. At the original 0.6 the spokes snapped within ~8 ticks, fragmenting the body so it could not chemotax (critter-swim closed only ~7 units, not ≥150). At 1.0 the spokes flex without breaking and the critter homes in robustly across start headings (closes ~250-290 units; verified 5/5). NOT a stiffness change — raising bondStiffness toward the ceiling made it WORSE (the orbital limit cycle tightens); cohesion here comes from strain tolerance, not k. Still snaps under a genuine hard pull (golden-bond overrides to 0.2). Live knob.
@@ -259,6 +288,8 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     mutationRewireRate: 0,
     mutationChangeTypeRate: 0,
     mutationDuplicateSubgraphRate: 0,
+    metricsEvolutionInterval: 16,
+    maxLineageNodes: 4000,
 
     ...overrides,
   };

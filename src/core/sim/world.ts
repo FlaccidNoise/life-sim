@@ -24,8 +24,11 @@ import { orientSensors } from '../neural/orient';
 import { BondNetwork } from '../organism/bonds';
 import { OrganismTable, aggregateOrganisms } from '../organism/organisms';
 import { SplitChecker } from '../organism/split';
-import { makeMetrics, sampleMetrics, type Metrics } from './metrics';
+import { makeMetrics, sampleMetrics, sampleEvolutionMetrics, type Metrics } from './metrics';
+import { sampleLineages, type LineageSummary, type LineageStat } from './lineage-board';
+import { sampleSpecies, type SpeciesSummary } from './species-board';
 import { GenomeStore } from '../genome/genome';
+import { LineageLog } from '../genome/lineage-log';
 import { reproduceOrganisms, type ReproParams } from '../organism/reproduction';
 import { killStarvedOrganisms } from '../organism/organism-death';
 import { type MutationRates } from '../genome/mutate';
@@ -56,16 +59,24 @@ export class World {
   readonly splitter: SplitChecker;
   /** Genome store (developmental recipes by ref). */
   readonly genomes: GenomeStore;
+  /** M7 phylogeny: births/deaths recorded by genome ref; pruned at metrics cadence. Part of the
+   * determinism contract (canonical-order recording, no RNG — the reproducibility test hashes it). */
+  readonly lineage: LineageLog;
   /** Dedicated RNG substream for mutation (rng.split(2)); keeps mutation independent. */
   readonly mutationRng: Rng;
   /** Pre-allocated per-organism death flags (zero-alloc death scan). */
   readonly dyingScratch: Uint8Array;
   /** Pre-allocated local→slot scratch for instantiateBody (zero-alloc births). */
   readonly instantiateScratch: Int32Array;
+  /** Coarse density grid (cells per bucket) for the crowdDivideCap carrying capacity. Reused each
+   *  tick; only filled when the cap is enabled. Not on the determinism contract (derived). */
+  private readonly densityGrid: Int32Array;
+  private readonly densityCols: number;
+  private readonly densityRows: number;
   private readonly mutationRates: MutationRates;
   private readonly reproParams: ReproParams;
-  private readonly reproOut: { births: number };
-  private readonly deathOut: { deaths: number };
+  private readonly reproOut: { births: number; bornRefs: number[] };
+  private readonly deathOut: { deaths: number; deadRefs: number[] };
   /** Cumulative organisms that ever reached reproThreshold (births-reaching-adulthood). */
   birthsReachedAdulthood: number;
   lastOrganismBirths: number;
@@ -73,6 +84,14 @@ export class World {
   /** Per-cell bonded-DIGESTIVE-neighbour count (the digestion-clustering payoff input). */
   readonly digestBonus: Uint8Array;
   readonly metrics: Metrics;
+  /** M7 champion board: top live founding lineages by member count (sampled telemetry, not the
+   * SoA determinism contract). Refreshed at metricsEvolutionInterval cadence. */
+  lineageBoard: readonly LineageSummary[] = [];
+  /** M7 species board: live genome population greedily clustered by genomeDistance (sampled
+   * telemetry, not the SoA determinism contract). Refreshed at metricsEvolutionInterval cadence. */
+  speciesBoard: readonly SpeciesSummary[] = [];
+  /** Persistent per-lineage peak + first-seen accumulator backing lineageBoard. */
+  private readonly lineageStats = new Map<number, LineageStat>();
   /** Pre-allocated so lifecycle writes counts without a per-tick object (zero-alloc). */
   readonly lifecycleResult: LifecycleResult;
   lastBirths: number;
@@ -118,9 +137,13 @@ export class World {
     this.organisms = new OrganismTable(config.maxOrganisms);
     this.splitter = new SplitChecker(config.maxCells);
     this.genomes = new GenomeStore();
+    this.lineage = new LineageLog(this.genomes);
     this.mutationRng = this.rng.split(2 /* STREAM_MUTATION */);
     this.dyingScratch = new Uint8Array(config.maxOrganisms);
     this.instantiateScratch = new Int32Array(config.maxCellsPerOrganism);
+    this.densityCols = Math.max(3, Math.round(config.worldWidth / config.crowdGridSize));
+    this.densityRows = Math.max(3, Math.round(config.worldHeight / config.crowdGridSize));
+    this.densityGrid = new Int32Array(this.densityCols * this.densityRows);
     this.mutationRates = {
       paramSigma: 0,
       paramRate: 0,
@@ -144,8 +167,8 @@ export class World {
       worldHeight: config.worldHeight,
       tick: 0,
     };
-    this.reproOut = { births: 0 };
-    this.deathOut = { deaths: 0 };
+    this.reproOut = { births: 0, bornRefs: [] };
+    this.deathOut = { deaths: 0, deadRefs: [] };
     this.birthsReachedAdulthood = 0;
     this.lastOrganismBirths = 0;
     this.lastOrganismDeaths = 0;
@@ -214,6 +237,40 @@ export class World {
       if (this.cells.isAlive(i)) live[n++] = i;
     }
     this.liveCount = n;
+  }
+
+  /**
+   * Fill `localDensity[i]` = number of live cells sharing cell i's coarse density-grid bucket,
+   * for the crowdDivideCap carrying capacity. Two O(live) passes (count into grid, then read back),
+   * allocation-free (reused `densityGrid`), deterministic (integer counts over the canonical live
+   * order, no RNG). Type-blind and position-only — a uniform environmental constraint, never a
+   * fitness/lineage branch. Only called when the cap is enabled.
+   */
+  private fillDensity(live: Uint32Array, n: number): void {
+    const f = this.cells.fields;
+    const grid = this.densityGrid;
+    const cols = this.densityCols;
+    const rows = this.densityRows;
+    const cellW = this.config.worldWidth / cols;
+    const cellH = this.config.worldHeight / rows;
+    grid.fill(0);
+    for (let k = 0; k < n; k++) {
+      const i = live[k]!;
+      let col = Math.floor(f.posX[i]! / cellW);
+      let row = Math.floor(f.posY[i]! / cellH);
+      col = ((col % cols) + cols) % cols; // toroidal-safe (cells live in [0,W) but be defensive)
+      row = ((row % rows) + rows) % rows;
+      grid[row * cols + col]!++;
+    }
+    for (let k = 0; k < n; k++) {
+      const i = live[k]!;
+      let col = Math.floor(f.posX[i]! / cellW);
+      let row = Math.floor(f.posY[i]! / cellH);
+      col = ((col % cols) + cols) % cols;
+      row = ((row % rows) + rows) % rows;
+      const d = grid[row * cols + col]!;
+      f.localDensity[i] = d < 65535 ? d : 65535;
+    }
   }
 
   /** Copy the live M6 knobs into the reused param objects (avoids a per-tick allocation). */
@@ -403,6 +460,11 @@ export class World {
       f.age[i] = (f.age[i]! + 1) >>> 0;
     }
 
+    // Density-dependent carrying capacity (crowdDivideCap): count cells per coarse grid bucket
+    // at post-integrate positions so lifecycle can cap PHOTO division where the plant field is
+    // already dense. Skipped entirely when the cap is OFF (byte-identical to the un-capped sim).
+    if (cfg.crowdDivideCap < 65535) this.fillDensity(live, n);
+
     lifecycle(
       live,
       n,
@@ -414,6 +476,7 @@ export class World {
       cfg.divideThreshold,
       cfg.divideCost,
       cfg.divideJitter,
+      cfg.crowdDivideCap,
       this.tickCount,
       this.lifecycleResult,
     );
@@ -453,6 +516,7 @@ export class World {
 
     // 11d M6: atomic organism death (starved) — BEFORE reproduction so a dead organism
     // cannot reproduce the same tick. Reaps bonds + frees ids/genomes; rebuild nets if any died.
+    this.deathOut.deadRefs.length = 0;
     const orgDied = killStarvedOrganisms(
       this.cells,
       this.net,
@@ -471,10 +535,14 @@ export class World {
       this.bonds.rebuildLive(this.cells);
     }
     this.lastOrganismDeaths = this.deathOut.deaths;
+    // M7: record deaths for the just-freed orgs (recordDeath only stamps an existing node's
+    // deathTick — it never reads the store, so draining after store.free is safe).
+    for (const ref of this.deathOut.deadRefs) this.lineage.recordDeath(ref, this.tickCount);
 
     // 11e M6: asexual reproduction (threshold + maternal provisioning). Structural; allocates
     // only on an actual birth (the scan is allocation-free).
     this.syncReproParams();
+    this.reproOut.bornRefs.length = 0;
     reproduceOrganisms(
       this.cells,
       this.net,
@@ -490,6 +558,9 @@ export class World {
       this.reproOut,
     );
     this.lastOrganismBirths = this.reproOut.births;
+    // M7: record births for the just-committed children (recordBirth reads the store; the
+    // children are registered — not freed — during reproduce, so present at drain time).
+    for (const ref of this.reproOut.bornRefs) this.lineage.recordBirth(ref, this.tickCount);
 
     // 11f M6: adulthood tracking + live-organism count (one O(maxOrganisms) scan).
     let liveOrgs = 0;
@@ -520,6 +591,21 @@ export class World {
       this.lastOrganismDeaths,
       this.birthsReachedAdulthood,
     );
+
+    // M7: evolution telemetry at reduced cadence (allocates a Map → kept off the per-tick
+    // hot loop). Read-only; not part of the SoA determinism contract.
+    if (this.tickCount % cfg.metricsEvolutionInterval === 0) {
+      sampleEvolutionMetrics(this.metrics, this.organisms, this.genomes);
+      this.lineageBoard = sampleLineages(
+        this.organisms,
+        this.genomes,
+        this.lineageStats,
+        this.tickCount,
+        8,
+      );
+      this.lineage.prune(cfg.maxLineageNodes);
+      this.speciesBoard = sampleSpecies(this.organisms, this.genomes);
+    }
 
     this.tickCount++;
   }

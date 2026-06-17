@@ -11,6 +11,9 @@ export class TelemetryDashboard {
   private readonly meat = new Float32Array(CAP);
   private readonly energy = new Float32Array(CAP);
   private readonly diversity = new Float32Array(CAP);
+  private readonly genoDiv = new Float32Array(CAP);
+  private lastGenoDiv = 0;
+  private lastMaxGen = 0;
   private head = 0;
   private count = 0;
 
@@ -28,8 +31,19 @@ export class TelemetryDashboard {
     this.meat[h] = m.meat;
     this.energy[h] = m.meanEnergy;
     this.diversity[h] = m.diversity;
+    this.genoDiv[h] = m.genotypicDiversity;
+    this.lastGenoDiv = m.genotypicDiversity;
+    this.lastMaxGen = m.maxGeneration;
     this.head = (h + 1) % CAP;
     if (this.count < CAP) this.count++;
+  }
+
+  latestGenotypicDiversity(): number {
+    return this.lastGenoDiv;
+  }
+
+  latestMaxGeneration(): number {
+    return this.lastMaxGen;
   }
 
   /** Max value of a series over the live window (>= floor so an all-zero band still scales). */
@@ -109,7 +123,12 @@ export class TelemetryDashboard {
     // Band 3: diversity, fixed 0..1.
     y += bandH + bandGap;
     this.plot(this.diversity, x0, y, w, bandH, 1, '#d98cff');
-    label(`diversity ${latest.diversity.toFixed(3)}`, x0, y + 9);
+    this.plot(this.genoDiv, x0, y, w, bandH, 1, '#ffd166'); // genotypic diversity (gold)
+    label(
+      `diversity pheno ${latest.diversity.toFixed(3)} geno ${latest.genotypicDiversity.toFixed(3)} · gen ${latest.maxGeneration} · size ${latest.meanGenomeSize.toFixed(1)}`,
+      x0,
+      y + 9,
+    );
 
     // Status text line.
     ctx.fillStyle = '#9fe';

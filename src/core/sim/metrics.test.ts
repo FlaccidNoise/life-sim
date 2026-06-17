@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { makeMetrics, sampleMetrics } from './metrics';
+import { makeMetrics, sampleMetrics, sampleEvolutionMetrics } from './metrics';
 import { CellType } from '../cells/types';
 import { CellStore } from '../memory/cell-store';
+import { OrganismTable } from '../organism/organisms';
+import { GenomeStore } from '../genome/genome';
+import { buildForagerGenome, buildAutotrophGenome } from '../genome/critter-genome';
 
 function seed(types: number[], energies: number[]): { store: CellStore; live: Uint32Array } {
   const store = new CellStore(types.length + 4, false);
@@ -90,5 +93,51 @@ describe('M6 metrics — organism counters', () => {
     expect(m.organismBirths).toBe(2);
     expect(m.organismDeaths).toBe(1);
     expect(m.birthsReachedAdulthood).toBe(5);
+  });
+});
+
+describe('sampleEvolutionMetrics', () => {
+  it('computes genotypic diversity, means, and max generation over live genome organisms', () => {
+    const organisms = new OrganismTable(16);
+    const genomes = new GenomeStore();
+    // Two foragers (signature A) + one autotroph (signature B) → Simpson(2/3,1/3)=1-(4/9+1/9)=4/9.
+    const forager = buildForagerGenome(6, 100); // 6 cells, 2 sensors
+    const autotroph = buildAutotrophGenome(6); // 4 cells, 0 sensors
+    const setup: { genome: typeof forager; cells: number; gen: number }[] = [
+      { genome: forager, cells: 6, gen: 3 },
+      { genome: forager, cells: 6, gen: 1 },
+      { genome: autotroph, cells: 4, gen: 0 },
+    ];
+    for (const s of setup) {
+      const org = organisms.alloc();
+      const g = { ...s.genome, generation: s.gen };
+      organisms.genomeRef[org] = genomes.register(g);
+      organisms.cellCount[org] = s.cells;
+    }
+    const m = makeMetrics();
+    sampleEvolutionMetrics(m, organisms, genomes);
+    expect(m.genotypicDiversity).toBeCloseTo(4 / 9, 6);
+    expect(m.meanCellsPerOrganism).toBeCloseTo((6 + 6 + 4) / 3, 6);
+    expect(m.meanSensorsPerOrganism).toBeCloseTo((2 + 2 + 0) / 3, 6);
+    expect(m.meanGenomeSize).toBeCloseTo((6 + 6 + 4) / 3, 6);
+    expect(m.maxGeneration).toBe(3);
+  });
+
+  it('reports zeros for an empty population without dividing by zero', () => {
+    const m = makeMetrics();
+    sampleEvolutionMetrics(m, new OrganismTable(8), new GenomeStore());
+    expect(m.genotypicDiversity).toBe(0);
+    expect(m.meanCellsPerOrganism).toBe(0);
+    expect(m.maxGeneration).toBe(0);
+  });
+
+  it('skips genome-less organisms (genomeRef < 0)', () => {
+    const organisms = new OrganismTable(8);
+    const genomes = new GenomeStore();
+    const org = organisms.alloc(); // genomeRef stays -1
+    organisms.cellCount[org] = 5;
+    const m = makeMetrics();
+    sampleEvolutionMetrics(m, organisms, genomes);
+    expect(m.meanCellsPerOrganism).toBe(0); // none counted
   });
 });

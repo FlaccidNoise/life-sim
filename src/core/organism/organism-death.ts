@@ -27,7 +27,7 @@ export function killStarvedOrganisms(
   deathFloor: number,
   meatEnergyOnDeath: number,
   dying: Uint8Array,
-  out: { deaths: number },
+  out: { deaths: number; deadRefs?: number[] },
 ): boolean {
   const maxOrg = organisms.maxOrganisms;
   let deaths = 0;
@@ -79,7 +79,10 @@ export function killStarvedOrganisms(
   for (let org = 1; org < maxOrg; org++) {
     if (dying[org] === 1) {
       const ref = organisms.genomeRef[org]!;
-      if (ref >= 0) store.free(ref);
+      if (ref >= 0) {
+        store.free(ref);
+        if (out.deadRefs !== undefined) out.deadRefs.push(ref);
+      }
       organisms.free(org);
     }
   }
