@@ -25,6 +25,10 @@ import { BondNetwork } from '../organism/bonds';
 import { OrganismTable, aggregateOrganisms } from '../organism/organisms';
 import { SplitChecker } from '../organism/split';
 import { makeMetrics, sampleMetrics, type Metrics } from './metrics';
+import { GenomeStore } from '../genome/genome';
+import { reproduceOrganisms, type ReproParams } from '../organism/reproduction';
+import { killStarvedOrganisms } from '../organism/organism-death';
+import { type MutationRates } from '../genome/mutate';
 
 /**
  * The simulation world. Each `tick()` runs the M5 pipeline:
@@ -50,6 +54,22 @@ export class World {
   readonly bonds: BondNetwork;
   readonly organisms: OrganismTable;
   readonly splitter: SplitChecker;
+  /** Genome store (developmental recipes by ref). */
+  readonly genomes: GenomeStore;
+  /** Dedicated RNG substream for mutation (rng.split(2)); keeps mutation independent. */
+  readonly mutationRng: Rng;
+  /** Pre-allocated per-organism death flags (zero-alloc death scan). */
+  readonly dyingScratch: Uint8Array;
+  /** Pre-allocated local→slot scratch for instantiateBody (zero-alloc births). */
+  readonly instantiateScratch: Int32Array;
+  private readonly mutationRates: MutationRates;
+  private readonly reproParams: ReproParams;
+  private readonly reproOut: { births: number };
+  private readonly deathOut: { deaths: number };
+  /** Cumulative organisms that ever reached reproThreshold (births-reaching-adulthood). */
+  birthsReachedAdulthood: number;
+  lastOrganismBirths: number;
+  lastOrganismDeaths: number;
   /** Per-cell bonded-DIGESTIVE-neighbour count (the digestion-clustering payoff input). */
   readonly digestBonus: Uint8Array;
   readonly metrics: Metrics;
@@ -97,6 +117,38 @@ export class World {
     this.bonds = new BondNetwork(config.maxCells, config.maxBonds, config.bondDegreeCap);
     this.organisms = new OrganismTable(config.maxOrganisms);
     this.splitter = new SplitChecker(config.maxCells);
+    this.genomes = new GenomeStore();
+    this.mutationRng = this.rng.split(2 /* STREAM_MUTATION */);
+    this.dyingScratch = new Uint8Array(config.maxOrganisms);
+    this.instantiateScratch = new Int32Array(config.maxCellsPerOrganism);
+    this.mutationRates = {
+      paramSigma: 0,
+      paramRate: 0,
+      weightSigma: 0,
+      weightRate: 0,
+      addGeneRate: 0,
+      deleteGeneRate: 0,
+      duplicateGeneRate: 0,
+      rewireRate: 0,
+      changeTypeRate: 0,
+      duplicateSubgraphRate: 0,
+    };
+    this.reproParams = {
+      reproThreshold: 0,
+      parentFloor: 0,
+      offspringOffset: 0,
+      maxCellsPerOrganism: 0,
+      maxRecursionDepth: 0,
+      maxBirthsPerTick: 0,
+      worldWidth: config.worldWidth,
+      worldHeight: config.worldHeight,
+      tick: 0,
+    };
+    this.reproOut = { births: 0 };
+    this.deathOut = { deaths: 0 };
+    this.birthsReachedAdulthood = 0;
+    this.lastOrganismBirths = 0;
+    this.lastOrganismDeaths = 0;
     this.digestBonus = new Uint8Array(config.maxCells);
     this.metrics = makeMetrics();
     this.lifecycleResult = { births: 0, deaths: 0 };
@@ -162,6 +214,32 @@ export class World {
       if (this.cells.isAlive(i)) live[n++] = i;
     }
     this.liveCount = n;
+  }
+
+  /** Copy the live M6 knobs into the reused param objects (avoids a per-tick allocation). */
+  private syncReproParams(): void {
+    const cfg = this.config;
+    const rp = this.reproParams;
+    rp.reproThreshold = cfg.reproThreshold;
+    rp.parentFloor = cfg.reproParentFloor;
+    rp.offspringOffset = cfg.offspringOffset;
+    rp.maxCellsPerOrganism = cfg.maxCellsPerOrganism;
+    rp.maxRecursionDepth = cfg.maxRecursionDepth;
+    rp.maxBirthsPerTick = cfg.maxBirthsPerTick;
+    rp.worldWidth = cfg.worldWidth;
+    rp.worldHeight = cfg.worldHeight;
+    rp.tick = this.tickCount;
+    const mr = this.mutationRates;
+    mr.paramSigma = cfg.mutationParamSigma;
+    mr.paramRate = cfg.mutationParamRate;
+    mr.weightSigma = cfg.mutationWeightSigma;
+    mr.weightRate = cfg.mutationWeightRate;
+    mr.addGeneRate = cfg.mutationAddGeneRate;
+    mr.deleteGeneRate = cfg.mutationDeleteGeneRate;
+    mr.duplicateGeneRate = cfg.mutationDuplicateGeneRate;
+    mr.rewireRate = cfg.mutationRewireRate;
+    mr.changeTypeRate = cfg.mutationChangeTypeRate;
+    mr.duplicateSubgraphRate = cfg.mutationDuplicateSubgraphRate;
   }
 
   /**
@@ -373,6 +451,62 @@ export class World {
       this.organisms,
     );
 
+    // 11d M6: atomic organism death (starved) — BEFORE reproduction so a dead organism
+    // cannot reproduce the same tick. Reaps bonds + frees ids/genomes; rebuild nets if any died.
+    const orgDied = killStarvedOrganisms(
+      this.cells,
+      this.net,
+      this.bonds,
+      this.organisms,
+      this.genomes,
+      this.liveIndices,
+      this.liveCount,
+      cfg.organismDeathFloor,
+      cfg.meatEnergyOnDeath,
+      this.dyingScratch,
+      this.deathOut,
+    );
+    if (orgDied) {
+      this.net.rebuildLive(this.cells);
+      this.bonds.rebuildLive(this.cells);
+    }
+    this.lastOrganismDeaths = this.deathOut.deaths;
+
+    // 11e M6: asexual reproduction (threshold + maternal provisioning). Structural; allocates
+    // only on an actual birth (the scan is allocation-free).
+    this.syncReproParams();
+    reproduceOrganisms(
+      this.cells,
+      this.net,
+      this.bonds,
+      this.organisms,
+      this.genomes,
+      this.liveIndices,
+      this.liveCount,
+      this.mutationRng,
+      this.mutationRates,
+      this.reproParams,
+      this.instantiateScratch,
+      this.reproOut,
+    );
+    this.lastOrganismBirths = this.reproOut.births;
+
+    // 11f M6: adulthood tracking + live-organism count (one O(maxOrganisms) scan).
+    let liveOrgs = 0;
+    let newlyAdult = 0;
+    for (let org = 1; org < this.organisms.maxOrganisms; org++) {
+      if (!this.organisms.isAlive(org) || this.organisms.cellCount[org]! === 0) continue;
+      liveOrgs++;
+      if (
+        this.organisms.reachedAdulthood[org]! === 0 &&
+        this.organisms.energy[org]! >= cfg.reproThreshold
+      ) {
+        this.organisms.reachedAdulthood[org] = 1;
+        newlyAdult++;
+      }
+    }
+    this.birthsReachedAdulthood += newlyAdult;
+
     sampleMetrics(
       this.metrics,
       this.liveIndices,
@@ -381,6 +515,10 @@ export class World {
       this.tickCount,
       this.lifecycleResult.births,
       this.lifecycleResult.deaths,
+      liveOrgs,
+      this.lastOrganismBirths,
+      this.lastOrganismDeaths,
+      this.birthsReachedAdulthood,
     );
 
     this.tickCount++;
