@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildCritterGenome } from './critter-genome';
+import { buildCritterGenome, buildForagerGenome } from './critter-genome';
 import { develop } from './develop';
 import { CellType } from '../cells/types';
 import { SensorChannel } from '../neural/network';
@@ -77,5 +77,36 @@ describe('buildCritterGenome — develops into the M5 critter wiring (§8 M6 acc
     expect(body.bias[6]).toBeCloseTo(0.5, 6); // thrust
     expect(body.mass.every((m) => m === 2)).toBe(true); // cohesion: heavier than free cells
     expect(body.totalEnergy).toBeCloseTo(7 * 5000, 1);
+  });
+});
+
+describe('buildForagerGenome — a viable brain-driven forager (sense→move→eat)', () => {
+  const body = develop(buildForagerGenome(6, 100), 256, 16);
+
+  it('develops a 6-cell body: MOVER + 2 SENSOR + 2 NEURON + a DIGESTIVE mouth', () => {
+    expect(body.count).toBe(6);
+    expect(body.cellType).toEqual([
+      CellType.MOVER,
+      CellType.SENSOR,
+      CellType.SENSOR,
+      CellType.NEURON,
+      CellType.NEURON,
+      CellType.DIGESTIVE,
+    ]);
+  });
+
+  it('wires the steering loop + motor and leads with the digestive mouth', () => {
+    const syn = new Map(body.synapses.map((s) => [`${s.pre}-${s.post}`, s.weight]));
+    expect(syn.get('2-3')).toBeCloseTo(1.5, 6); // sensorLat → turn
+    expect(syn.get('1-4')).toBeCloseTo(1.5, 6); // sensorFwd → thrust
+    expect(body.motors).toEqual([{ mover: 0, turn: 3, thrust: 4 }]);
+    expect(body.sensorChannel[1]).toBe(SensorChannel.FWD_GRAD);
+    expect(body.sensorChannel[2]).toBe(SensorChannel.LAT_GRAD);
+    expect(body.localX[5]).toBeGreaterThan(body.localX[1]!); // the mouth leads (furthest forward)
+  });
+
+  it('is mortal: modest seed energy (no 5000 reserve) so it must forage to live', () => {
+    expect(body.totalEnergy).toBeCloseTo(6 * 100, 1);
+    expect(body.mass.every((m) => m === 2)).toBe(true);
   });
 });

@@ -10,32 +10,38 @@ import { inspectAt } from './inspect';
 import { mountControls } from './controls';
 import { BrainInspector } from './brain-inspector';
 import { renderGenomeInspector } from './genome-inspector';
-import { spawnSwimmer } from '../core/sim/critter';
 import { develop } from '../core/genome/develop';
-import { buildCritterGenome, buildAutotrophGenome } from '../core/genome/critter-genome';
+import {
+  buildCritterGenome,
+  buildAutotrophGenome,
+  buildForagerGenome,
+} from '../core/genome/critter-genome';
 import { instantiateBody } from '../core/organism/instantiate';
+import { CellType } from '../core/cells/types';
 import type { Genome } from '../core/genome/genome';
 
 const canvas = document.getElementById('view') as HTMLCanvasElement;
 const hud = document.getElementById('hud');
 
-const config = defaultConfig({ maxCells: 100_000 });
+// A petri-dish world tuned (via headless/forager-probe.ts) so the brain-driven FORAGER organisms
+// sustain a multicellular predator-prey limit cycle: a dense PHOTO plant field is the only food and
+// the foragers are the only heterotroph, so they boom (sensing→swimming→eating→reproducing), strip
+// the plants, crash (starve→MEAT), the plants regrow, and they recover — generation after generation.
+const config = defaultConfig({
+  seed: 3,
+  maxCells: 100_000,
+  worldWidth: 1024,
+  worldHeight: 1024,
+  initialPhotoFraction: 1, // all-plant seed: pure food, no competing single-cell eaters
+  initialMotileFraction: 0,
+  reproThreshold: 700,
+  reproParentFloor: 120,
+  organismDeathFloor: 0, // an unfed forager starves to MEAT, feeding the next generation
+});
 const world = new World(config);
-world.seedLife(20_000);
+world.seedLife(8000);
 
-// M4 demo: a few hand-wired swimmer critters whose brains chase food. Remember the
-// first critter's organism so the brain inspector can scope to a single, legible network.
-const demoCritter = spawnSwimmer(
-  world,
-  world.config.worldWidth * 0.5,
-  world.config.worldHeight * 0.5,
-  0,
-);
-spawnSwimmer(world, world.config.worldWidth * 0.5 + 120, world.config.worldHeight * 0.5, Math.PI);
-
-// M6 demo: a critter DEVELOPED from its genome (proves the encoding drives the live demo),
-// plus a cluster of autotrophs that photosynthesise, accumulate energy, and REPRODUCE —
-// offspring resemble the parent (clone-only at the default mutation rates).
+// M6 demo: organisms DEVELOPED from a genome (proves the encoding drives the live demo).
 function developInto(genome: Genome, x: number, y: number, heading: number): number {
   const ref = world.genomes.register(genome);
   const body = develop(genome, world.config.maxCellsPerOrganism, world.config.maxRecursionDepth);
@@ -54,18 +60,17 @@ function developInto(genome: Genome, x: number, y: number, heading: number): num
     world.instantiateScratch,
   );
 }
-developInto(
-  buildCritterGenome(world.config.cellRadius),
-  world.config.worldWidth * 0.5 - 120,
-  world.config.worldHeight * 0.5,
-  0,
-);
-for (let k = 0; k < 12; k++) {
+// The ACTIVE population: brain-driven FORAGERS (MOVER+SENSOR+NEURON+DIGESTIVE) scattered across
+// the dish. They sense the food gradient, swim to plants, eat them, reproduce when fed, and
+// starve→MEAT when they can't — a multicellular predator-prey cycle you can watch. Each forager
+// is itself a legible brain (2 sensors → 2 motor-neurons → motor), so the brain inspector (B)
+// shows a LIVE foraging network. The §8 encoding-hero critter lives in tests + `sim.spawnCritter()`.
+for (let k = 0; k < 20; k++) {
   developInto(
-    buildAutotrophGenome(world.config.cellRadius),
-    world.config.worldWidth * 0.5 + 200 + (k % 4) * 60,
-    world.config.worldHeight * 0.5 + ((k / 4) | 0) * 60,
-    0,
+    buildForagerGenome(world.config.cellRadius),
+    world.config.worldWidth * (0.1 + (0.8 * ((k * 7) % 20)) / 20),
+    world.config.worldHeight * (0.1 + (0.8 * ((k * 13) % 20)) / 20),
+    (k * 2.39996) % (Math.PI * 2),
   );
 }
 
@@ -139,6 +144,17 @@ for (let i = 0; i < config.maxCells; i++) {
 let followId = -1;
 let followGen = 0;
 
+// The brain inspector's default subject when you aren't following anyone: the first live
+// organism that owns a NEURON cell (a forager). Returns 0 (nothing to draw) if none are alive.
+function firstNeuralOrg(): number {
+  const live = world.liveIndices;
+  for (let k = 0; k < world.liveCount; k++) {
+    const i = live[k]!;
+    if (f.cellType[i] === CellType.NEURON && f.organismId[i]! > 0) return f.organismId[i]!;
+  }
+  return 0;
+}
+
 function pickNearest(screenX: number, screenY: number): number {
   const wx = camera.x + (screenX - canvas.width / 2) / camera.scale;
   const wy = camera.y + (screenY - canvas.height / 2) / camera.scale;
@@ -190,11 +206,11 @@ function drawScene(alpha: number): void {
     bondOverlay.render(world, camera);
   }
   if (showBrain) {
-    // Scope to the followed cell's organism if it's a neural critter, else the demo critter.
+    // Scope to the followed cell's organism if it's neural, else the first live forager brain.
     const followOrg =
       followId >= 0 && world.cells.isAlive(followId) && f.organismId[followId]! > 0
         ? f.organismId[followId]!
-        : demoCritter.organismId;
+        : firstNeuralOrg();
     brain.render(world, followOrg);
   }
   if (showGenome) {
@@ -250,11 +266,19 @@ window.addEventListener('mouseup', (e) => {
   if (dragging) {
     const moved = Math.hypot(e.clientX - downX, e.clientY - downY);
     if (moved < 4) {
-      inspectAt(world, camera, e.clientX, e.clientY, canvas.width, canvas.height, inspectPanel);
-      const id = pickNearest(e.clientX, e.clientY);
-      if (id >= 0) {
-        followId = id;
-        followGen = f.generation[id]!;
+      // shift+click = drop a forager at the cursor (hand-of-god, §11); alt+click = autotroph.
+      if (e.shiftKey || e.altKey) {
+        const wx = camera.x + (e.clientX - canvas.width / 2) / camera.scale;
+        const wy = camera.y + (e.clientY - canvas.height / 2) / camera.scale;
+        if (e.altKey) developInto(buildAutotrophGenome(world.config.cellRadius), wx, wy, 0);
+        else developInto(buildForagerGenome(world.config.cellRadius), wx, wy, Math.random() * 6.28);
+      } else {
+        inspectAt(world, camera, e.clientX, e.clientY, canvas.width, canvas.height, inspectPanel);
+        const id = pickNearest(e.clientX, e.clientY);
+        if (id >= 0) {
+          followId = id;
+          followGen = f.generation[id]!;
+        }
       }
     }
   }
@@ -363,13 +387,59 @@ function loop(): void {
 updateHud();
 requestAnimationFrame(loop);
 
-// Debug/automation handle — also handy from the browser console for live poking.
+// Debug / "hand of god" handle — drive it from the browser console (§11). Coords default to the
+// camera centre, so `sim.spawnForager()` drops one where you're looking. shift+click also spawns
+// a forager at the cursor (see the mouseup handler).
 interface SimHandle {
   world: World;
   camera: Camera;
   setSpeed: (s: number) => void;
-  /** "Hand of god": develop+instantiate a fresh autotroph organism from its genome (§11). */
-  spawnAutotroph: (x?: number, y?: number) => number;
+  /** Develop+instantiate a brain-driven FORAGER (senses→swims→eats→breeds). Returns its org id. */
+  spawnForager: (x?: number, y?: number, n?: number) => number;
+  /** Develop+instantiate a photosynthetic AUTOTROPH organism. */
+  spawnAutotroph: (x?: number, y?: number, n?: number) => number;
+  /** Develop+instantiate the hand-authored CRITTER (brain, no mouth — the encoding demo). */
+  spawnCritter: (x?: number, y?: number) => number;
+  /** Atomic-kill the nearest genome organism to (x,y) → its cells become MEAT. */
+  killNearestOrganism: (x?: number, y?: number) => number;
+  /** Top every live genome organism's cells up to `e` energy (watch them all reproduce). */
+  feedAll: (e?: number) => number;
+  /** Print/return live genome organisms with cell-count, energy, genome ref + generation. */
+  organisms: () => { org: number; cells: number; energy: number; gen: number; ref: number }[];
+}
+const cx0 = () => world.config.worldWidth * 0.5;
+const cy0 = () => world.config.worldHeight * 0.5;
+const fld = world.cells.fields;
+const spawnMany = (
+  make: (x: number, y: number) => number,
+  x: number,
+  y: number,
+  n: number,
+): number => {
+  let last = -1;
+  for (let i = 0; i < Math.max(1, n); i++) {
+    const a = (i * 2.39996) % (Math.PI * 2);
+    const rad = i === 0 ? 0 : 18 + i * 6;
+    last = make(x + Math.cos(a) * rad, y + Math.sin(a) * rad);
+  }
+  return last;
+};
+function nearestGenomeOrg(x: number, y: number): number {
+  const o = world.organisms;
+  let best = -1;
+  let bestD = Infinity;
+  for (let org = 1; org < o.cellCount.length; org++) {
+    if (o.cellCount[org]! > 0 && o.genomeRef[org]! >= 0) {
+      const dx = o.centroidX[org]! - x;
+      const dy = o.centroidY[org]! - y;
+      const d = dx * dx + dy * dy;
+      if (d < bestD) {
+        bestD = d;
+        best = org;
+      }
+    }
+  }
+  return best;
 }
 (globalThis as unknown as { sim: SimHandle }).sim = {
   world,
@@ -377,6 +447,55 @@ interface SimHandle {
   setSpeed: (s) => {
     speed = s;
   },
-  spawnAutotroph: (x = world.config.worldWidth * 0.5, y = world.config.worldHeight * 0.5) =>
-    developInto(buildAutotrophGenome(world.config.cellRadius), x, y, 0),
+  spawnForager: (x = cx0(), y = cy0(), n = 1) =>
+    spawnMany(
+      (px, py) =>
+        developInto(buildForagerGenome(world.config.cellRadius), px, py, Math.random() * 6.28),
+      x,
+      y,
+      n,
+    ),
+  spawnAutotroph: (x = cx0(), y = cy0(), n = 1) =>
+    spawnMany(
+      (px, py) => developInto(buildAutotrophGenome(world.config.cellRadius), px, py, 0),
+      x,
+      y,
+      n,
+    ),
+  spawnCritter: (x = cx0(), y = cy0()) =>
+    developInto(buildCritterGenome(world.config.cellRadius), x, y, 0),
+  killNearestOrganism: (x = camera.x, y = camera.y) => {
+    const org = nearestGenomeOrg(x, y);
+    if (org >= 0) world.organisms.energy[org] = -1e9; // next tick's atomic-death scan reaps it
+    return org;
+  },
+  feedAll: (e = 900) => {
+    const o = world.organisms;
+    let n = 0;
+    for (let i = 0; i < world.cells.capacity; i++) {
+      const org = fld.organismId[i]!;
+      if (world.cells.isAlive(i) && org !== 0 && o.genomeRef[org]! >= 0) {
+        fld.energy[i] = e;
+        n++;
+      }
+    }
+    return n;
+  },
+  organisms: () => {
+    const o = world.organisms;
+    const out: { org: number; cells: number; energy: number; gen: number; ref: number }[] = [];
+    for (let org = 1; org < o.cellCount.length; org++) {
+      if (o.cellCount[org]! > 0 && o.genomeRef[org]! >= 0) {
+        const g = world.genomes.get(o.genomeRef[org]!);
+        out.push({
+          org,
+          cells: o.cellCount[org]!,
+          energy: Math.round(o.energy[org]!),
+          gen: g ? g.generation : -1,
+          ref: o.genomeRef[org]!,
+        });
+      }
+    }
+    return out;
+  },
 };
