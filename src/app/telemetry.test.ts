@@ -38,6 +38,9 @@ describe('TelemetryDashboard evolution series', () => {
     const d = new TelemetryDashboard(stubCanvas());
     const m = makeMetrics();
     m.genotypicDiversity = 0.3;
+    // Push twice so count >= 2 and plot() actually renders the polyline path (incl. the new
+    // genoDiv series) rather than early-returning — exercises the band-3 drawing code.
+    d.push(m);
     d.push(m);
     expect(() => d.draw(m)).not.toThrow();
   });
