@@ -33,7 +33,7 @@ spawnSwimmer(world, world.config.worldWidth * 0.5, world.config.worldHeight * 0.
     f.posX[i] = cx + (kk % 2) * (2.4 * r);
     f.posY[i] = cy + ((kk / 2) | 0) * (2.4 * r);
     f.radius[i] = r;
-    f.mass[i] = 1;
+    f.mass[i] = 2; // heavier than free cells (mass 1) → resists repulsion jostling, holds together (like the critter)
     f.energy[i] = 5000; // provisioned reserve so the cluster persists like the swimmer
     f.cellType[i] = CellType.DIGESTIVE;
     f.organismId[i] = org;

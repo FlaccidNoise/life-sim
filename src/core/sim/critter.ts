@@ -18,14 +18,26 @@ export interface Critter {
  * §10 R3 hand-wired sensorimotor critter, now a REAL bonded organism (M5; replaces the
  * M4 kinematic rigid grouping). A MOVER body with two front SENSOR cells (forward/lateral
  * food-gradient channels), a 2-neuron recurrent clock (search oscillator), and two output
- * NEURONs (turn, thrust) the MOVER reads. Cohesion is bond springs: spokes from the MOVER
- * to every cell + cross-bracing between rim cells triangulate the body so it holds its
- * shape near-rigidly under thrust. Energy is shared by intra-organism transfer. Organism
+ * NEURONs (turn, thrust) the MOVER reads. Cohesion is bond springs (MOVER spokes + rim
+ * bracing + front↔back cross-body bonds for connectivity redundancy) PLUS heavier-than-
+ * ecosystem cells (mass 2) so the body resists repulsion jostling and holds together as
+ * ONE organism in the dense ecosystem. Energy is shared by intra-organism transfer. Organism
  * orientation = the MOVER's heading (propagated to the SENSORs by orientSensors). Cells
  * are provisioned with a large reserve and are lifecycle-exempt (organismId != 0), so the
  * topology is stable for the whole run. Deterministic (organism id from the per-World
  * OrganismTable free-list → first build gets id 1).
  */
+/**
+ * Critter cells are heavier than free ecosystem cells (mass 1). A heavier cell resists
+ * the repulsion fling (accel = F/m) when the bonded body is jostled by the dense
+ * ecosystem, keeping bond strain low (measured peak ≈0.42 vs the 1.0 break threshold) so
+ * the organism holds together as ONE component instead of fragmenting. mass 2 was chosen
+ * empirically (headless/cohesion-probe.ts): it cohered 6/6 spawned critters while keeping
+ * the best locomotion; heavier (3–6) coheres too but locomotes less. It also makes the bond
+ * spring more stable (k_eff/mass falls further below the integrator ceiling).
+ */
+const CRITTER_MASS = 2;
+
 export function spawnSwimmer(world: World, x: number, y: number, heading: number): Critter {
   const f = world.cells.fields;
   const r = world.config.cellRadius;
@@ -45,7 +57,7 @@ export function spawnSwimmer(world: World, x: number, y: number, heading: number
     f.forceX[i] = 0;
     f.forceY[i] = 0;
     f.radius[i] = r;
-    f.mass[i] = 1;
+    f.mass[i] = CRITTER_MASS;
     f.energy[i] = RESERVE;
     f.cellType[i] = type;
     f.organismId[i] = org;
@@ -114,6 +126,12 @@ export function spawnSwimmer(world: World, x: number, y: number, heading: number
   bond(clockA, clockB);
   bond(clockA, turn);
   bond(clockB, turn);
+  // Cross-body redundancy: connect the front {sensorFwd,sensorLat,thrust} and back
+  // {clockA,clockB,turn} triangles DIRECTLY (not only through the MOVER hub), so losing a
+  // hub spoke does not detach a triangle — the organism stays one connected component.
+  bond(sensorFwd, clockA);
+  bond(sensorLat, clockB);
+  bond(thrust, turn);
 
   net.rebuildLive(world.cells);
   world.bonds.rebuildLive(world.cells);
