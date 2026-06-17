@@ -155,11 +155,6 @@ export class GenomeStore {
     return this.innovation++;
   }
 
-  /** Next founding-lineage id (monotonic). Used by register for founders; descendants inherit. */
-  nextFounderId(): number {
-    return this.founder++;
-  }
-
   get size(): number {
     return this.genomes.size;
   }
