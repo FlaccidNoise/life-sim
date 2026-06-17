@@ -37,6 +37,12 @@ const config = defaultConfig({
   reproThreshold: 700,
   reproParentFloor: 120,
   organismDeathFloor: 0, // an unfed forager starves to MEAT, feeding the next generation
+  // M7: mutation ON so the forager population ADAPTS live (library defaults stay 0).
+  // Tuned-safe: explores steering weights/params without collapsing the predator-prey cycle.
+  mutationWeightRate: 0.25,
+  mutationWeightSigma: 0.1,
+  mutationParamRate: 0.1,
+  mutationParamSigma: 0.1,
 });
 const world = new World(config);
 world.seedLife(8000);
@@ -349,6 +355,7 @@ function updateHud(): void {
     `${speed.toFixed(2)}×${paused ? ' paused' : ''}  ·  zoom ${camera.scale.toFixed(2)}\n` +
     `photo ${m.photo}  dig ${m.digestive}  motile ${m.motile}  meat ${m.meat}` +
     `   ·   ⌀energy ${m.meanEnergy.toFixed(0)}  ·  diversity ${m.diversity.toFixed(3)}\n` +
+    `evolve: geno-div ${m.genotypicDiversity.toFixed(3)}  ·  gen ${m.maxGeneration}  ·  ⌀genome ${m.meanGenomeSize.toFixed(1)} cells/org ${m.meanCellsPerOrganism.toFixed(1)}\n` +
     `brain: ${net.liveNeuronCount} neurons · ${net.liveSynapseCount} synapses` +
     `   ·   light ${showLight ? 'on' : 'off'}  smell ${showFood ? 'on' : 'off'}  bonds ${showBonds ? 'on' : 'off'}` +
     `${followId >= 0 ? `  ·  follow #${followId}` : ''}   ·   ${legend && !legend.classList.contains('hidden') ? 'H hide legend' : 'H legend'}`;
