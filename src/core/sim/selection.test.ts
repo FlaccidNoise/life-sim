@@ -6,9 +6,8 @@ import { buildForagerGenome, buildHandicappedForagerGenome } from '../genome/cri
 import { instantiateBody } from '../organism/instantiate';
 import { type Genome } from '../genome/genome';
 
-const FIT = 1.5;
 const UNFIT = 0.2;
-const PAIRS = 12; // FIT + UNFIT foragers each
+const PAIRS = 12; // one fit + one unfit forager each
 const PLANTS = 2500;
 const TICKS = 3000;
 const SAMPLE_FROM = 1200; // start sampling after the first boom-bust bottleneck has separated the alleles
@@ -109,6 +108,5 @@ describe('economic selection (no fitness function)', () => {
     // Selection: integrated over the cycle, the fit lineage out-reproduces the unfit one by a
     // comfortable margin (observed ratio ≈2.98× — the 1.5× bar leaves wide headroom).
     expect(sumFit).toBeGreaterThan(sumUnfit * 1.5);
-    void FIT;
   }, 30000); // 3000 ticks on a 6000-cell forager world exceeds the 5s default (cf. reproducibility.test.ts)
 });
