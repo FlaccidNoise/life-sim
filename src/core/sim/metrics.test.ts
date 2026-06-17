@@ -73,3 +73,22 @@ describe('metrics — MOTILE (M3)', () => {
     expect(m.deaths).toBe(2);
   });
 });
+
+describe('M6 metrics — organism counters', () => {
+  it('defaults the new fields to 0 and records them when passed', () => {
+    const m = makeMetrics();
+    expect(m.liveOrganisms).toBe(0);
+    expect(m.organismBirths).toBe(0);
+    expect(m.organismDeaths).toBe(0);
+    expect(m.birthsReachedAdulthood).toBe(0);
+    const live = Uint32Array.from([0]);
+    const f = new CellStore(1, false).fields;
+    f.cellType[0] = CellType.PHOTO;
+    f.energy[0] = 100;
+    sampleMetrics(m, live, 1, f, 9, 0, 0, 3, 2, 1, 5);
+    expect(m.liveOrganisms).toBe(3);
+    expect(m.organismBirths).toBe(2);
+    expect(m.organismDeaths).toBe(1);
+    expect(m.birthsReachedAdulthood).toBe(5);
+  });
+});

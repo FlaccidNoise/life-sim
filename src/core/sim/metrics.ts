@@ -19,6 +19,10 @@ export interface Metrics {
   diversity: number;
   births: number;
   deaths: number;
+  liveOrganisms: number;
+  organismBirths: number;
+  organismDeaths: number;
+  birthsReachedAdulthood: number;
 }
 
 export function makeMetrics(): Metrics {
@@ -33,6 +37,10 @@ export function makeMetrics(): Metrics {
     diversity: 0,
     births: 0,
     deaths: 0,
+    liveOrganisms: 0,
+    organismBirths: 0,
+    organismDeaths: 0,
+    birthsReachedAdulthood: 0,
   };
 }
 
@@ -44,6 +52,10 @@ export function sampleMetrics(
   tick: number,
   births: number,
   deaths: number,
+  liveOrganisms = 0,
+  organismBirths = 0,
+  organismDeaths = 0,
+  birthsReachedAdulthood = 0,
 ): void {
   let photo = 0;
   let digestive = 0;
@@ -84,4 +96,8 @@ export function sampleMetrics(
   out.diversity = diversity;
   out.births = births;
   out.deaths = deaths;
+  out.liveOrganisms = liveOrganisms;
+  out.organismBirths = organismBirths;
+  out.organismDeaths = organismDeaths;
+  out.birthsReachedAdulthood = birthsReachedAdulthood;
 }
