@@ -116,3 +116,44 @@ describe('M5 config', () => {
     expect(back.digestClusterBonus).toBe(0.33);
   });
 });
+
+describe('M6 config', () => {
+  it('exposes genome/reproduction/development knobs with sane defaults', () => {
+    const c = defaultConfig();
+    expect(c.reproThreshold).toBeGreaterThan(0);
+    expect(c.reproParentFloor).toBeGreaterThan(0);
+    // The parent must be able to afford an offspring AND survive: the floor it keeps
+    // must be below the threshold that triggers reproduction.
+    expect(c.reproParentFloor).toBeLessThan(c.reproThreshold);
+    expect(c.organismDeathFloor).toBeGreaterThanOrEqual(0);
+    expect(c.organismDeathFloor).toBeLessThan(c.reproThreshold);
+    expect(c.offspringOffset).toBeGreaterThan(0);
+    expect(c.maxCellsPerOrganism).toBeGreaterThan(0);
+    expect(c.maxRecursionDepth).toBeGreaterThan(0);
+    expect(c.maxBirthsPerTick).toBeGreaterThan(0);
+    // Mutation rates default to 0 (clone-only): M6 is reproduction-first, selection is M7.
+    expect(c.mutationParamRate).toBe(0);
+    expect(c.mutationWeightRate).toBe(0);
+    expect(c.mutationAddGeneRate).toBe(0);
+    expect(c.mutationDeleteGeneRate).toBe(0);
+    expect(c.mutationDuplicateGeneRate).toBe(0);
+    expect(c.mutationRewireRate).toBe(0);
+    expect(c.mutationChangeTypeRate).toBe(0);
+    expect(c.mutationDuplicateSubgraphRate).toBe(0);
+    // Sigmas are present (live-tunable) even though rates are 0.
+    expect(c.mutationParamSigma).toBeGreaterThan(0);
+    expect(c.mutationWeightSigma).toBeGreaterThan(0);
+  });
+
+  it('round-trips the new fields through serialize/deserialize', () => {
+    const c = defaultConfig({
+      reproThreshold: 777,
+      mutationParamRate: 0.05,
+      maxCellsPerOrganism: 99,
+    });
+    const back = JSON.parse(serializeConfig(c)) as typeof c;
+    expect(back.reproThreshold).toBe(777);
+    expect(back.mutationParamRate).toBe(0.05);
+    expect(back.maxCellsPerOrganism).toBe(99);
+  });
+});

@@ -121,6 +121,43 @@ export interface Config {
   digestClusterBonus: number;
   /** Max split-checks per tick (guards a mass-break tick; excess strained bonds defer). */
   maxSplitChecksPerTick: number;
+
+  // Developmental genome & reproduction (§4.5, §4.7). Caps are restart-ish (size scratch);
+  // the rest are live knobs. Mutation rates default 0 (clone-only) for M6 reproduction-first.
+  /** Organism aggregate energy at/above which it reproduces asexually (copy+mutate+develop). */
+  reproThreshold: number;
+  /** Energy the parent organism must retain after provisioning an offspring (clean-abort floor). */
+  reproParentFloor: number;
+  /** Offspring placement offset from the parent centroid, in world units. */
+  offspringOffset: number;
+  /** Organism aggregate energy at/below which the WHOLE organism dies (atomic, §4.8). */
+  organismDeathFloor: number;
+  /** Hard cap on cells one development may produce (bounds runaway rules, §4.7). Sizes scratch. */
+  maxCellsPerOrganism: number;
+  /** Hard cap on development recursion depth (bounds runaway rules, §4.7). */
+  maxRecursionDepth: number;
+  /** Max organism births processed per tick (bounds structural-phase work). */
+  maxBirthsPerTick: number;
+  /** Gaussian σ for numeric gene-param mutation. */
+  mutationParamSigma: number;
+  /** Per-gene probability of a numeric-param mutation. */
+  mutationParamRate: number;
+  /** Gaussian σ for connection-weight mutation. */
+  mutationWeightSigma: number;
+  /** Per-connection-rule probability of a weight mutation. */
+  mutationWeightRate: number;
+  /** Probability of an add-gene mutation per reproduction. */
+  mutationAddGeneRate: number;
+  /** Probability of a delete-gene mutation per reproduction. */
+  mutationDeleteGeneRate: number;
+  /** Probability of a duplicate-gene mutation per reproduction. */
+  mutationDuplicateGeneRate: number;
+  /** Probability of a rewire-rule-target mutation per reproduction. */
+  mutationRewireRate: number;
+  /** Probability of a change-cell-type mutation per reproduction. */
+  mutationChangeTypeRate: number;
+  /** Probability of a duplicate-subgraph mutation per reproduction (the complexity driver). */
+  mutationDuplicateSubgraphRate: number;
 }
 
 export function defaultConfig(overrides: Partial<Config> = {}): Config {
@@ -200,6 +237,28 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     adhesionRange: 18, // 3·cellRadius — inside the spatial-hash 3×3 neighbourhood
     digestClusterBonus: 0.5, // a fully-bonded digestive cluster out-harvests lone cells (payoff); 0 for free (organismId 0) cells
     maxSplitChecksPerTick: 64,
+
+    // M6 developmental genome. reproThreshold is reachable by a small autotroph body
+    // (a few PHOTO cells photosynthesising + sharing energy); the parent floor keeps it
+    // alive after provisioning. organismDeathFloor 0 = die when the body's total energy
+    // is spent. Caps bound runaway recursion well above the critter's 7 cells.
+    reproThreshold: 600,
+    reproParentFloor: 200,
+    offspringOffset: 40,
+    organismDeathFloor: 0,
+    maxCellsPerOrganism: 256,
+    maxRecursionDepth: 16,
+    maxBirthsPerTick: 64,
+    mutationParamSigma: 0.1,
+    mutationParamRate: 0, // OFF by default (clone-only) — M6 is reproduction-first; M7 turns these up
+    mutationWeightSigma: 0.1,
+    mutationWeightRate: 0,
+    mutationAddGeneRate: 0,
+    mutationDeleteGeneRate: 0,
+    mutationDuplicateGeneRate: 0,
+    mutationRewireRate: 0,
+    mutationChangeTypeRate: 0,
+    mutationDuplicateSubgraphRate: 0,
 
     ...overrides,
   };
