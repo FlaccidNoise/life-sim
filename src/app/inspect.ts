@@ -39,10 +39,13 @@ export function inspectAt(
   const act = world.net.actCur[best]!;
   const neural = isNeural(t) ? ` | act ${act.toFixed(3)}` : '';
   const org = f.organismId[best]!;
-  const orgInfo =
-    org !== 0
-      ? ` | org #${org} cells ${world.organisms.cellCount[org]} E ${world.organisms.energy[org]!.toFixed(0)}`
-      : '';
+  let orgInfo = '';
+  if (org !== 0) {
+    const ref = world.organisms.genomeRef[org]!;
+    const gen = ref >= 0 ? world.genomes.get(ref) : undefined;
+    const genTag = ref >= 0 ? ` g#${ref}${gen ? ` gen${gen.generation}` : ''}` : '';
+    orgInfo = ` | org #${org} cells ${world.organisms.cellCount[org]} E ${world.organisms.energy[org]!.toFixed(0)}${genTag}`;
+  }
   panel.textContent =
     `#${best} ${NAMES[t] ?? t} | energy ${f.energy[best]!.toFixed(1)} | ` +
     `age ${f.age[best]} | pos ${f.posX[best]!.toFixed(0)},${f.posY[best]!.toFixed(0)}${neural}${orgInfo}`;
