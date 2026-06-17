@@ -521,7 +521,7 @@ console.log(
 
 - [ ] **Step 2: Run the probe**
 
-Run (use the repo's headless runner; check `package.json` scripts — likely `pnpm tsx src/headless/evolution-probe.ts`):
+Run: `pnpm exec tsx src/headless/evolution-probe.ts` (confirmed working for probe files in this repo).
 Expected: a two-block generation table + a verdict line. **Success criterion for this task:** the verdict prints `→ ADAPTATION` (Δ > 0.4, both populations survive). If it prints WEAK/NO or EXTINCTION, apply the documented tuning (economy pressure or σ) — never add a fitness function — until adaptation shows, OR if economy-only genuinely cannot move the trait in budget, **stop and escalate** with the table (this would be the spec's headline empirical risk materializing). Capture the final verdict + the mutation rates that produced it — Tasks 5 and 8 reuse this regime.
 
 - [ ] **Step 3: Commit**
