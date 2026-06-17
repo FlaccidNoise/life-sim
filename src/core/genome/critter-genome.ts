@@ -92,6 +92,7 @@ export function buildCritterGenome(cellRadius = 6): Genome {
     motorRules,
     parentRef: -1,
     generation: 0,
+    founderId: -1,
   };
 }
 
@@ -134,6 +135,7 @@ export function buildAutotrophGenome(cellRadius = 6): Genome {
     motorRules: [],
     parentRef: -1,
     generation: 0,
+    founderId: -1,
   };
 }
 
@@ -208,6 +210,7 @@ export function buildForagerGenome(cellRadius = 6, initialEnergy = 100): Genome 
     motorRules,
     parentRef: -1,
     generation: 0,
+    founderId: -1,
   };
 }
 

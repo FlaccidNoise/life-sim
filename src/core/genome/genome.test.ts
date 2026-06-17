@@ -39,6 +39,7 @@ function tinyGenome(): Genome {
     motorRules: [],
     parentRef: -1,
     generation: 0,
+    founderId: -1,
   };
 }
 
@@ -113,7 +114,8 @@ describe('GenomeStore — list + library save/load', () => {
     const json = serializeGenomeLibrary(s);
     const back = loadGenomeLibrary(json);
     expect(back.length).toBe(2);
-    expect(back[0]!.genome).toEqual(tinyGenome());
+    // register() lazily stamped the first founder with founderId 0 (was -1 in the builder).
+    expect(back[0]!.genome).toEqual({ ...tinyGenome(), founderId: 0 });
     expect(back[0]!.ref).toBe(0);
   });
 });
