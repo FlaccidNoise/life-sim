@@ -68,6 +68,11 @@ export class World {
   readonly dyingScratch: Uint8Array;
   /** Pre-allocated local→slot scratch for instantiateBody (zero-alloc births). */
   readonly instantiateScratch: Int32Array;
+  /** Coarse density grid (cells per bucket) for the crowdDivideCap carrying capacity. Reused each
+   *  tick; only filled when the cap is enabled. Not on the determinism contract (derived). */
+  private readonly densityGrid: Int32Array;
+  private readonly densityCols: number;
+  private readonly densityRows: number;
   private readonly mutationRates: MutationRates;
   private readonly reproParams: ReproParams;
   private readonly reproOut: { births: number; bornRefs: number[] };
@@ -136,6 +141,9 @@ export class World {
     this.mutationRng = this.rng.split(2 /* STREAM_MUTATION */);
     this.dyingScratch = new Uint8Array(config.maxOrganisms);
     this.instantiateScratch = new Int32Array(config.maxCellsPerOrganism);
+    this.densityCols = Math.max(3, Math.round(config.worldWidth / config.crowdGridSize));
+    this.densityRows = Math.max(3, Math.round(config.worldHeight / config.crowdGridSize));
+    this.densityGrid = new Int32Array(this.densityCols * this.densityRows);
     this.mutationRates = {
       paramSigma: 0,
       paramRate: 0,
@@ -229,6 +237,40 @@ export class World {
       if (this.cells.isAlive(i)) live[n++] = i;
     }
     this.liveCount = n;
+  }
+
+  /**
+   * Fill `localDensity[i]` = number of live cells sharing cell i's coarse density-grid bucket,
+   * for the crowdDivideCap carrying capacity. Two O(live) passes (count into grid, then read back),
+   * allocation-free (reused `densityGrid`), deterministic (integer counts over the canonical live
+   * order, no RNG). Type-blind and position-only — a uniform environmental constraint, never a
+   * fitness/lineage branch. Only called when the cap is enabled.
+   */
+  private fillDensity(live: Uint32Array, n: number): void {
+    const f = this.cells.fields;
+    const grid = this.densityGrid;
+    const cols = this.densityCols;
+    const rows = this.densityRows;
+    const cellW = this.config.worldWidth / cols;
+    const cellH = this.config.worldHeight / rows;
+    grid.fill(0);
+    for (let k = 0; k < n; k++) {
+      const i = live[k]!;
+      let col = Math.floor(f.posX[i]! / cellW);
+      let row = Math.floor(f.posY[i]! / cellH);
+      col = ((col % cols) + cols) % cols; // toroidal-safe (cells live in [0,W) but be defensive)
+      row = ((row % rows) + rows) % rows;
+      grid[row * cols + col]!++;
+    }
+    for (let k = 0; k < n; k++) {
+      const i = live[k]!;
+      let col = Math.floor(f.posX[i]! / cellW);
+      let row = Math.floor(f.posY[i]! / cellH);
+      col = ((col % cols) + cols) % cols;
+      row = ((row % rows) + rows) % rows;
+      const d = grid[row * cols + col]!;
+      f.localDensity[i] = d < 65535 ? d : 65535;
+    }
   }
 
   /** Copy the live M6 knobs into the reused param objects (avoids a per-tick allocation). */
@@ -418,6 +460,11 @@ export class World {
       f.age[i] = (f.age[i]! + 1) >>> 0;
     }
 
+    // Density-dependent carrying capacity (crowdDivideCap): count cells per coarse grid bucket
+    // at post-integrate positions so lifecycle can cap PHOTO division where the plant field is
+    // already dense. Skipped entirely when the cap is OFF (byte-identical to the un-capped sim).
+    if (cfg.crowdDivideCap < 65535) this.fillDensity(live, n);
+
     lifecycle(
       live,
       n,
@@ -429,6 +476,7 @@ export class World {
       cfg.divideThreshold,
       cfg.divideCost,
       cfg.divideJitter,
+      cfg.crowdDivideCap,
       this.tickCount,
       this.lifecycleResult,
     );

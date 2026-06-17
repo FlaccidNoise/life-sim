@@ -25,6 +25,11 @@ export interface CellArrays {
   thrust: Float32Array;
   flags: Uint8Array;
   generation: Uint32Array;
+  /** Local cell density = number of live cells sharing this cell's coarse density-grid bucket,
+   *  recomputed each tick (World.fillDensity) before lifecycle. Drives the density-dependent PHOTO
+   *  divide cap (a logistic carrying capacity). Derived — NOT on the byte-identical determinism
+   *  contract. Only filled when the cap is enabled. */
+  localDensity: Uint16Array;
 }
 
 const CELL_FIELDS = [
@@ -48,6 +53,7 @@ const CELL_FIELDS = [
   { name: 'thrust', ctor: Float32Array },
   { name: 'flags', ctor: Uint8Array },
   { name: 'generation', ctor: Uint32Array },
+  { name: 'localDensity', ctor: Uint16Array },
 ] as const;
 
 export type CellField = (typeof CELL_FIELDS)[number]['name'];
