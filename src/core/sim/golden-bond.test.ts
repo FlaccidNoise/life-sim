@@ -112,4 +112,43 @@ describe('golden bond — spring relaxation + split-on-break through World.tick'
     const energyAfter = cells.reduce((sum, c) => sum + f.energy[c]!, 0);
     expect(energyAfter).toBeCloseTo(energyBefore, 4);
   });
+
+  it('intra-organism energy transfer flows richer→needier through World.tick (§8 share-energy)', () => {
+    // bondCfg zeroes photoGain/basalCost/moveCost/neuralCost, so the ONLY energy change
+    // a tick can make here is the bond transfer. Leave transferRate NONZERO so we test it.
+    const w = new World(bondCfg({ transferRate: 0.1, transferEfficiency: 0.95 }), false);
+    const f = w.cells.fields;
+    const org = w.organisms.alloc(); // organismId != 0 → lifecycle-exempt (B at 0 energy won't die)
+    const a = w.cells.alloc();
+    const b = w.cells.alloc();
+    for (const c of [a, b]) {
+      f.posX[c] = 400;
+      f.posY[c] = 400; // co-located: distance doesn't matter, only the bond's energy diffusion
+      f.radius[c] = 6;
+      f.mass[c] = 1;
+      f.cellType[c] = CellType.PHOTO;
+      f.organismId[c] = org;
+    }
+    f.posX[b] = 420;
+    f.energy[a] = 100;
+    f.energy[b] = 0;
+    w.bonds.addBond(a, f.generation[a]!, b, f.generation[b]!, 20, 1);
+    w.bonds.rebuildLive(w.cells);
+
+    for (let t = 0; t < 5; t++) w.tick();
+
+    const ea = f.energy[a];
+    const eb = f.energy[b];
+    // A gave energy away; B received it.
+    expect(ea).toBeLessThan(100);
+    expect(eb).toBeGreaterThan(0);
+    // Diffusion converges toward the source: A still richer than B (5 ticks of rate-0.1 gap).
+    expect(ea).toBeGreaterThan(eb);
+    // Conservation WITH transit loss: efficiency 0.95 < 1 → total energy strictly dropped,
+    // i.e. A lost strictly more than B gained.
+    const lostByA = 100 - ea;
+    const gainedByB = eb;
+    expect(lostByA).toBeGreaterThan(gainedByB);
+    expect(ea + eb).toBeLessThan(100);
+  });
 });

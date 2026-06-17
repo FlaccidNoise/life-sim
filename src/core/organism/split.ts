@@ -17,7 +17,6 @@ import { type OrganismTable } from './organisms';
  * frequent splits should mask the increment + stamp.fill(0) on wrap.
  */
 export class SplitChecker {
-  private readonly maxCells: number;
   private readonly queueA: Int32Array;
   private readonly queueB: Int32Array;
   private readonly stamp: Int32Array;
@@ -25,7 +24,6 @@ export class SplitChecker {
   private epoch: number;
 
   constructor(maxCells: number) {
-    this.maxCells = maxCells;
     this.queueA = new Int32Array(maxCells);
     this.queueB = new Int32Array(maxCells);
     this.stamp = new Int32Array(maxCells);
