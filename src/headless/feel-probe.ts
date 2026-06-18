@@ -243,17 +243,19 @@ if (mode === 'diag') {
     false,
   );
 } else {
-  // LOCKED ECOLOGY CONFIG (candidate). The full 2048² rescale target CANNOT host a breeding predator
-  // population — at that sparsity the steady-state contact rate supports at most subsistence (P1, no
-  // reproduction) then extinction. The predator layer imposes a tighter MAX WORLD SIZE than the
-  // forager-only Phase 1 validated. World 1280² is the largest that hosts a robust BREEDING predator
-  // population. Mechanism: ambush brain (sensorFwd→thrust -1.5, brake/loiter in prey-scent, sidestep
-  // pursuit-lag) + carnivore speed edge (carnivoreThrustMult 2.0) + strike-reach (predReach 1.5) +
-  // strong prey-scent (preyDeposit 5) + 4× predator reserve (early gauntlet) + the LATCH (predLatchRange
-  // 2.5 + rest-length tether predLatchStiffness 1.0) which converts a contact into a completed kill —
-  // it ~doubled the predator bloom and turned extinction into coexistence at this scale. Counts hold
-  // the diagnostic density (4290 plants / 17 foragers / 11.4 predators per 1e6 area).
-  console.log('=== FULL validation: 1280², 12k ticks, seeds 3/7/42/99 ===');
+  // LOCKED ECOLOGY CONFIG — VALIDATED: all 3 trophic levels coexist across seeds 3/7/42/99 for 12k
+  // ticks with NO top-ups at 1024² (predators settle 1-4, foragers 67-194, plants 42-58% pack).
+  // WORLD SIZE is the binding constraint: the predator layer needs a minimum local prey density for
+  // its ambush bite-rate, so larger worlds are too sparse — 1280² is marginal (2/4 seeds wink out at
+  // P1) and the 2048² Phase-1 target cannot host a BREEDING predator at all (subsistence P1 → death).
+  // Mechanism: ambush brain (sensorFwd→thrust -1.5, brake/loiter in prey-scent, sidestep pursuit-lag)
+  // + carnivore speed edge (carnivoreThrustMult 2.0) + strike-reach (predReach 1.5) + strong prey-scent
+  // (preyDeposit 5) + 4× predator reserve (early gauntlet) + the LATCH (predLatchRange 2.5 + rest-length
+  // tether predLatchStiffness 1.0) — the latch ~doubled the predator bloom and turned extinction into
+  // coexistence at this scale. CAVEAT: coexistence is a damped equilibrium, not sustained boom-bust
+  // "breathing" — predators are few and the prey settles to a fixed point. Counts hold the diagnostic
+  // density (4290 plants / 17 foragers / 11.4 predators per 1e6 area).
+  console.log('=== FULL validation: 1024², 12k ticks, seeds 3/7/42/99 ===');
   const LOCKED = {
     preyDeposit: 5,
     predDigestRate: 30,
@@ -262,17 +264,17 @@ if (mode === 'diag') {
     crowdDivideCap: 4,
     predLatchRange: 2.5,
     predLatchStiffness: 1.0,
-    worldWidth: 1280,
-    worldHeight: 1280,
+    worldWidth: 1024,
+    worldHeight: 1024,
   };
   const W = { predThrustMult: 2.0, fwdThrustWeight: -1.5, predReserveMult: 4 } as const;
   for (const seed of [3, 7, 42, 99]) {
     run(
       {
         name: `full s${seed}`,
-        plants: 7030,
-        foragers: 28,
-        predators: 19,
+        plants: 4505,
+        foragers: 18,
+        predators: 12,
         o: { ...LOCKED, seed },
         ...W,
       },
