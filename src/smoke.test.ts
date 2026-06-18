@@ -17,5 +17,5 @@ describe('tier-7 visual smoke — the default economy breathes', () => {
     expect(w.cells.aliveCount).toBeLessThan(cfg.maxCells); // not pinned at the quota
     expect(w.metrics.diversity).toBeGreaterThan(0); // both trophic levels survive (anti-monoculture)
   }, 30000); // heavy: 300 ticks @ 60k cells. Generous timeout for parallel-suite CPU contention
-    // (the reproducibility forager runs use the same 30s allowance). Assertions unchanged.
+  // (the reproducibility forager runs use the same 30s allowance). Assertions unchanged.
 });
