@@ -70,7 +70,15 @@ const config = defaultConfig({
   organismDeathFloor: 0, // an unfed creature starves to MEAT, feeding the next trophic level
   basalCost: 0.004, // low upkeep so creatures bleed slowly between meals; env temp/toxin adds on top
   cruiseThrust: 1, // friskier roam so a searching forager visibly explores the open water
-  maxThrust: 8,
+  // ~2× faster swim (live-feel layer). Terminal speed ≈ thrust/mass, so we lift the neural thrust
+  // output + cap and quicken turning. moveCost (energy = moveCost·thrust²) is HALVED so the ~2×
+  // thrust doesn't ~4× the energy burn — keeps foragers fed and the 3-trophic ecology alive.
+  // carnivoreThrustMult is a multiplier, so predators stay 2× forager speed automatically.
+  maxThrust: 14,
+  thrustScale: 5, // neural thrust per motor activation (probe default 3)
+  thrustBias: 3, // baseline cruise term (probe default 2)
+  turnScale: 0.45, // faster steering so they don't overshoot at the higher speed (default 0.3)
+  moveCost: 0.01, // halved from 0.02 to offset the quadratic cost of the higher thrust
   // PREDATION + FLEEING (the validated 3-trophic balance — feel-probe.ts LOCKED):
   preyDeposit: 5, // forager flesh emits the prey-scent gradient predators hunt
   predDigestRate: 40, // energy a PREDATOR cell drains from held prey per tick (richer kills)
@@ -194,7 +202,9 @@ const f = world.cells.fields;
 
 function createRenderer(): Renderer {
   try {
-    return new Renderer(canvas, config.maxCells, config.cellRadius * 2);
+    // Draw cells smaller than their physics radius (×1.3, not ×2) — purely visual: shrinks the
+    // on-screen dot without touching the radius²-based economy or collision geometry.
+    return new Renderer(canvas, config.maxCells, config.cellRadius * 1.3);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     if (hud) hud.textContent = `Viewer needs WebGL2 — initialisation failed: ${msg}`;

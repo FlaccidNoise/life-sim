@@ -22,7 +22,7 @@ const TWO_PI = Math.PI * 2;
  */
 export function buildCritterGenome(cellRadius = 6): Genome {
   const r = cellRadius;
-  const off = 4 * r;
+  const off = 3 * r;
   const lat = off * 0.6;
   const aft = off * 1.8;
   const RESERVE = 5000;
@@ -152,7 +152,7 @@ export function buildAutotrophGenome(cellRadius = 6): Genome {
  */
 export function buildForagerGenome(cellRadius = 6, initialEnergy = 100): Genome {
   const r = cellRadius;
-  const off = 4 * r;
+  const off = 3 * r;
   const lat = off * 0.6;
   const aft = off * 1.8;
   const g = (cellType: number, over: Partial<Gene> = {}): Gene => ({
@@ -281,7 +281,7 @@ export function buildHandicappedForagerGenome(
 export function buildNightForagerGenome(cellRadius = 6, initialEnergy = 100): Genome {
   const g = buildForagerGenome(cellRadius, initialEnergy);
   const r = cellRadius;
-  const off = 4 * r;
+  const off = 3 * r;
   // 7th gene: AMBIENT_LIGHT sensor placed behind the mover (away from the mouth).
   g.genes.push({
     innovation: 0,
@@ -320,7 +320,7 @@ export function buildNightForagerGenome(cellRadius = 6, initialEnergy = 100): Ge
 export function buildGlowForagerGenome(cellRadius = 6, initialEnergy = 100): Genome {
   const g = buildForagerGenome(cellRadius, initialEnergy);
   const r = cellRadius;
-  const off = 4 * r;
+  const off = 3 * r;
   // Set glowGain on the turn neuron (gene 3).
   const turnGene = g.genes[3]!;
   g.genes[3] = { ...turnGene, glowGain: 0.8 };
@@ -361,7 +361,7 @@ export function buildGlowForagerGenome(cellRadius = 6, initialEnergy = 100): Gen
 export function buildToxinAvoiderGenome(cellRadius = 6, initialEnergy = 100): Genome {
   const g = buildForagerGenome(cellRadius, initialEnergy);
   const r = cellRadius;
-  const off = 4 * r;
+  const off = 3 * r;
   // 7th gene: TOXIN sensor placed on the dorsal side.
   g.genes.push({
     innovation: 0,

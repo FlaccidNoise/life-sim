@@ -32,16 +32,16 @@ describe('buildCritterGenome — develops into the M5 critter wiring (§8 M6 acc
     ]);
   });
 
-  it('places the cells at the spawnSwimmer offsets (off=24, lat=14.4, aft=43.2)', () => {
+  it('places the cells at the spawnSwimmer offsets (off=18, lat=10.8, aft=32.4)', () => {
     expect(body.localX[0]).toBeCloseTo(0, 6); // mover
     expect(body.localY[0]).toBeCloseTo(0, 6);
-    expect(body.localX[1]).toBeCloseTo(24, 5); // sensorFwd (off, -lat)
-    expect(body.localY[1]).toBeCloseTo(-14.4, 5);
-    expect(body.localX[2]).toBeCloseTo(24, 5); // sensorLat (off, lat)
-    expect(body.localY[2]).toBeCloseTo(14.4, 5);
-    expect(body.localX[3]).toBeCloseTo(-24, 5); // clockA (-off, -lat)
-    expect(body.localX[5]).toBeCloseTo(-43.2, 5); // turn (-aft, 0)
-    expect(body.localX[6]).toBeCloseTo(43.2, 5); // thrust (aft, 0)
+    expect(body.localX[1]).toBeCloseTo(18, 5); // sensorFwd (off, -lat)
+    expect(body.localY[1]).toBeCloseTo(-10.8, 5);
+    expect(body.localX[2]).toBeCloseTo(18, 5); // sensorLat (off, lat)
+    expect(body.localY[2]).toBeCloseTo(10.8, 5);
+    expect(body.localX[3]).toBeCloseTo(-18, 5); // clockA (-off, -lat)
+    expect(body.localX[5]).toBeCloseTo(-32.4, 5); // turn (-aft, 0)
+    expect(body.localX[6]).toBeCloseTo(32.4, 5); // thrust (aft, 0)
   });
 
   it('wires 15 bonds: 6 MOVER spokes + 6 bracing + 3 cross-body', () => {
