@@ -100,7 +100,9 @@ interface Trial {
 function run(t: Trial, ticks: number, world1024: boolean): void {
   const arena: Partial<Config> = world1024 ? { worldWidth: 1024, worldHeight: 1024 } : {};
   const config = defaultConfig({
-    maxCells: 100_000,
+    maxCells: 300_000,
+    maxBonds: 131_072,
+    maxOrganisms: 65_536,
     ...BASE,
     ...arena,
     carnivoreThrustMult: t.predThrustMult ?? 1,
@@ -169,12 +171,12 @@ function run(t: Trial, ticks: number, world1024: boolean): void {
 const mode = process.argv[2] ?? 'full';
 
 if (mode === 'diag') {
-  // DIAG11: LONGEVITY at 2048² (Josh's direction — bigger world, longer-lived creatures that overcome
-  // the distance between sparse encounters). Test existing levers BEFORE adding a new knob: lower global
-  // basalCost (everything bleeds slower → lives longer AND plants accumulate faster → denser prey), big
-  // predator reserve, rich kills. Pre-bloom prey (250 foragers) so the early game isn't the confound.
-  console.log('=== DIAG11: longevity levers at 2048² (latch+ambush, 6k, seed 3) ===');
+  // DIAG12: push BIGGER than 2048² (Josh wants even bigger). The longevity config sustains predators at
+  // 2048²; does it scale up? Hold the 2048² density (plants 18000 / foragers 250 / predators 24 per
+  // 4.19e6 area) and the longevity economy, sweep world up to 3072². 8k ticks, seed 3.
+  console.log('=== DIAG12: bigger worlds via longevity (latch+ambush, 8k, seed 3) ===');
   const base = {
+    basalCost: 0.004,
     preyDeposit: 5,
     predDigestRate: 40,
     predDigestEfficiency: 0.9,
@@ -184,24 +186,21 @@ if (mode === 'diag') {
     predLatchStiffness: 1.0,
   };
   const A = { predThrustMult: 2.0, fwdThrustWeight: -1.5, predReserveMult: 8 } as const;
-  const D = { plants: 18000, foragers: 250, predators: 24 };
-  // basalCost sweep (the master longevity lever); 0.012 is the rescale default.
-  run({ name: 'basal0.012', ...D, o: { ...base, basalCost: 0.012, seed: 3 }, ...A }, 6000, false);
-  run({ name: 'basal0.008', ...D, o: { ...base, basalCost: 0.008, seed: 3 }, ...A }, 6000, false);
-  run({ name: 'basal0.006', ...D, o: { ...base, basalCost: 0.006, seed: 3 }, ...A }, 6000, false);
-  run({ name: 'basal0.004', ...D, o: { ...base, basalCost: 0.004, seed: 3 }, ...A }, 6000, false);
-  // Lowest basal + huge reserve (live very long between meals).
-  run(
-    {
-      name: 'basal0.004 res16',
-      ...D,
-      o: { ...base, basalCost: 0.004, seed: 3 },
-      ...A,
-      predReserveMult: 16,
-    },
-    6000,
-    false,
-  );
+  for (const ws of [2048, 2560, 3072]) {
+    const a = (ws * ws) / (2048 * 2048);
+    run(
+      {
+        name: `world${ws} s3`,
+        plants: Math.round(18000 * a),
+        foragers: Math.round(250 * a),
+        predators: Math.round(24 * a),
+        o: { ...base, worldWidth: ws, worldHeight: ws, seed: 3 },
+        ...A,
+      },
+      8000,
+      false,
+    );
+  }
 } else {
   // LOCKED ECOLOGY CONFIG — VALIDATED: all 3 trophic levels coexist across seeds 3/7/42/99 for 12k
   // ticks with NO top-ups at 1024² (predators settle 1-4, foragers 67-194, plants 42-58% pack).
