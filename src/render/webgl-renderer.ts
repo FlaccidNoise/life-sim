@@ -35,8 +35,8 @@ in float v_heading;
 out vec4 frag;
 void main() {
   vec2 c = gl_PointCoord - 0.5;
-  // Directional wedge for cells that swim (MOTILE=3, MOVER=6).
-  if ((v_type > 2.5 && v_type < 3.5) || v_type > 5.5) {
+  // Directional wedge for cells that swim (MOTILE=3, MOVER=6). PREDATOR (7) is a mouth disc, not a wedge.
+  if ((v_type > 2.5 && v_type < 3.5) || (v_type > 5.5 && v_type < 6.5)) {
     float s = sin(-v_heading), co = cos(-v_heading);
     vec2 d = vec2(co * c.x - s * c.y, s * c.x + co * c.y);
     if (d.x > 0.45 || d.x < -0.35 || abs(d.y) > (0.40 - d.x * 0.45)) discard;
@@ -51,7 +51,8 @@ void main() {
   else if (v_type < 1.5)  col = vec3(0.95, 0.45, 0.20);  // DIGEST   orange-red
   else if (v_type < 2.5)  col = vec3(0.34, 0.30, 0.26);  // MEAT     dim grey-brown
   else if (v_type < 4.5)  col = vec3(0.85, 0.35, 0.85);  // SENSOR   magenta
-  else                    col = vec3(0.45, 0.55, 0.95);  // NEURON   blue
+  else if (v_type < 6.5)  col = vec3(0.45, 0.55, 0.95);  // NEURON   blue
+  else                    col = vec3(0.95, 0.15, 0.15);  // PREDATOR menacing red
   frag = vec4(col, 1.0);
 }`;
 
