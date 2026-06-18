@@ -86,6 +86,9 @@ function biteOnce(anchored: boolean, preyEnergy: number): { prey: number; eater:
     f.latchCell,
     noCC,
     0,
+    false,
+    0,
+    0,
   );
   return { prey: f.energy[prey], eater: f.energy[eater] };
 }
@@ -171,6 +174,9 @@ describe('base toughness', () => {
           f.latchPrey,
           f.latchCell,
           noCC,
+          0,
+          false,
+          0,
           0,
         );
         bites++;

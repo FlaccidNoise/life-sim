@@ -78,6 +78,9 @@ export function metabolize(
   latchCell: Uint32Array,
   organismCellCount: Uint32Array,
   predLatchRange: number,
+  herbivoreLatch: boolean,
+  grazeRate: number,
+  grazeLatchRange: number,
 ): void {
   const { cols, rows, width, height, sorted, bucketStart } = hash;
 
@@ -110,7 +113,70 @@ export function metabolize(
       const yi = f.posY[i]!;
       const cx = hash.colOf(xi);
       const cy = hash.rowOf(yi);
-      let eaten = false;
+      let grazed = false;
+      if (herbivoreLatch && grazeLatchRange > 0) {
+        // GRAZE-LATCH (mirrors the PREDATOR latch): the mouth latches one PHOTO cell and drains it at
+        // the modest grazeRate over many ticks, so a chain cell is consumed gradually instead of in one
+        // instant-kill bite. held = the latched PLANT organismId (0 = unlatched); a fresh holdJ scan
+        // re-derives the drain target each tick (latchCell is purely the tether handle). The companion
+        // tether (applyLatchTether, gated grazeLatchStiffness) holds the forager at the plant. Acquire
+        // and hold share grazeLatchRange. Release falls out naturally: a grazed-out cell becomes MEAT
+        // (severEatenChainCells), so next tick no matching PHOTO is found and the latch clears.
+        const held = latchPrey[i]!;
+        const heldAlive = held !== 0 && organismCellCount[held]! > 0;
+        let holdJ = -1; // first PHOTO cell of the HELD plant within range (keep grazing it)
+        let strikeJ = -1; // first edible PHOTO of ANY plant within range (acquire a fresh latch)
+        for (let dy = -1; dy <= 1; dy++) {
+          const by = (cy + dy + rows) % rows;
+          for (let dx = -1; dx <= 1; dx++) {
+            const bx = (cx + dx + cols) % cols;
+            const b = by * cols + bx;
+            const end = bucketStart[b + 1]!;
+            for (let idx = bucketStart[b]!; idx < end; idx++) {
+              const j = sorted[idx]!;
+              if (j === i) continue;
+              if (f.cellType[j]! !== CellType.PHOTO) continue; // latch grazes PHOTO only; MEAT uses the legacy overlap scan
+              if (f.energy[j]! <= 0) continue;
+              const rsum = ri + f.radius[j]!;
+              const range = grazeLatchRange * rsum;
+              const ddx = wrapDelta(xi - f.posX[j]!, width);
+              const ddy = wrapDelta(yi - f.posY[j]!, height);
+              const d2 = ddx * ddx + ddy * ddy;
+              if (d2 >= range * range) continue;
+              if (heldAlive && holdJ < 0 && f.organismId[j]! === held) holdJ = j;
+              if (strikeJ < 0) strikeJ = j;
+            }
+          }
+        }
+        let prey = -1;
+        let newLatch = 0;
+        if (holdJ >= 0) {
+          prey = holdJ;
+          newLatch = held;
+        } else if (strikeJ >= 0) {
+          prey = strikeJ;
+          newLatch = f.organismId[strikeJ]!;
+        }
+        if (prey >= 0) {
+          const avail = f.energy[prey]!;
+          // Keep the base tough (drain ~baseToughness× as fast) so foragers prefer chain cells; chain
+          // cells drain at the full grazeRate.
+          const rate = f.anchored[prey]! ? grazeRate * baseToughness : grazeRate;
+          const extracted = avail < rate ? avail : rate;
+          f.energy[prey] = avail - extracted;
+          const mult = 1 + digestClusterBonus * digestBonus[i]!;
+          f.energy[i] = f.energy[i]! + extracted * digestEfficiency * mult;
+          latchPrey[i] = newLatch;
+          latchCell[i] = prey + 1; // (cell+1) handle for the tether; 0 = none
+          grazed = true;
+        } else {
+          latchPrey[i] = 0; // no PHOTO held/acquired → release (cell gone/MEAT/out of range)
+          latchCell[i] = 0;
+        }
+      }
+      // Legacy overlap-drain path: runs verbatim when the latch is off, AND as the MEAT fallback when a
+      // latching mouth found no PHOTO to graze this tick (so a forager doesn't starve next to a corpse).
+      let eaten = grazed;
       for (let dy = -1; dy <= 1 && !eaten; dy++) {
         const by = (cy + dy + rows) % rows;
         for (let dx = -1; dx <= 1 && !eaten; dx++) {
