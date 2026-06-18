@@ -159,12 +159,21 @@ export class World {
       config.worldWidth,
       config.worldHeight,
     );
-    this.light.init(
-      this.rng.split(1 /* STREAM_LIGHT */),
-      config.lightPatchCount,
-      config.lightPatchRadius,
-      config.lightMax,
-    );
+    // Sessile-plant demo: SPREAD the light pockets on a jittered macro-grid (distinct pockets with
+    // dark gaps) so plants form separate clusters instead of one merged central blob. initSpread
+    // rescales to the SAME total integrated light as the legacy patchy init (food-neutral — no extra
+    // standing food). The default (sessilePlants=false) path is byte-identical.
+    const lightRng = this.rng.split(1 /* STREAM_LIGHT */);
+    if (config.sessilePlants) {
+      this.light.initSpread(
+        lightRng.seed,
+        config.lightPatchCount,
+        config.lightPatchRadius,
+        config.lightMax,
+      );
+    } else {
+      this.light.init(lightRng, config.lightPatchCount, config.lightPatchRadius, config.lightMax);
+    }
     this.food = new FoodField(
       config.foodGridCols,
       config.foodGridRows,
