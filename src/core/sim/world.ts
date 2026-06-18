@@ -551,6 +551,7 @@ export class World {
         n,
         f.latchCell,
         f.cellType,
+        f.radius,
         f.posX,
         f.posY,
         f.forceX,

@@ -169,60 +169,110 @@ function run(t: Trial, ticks: number, world1024: boolean): void {
 const mode = process.argv[2] ?? 'full';
 
 if (mode === 'diag') {
-  // FAST diagnostic: ¼-area arena (1024²), 5k ticks, single seed. Plants/foragers/predators scaled
-  // to ¼ so densities match the full arena. Sweep ambush brake × speed edge × strike-reach.
-  // DIAG6: world-size sweep at FIXED density. The ¼-scale diag (1024²) sustained predators; the full
-  // 2048² collapsed because ambush bite-rate ∝ local prey density and 2048² is 4× sparser at the same
-  // counts. There is a MAX world size for a given prey density. Sweep W from the worked 1024² up,
-  // holding density at the diag's (4290 plants / 17 foragers / 11.4 predators per 1e6 area).
-  console.log('=== DIAG6: world-size sweep at FIXED density (winner config, 6k, seed 3) ===');
-  const best = {
+  // DIAG9: does the LATCH improve the regime where contact is adequate, and how far up in world size
+  // can it push viability? At 2048² the binding constraint is contact (sparse prey), not kill speed, so
+  // the latch can't help. Test latch (logical + rest-length tether) + ambush + speed edge at fixed
+  // density across worlds 1024/1280/1536, vs a 1024 no-latch baseline (DIAG4's working regime). 6k seed 3.
+  // DIAG10: rescue 2048² by surviving the EARLY game. Predators die at 2048² before the prey blooms
+  // (sparse initial foragers), yet the STEADY-state prey density there (~270 foragers) is high enough
+  // to host them. So PRE-BLOOM the prey: seed more initial foragers (and bigger predator reserve) so
+  // predators reach steady state alive. Latch + ambush + speed edge, full 2048², 6k seed 3.
+  console.log(
+    '=== DIAG10: rescue 2048² via pre-bloomed prey + reserve (latch+ambush, 6k, seed 3) ===',
+  );
+  const base = {
     preyDeposit: 5,
     predDigestRate: 30,
     predDigestEfficiency: 0.7,
     predReach: 1.5,
     crowdDivideCap: 4,
+    predLatchRange: 2.5,
+    predLatchStiffness: 1.0,
   };
-  const W = { predThrustMult: 2.0, fwdThrustWeight: -1.5, predReserveMult: 4 } as const;
-  for (const ws of [1024, 1280, 1536, 1792]) {
-    const a = (ws * ws) / 1e6;
-    run(
-      {
-        name: `world${ws} s3`,
-        plants: Math.round(4290 * a),
-        foragers: Math.round(17 * a),
-        predators: Math.round(11.4 * a),
-        o: { ...best, worldWidth: ws, worldHeight: ws, seed: 3 },
-        ...W,
-      },
-      6000,
-      false,
-    );
-  }
+  const A = { predThrustMult: 2.0, fwdThrustWeight: -1.5 } as const;
+  run(
+    {
+      name: 'for72 res4',
+      plants: 18000,
+      foragers: 72,
+      predators: 24,
+      o: { ...base, seed: 3 },
+      ...A,
+      predReserveMult: 4,
+    },
+    6000,
+    false,
+  );
+  run(
+    {
+      name: 'for250 res4',
+      plants: 18000,
+      foragers: 250,
+      predators: 24,
+      o: { ...base, seed: 3 },
+      ...A,
+      predReserveMult: 4,
+    },
+    6000,
+    false,
+  );
+  run(
+    {
+      name: 'for500 res4',
+      plants: 18000,
+      foragers: 500,
+      predators: 24,
+      o: { ...base, seed: 3 },
+      ...A,
+      predReserveMult: 4,
+    },
+    6000,
+    false,
+  );
+  run(
+    {
+      name: 'for500 res8',
+      plants: 18000,
+      foragers: 500,
+      predators: 24,
+      o: { ...base, seed: 3 },
+      ...A,
+      predReserveMult: 8,
+    },
+    6000,
+    false,
+  );
 } else {
-  // LOCKED ECOLOGY CONFIG (the ambush+speed-edge balance, derived in DIAG1-4 at ¼ scale, validated
-  // here at full scale): ambush brain (sensorFwd→thrust -1.5 → predator brakes/loiters in prey-scent
-  // instead of charging, sidestepping pursuit-lag) + carnivore speed edge (carnivoreThrustMult 2.0 →
-  // outruns equal-speed prey to reposition) + strike-reach (predReach 1.5) + STRONG prey-scent
-  // (preyDeposit 5 — the dominant lever; lets scattered predators find prey before their seed reserve
-  // runs out) + 4× predator seed reserve (survives the early hunt-establish gauntlet). Counts/plants
-  // are the diagnostic densities ×4 (full arena is 4× area).
-  console.log('=== FULL validation: 2048², 12k ticks, seeds 3/7/42/99 ===');
+  // LOCKED ECOLOGY CONFIG (candidate). The full 2048² rescale target CANNOT host a breeding predator
+  // population — at that sparsity the steady-state contact rate supports at most subsistence (P1, no
+  // reproduction) then extinction. The predator layer imposes a tighter MAX WORLD SIZE than the
+  // forager-only Phase 1 validated. World 1280² is the largest that hosts a robust BREEDING predator
+  // population. Mechanism: ambush brain (sensorFwd→thrust -1.5, brake/loiter in prey-scent, sidestep
+  // pursuit-lag) + carnivore speed edge (carnivoreThrustMult 2.0) + strike-reach (predReach 1.5) +
+  // strong prey-scent (preyDeposit 5) + 4× predator reserve (early gauntlet) + the LATCH (predLatchRange
+  // 2.5 + rest-length tether predLatchStiffness 1.0) which converts a contact into a completed kill —
+  // it ~doubled the predator bloom and turned extinction into coexistence at this scale. Counts hold
+  // the diagnostic density (4290 plants / 17 foragers / 11.4 predators per 1e6 area).
+  console.log('=== FULL validation: 1280², 12k ticks, seeds 3/7/42/99 ===');
   const LOCKED = {
     preyDeposit: 5,
     predDigestRate: 30,
     predDigestEfficiency: 0.7,
     predReach: 1.5,
     crowdDivideCap: 4,
+    predLatchRange: 2.5,
+    predLatchStiffness: 1.0,
+    worldWidth: 1280,
+    worldHeight: 1280,
   };
   const W = { predThrustMult: 2.0, fwdThrustWeight: -1.5, predReserveMult: 4 } as const;
   for (const seed of [3, 7, 42, 99]) {
     run(
       {
         name: `full s${seed}`,
-        plants: 18000,
-        foragers: 72,
-        predators: 48,
+        plants: 7030,
+        foragers: 28,
+        predators: 19,
         o: { ...LOCKED, seed },
         ...W,
       },
