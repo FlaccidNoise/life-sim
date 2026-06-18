@@ -75,9 +75,9 @@ lateral gradient sensor) reading the same `senseX/senseY`. A directional sense o
 - `sense.ts` becomes: for each sensor cell, fill `senseX/senseY` from `senseSource` (SMELL = chemical-
   field gradient as today; HEARING = noise-field gradient; SIGHT = the sight vector below), THEN `think.ts`
   projects per `sensorChannel` unchanged.
-- **Mutation surface:** `senseSource` joins the gene-mutation operators, and the hardcoded
-  `rng.int(6)` channel count in `mutate.ts` is bumped — both gated behind senses-ON so baseline RNG draws
-  stay byte-identical; the senses-ON reproducibility test covers the expanded range.
+- **Mutation surface:** `senseSource` and sight's `sightTarget` join the gene-mutation operators, and the
+  hardcoded `rng.int(6)` channel count in `mutate.ts` is bumped — all gated behind senses-ON so baseline
+  RNG draws stay byte-identical; the senses-ON reproducibility test covers the expanded range.
 
 **SMELL** *(exists; keep)* — central finite-difference of a diffusing chemical field. Source field is
 chosen by the organism's `carnivore` flag exactly as today (carnivore → prey-scent, herbivore → food +
@@ -96,34 +96,32 @@ attenuated only by the one-tick lag + decay + the gradient read (a lone mover's 
 validated headlessly that hearing-only creatures still navigate. `loudnessGain` 0 = OFF (skip
 deposit+step). → **detect motion you can't see**.
 
-**SIGHT** *(new — a dedicated cone query; the one mechanism that legitimately exceeds the 3×3 window)* —
-the sensor looks along the sensor cell's `heading` and finds the **nearest creature** within `viewRange`
-and `viewHalfAngle`.
+**SIGHT** *(new — a dedicated cone query; the one mechanism that legitimately exceeds the 3×3 window)* — a
+general visual sense with **evolvable, type-tuned eyes**. The sensor looks along the sensor cell's
+`heading` and finds the **nearest object of its target class** within `viewRange` and `viewHalfAngle`.
 - **Query:** a dedicated scan over an `(2R+1)×(2R+1)` hash block, `R = ceil(viewRange/cellSize)`, NOT the
   shared 3×3 loop. `viewRange` is a config knob with a **documented cost ceiling** (start `R ≤ 3-4` ≈
   48-60 units, profiled in `scaling-bench` per the `predReach` discipline). The toroidal-seam
   double-count guard (which the 3×3 alias guard does not generalize to) is re-derived for the wider window.
-- **Target:** **diet-routed** — a carnivore's eye reports the nearest *prey flesh of another organism*; a
-  herbivore's eye reports the nearest *carnivore*. (This is a design choice I made — see "Open decision"
-  below; the alternative is an undifferentiated eye.) Classification reads ONLY `cellType` +
-  `organisms.carnivore` (cardinal-safe).
+- **Target class (evolvable, NOT diet-routed):** each sight gene carries a `sightTarget ∈ {FOOD, PREY,
+  PREDATOR}` — FOOD = nearest edible (PHOTO/MEAT) cell, PREY = nearest non-carnivore organism flesh,
+  PREDATOR = nearest carnivore flesh. The genome grows **any mix** of eyes and the brain wires each however
+  it likes; nothing forces what a creature sees. The described behavior — predators chase prey, prey
+  approach plants and flee predators — *emerges from selection*: a predator that wastes an eye on FOOD or
+  never wires its PREY-eye to pursuit is out-competed; likewise a prey that stares at predators without
+  fleeing. Classification reads ONLY `f.cellType[j]` + `organisms.carnivore[f.organismId[j]]`
+  (cardinal-safe). The creature's own organism cells are excluded from the scan. `sightTarget` joins the
+  evolvable gene attributes (gated behind senses-ON like `senseSource`).
 - **Selection & ties:** nearest by strict `<` on squared toroidal distance (`wrapDelta`); exact ties (which
   occur on a torus) resolve to first-in-canonical-scan-order (lowest bucket, then ascending sorted slot).
   Documented in `READS-WRITES.md`.
 - **Output:** `senseX/senseY = unitDirectionToTarget × proximity`, `proximity = clamp((viewRange − dist)/
-  viewRange, 0, 1)`; **zero vector** when no creature is in cone (then FWD/LAT project to 0).
+  viewRange, 0, 1)`; **zero vector** when no target is in cone (then FWD/LAT project to 0).
 - **Rocks occlude** sight — but this is **net-new geometry** (segment-from-eye-to-target vs each rock
   circle: closest-point-on-segment-to-center < rockRadius, over rocks in the corridor via the rock grid),
   so it's a **separate OFF-able sub-task within Phase 3**: the first sight build lands *without* occlusion,
-  then occlusion is added incrementally (reused scratch, canonical order, allocation-free). → **see
-  creatures to chase or flee**.
-
-**Open decision for you:** I made sight **diet-routed** (carnivore sees prey, prey sees predators) — it
-matches the smell precedent and gives immediate chase/flee. The alternative is an **undifferentiated eye**
-(reports the nearest creature of any type; the brain must learn friend-vs-foe, or you wire two eyes, one
-per target class). Diet-routed is simpler and more legible; undifferentiated is more "let evolution sort
-it." I recommend diet-routed for v1 with undifferentiated as a deferred knob — flag if you'd rather start
-undifferentiated.
+  then occlusion is added incrementally (reused scratch, canonical order, allocation-free). → **see what's
+  right there** (plants or creatures) — short-range, line-of-sight, complementary to smell's long-range trail.
 
 ### 2. The world — drifting food zones + longevity economy
 
@@ -200,8 +198,8 @@ toward K. Numbers derived by the headless feel-probe, not guessed.
 
 - **Sub-project 2:** in-life unsupervised (Hebbian) plasticity + Lamarckian inheritance, reward-free.
 - Custom/destructible rocks and rock-sheltered **safe habitats** (owner wants this *later*).
-- Prey-sees-prey **schooling**, hearing **diet-routing**, per-gene smell field-selection, body-occlusion
-  sight, undifferentiated-sight (the alt above) — deferred knobs.
+- Prey-sees-prey **schooling**, hearing target-tuning, per-gene smell field-selection, body-occlusion
+  sight — deferred knobs.
 - M8 parallelism. (Inter-creature signaling/communication was not discussed and is not planned.)
 
 ## Open tuning questions (derived headlessly, not guessed)
