@@ -27,6 +27,8 @@ function makeCellArrays(n: number) {
     flags: new Uint8Array(n),
     generation: new Uint32Array(n),
     localDensity: new Uint16Array(n),
+    latchPrey: new Uint32Array(n),
+    latchCell: new Uint32Array(n),
   };
 }
 
@@ -76,10 +78,14 @@ describe('applyCurrent', () => {
     const cf = new CurrentField(8, 8, 800, 800);
     cf.init(new Rng(10), 6, 3, 1);
     const f = makeCellArrays(4);
-    f.posX[0] = 5; f.posY[0] = 5; // near origin
-    f.posX[1] = 795; f.posY[1] = 5; // near right edge
-    f.posX[2] = 5; f.posY[2] = 795; // near bottom edge
-    f.posX[3] = 795; f.posY[3] = 795; // near corner
+    f.posX[0] = 5;
+    f.posY[0] = 5; // near origin
+    f.posX[1] = 795;
+    f.posY[1] = 5; // near right edge
+    f.posX[2] = 5;
+    f.posY[2] = 795; // near bottom edge
+    f.posX[3] = 795;
+    f.posY[3] = 795; // near corner
     f.forceX.fill(0);
     f.forceY.fill(0);
     const live = new Uint32Array([0, 1, 2, 3]);

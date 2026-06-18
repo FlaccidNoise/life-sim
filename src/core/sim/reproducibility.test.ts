@@ -157,7 +157,7 @@ describe('reproducibility — M6 genome reproduction + mutation', () => {
       w.config.worldWidth,
       w.config.worldHeight,
       w.instantiateScratch,
-    w.glowEffectors,
+      w.glowEffectors,
     );
     const f = w.cells.fields;
     for (let i = 0; i < w.cells.capacity; i++) if (f.organismId[i] === org) f.energy[i] = energy;
@@ -245,7 +245,7 @@ describe('reproducibility — M7 mutation>0 with births AND deaths', () => {
         cfg.worldWidth,
         cfg.worldHeight,
         w.instantiateScratch,
-      w.glowEffectors,
+        w.glowEffectors,
       );
     }
     let births = 0;
@@ -388,6 +388,7 @@ describe('reproducibility — predation + fleeing (3-trophic ecology) ON', () =>
         cfg.worldWidth,
         cfg.worldHeight,
         w.instantiateScratch,
+        w.glowEffectors,
       );
     };
     // Foragers and predators interleaved in the same cluster → fast, deterministic first contact.
