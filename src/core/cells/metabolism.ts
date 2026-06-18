@@ -44,6 +44,10 @@ export interface EnvEffects {
  *   up to predDigestRate from the prey cell → the prey organism's aggregate falls → it dies atomically
  *   via the existing organism-death path (NO per-cell death; that's deferred). The "different organism"
  *   test is structural (organismId), not lineage. predDigestRate=0 keeps this branch a no-op.
+ *   STRIKE-REACH: the bite range is predReach·(ri+rj), not just contact — a gradient-following
+ *   predator perpetually lags equal-speed mobile prey by a cell or two, so contact-only predation
+ *   nets ~zero bites; reach converts the near-miss into a kill. predReach MUST keep predReach·(ri+rj)
+ *   within the 3×3 hash window (≤ ~1.5·cellSize) or distant prey are missed; default 1 = contact-only.
  * - All living cells pay basalCost · area + moveCost · thrust²; SENSOR/NEURON/MOVER
  *   additionally pay neuralCost per tick (the brain isn't free, §4.5; per-synapse cost
  *   deferred). MEAT loses meatDecay per tick.
@@ -68,6 +72,7 @@ export function metabolize(
   env: EnvEffects,
   predDigestRate: number,
   predDigestEfficiency: number,
+  predReach: number,
 ): void {
   const { cols, rows, width, height, sorted, bucketStart } = hash;
 
@@ -148,8 +153,8 @@ export function metabolize(
             if (!isFlesh(f.cellType[j]!)) continue; // flesh only: not plants/corpses/other predators
             const ddx = wrapDelta(xi - f.posX[j]!, width);
             const ddy = wrapDelta(yi - f.posY[j]!, height);
-            const rsum = ri + f.radius[j]!;
-            if (ddx * ddx + ddy * ddy < rsum * rsum) {
+            const reach = (ri + f.radius[j]!) * predReach; // strike-reach: bite from beyond contact
+            if (ddx * ddx + ddy * ddy < reach * reach) {
               const avail = f.energy[j]!;
               const extracted = avail < predDigestRate ? avail : predDigestRate;
               if (extracted > 0) {
