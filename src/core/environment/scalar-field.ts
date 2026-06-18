@@ -119,8 +119,57 @@ export class ScalarField {
   }
 
   /**
+   * One shared sum-of-Gaussians accumulation + global [lo,hi] normalization, in row-major
+   * order. Called by BOTH seedPatches (init) and (later) the drift cap recompute, so there is
+   * exactly ONE accumulation/normalization order → no float-non-associativity drift between the
+   * seed and the amplitude-driven recompute. `centerX/centerY` are grid coords; `radius` is
+   * per-patch radius in grid cells (sigma² = 2·radius²); `amp` is per-patch amplitude. Clears
+   * `out` first; allocates nothing.
+   *
+   * Per-patch inputs are Float64Array so the center/amp/radius values keep the full f64
+   * precision of the rng draws — byte-identical to the original seedPatches, which held them
+   * as f64 `const` locals. (Storing them in Float32Array would round the centers to f32 and
+   * shift the resulting field by ~1 ulp across most cells; see scalar-field.test.ts.)
+   */
+  protected gaussianSum(
+    centerX: Float64Array,
+    centerY: Float64Array,
+    radius: Float64Array,
+    amp: Float64Array,
+    patchCount: number,
+    out: Float32Array,
+    lo: number,
+    hi: number,
+  ): void {
+    const { cols, rows } = this;
+    out.fill(0);
+    for (let p = 0; p < patchCount; p++) {
+      const pcx = centerX[p]!;
+      const pcy = centerY[p]!;
+      const a = amp[p]!;
+      const sigma2 = 2 * radius[p]! * radius[p]!;
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          let dx = Math.abs(c - pcx);
+          if (dx > cols / 2) dx = cols - dx;
+          let dy = Math.abs(r - pcy);
+          if (dy > rows / 2) dy = rows - dy;
+          out[r * cols + c]! += a * Math.exp(-(dx * dx + dy * dy) / sigma2);
+        }
+      }
+    }
+    let max = 0;
+    for (const v of out) if (v > max) max = v;
+    const range = hi - lo;
+    const scale = max > 0 ? range / max : 0;
+    for (let i = 0; i < out.length; i++) out[i] = out[i]! * scale + lo;
+  }
+
+  /**
    * Patchy seeded init shared by the climate fields: sum of `patchCount` random toroidal
-   * Gaussian bumps, normalized to [lo, hi]. Writes both the live buffer and `cap`.
+   * Gaussian bumps, normalized to [lo, hi]. Writes both the live buffer and `cap`. Draws
+   * pcx/pcy/amp per patch (UNCHANGED draw order + count → byte-identical seed), then defers
+   * the accumulation/normalization to the shared gaussianSum helper.
    */
   protected seedPatches(
     rng: { range(min: number, max: number): number },
@@ -130,32 +179,18 @@ export class ScalarField {
     lo: number,
     hi: number,
   ): void {
-    const { cols, rows } = this;
-    const buf = this.a;
-    buf.fill(0);
-    const sigma2 = 2 * patchRadius * patchRadius;
+    const cx = new Float64Array(patchCount);
+    const cy = new Float64Array(patchCount);
+    const rad = new Float64Array(patchCount);
+    const amp = new Float64Array(patchCount);
     for (let p = 0; p < patchCount; p++) {
-      const pcx = rng.range(0, cols);
-      const pcy = rng.range(0, rows);
-      const amp = rng.range(0.5, 1);
-      for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-          let dx = Math.abs(c - pcx);
-          if (dx > cols / 2) dx = cols - dx;
-          let dy = Math.abs(r - pcy);
-          if (dy > rows / 2) dy = rows - dy;
-          buf[r * cols + c]! += amp * Math.exp(-(dx * dx + dy * dy) / sigma2);
-        }
-      }
+      cx[p] = rng.range(0, this.cols);
+      cy[p] = rng.range(0, this.rows);
+      amp[p] = rng.range(0.5, 1);
+      rad[p] = patchRadius;
     }
-    let max = 0;
-    for (const v of buf) if (v > max) max = v;
-    const range = hi - lo;
-    const scale = max > 0 ? range / max : 0;
-    for (let i = 0; i < buf.length; i++) {
-      const v = buf[i]! * scale + lo;
-      buf[i] = v;
-      cap[i] = v;
-    }
+    const buf = this.a;
+    this.gaussianSum(cx, cy, rad, amp, patchCount, buf, lo, hi);
+    for (let i = 0; i < buf.length; i++) cap[i] = buf[i]!;
   }
 }
