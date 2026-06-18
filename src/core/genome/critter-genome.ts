@@ -218,6 +218,20 @@ export function buildForagerGenome(cellRadius = 6, initialEnergy = 100): Genome 
 }
 
 /**
+ * A PREDATOR: the SAME body plan + brain as a forager, but its leading mouth (gene 5) is a PREDATOR
+ * (carnivore) cell instead of DIGESTIVE. At instantiate the PREDATOR mouth flags the organism
+ * carnivore → its SENSORs route to the prey-scent field (it hunts foragers) and it is excluded from
+ * prey-scent deposit. It eats forager flesh via the predation branch of metabolize. DRY over
+ * buildForagerGenome — identical genome, one gene's cellType overridden. Evolves under the same
+ * economic selection (mutation may even flip the mouth back to herbivore — diet can drift, lineage-blind).
+ */
+export function buildPredatorGenome(cellRadius = 6, initialEnergy = 100): Genome {
+  const g = buildForagerGenome(cellRadius, initialEnergy);
+  g.genes[5] = { ...g.genes[5]!, cellType: CellType.PREDATOR };
+  return g;
+}
+
+/**
  * The forager handicapped at TURNING TOWARD FOOD: the `sensorLat→turn` connection weight
  * (preGene 2 → postGene 3) is knocked from the hand-tuned 1.5 down to `weight` (default 0.2),
  * while `sensorFwd→thrust` is left at the fit 1.5. A forager that can't steer toward off-axis

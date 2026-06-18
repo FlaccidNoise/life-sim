@@ -6,6 +6,7 @@ import {
   buildNightForagerGenome,
   buildGlowForagerGenome,
   buildToxinAvoiderGenome,
+  buildPredatorGenome,
 } from './critter-genome';
 import { develop } from './develop';
 import { CellType } from '../cells/types';
@@ -117,6 +118,29 @@ describe('buildForagerGenome — a viable brain-driven forager (sense→move→e
   it('is mortal: modest seed energy (no 5000 reserve) so it must forage to live', () => {
     expect(body.totalEnergy).toBeCloseTo(6 * 100, 1);
     expect(body.mass.every((m) => m === 2)).toBe(true);
+  });
+});
+
+describe('buildPredatorGenome — a forager body with a carnivore mouth', () => {
+  const body = develop(buildPredatorGenome(6, 100), 256, 16);
+
+  it('mirrors the forager body but the leading mouth is a PREDATOR cell', () => {
+    expect(body.count).toBe(6);
+    expect(body.cellType).toEqual([
+      CellType.MOVER,
+      CellType.SENSOR,
+      CellType.SENSOR,
+      CellType.NEURON,
+      CellType.NEURON,
+      CellType.PREDATOR, // the only change from the forager
+    ]);
+  });
+
+  it('keeps the same brain + motor wiring as the forager (only diet differs)', () => {
+    const forager = develop(buildForagerGenome(6, 100), 256, 16);
+    expect(body.synapses).toEqual(forager.synapses);
+    expect(body.motors).toEqual(forager.motors);
+    expect(body.sensorChannel).toEqual(forager.sensorChannel);
   });
 });
 
