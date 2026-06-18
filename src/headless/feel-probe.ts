@@ -170,7 +170,46 @@ function run(t: Trial, ticks: number, world1024: boolean): void {
 
 const mode = process.argv[2] ?? 'full';
 
-if (mode === 'diag') {
+// LOCKED Phase-3 ecology config (validated 2048²/12k/4-seed). Shared by FULL and FLEE modes.
+const LOCKED = {
+  basalCost: 0.004,
+  preyDeposit: 5,
+  predDigestRate: 40,
+  predDigestEfficiency: 0.9,
+  predReach: 1.5,
+  crowdDivideCap: 4,
+  predLatchRange: 2.5,
+  predLatchStiffness: 1.0,
+  predScentDeposit: 5, // P4: carnivore flesh emits flee-scent (mirrors preyDeposit)
+  predFleeWeight: 1.0, // P4: foragers flee down the predScent gradient — deepest evasion that still holds predators
+  worldWidth: 2048,
+  worldHeight: 2048,
+};
+const PRED = { predThrustMult: 2.0, fwdThrustWeight: -1.5, predReserveMult: 8 } as const;
+
+if (mode === 'flee') {
+  // P4 SWEEP: does prey fleeing deepen the arms race WITHOUT destabilizing the Phase-3 balance?
+  // Hold the locked config; sweep predFleeWeight (0 = Phase-3 baseline). predScentDeposit mirrors
+  // preyDeposit (5). 8k ticks, seeds 3 & 42 (the representative pair). GATE: all 3 levels survive,
+  // ideally MORE boom-bust (predator amplitude predMax−predMin, forager swing) than the damped baseline.
+  console.log('=== FLEE sweep: 2048², 8k ticks, seeds 3/42, predScentDeposit 5 ===');
+  for (const flee of [0, 0.5, 1.0, 2.0]) {
+    for (const seed of [3, 42]) {
+      run(
+        {
+          name: `flee${flee} s${seed}`,
+          plants: 18000,
+          foragers: 250,
+          predators: 24,
+          o: { ...LOCKED, seed, predScentDeposit: flee > 0 ? 5 : 0, predFleeWeight: flee },
+          ...PRED,
+        },
+        8000,
+        false,
+      );
+    }
+  }
+} else if (mode === 'diag') {
   // DIAG12: push BIGGER than 2048² (Josh wants even bigger). The longevity config sustains predators at
   // 2048²; does it scale up? Hold the 2048² density (plants 18000 / foragers 250 / predators 24 per
   // 4.19e6 area) and the longevity economy, sweep world up to 3072². 8k ticks, seed 3.
@@ -226,19 +265,6 @@ if (mode === 'diag') {
   // unchanged. Prey pre-bloomed (250 foragers) as a richer one-time seed (not a top-up). CAVEAT: a damped
   // equilibrium (settles to a stable point), not dramatic boom-bust — predators do bloom (25-30) then settle.
   console.log('=== FULL validation: 2048² LONGEVITY, 12k ticks, seeds 3/7/42/99 ===');
-  const LOCKED = {
-    basalCost: 0.004,
-    preyDeposit: 5,
-    predDigestRate: 40,
-    predDigestEfficiency: 0.9,
-    predReach: 1.5,
-    crowdDivideCap: 4,
-    predLatchRange: 2.5,
-    predLatchStiffness: 1.0,
-    worldWidth: 2048,
-    worldHeight: 2048,
-  };
-  const W = { predThrustMult: 2.0, fwdThrustWeight: -1.5, predReserveMult: 8 } as const;
   for (const seed of [3, 7, 42, 99]) {
     run(
       {
@@ -247,7 +273,7 @@ if (mode === 'diag') {
         foragers: 250,
         predators: 24,
         o: { ...LOCKED, seed },
-        ...W,
+        ...PRED,
       },
       12000,
       false,
