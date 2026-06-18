@@ -103,7 +103,7 @@ function run(t: Trial): void {
   const predMass = t.predMass ?? 2;
   const mouthR = t.mouthR ?? world.config.cellRadius;
   for (let k = 0; k < t.predators; k++) {
-    const g = buildPredatorGenome(world.config.cellRadius, 200); // double seed reserve
+    const g = buildPredatorGenome(world.config.cellRadius, FORAGER_INIT_E * 2); // 2× forager seed reserve (scaled)
     g.genes = g.genes.map((gene) => ({ ...gene, mass: predMass })); // lighter → faster (speed edge)
     g.genes[5] = { ...g.genes[5]!, radius: mouthR }; // bigger maw → larger contact range to snag prey
     spawn(
@@ -141,25 +141,46 @@ function run(t: Trial): void {
 }
 
 console.log(
-  '=== PHASE 1: rescale (r4, 2048², scaled energy) — foragers self-sustain + de-jam? ===',
+  '=== PHASE 2.2: strike-reach lever — predReach 1.5 (reach 12 @ r4, hash-window cap) ===',
 );
-// Predation OFF (predators 0, preyDeposit 0). Gate: foragers self-sustain + de-jam + div climbs, multi-seed.
-run({ name: 'r4 seed3', plants: 18000, foragers: 70, predators: 0, o: { seed: 3 } });
-run({ name: 'r4 seed7', plants: 18000, foragers: 70, predators: 0, o: { seed: 7 } });
-run({ name: 'r4 seed42', plants: 18000, foragers: 70, predators: 0, o: { seed: 42 } });
-// cap/threshold variants in case foragers struggle at the smaller scale.
+// reach converts the perpetual ~9-unit pursuit near-miss into a bite. Sweep density + speed edge.
+const P = { preyDeposit: 3, predDigestRate: 30, predReach: 1.5 };
+run({ name: 'reach1.5 cap2 s3', plants: 18000, foragers: 70, predators: 30, o: { seed: 3, ...P } });
 run({
-  name: 'r4 cap3 s3',
+  name: 'reach1.5 cap4 s3',
   plants: 18000,
   foragers: 70,
-  predators: 0,
-  o: { seed: 3, crowdDivideCap: 3 },
+  predators: 30,
+  o: { seed: 3, crowdDivideCap: 4, ...P },
 });
 run({
-  name: 'r4 repro220 s3',
+  name: 'reach1.5 cap6 s3',
+  plants: 20000,
+  foragers: 70,
+  predators: 30,
+  o: { seed: 3, crowdDivideCap: 6, ...P },
+});
+run({
+  name: 'reach1.5 cap4 m1.3 s3',
   plants: 18000,
   foragers: 70,
-  predators: 0,
-  o: { seed: 3, reproThreshold: 220 },
+  predators: 30,
+  o: { seed: 3, crowdDivideCap: 4, ...P },
+  predMass: 1.3,
 });
-run({ name: 'r4 seed12k s3', plants: 12000, foragers: 70, predators: 0, o: { seed: 3 } });
+run({
+  name: 'reach1.5 cap4 m1.3 s7',
+  plants: 18000,
+  foragers: 70,
+  predators: 30,
+  o: { seed: 7, crowdDivideCap: 4, ...P },
+  predMass: 1.3,
+});
+run({
+  name: 'reach1.5 cap4 m1.3 s42',
+  plants: 18000,
+  foragers: 70,
+  predators: 30,
+  o: { seed: 42, crowdDivideCap: 4, ...P },
+  predMass: 1.3,
+});

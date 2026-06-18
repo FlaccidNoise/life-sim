@@ -94,6 +94,10 @@ export interface Config {
   predDigestRate: number;
   /** Fraction of drained prey energy the predator keeps (<1). */
   predDigestEfficiency: number;
+  /** Predator strike-reach as a multiple of contact (ri+rj). A gradient-following predator lags
+   *  equal-speed mobile prey, so contact-only (1) nets ~zero bites; >1 lets it bite from just beyond
+   *  contact. MUST keep predReach·(ri+rj) within the 3×3 hash window (≤ ~1.5·cellSize). Default 1. */
+  predReach: number;
 
   // Sensing & movement (§4.4). All live knobs.
   /** Gradient magnitude below which a mover coasts at cruiseThrust instead of steering. */
@@ -339,6 +343,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     preyDeposit: 0, // OFF by default (no predation) — the verified M2-M7 economy is byte-identical; the demo opts in
     predDigestRate: 40, // a predator BITE drains flesh fast (vs digestRate 7 for stripping a plant) so a latched predator kills a ~600-energy forager in a sustained chase, not 50 ticks
     predDigestEfficiency: 0.7, // same conversion loss as herbivore digestion
+    predReach: 1, // contact-only by default (no-op); the demo raises it so hunters can land bites on mobile prey
 
     senseThreshold: 1e-4,
     turnRate: 0.25, // ~14°/tick — visibly curves toward food without snapping

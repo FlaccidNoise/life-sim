@@ -619,6 +619,7 @@ export class World {
       env,
       cfg.predDigestRate,
       cfg.predDigestEfficiency,
+      cfg.predReach,
     );
 
     // M5: intra-organism energy transfer toward needier cells (§4.5).
