@@ -96,7 +96,7 @@ describe('PREDATOR type (ecology pass)', () => {
     expect(isFlesh(CellType.MOVER)).toBe(true);
     expect(isFlesh(CellType.PHOTO)).toBe(false); // plants are the herbivore niche, not flesh
     expect(isFlesh(CellType.MEAT)).toBe(false); // corpses are scavenger food
-    expect(isFlesh(CellType.PREDATOR)).toBe(false); // predators don't cannibalize each other
+    expect(isFlesh(CellType.PREDATOR)).toBe(false); // the mouth cell is never prey (body cells still are)
   });
 
   it('PREDATOR is NOT edible by herbivore mouths (it is not PHOTO/MEAT)', () => {

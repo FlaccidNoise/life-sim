@@ -165,7 +165,7 @@ export function metabolize(
             if (j === i) continue;
             const jOrg = f.organismId[j]!;
             if (jOrg === myOrg) continue; // never eat own body
-            if (!isFlesh(f.cellType[j]!)) continue; // flesh only: not plants/corpses/other predators
+            if (!isFlesh(f.cellType[j]!)) continue; // flesh only: not plants/corpses/predator-mouths
             if (f.energy[j]! <= 0) continue; // drained-empty cell: nothing to take this tick
             const rsum = ri + f.radius[j]!;
             const ddx = wrapDelta(xi - f.posX[j]!, width);
