@@ -4,7 +4,8 @@ import { type CellArrays } from '../memory/cell-store';
 /**
  * Apply current drift force to each live cell. For each cell, sample the current
  * vector at its position and add `strength * (vx, vy)` to its force accumulator.
- * Allocation-free — iterates the compact live list and uses `sampleInto`.
+ * Allocation-free — iterates the compact live list and reads the field's `sample`
+ * scratch (currentVx/currentVy) inline.
  *
  * Cells in a current get pushed; the integrator + drag turn the drift into a
  * net displacement. Down-current locomotion is cheaper, up-current harder.
