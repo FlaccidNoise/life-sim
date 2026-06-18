@@ -7,6 +7,9 @@ import { FoodOverlay } from '../render/food-overlay';
 import { BondOverlay } from '../render/bond-overlay';
 import { RockOverlay } from '../render/rock-overlay';
 import { TempOverlay } from '../render/temp-overlay';
+import { GlowOverlay } from '../render/glow-overlay';
+import { ToxinOverlay } from '../render/toxin-overlay';
+import { CurrentOverlay } from '../render/current-overlay';
 import { lightMultiplier } from '../core/environment/cycle';
 import { TelemetryDashboard } from './telemetry';
 import { inspectAt } from './inspect';
@@ -20,6 +23,9 @@ import {
   buildCritterGenome,
   buildAutotrophGenome,
   buildForagerGenome,
+  buildNightForagerGenome,
+  buildGlowForagerGenome,
+  buildToxinAvoiderGenome,
 } from '../core/genome/critter-genome';
 import { CellType } from '../core/cells/types';
 import { cloneGenome, type Genome } from '../core/genome/genome';
@@ -54,13 +60,16 @@ const config = defaultConfig({
   // and collapses the food web. Found via headless/feel-probe.ts.
   crowdDivideCap: 2,
   crowdGridSize: 32,
-  reproThreshold: 600,
+  // Economy RETUNED for environmental pressures (headless/env-feel-probe.ts sweep). The env
+  // features (day/night dimming photosynthesis, temp basal penalty) raise forager upkeep, so the
+  // pre-env M7 knobs starved them post-boom. Cheaper basal + lower repro + bigger seed reserve
+  // keeps the predator-prey cycle breathing across seeds 3/7/42 under the full env load below.
+  reproThreshold: 500,
   reproParentFloor: 120,
   organismDeathFloor: 0, // an unfed forager starves to MEAT, feeding the next generation
-  basalCost: 0.012, // slightly cheaper upkeep so foragers survive the SPARSER (de-jammed) food and
-  // establish across seeds — at baseline 0.015 the de-jammed dish starved them on unlucky seeds.
-  cruiseThrust: 1, // friskier roam (was 0.5) so a searching forager visibly explores the open water
-  maxThrust: 8, // a little faster top speed (was 6) — more mobile, more watchable
+  basalCost: 0.008, // cheaper upkeep offsets the temp comfort penalty + dimmer night photosynthesis
+  cruiseThrust: 1, // friskier roam so a searching forager visibly explores the open water
+  maxThrust: 8,
   // M7: mutation ON so the forager population ADAPTS and DIVERSIFIES live (library defaults stay 0).
   // Tuned-safe: explores steering weights/params without collapsing the predator-prey cycle.
   mutationWeightRate: 0.25,
@@ -69,10 +78,12 @@ const config = defaultConfig({
   mutationParamSigma: 0.1,
   // One structural operator, ON small, gives OPEN-ENDED emergence: weight/param mutation only
   // tunes a FIXED body plan (genotypic diversity stays 0), so changeType lets body plans actually
-  // diverge → the `geno-div` HUD readout climbs and holds. Tuned at 0.015 via headless sweep:
-  // preserves the boom-bust early, zero genome bloat (changeType adds no cells). Higher (0.02)
-  // locks the population; combos with add/delete-gene EXTINCT it. Other structural rates stay 0.
+  // diverge → the `geno-div` HUD readout climbs and holds. Tuned at 0.015 via headless sweep.
   mutationChangeTypeRate: 0.015,
+  // Sensor-channel mutation: lets evolution DISCOVER the new env sensors (AMBIENT_LIGHT/TEMP/TOXIN/
+  // GLOW). Small rate so the seeded variants (below) don't instantly lose their channels but new
+  // lineages can acquire them. paramRate also nudges gene.glowGain so NEURONs can discover glow.
+  mutationSensorChannelRate: 0.01,
   // ── Environmental features (10) ──
   // Gentler day/night: night dims to ~0.5 so plants keep trickle-producing.
   dayNightDepth: 0.5,
@@ -85,15 +96,40 @@ const config = defaultConfig({
   rockRadiusMax: 20,
   rockRepulsion: 4,
   rockGridSize: 64,
-  // Temperature: patchy heatmap with gentle basal penalty.
+  // Temperature: patchy heatmap. Penalty GENTLED to 0.25 (probe showed 0.5 was the dominant
+  // forager stressor — crashed the boom; 0.25 keeps it a selection pressure without starving).
   tempPatchCount: 12,
   tempMin: 0,
   tempMax: 1,
   tempComfortLow: 0.3,
   tempComfortHigh: 0.7,
-  tempColdPenalty: 0.5,
-  tempHeatPenalty: 0.5,
-  // Glow / toxin / current OFF for now.
+  tempColdPenalty: 0.25,
+  tempHeatPenalty: 0.25,
+  // Bioluminescence ON: NEURON glow effectors emit into the GlowField (warm additive overlay at
+  // night). glowCost is small so glowing is affordable; the seeded glow-foragers pay it actively.
+  glowGridCols: 32,
+  glowGridRows: 32,
+  glowDiffuse: 0.2,
+  glowDecay: 0.05,
+  glowGain: 1,
+  glowCost: 0.02,
+  // Toxin ON, GENTLE: accumulates around decaying MEAT (corpse fields) and lightly damages cells.
+  // At toxinDamage 0.5 the probe EXTINCTS foragers by tick 679; 0.04 is a mild pressure that the
+  // toxin-avoider variant can exploit without collapsing the ecosystem.
+  toxinGridCols: 64,
+  toxinGridRows: 64,
+  toxinDiffuse: 0.2,
+  toxinDecay: 0.03,
+  toxinDamage: 0.04,
+  toxinDepositOnMeatDecay: 0.1,
+  // Current ON: a slow vector drift. The probe showed strength 2 SUSTAINS births (drift pushes
+  // foragers into food patches); a mild selection pressure for current-aware movement.
+  currentGridCols: 32,
+  currentGridRows: 32,
+  currentPatchCount: 16,
+  currentPatchRadius: 6,
+  currentStrength: 2,
+  currentEvolveRate: 0.05,
 });
 const world = new World(config);
 // ~6500 PHOTO plants ≈ the crowdDivideCap equilibrium density, so food is plentiful from tick 0
@@ -104,19 +140,30 @@ world.seedLife(6500);
 function developInto(genome: Genome, x: number, y: number, heading: number): number {
   return world.spawnOrganism(genome, x, y, heading);
 }
-// The ACTIVE population: brain-driven FORAGERS (MOVER+SENSOR+NEURON+DIGESTIVE) scattered across
-// the dish. They sense the food gradient, swim to plants, eat them, reproduce when fed, and
-// starve→MEAT when they can't — a multicellular predator-prey cycle you can watch. Each forager
-// is itself a legible brain (2 sensors → 2 motor-neurons → motor), so the brain inspector (B)
-// shows a LIVE foraging network. The §8 encoding-hero critter lives in tests + `sim.spawnCritter()`.
+// The ACTIVE population: a MIX of brain-driven foragers seeded across the dish. The base forager
+// (sense→steer→thrust loop) is the majority; the three env-variant foragers exercise the new
+// sensor channels + glow so the features are ecologically live, not just wired:
+//   • night-forager  — AMBIENT_LIGHT sensor → nocturnal thrust modulation
+//   • glow-forager   — turn-neuron glows + GLOW sensor → signaling/following
+//   • toxin-avoider  — TOXIN sensor → steers away from corpse-field toxin
+// All share the foraging loop so they can eat; mutation (sensorChannelRate>0) lets lineages
+// acquire/lose these channels over generations. Each is a legible brain (brain inspector B).
 let firstForagerOrg = -1;
+const spawnX = (k: number) => world.config.worldWidth * (0.1 + (0.8 * ((k * 7) % 20)) / 20);
+const spawnY = (k: number) => world.config.worldHeight * (0.1 + (0.8 * ((k * 13) % 20)) / 20);
+const spawnH = (k: number) => (k * 2.39996) % (Math.PI * 2);
 for (let k = 0; k < 40; k++) {
-  const org = developInto(
-    buildForagerGenome(world.config.cellRadius),
-    world.config.worldWidth * (0.1 + (0.8 * ((k * 7) % 20)) / 20),
-    world.config.worldHeight * (0.1 + (0.8 * ((k * 13) % 20)) / 20),
-    (k * 2.39996) % (Math.PI * 2),
-  );
+  // 40 foragers: 28 base + 4 each of the three env variants, interleaved so they're scattered.
+  const r = k % 10;
+  const genome =
+    r < 7
+      ? buildForagerGenome(world.config.cellRadius, 150)
+      : r === 7
+        ? buildNightForagerGenome(world.config.cellRadius, 150)
+        : r === 8
+          ? buildGlowForagerGenome(world.config.cellRadius, 150)
+          : buildToxinAvoiderGenome(world.config.cellRadius, 150);
+  const org = developInto(genome, spawnX(k), spawnY(k), spawnH(k));
   if (k === 0) firstForagerOrg = org;
 }
 
@@ -157,6 +204,22 @@ let showRocks = true;
 // Temperature heatmap overlay (toggled with `T`): WebGL quad, shares GL context.
 const tempOverlay = new TempOverlay(renderer.gl, world.temperature);
 let showTemp = false;
+
+// Bioluminescence heatmap (toggled with `N`): WebGL ADDITIVE quad — warm glow over the scene,
+// most legible at night. Drawn AFTER the points so it sits on top of cells.
+const glowOverlay = new GlowOverlay(renderer.gl, world.glow);
+let showGlow = true;
+const GLOW_DISPLAY_MAX = 4; // smell scale for the heatmap; tune to taste
+
+// Toxin heatmap (toggled with `X`): WebGL alpha-scaled quad — highlights corpse-field toxin.
+const toxinOverlay = new ToxinOverlay(renderer.gl, world.toxin);
+let showToxin = false;
+const TOXIN_DISPLAY_MAX = 2;
+
+// Current arrows overlay (toggled with `U`): canvas-2D vector arrows.
+const currentCanvas = document.getElementById('current') as HTMLCanvasElement;
+const currentOverlay = new CurrentOverlay(currentCanvas);
+let showCurrent = false;
 
 // Night dimming overlay div.
 const nightDiv = document.getElementById('night') as HTMLElement;
@@ -286,12 +349,21 @@ function drawScene(alpha: number): void {
   if (showTemp) {
     tempOverlay.render(camera, world.temperature, config.tempMin, config.tempMax, canvas.width, canvas.height);
   }
+  if (showToxin) {
+    toxinOverlay.render(camera, world.toxin, TOXIN_DISPLAY_MAX, canvas.width, canvas.height);
+  }
   renderer.render(world, camera, prevX, prevY, prevGen, alpha);
   if (showRocks) {
     rockOverlay.render(world, camera);
   }
+  if (showCurrent) {
+    currentOverlay.render(world, camera);
+  }
   if (showBonds) {
     bondOverlay.render(world, camera);
+  }
+  if (showGlow) {
+    glowOverlay.render(camera, world.glow, GLOW_DISPLAY_MAX, canvas.width, canvas.height);
   }
   if (showBrain) {
     // Scope to the followed cell's organism if it's neural, else the first live forager brain.
@@ -320,6 +392,7 @@ function fit(initial: boolean): void {
   renderer.resize(canvas.width, canvas.height);
   bondOverlay.resize(canvas.width, canvas.height);
   rockOverlay.resize(canvas.width, canvas.height);
+  currentOverlay.resize(canvas.width, canvas.height);
   if (initial) camera.scale = Math.min(canvas.width, canvas.height) / DEFAULT_VIEW_SPAN;
 }
 window.addEventListener('resize', () => fit(false));
@@ -440,6 +513,13 @@ window.addEventListener('keydown', (e) => {
     rocksCanvas.style.display = showRocks ? 'block' : 'none';
   } else if (e.key === 't' || e.key === 'T') {
     showTemp = !showTemp;
+  } else if (e.key === 'n' || e.key === 'N') {
+    showGlow = !showGlow;
+  } else if (e.key === 'x' || e.key === 'X') {
+    showToxin = !showToxin;
+  } else if (e.key === 'u' || e.key === 'U') {
+    showCurrent = !showCurrent;
+    currentCanvas.style.display = showCurrent ? 'block' : 'none';
   } else if (e.key === 'c' || e.key === 'C' || e.key === 'Escape') {
     followId = -1;
   }
@@ -462,7 +542,7 @@ function updateHud(): void {
     `   ·   ⌀energy ${m.meanEnergy.toFixed(0)}  ·  diversity ${m.diversity.toFixed(3)}\n` +
     `evolve: geno-div ${m.genotypicDiversity.toFixed(3)}  ·  gen ${m.maxGeneration}  ·  ⌀genome ${m.meanGenomeSize.toFixed(1)} cells/org ${m.meanCellsPerOrganism.toFixed(1)}\n` +
     `brain: ${net.liveNeuronCount} neurons · ${net.liveSynapseCount} synapses` +
-    `   ·   light ${showLight ? 'on' : 'off'}  smell ${showFood ? 'on' : 'off'}  bonds ${showBonds ? 'on' : 'off'}  rocks ${showRocks ? 'on' : 'off'}  temp ${showTemp ? 'on' : 'off'}` +
+    `   ·   light ${showLight ? 'on' : 'off'}  smell ${showFood ? 'on' : 'off'}  bonds ${showBonds ? 'on' : 'off'}  rocks ${showRocks ? 'on' : 'off'}  temp ${showTemp ? 'on' : 'off'}  glow ${showGlow ? 'on' : 'off'}  toxin ${showToxin ? 'on' : 'off'}  curr ${showCurrent ? 'on' : 'off'}` +
     `${followId >= 0 ? `  ·  follow #${followId}` : ''}   ·   ${legend && !legend.classList.contains('hidden') ? 'H hide legend' : 'H legend'}`;
 }
 

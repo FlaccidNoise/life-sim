@@ -239,3 +239,122 @@ export function buildHandicappedForagerGenome(
   if (latTurn) latTurn.weight = weight;
   return g;
 }
+
+/**
+ * Nocturnal-energy-conservation forager: a standard forager with an extra AMBIENT_LIGHT
+ * SENSOR (gene 6) wired negatively to thrust. At night (ambient≈low), the sensor
+ * SUPPRESSES thrust → the forager conserves energy in the dark when plants aren't
+ * growing; by day it forages normally. This emergent strategy comes from a single
+ * added sensor + inhibitory synapse — the core foraging loop (sensorLat→turn 1.5,
+ * sensorFwd→thrust 1.5) is untouched.
+ *
+ * DRY over buildForagerGenome: same 6-cell body + 7th AMBIENT_LIGHT sensor, its spoke,
+ * a brace bond, and a negative-weight connection to thrust.
+ */
+export function buildNightForagerGenome(cellRadius = 6, initialEnergy = 100): Genome {
+  const g = buildForagerGenome(cellRadius, initialEnergy);
+  const r = cellRadius;
+  const off = 4 * r;
+  // 7th gene: AMBIENT_LIGHT sensor placed behind the mover (away from the mouth).
+  g.genes.push({
+    innovation: 0,
+    cellType: CellType.SENSOR,
+    radius: r,
+    mass: 2,
+    initialEnergy,
+    bias: 0,
+    sensorChannel: SensorChannel.AMBIENT_LIGHT,
+    glowGain: 0,
+  });
+  g.divisionRules.push({
+    parentGene: 0,
+    childGene: 6,
+    angle: Math.PI,
+    dist: off * 1.2,
+    stiffness: 1,
+    repeat: 1,
+  });
+  g.bondRules.push({ geneA: 4, geneB: 6, stiffness: 1 }); // brace to thrust neuron
+  g.connectionRules.push({ preGene: 6, postGene: 4, weight: -0.8 }); // ambient→thrust inhibitory
+  return g;
+}
+
+/**
+ * Signaling/flocking forager: the turn neuron (gene 3) emits glow (glowGain=0.8)
+ * proportional to its activation, AND the forager has a GLOW sensor (gene 6) wired
+ * POSITIVELY to thrust (weight 1.2) — so it is attracted to glow from conspecifics.
+ * This creates a primitive follow-the-glow flocking effect. The forager pays glowCost
+ * when the turn neuron is active, an economic tradeoff: signaling costs energy but
+ * enables conspecific attraction.
+ *
+ * DRY over buildForagerGenome: same 6-cell body, glowGain set on gene 3, + 7th GLOW
+ * sensor with its spoke, brace bond, and positive connection to thrust.
+ */
+export function buildGlowForagerGenome(cellRadius = 6, initialEnergy = 100): Genome {
+  const g = buildForagerGenome(cellRadius, initialEnergy);
+  const r = cellRadius;
+  const off = 4 * r;
+  // Set glowGain on the turn neuron (gene 3).
+  const turnGene = g.genes[3]!;
+  g.genes[3] = { ...turnGene, glowGain: 0.8 };
+  // 7th gene: GLOW sensor placed forward between mover and mouth.
+  g.genes.push({
+    innovation: 0,
+    cellType: CellType.SENSOR,
+    radius: r,
+    mass: 2,
+    initialEnergy,
+    bias: 0,
+    sensorChannel: SensorChannel.GLOW,
+    glowGain: 0,
+  });
+  g.divisionRules.push({
+    parentGene: 0,
+    childGene: 6,
+    angle: 0,
+    dist: off * 0.6,
+    stiffness: 1,
+    repeat: 1,
+  });
+  g.bondRules.push({ geneA: 5, geneB: 6, stiffness: 1 }); // brace to mouth
+  g.connectionRules.push({ preGene: 6, postGene: 4, weight: 1.2 }); // glow→thrust excitatory
+  return g;
+}
+
+/**
+ * Toxin-avoidance forager: a standard forager with an extra TOXIN SENSOR (gene 6)
+ * wired to the turn neuron with weight 1.5. High toxin → strong turn activation →
+ * reflexive avoidance wiggle. Since TOXIN is a scalar (not a gradient), the avoidance
+ * is a random-walk away from toxin patches rather than gradient climbing — acceptable
+ * as a first-cut avoidance mechanism that improves survival in toxic environments.
+ *
+ * DRY over buildForagerGenome: same 6-cell body + 7th TOXIN sensor, its spoke,
+ * a brace bond, and a positive connection to turn.
+ */
+export function buildToxinAvoiderGenome(cellRadius = 6, initialEnergy = 100): Genome {
+  const g = buildForagerGenome(cellRadius, initialEnergy);
+  const r = cellRadius;
+  const off = 4 * r;
+  // 7th gene: TOXIN sensor placed on the dorsal side.
+  g.genes.push({
+    innovation: 0,
+    cellType: CellType.SENSOR,
+    radius: r,
+    mass: 2,
+    initialEnergy,
+    bias: 0,
+    sensorChannel: SensorChannel.TOXIN,
+    glowGain: 0,
+  });
+  g.divisionRules.push({
+    parentGene: 0,
+    childGene: 6,
+    angle: -Math.PI / 2,
+    dist: off * 0.8,
+    stiffness: 1,
+    repeat: 1,
+  });
+  g.bondRules.push({ geneA: 1, geneB: 6, stiffness: 1 }); // brace to sensorFwd
+  g.connectionRules.push({ preGene: 6, postGene: 3, weight: 1.5 }); // toxin→turn excitatory
+  return g;
+}
