@@ -1,6 +1,7 @@
 import { type World } from './world';
 import { CellType } from '../cells/types';
 import { SensorChannel } from '../neural/network';
+import { SenseSource, SightTarget } from '../cells/sense-source';
 import { wrapDelta } from '../math/vec2';
 
 export interface Critter {
@@ -87,8 +88,8 @@ export function spawnSwimmer(world: World, x: number, y: number, heading: number
   const g = (i: number): number => f.generation[i]!;
 
   // Sensor channels.
-  net.addSensor(sensorFwd, SensorChannel.FWD_GRAD);
-  net.addSensor(sensorLat, SensorChannel.LAT_GRAD);
+  net.addSensor(sensorFwd, SensorChannel.FWD_GRAD, SenseSource.SMELL, SightTarget.FOOD);
+  net.addSensor(sensorLat, SensorChannel.LAT_GRAD, SenseSource.SMELL, SightTarget.FOOD);
 
   // Steering loop: lateral gradient → turn; forward gradient → thrust (+ cruise bias).
   net.addSynapse(sensorLat, g(sensorLat), turn, g(turn), 1.5);

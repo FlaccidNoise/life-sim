@@ -123,7 +123,8 @@ export function instantiateBody(
   // Sensor channels (SENSOR genes carry a channel).
   for (let i = 0; i < count; i++) {
     const ch = body.sensorChannel[i]!;
-    if (ch >= 0 && body.cellType[i]! === CellType.SENSOR) net.addSensor(slotScratch[i]!, ch);
+    if (ch >= 0 && body.cellType[i]! === CellType.SENSOR)
+      net.addSensor(slotScratch[i]!, ch, body.senseSource[i]!, body.sightTarget[i]!);
   }
 
   // Motors.

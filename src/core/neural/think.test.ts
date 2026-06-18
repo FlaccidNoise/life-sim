@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { CellStore } from '../memory/cell-store';
 import { CellType } from '../cells/types';
 import { NeuralNetwork, SensorChannel } from './network';
+import { SenseSource, SightTarget } from '../cells/sense-source';
 import { think } from './think';
 
 /** Tick once: think writes actNxt, then swap so actCur holds a(t). */
@@ -24,7 +25,7 @@ describe('think — recurrent forward pass', () => {
     f.senseY[sIn] = 0;
 
     const net = new NeuralNetwork(4, 4, 4);
-    net.addSensor(sIn, SensorChannel.FWD_GRAD);
+    net.addSensor(sIn, SensorChannel.FWD_GRAD, SenseSource.SMELL, SightTarget.FOOD);
     net.bias[hOut] = 0.1;
     net.addSynapse(sIn, f.generation[sIn]!, hOut, f.generation[hOut]!, 2);
     net.rebuildLive(store);
@@ -70,7 +71,7 @@ describe('think — recurrent forward pass', () => {
     f.senseX[s] = 1; // gradient points +x → lateral (right of a +y heading) = -1
     f.senseY[s] = 0;
     const net = new NeuralNetwork(2, 2, 2);
-    net.addSensor(s, SensorChannel.LAT_GRAD);
+    net.addSensor(s, SensorChannel.LAT_GRAD, SenseSource.SMELL, SightTarget.FOOD);
     net.rebuildLive(store);
     step(net, store);
     // lat = -senseX*sin(h) + senseY*cos(h) = -1*1 + 0 = -1
