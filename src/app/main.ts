@@ -5,6 +5,9 @@ import { Renderer, type Camera } from '../render/webgl-renderer';
 import { LightOverlay } from '../render/light-overlay';
 import { FoodOverlay } from '../render/food-overlay';
 import { BondOverlay } from '../render/bond-overlay';
+import { RockOverlay } from '../render/rock-overlay';
+import { TempOverlay } from '../render/temp-overlay';
+import { lightMultiplier } from '../core/environment/cycle';
 import { TelemetryDashboard } from './telemetry';
 import { inspectAt } from './inspect';
 import { mountControls } from './controls';
@@ -72,6 +75,27 @@ const config = defaultConfig({
   // preserves the boom-bust early, zero genome bloat (changeType adds no cells). Higher (0.02)
   // locks the population; combos with add/delete-gene EXTINCT it. Other structural rates stay 0.
   mutationChangeTypeRate: 0.015,
+  // ── Environmental features (10) ──
+  // Gentler day/night: night dims to ~0.5 so plants keep trickle-producing.
+  dayNightDepth: 0.5,
+  dayLength: 800,
+  seasonLength: 10000,
+  seasonDepth: 0.2,
+  // Rocks: static obstacles for shelter / chokepoints.
+  rockCount: 40,
+  rockRadiusMin: 8,
+  rockRadiusMax: 20,
+  rockRepulsion: 4,
+  rockGridSize: 64,
+  // Temperature: patchy heatmap with gentle basal penalty.
+  tempPatchCount: 12,
+  tempMin: 0,
+  tempMax: 1,
+  tempComfortLow: 0.3,
+  tempComfortHigh: 0.7,
+  tempColdPenalty: 0.5,
+  tempHeatPenalty: 0.5,
+  // Glow / toxin / current OFF for now.
 });
 const world = new World(config);
 // ~6500 PHOTO plants ≈ the crowdDivideCap equilibrium density, so food is plentiful from tick 0
@@ -141,6 +165,18 @@ const FOOD_DISPLAY_MAX = 8; // smell scale for the heatmap; tune to taste
 const bondsCanvas = document.getElementById('bonds') as HTMLCanvasElement;
 const bondOverlay = new BondOverlay(bondsCanvas);
 let showBonds = false;
+
+// Rock overlay (toggled with `R`): canvas-2D discs with outlines.
+const rocksCanvas = document.getElementById('rocks') as HTMLCanvasElement;
+const rockOverlay = new RockOverlay(rocksCanvas);
+let showRocks = true;
+
+// Temperature heatmap overlay (toggled with `T`): WebGL quad, shares GL context.
+const tempOverlay = new TempOverlay(renderer.gl, world.temperature);
+let showTemp = false;
+
+// Night dimming overlay div.
+const nightDiv = document.getElementById('night') as HTMLElement;
 
 // Brain inspector overlay (toggled with `B`): live neuron-cell network of a critter.
 const brainCanvas = document.getElementById('brain') as HTMLCanvasElement;
@@ -264,7 +300,13 @@ function drawScene(alpha: number): void {
   if (showFood) {
     foodOverlay.render(camera, world.food, FOOD_DISPLAY_MAX, canvas.width, canvas.height);
   }
+  if (showTemp) {
+    tempOverlay.render(camera, world.temperature, config.tempMin, config.tempMax, canvas.width, canvas.height);
+  }
   renderer.render(world, camera, prevX, prevY, prevGen, alpha);
+  if (showRocks) {
+    rockOverlay.render(world, camera);
+  }
   if (showBonds) {
     bondOverlay.render(world, camera);
   }
@@ -294,6 +336,7 @@ function fit(initial: boolean): void {
   canvas.height = window.innerHeight;
   renderer.resize(canvas.width, canvas.height);
   bondOverlay.resize(canvas.width, canvas.height);
+  rockOverlay.resize(canvas.width, canvas.height);
   if (initial) camera.scale = Math.min(canvas.width, canvas.height) / DEFAULT_VIEW_SPAN;
 }
 window.addEventListener('resize', () => fit(false));
@@ -409,6 +452,11 @@ window.addEventListener('keydown', (e) => {
   } else if (e.key === 'k' || e.key === 'K') {
     showMenag = !showMenag;
     menagPanel.classList.toggle('hidden', !showMenag);
+  } else if (e.key === 'r' || e.key === 'R') {
+    showRocks = !showRocks;
+    rocksCanvas.style.display = showRocks ? 'block' : 'none';
+  } else if (e.key === 't' || e.key === 'T') {
+    showTemp = !showTemp;
   } else if (e.key === 'c' || e.key === 'C' || e.key === 'Escape') {
     followId = -1;
   }
@@ -422,14 +470,16 @@ function updateHud(): void {
   if (!hud) return;
   const m = world.metrics;
   const net = world.net;
+  const lm = lightMultiplier(world.tickCount, config.dayLength, config.dayNightDepth, config.seasonLength, config.seasonDepth);
   hud.textContent =
     `cells ${world.cells.aliveCount}  ·  tick ${world.tickCount}  ·  ${fps} fps  ·  ` +
-    `${speed.toFixed(2)}×${paused ? ' paused' : ''}  ·  zoom ${camera.scale.toFixed(2)}\n` +
+    `${speed.toFixed(2)}×${paused ? ' paused' : ''}  ·  zoom ${camera.scale.toFixed(2)}` +
+    `  ·  day ${(lm * 100).toFixed(0)}%\n` +
     `photo ${m.photo}  dig ${m.digestive}  motile ${m.motile}  meat ${m.meat}` +
     `   ·   ⌀energy ${m.meanEnergy.toFixed(0)}  ·  diversity ${m.diversity.toFixed(3)}\n` +
     `evolve: geno-div ${m.genotypicDiversity.toFixed(3)}  ·  gen ${m.maxGeneration}  ·  ⌀genome ${m.meanGenomeSize.toFixed(1)} cells/org ${m.meanCellsPerOrganism.toFixed(1)}\n` +
     `brain: ${net.liveNeuronCount} neurons · ${net.liveSynapseCount} synapses` +
-    `   ·   light ${showLight ? 'on' : 'off'}  smell ${showFood ? 'on' : 'off'}  bonds ${showBonds ? 'on' : 'off'}` +
+    `   ·   light ${showLight ? 'on' : 'off'}  smell ${showFood ? 'on' : 'off'}  bonds ${showBonds ? 'on' : 'off'}  rocks ${showRocks ? 'on' : 'off'}  temp ${showTemp ? 'on' : 'off'}` +
     `${followId >= 0 ? `  ·  follow #${followId}` : ''}   ·   ${legend && !legend.classList.contains('hidden') ? 'H hide legend' : 'H legend'}`;
 }
 
@@ -448,6 +498,10 @@ function loop(): void {
 
   const alpha = paused ? 1 : Math.min(1, accumulator);
   drawScene(alpha);
+
+  // Night dimming: dark overlay fades with (1 - lightMultiplier).
+  const night = 1 - lightMultiplier(world.tickCount, config.dayLength, config.dayNightDepth, config.seasonLength, config.seasonDepth);
+  nightDiv.style.opacity = String(night * 0.55);
 
   dash.push(world.metrics);
   dash.draw(world.metrics);

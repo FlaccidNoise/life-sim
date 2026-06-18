@@ -226,6 +226,16 @@
       style="position: absolute; left: 0; top: 0; pointer-events: none; display: none"
       aria-label="bond network and energy-flow overlay"
     ></canvas>
+    <canvas
+      id="rocks"
+      style="position: absolute; left: 0; top: 0; pointer-events: none; display: block"
+      aria-label="rock / shelter terrain overlay"
+    ></canvas>
+    <div
+      id="night"
+      style="position: fixed; inset: 0; background: #000; pointer-events: none; opacity: 0"
+      aria-hidden="true"
+    ></div>
     <div id="hud" class="panel" role="status" aria-label="simulation status"></div>
     <canvas
       id="telemetry"
@@ -350,7 +360,7 @@
       <div>
         <b>Keys:</b>
         <span class="note"
-          >L light · F smell · O bonds · B brain · G genome · J hall · Y phylo · H legend · click
+          >L light · F smell · O bonds · R rocks · T temp · B brain · G genome · J hall · Y phylo · H legend · click
           follow · space pause · [ ] speed · . step</span
         >
       </div>

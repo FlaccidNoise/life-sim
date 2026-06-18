@@ -627,10 +627,15 @@ export class World {
 
     this.light.step(cfg.lightDiffuse, cfg.lightRegen);
 
-    // M9-early: environment field steps (all allocation-free).
-    this.temperature.step(cfg.tempDiffuse, cfg.tempRegen);
-    this.glow.step(cfg.glowDiffuse, cfg.glowDecay);
-    this.toxin.step(cfg.toxinDiffuse, cfg.toxinDecay);
+    // M9-early: environment field steps (all allocation-free). Guarded on enable flags
+    // so a default (all-OFF) config pays zero per-tick cost — byte-identical AND no perf hit.
+    if (cfg.tempColdPenalty > 0 || cfg.tempHeatPenalty > 0) {
+      this.temperature.step(cfg.tempDiffuse, cfg.tempRegen);
+    }
+    if (this.glowEffectors.effectorCount > 0) this.glow.step(cfg.glowDiffuse, cfg.glowDecay);
+    if (cfg.toxinDamage > 0 || cfg.toxinDepositOnMeatDecay > 0) {
+      this.toxin.step(cfg.toxinDiffuse, cfg.toxinDecay);
+    }
     if (cfg.currentStrength > 0) this.current.step(cfg.currentEvolveRate);
 
     // Re-derive the live set so metrics exclude freed corpses (free() leaves
