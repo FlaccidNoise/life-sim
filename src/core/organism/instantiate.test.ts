@@ -32,6 +32,8 @@ function miniGenome(): Genome {
     bias: 0,
     sensorChannel: -1,
     glowGain: 0,
+    senseSource: 0,
+    sightTarget: 0,
     ...over,
   });
   return {
@@ -135,6 +137,8 @@ describe('instantiateBody', () => {
       bias: 0,
       sensorChannel: -1,
       glowGain: 0,
+      senseSource: 0,
+      sightTarget: 0,
     });
     const star: Genome = {
       seedGene: 0,
@@ -179,17 +183,14 @@ describe('instantiateBody', () => {
       bias: 0,
       sensorChannel: -1,
       glowGain: 0,
+      senseSource: 0,
+      sightTarget: 0,
       ...over,
     });
     const genome: Genome = {
       seedGene: 0,
-      genes: [
-        g(CellType.MOVER),
-        g(CellType.NEURON, { glowGain: 0.7 }),
-      ],
-      divisionRules: [
-        { parentGene: 0, childGene: 1, angle: 0, dist: 24, stiffness: 1, repeat: 1 },
-      ],
+      genes: [g(CellType.MOVER), g(CellType.NEURON, { glowGain: 0.7 })],
+      divisionRules: [{ parentGene: 0, childGene: 1, angle: 0, dist: 24, stiffness: 1, repeat: 1 }],
       bondRules: [],
       connectionRules: [],
       motorRules: [],
@@ -201,8 +202,19 @@ describe('instantiateBody', () => {
     expect(body.glow).toHaveLength(1);
 
     const org = instantiateBody(
-      body, cells, net, bonds, organisms, 0,
-      1000, 1000, 0, 2048, 2048, scratch, glow,
+      body,
+      cells,
+      net,
+      bonds,
+      organisms,
+      0,
+      1000,
+      1000,
+      0,
+      2048,
+      2048,
+      scratch,
+      glow,
     );
     expect(org).toBeGreaterThanOrEqual(1);
     expect(glow.effectorCount).toBe(1);

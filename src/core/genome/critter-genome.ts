@@ -7,6 +7,7 @@ import {
   type Genome,
 } from './genome';
 import { CellType } from '../cells/types';
+import { SenseSource, SightTarget } from '../cells/sense-source';
 import { SensorChannel } from '../neural/network';
 
 const TWO_PI = Math.PI * 2;
@@ -35,6 +36,8 @@ export function buildCritterGenome(cellRadius = 6): Genome {
     bias: 0,
     sensorChannel: -1,
     glowGain: 0,
+    senseSource: SenseSource.SMELL,
+    sightTarget: SightTarget.FOOD,
     ...over,
   });
   // Gene order = spawnSwimmer alloc order: 0 mover, 1 sensorFwd, 2 sensorLat, 3 clockA,
@@ -115,6 +118,8 @@ export function buildAutotrophGenome(cellRadius = 6): Genome {
     bias: 0,
     sensorChannel: -1,
     glowGain: 0,
+    senseSource: SenseSource.SMELL,
+    sightTarget: SightTarget.FOOD,
     ...over,
   });
   const genes: Gene[] = [g(), g(), g(), g()];
@@ -164,6 +169,8 @@ export function buildForagerGenome(cellRadius = 6, initialEnergy = 100): Genome 
     bias: 0,
     sensorChannel: -1,
     glowGain: 0,
+    senseSource: SenseSource.SMELL,
+    sightTarget: SightTarget.FOOD,
     ...over,
   });
   // 0 mover, 1 sensorFwd, 2 sensorLat, 3 turn, 4 thrust, 5 digestive (mouth).
@@ -292,6 +299,8 @@ export function buildNightForagerGenome(cellRadius = 6, initialEnergy = 100): Ge
     bias: 0,
     sensorChannel: SensorChannel.AMBIENT_LIGHT,
     glowGain: 0,
+    senseSource: SenseSource.SMELL,
+    sightTarget: SightTarget.FOOD,
   });
   g.divisionRules.push({
     parentGene: 0,
@@ -334,6 +343,8 @@ export function buildGlowForagerGenome(cellRadius = 6, initialEnergy = 100): Gen
     bias: 0,
     sensorChannel: SensorChannel.GLOW,
     glowGain: 0,
+    senseSource: SenseSource.SMELL,
+    sightTarget: SightTarget.FOOD,
   });
   g.divisionRules.push({
     parentGene: 0,
@@ -372,6 +383,8 @@ export function buildToxinAvoiderGenome(cellRadius = 6, initialEnergy = 100): Ge
     bias: 0,
     sensorChannel: SensorChannel.TOXIN,
     glowGain: 0,
+    senseSource: SenseSource.SMELL,
+    sightTarget: SightTarget.FOOD,
   });
   g.divisionRules.push({
     parentGene: 0,

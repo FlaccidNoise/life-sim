@@ -1,6 +1,7 @@
 import { type Genome, type Gene, cloneGenome, GenomeStore } from './genome';
 import { type Rng } from '../math/rng';
 import { CellType } from '../cells/types';
+import { SenseSource, SightTarget } from '../cells/sense-source';
 
 const PALETTE = [
   CellType.PHOTO,
@@ -129,6 +130,8 @@ export function mutateGenome(
       bias: 0,
       sensorChannel: type === CellType.SENSOR ? rng.int(6) : -1,
       glowGain: 0,
+      senseSource: SenseSource.SMELL,
+      sightTarget: SightTarget.FOOD,
     };
     const newIndex = child.genes.push(gene) - 1;
     child.divisionRules.push({

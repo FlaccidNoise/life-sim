@@ -30,6 +30,8 @@ function demoGenome(): Genome {
     bias: 0,
     sensorChannel: -1,
     glowGain: 0,
+    senseSource: 0,
+    sightTarget: 0,
     ...over,
   });
   return {
@@ -145,6 +147,8 @@ describe('mutateGenome — structural operators (add/duplicate/rewire/changeType
       bias: 0,
       sensorChannel: -1,
       glowGain: 0,
+      senseSource: 0,
+      sightTarget: 0,
     });
     const c = mutateGenome(p, new Rng(2), { ...NO_MUT, rewireRate: 1 }, store());
     const rewired = c.divisionRules.some((r, i) => r.childGene !== p.divisionRules[i]!.childGene);
@@ -191,6 +195,8 @@ describe('mutateGenome — delete + duplicate-subgraph (index ops)', () => {
           bias: 0,
           sensorChannel: -1,
           glowGain: 0,
+          senseSource: 0,
+          sightTarget: 0,
         },
       ],
       divisionRules: [],
@@ -250,6 +256,8 @@ describe('mutateGenome — delete + duplicate-subgraph (index ops)', () => {
       bias: 0,
       sensorChannel: SensorChannel.FWD_GRAD,
       glowGain: 0,
+      senseSource: 0,
+      sightTarget: 0,
     });
     const c = mutateGenome(p, new Rng(7), { ...NO_MUT, sensorChannelRate: 1 }, store());
     const sensorGene = c.genes.find((g) => g.cellType === CellType.SENSOR);
