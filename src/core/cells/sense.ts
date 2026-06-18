@@ -13,6 +13,12 @@ import { wrap } from '../math/vec2';
  * (the prey-scent gradient → it hunts foragers); every other sensor (herbivore foragers + free
  * MOTILE cells) reads the plant/food field. The carnivore lookup is structural (organismId →
  * organisms.carnivore), never lineage. Both fields share grid geometry, so the FD steps are identical.
+ *
+ * Prey fleeing (P4, two-way arms race): when `fleeWeight > 0`, a HERBIVORE organism's sensor also
+ * subtracts `fleeWeight × ∇predScent` from its steering vector — it climbs the food gradient while
+ * sliding DOWN the predator-scent gradient (away from hunters). `predScent` is deposited by carnivore
+ * flesh (position/type based, never lineage). `fleeWeight === 0` (default) skips the term entirely →
+ * the M2-M7 + Phase-3 economy stays byte-identical.
  */
 export function sense(
   live: Uint32Array,
@@ -21,21 +27,34 @@ export function sense(
   food: FoodField,
   preyField: FoodField,
   carnivore: Uint8Array,
+  predField: FoodField,
+  fleeWeight: number,
 ): void {
   const hx = food.patchW;
   const hy = food.patchH;
   const w = food.worldWidth;
   const h = food.worldHeight;
+  const flee = fleeWeight > 0;
   for (let k = 0; k < n; k++) {
     const i = live[k]!;
     const ct = f.cellType[i]!;
     if (ct !== CellType.MOTILE && ct !== CellType.SENSOR) continue;
     const org = f.organismId[i]!;
-    const field = ct === CellType.SENSOR && org !== 0 && carnivore[org] === 1 ? preyField : food;
+    const carnSensor = ct === CellType.SENSOR && org !== 0 && carnivore[org] === 1;
+    const field = carnSensor ? preyField : food;
     const x = f.posX[i]!;
     const y = f.posY[i]!;
-    const gx = field.sampleAt(wrap(x + hx, w), y) - field.sampleAt(wrap(x - hx, w), y);
-    const gy = field.sampleAt(x, wrap(y + hy, h)) - field.sampleAt(x, wrap(y - hy, h));
+    let gx = field.sampleAt(wrap(x + hx, w), y) - field.sampleAt(wrap(x - hx, w), y);
+    let gy = field.sampleAt(x, wrap(y + hy, h)) - field.sampleAt(x, wrap(y - hy, h));
+    // FLEE: a herbivore organism's sensor steers away from predator scent (negative predScent gradient).
+    if (flee && org !== 0 && carnivore[org] === 0) {
+      gx -=
+        fleeWeight *
+        (predField.sampleAt(wrap(x + hx, w), y) - predField.sampleAt(wrap(x - hx, w), y));
+      gy -=
+        fleeWeight *
+        (predField.sampleAt(x, wrap(y + hy, h)) - predField.sampleAt(x, wrap(y - hy, h)));
+    }
     f.senseX[i] = gx;
     f.senseY[i] = gy;
   }

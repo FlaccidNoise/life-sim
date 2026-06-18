@@ -69,6 +69,9 @@ export class World {
   /** Prey-scent field (ecology pass): forager flesh deposits, predator sensors chemotax on it. Same
    *  grid geometry as `food`. Derived environment state, recomputed each tick (not on the contract). */
   readonly preyField: FoodField;
+  /** Predator-scent field (P4 fleeing): carnivore flesh deposits, herbivore sensors flee down its
+   *  gradient. Same grid geometry as `food`. Derived environment state (not on the contract). */
+  readonly predScent: FoodField;
   readonly net: NeuralNetwork;
   readonly bonds: BondNetwork;
   readonly organisms: OrganismTable;
@@ -163,6 +166,12 @@ export class World {
       config.worldHeight,
     );
     this.preyField = new FoodField(
+      config.foodGridCols,
+      config.foodGridRows,
+      config.worldWidth,
+      config.worldHeight,
+    );
+    this.predScent = new FoodField(
       config.foodGridCols,
       config.foodGridRows,
       config.worldWidth,
@@ -445,7 +454,16 @@ export class World {
     this.hash.build(live, n, f.posX, f.posY);
 
     // Step 2 SENSE → step 3 THINK (recurrent forward pass) → step 4 ACT.
-    sense(live, n, f, this.food, this.preyField, this.organisms.carnivore);
+    sense(
+      live,
+      n,
+      f,
+      this.food,
+      this.preyField,
+      this.organisms.carnivore,
+      this.predScent,
+      cfg.predFleeWeight,
+    );
 
     // M9-early: precompute scalar sensor values (AMBIENT_LIGHT / TEMP / TOXIN / GLOW).
     // No-op when no scalar-channel sensors exist.
@@ -713,25 +731,32 @@ export class World {
     // field on the NEXT tick (one-tick coupling).
     const food = this.food;
     const preyField = this.preyField;
+    const predScent = this.predScent;
     const dep = cfg.foodDeposit;
     const preyDep = cfg.preyDeposit;
+    const predScentDep = cfg.predScentDeposit;
     const predationOn = preyDep > 0; // predation OFF (default) → skip ALL prey-field work (zero added cost)
+    const fleeOn = predScentDep > 0; // fleeing OFF (default) → skip ALL pred-scent field work (byte-identical)
     const carn = this.organisms.carnivore;
     for (let k = 0; k < this.liveCount; k++) {
       const idx = this.liveIndices[k]!;
       const t = f.cellType[idx]!;
       if (isEdibleBy(CellType.MOTILE, t)) food.depositAt(f.posX[idx]!, f.posY[idx]!, dep);
       // Prey-scent: living forager (NON-carnivore organism) flesh emits the gradient predators hunt.
-      // Predators' own bodies don't deposit (they aren't prey in v1), so the field is pure prey signal.
-      if (predationOn) {
+      // Pred-scent: carnivore flesh emits the gradient foragers flee. Mirror images, same grid.
+      if (predationOn || fleeOn) {
         const org = f.organismId[idx]!;
-        if (org !== 0 && carn[org] === 0 && isFlesh(t)) {
-          preyField.depositAt(f.posX[idx]!, f.posY[idx]!, preyDep);
+        if (org !== 0 && isFlesh(t)) {
+          if (predationOn && carn[org] === 0)
+            preyField.depositAt(f.posX[idx]!, f.posY[idx]!, preyDep);
+          if (fleeOn && carn[org] === 1)
+            predScent.depositAt(f.posX[idx]!, f.posY[idx]!, predScentDep);
         }
       }
     }
     food.step(cfg.foodDiffuse, cfg.foodDecay);
     if (predationOn) preyField.step(cfg.foodDiffuse, cfg.foodDecay);
+    if (fleeOn) predScent.step(cfg.foodDiffuse, cfg.foodDecay);
 
     // M5: recompute per-organism aggregates over the post-lifecycle live set.
     aggregateOrganisms(
