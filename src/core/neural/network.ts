@@ -58,6 +58,8 @@ export class NeuralNetwork {
   // Sensor bindings: which cell injects which channel.
   readonly sensorCell: Uint32Array;
   readonly sensorChannel: Uint8Array;
+  readonly sensorSource: Uint8Array;
+  readonly sensorSightTarget: Uint8Array;
   sensorCount: number;
 
   /** Precomputed scalar for each SENSOR cell with channel >= AMBIENT_LIGHT (2).
@@ -96,6 +98,8 @@ export class NeuralNetwork {
 
     this.sensorCell = new Uint32Array(maxNeurons);
     this.sensorChannel = new Uint8Array(maxNeurons);
+    this.sensorSource = new Uint8Array(maxNeurons);
+    this.sensorSightTarget = new Uint8Array(maxNeurons);
     this.sensorCount = 0;
 
     this.moverCell = new Uint32Array(maxNeurons);
@@ -129,6 +133,8 @@ export class NeuralNetwork {
       const last = --this.sensorCount;
       this.sensorCell[k] = this.sensorCell[last]!;
       this.sensorChannel[k] = this.sensorChannel[last]!;
+      this.sensorSource[k] = this.sensorSource[last]!;
+      this.sensorSightTarget[k] = this.sensorSightTarget[last]!;
     }
   }
 
@@ -152,10 +158,12 @@ export class NeuralNetwork {
     this.synFree[this.synFreeTop++] = s;
   }
 
-  addSensor(cell: number, channel: number): void {
+  addSensor(cell: number, channel: number, source: number, sightTarget: number): void {
     const k = this.sensorCount++;
     this.sensorCell[k] = cell;
     this.sensorChannel[k] = channel;
+    this.sensorSource[k] = source;
+    this.sensorSightTarget[k] = sightTarget;
   }
 
   addMotor(mover: number, turnNeuron: number, thrustNeuron: number): void {

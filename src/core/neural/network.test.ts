@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { NeuralNetwork, SensorChannel } from './network';
 import { CellStore } from '../memory/cell-store';
 import { CellType } from '../cells/types';
+import { SenseSource, SightTarget } from '../cells/sense-source';
 
 describe('NeuralNetwork', () => {
   it('pre-allocates per-cell bias/activation buffers and synapse SoA, zero-init', () => {
@@ -74,8 +75,8 @@ describe('NeuralNetwork', () => {
 
   it('addSensor / addMotor register bindings', () => {
     const net = new NeuralNetwork(8, 16, 8);
-    net.addSensor(4, SensorChannel.FWD_GRAD);
-    net.addSensor(5, SensorChannel.LAT_GRAD);
+    net.addSensor(4, SensorChannel.FWD_GRAD, SenseSource.SMELL, SightTarget.FOOD);
+    net.addSensor(5, SensorChannel.LAT_GRAD, SenseSource.SMELL, SightTarget.FOOD);
     net.addMotor(6, 7, 8);
     expect(net.sensorCount).toBe(2);
     expect(net.sensorCell[0]).toBe(4);
@@ -101,8 +102,8 @@ describe('NeuralNetwork — removeMotorsFor / removeSensorsFor', () => {
     const n = new NeuralNetwork(8, 4, 8);
     n.addMotor(2, 3, 4);
     n.addMotor(5, 6, 7); // a second, unrelated motor
-    n.addSensor(2, 0);
-    n.addSensor(1, 1);
+    n.addSensor(2, 0, SenseSource.SMELL, SightTarget.FOOD);
+    n.addSensor(1, 1, SenseSource.SMELL, SightTarget.FOOD);
     expect(n.motorCount).toBe(2);
     expect(n.sensorCount).toBe(2);
     n.removeMotorsFor(2); // mover cell 2 dies
@@ -111,5 +112,29 @@ describe('NeuralNetwork — removeMotorsFor / removeSensorsFor', () => {
     expect(n.moverCell[0]).toBe(5); // the surviving motor
     expect(n.sensorCount).toBe(1);
     expect(n.sensorCell[0]).toBe(1); // the surviving sensor
+  });
+});
+
+describe('NeuralNetwork sensor source bindings', () => {
+  it('addSensor records source + sightTarget in parallel arrays', () => {
+    const net = new NeuralNetwork(16, 64, 16);
+    net.addSensor(3, 0 /* FWD_GRAD */, SenseSource.HEARING, SightTarget.PREY);
+    expect(net.sensorCount).toBe(1);
+    expect(net.sensorCell[0]).toBe(3);
+    expect(net.sensorChannel[0]).toBe(0);
+    expect(net.sensorSource[0]).toBe(SenseSource.HEARING);
+    expect(net.sensorSightTarget[0]).toBe(SightTarget.PREY);
+  });
+
+  it('removeSensorsFor swap-removes source + sightTarget alongside cell/channel', () => {
+    const net = new NeuralNetwork(16, 64, 16);
+    net.addSensor(3, 0, SenseSource.SMELL, SightTarget.FOOD);
+    net.addSensor(5, 1, SenseSource.SIGHT, SightTarget.PREDATOR);
+    net.removeSensorsFor(3); // swap-removes index 0; binding for cell 5 moves into slot 0
+    expect(net.sensorCount).toBe(1);
+    expect(net.sensorCell[0]).toBe(5);
+    expect(net.sensorChannel[0]).toBe(1);
+    expect(net.sensorSource[0]).toBe(SenseSource.SIGHT);
+    expect(net.sensorSightTarget[0]).toBe(SightTarget.PREDATOR);
   });
 });

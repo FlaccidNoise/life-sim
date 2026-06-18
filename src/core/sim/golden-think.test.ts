@@ -3,6 +3,7 @@ import { World } from './world';
 import { defaultConfig } from './config';
 import { CellType } from '../cells/types';
 import { SensorChannel } from '../neural/network';
+import { SenseSource, SightTarget } from '../cells/sense-source';
 import { spawnSwimmer } from './critter';
 
 /** Config that freezes everything irrelevant so the neural chain is exact. */
@@ -51,7 +52,7 @@ describe('golden tick — SENSE → THINK → ACT through World.tick', () => {
     f.cellType[nrn] = CellType.NEURON;
     f.energy[nrn] = 1e6;
     w.net.bias[nrn] = 0.1;
-    w.net.addSensor(s, SensorChannel.FWD_GRAD);
+    w.net.addSensor(s, SensorChannel.FWD_GRAD, SenseSource.SMELL, SightTarget.FOOD);
     w.net.addSynapse(s, f.generation[s]!, nrn, f.generation[nrn]!, 2);
     w.net.rebuildLive(w.cells);
 
