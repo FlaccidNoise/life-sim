@@ -217,6 +217,12 @@ let showToxin = false;
 const TOXIN_DISPLAY_MAX = 2;
 
 // Current arrows overlay (toggled with `U`): canvas-2D vector arrows.
+// Current arrows overlay (toggled with `U`): canvas-2D vector arrows. OFF by default.
+// The drift FORCE itself is a separate live toggle (Shift+U) — toggling it off sets
+// config.currentStrength to 0, so applyCurrent + current.step are both skipped next tick
+// (fully dormant, no rebuild). The field keeps its last state; re-enabling resumes.
+const CURRENT_STRENGTH = config.currentStrength; // remember the configured value for re-enable
+let currentForceOn = config.currentStrength > 0;
 const currentCanvas = document.getElementById('current') as HTMLCanvasElement;
 const currentOverlay = new CurrentOverlay(currentCanvas);
 let showCurrent = false;
@@ -517,6 +523,10 @@ window.addEventListener('keydown', (e) => {
     showGlow = !showGlow;
   } else if (e.key === 'x' || e.key === 'X') {
     showToxin = !showToxin;
+  } else if (e.shiftKey && (e.key === 'u' || e.key === 'U')) {
+    // Shift+U: toggle the current drift FORCE (physics) on/off live, no rebuild.
+    currentForceOn = !currentForceOn;
+    config.currentStrength = currentForceOn ? CURRENT_STRENGTH : 0;
   } else if (e.key === 'u' || e.key === 'U') {
     showCurrent = !showCurrent;
     currentCanvas.style.display = showCurrent ? 'block' : 'none';
@@ -542,7 +552,7 @@ function updateHud(): void {
     `   ·   ⌀energy ${m.meanEnergy.toFixed(0)}  ·  diversity ${m.diversity.toFixed(3)}\n` +
     `evolve: geno-div ${m.genotypicDiversity.toFixed(3)}  ·  gen ${m.maxGeneration}  ·  ⌀genome ${m.meanGenomeSize.toFixed(1)} cells/org ${m.meanCellsPerOrganism.toFixed(1)}\n` +
     `brain: ${net.liveNeuronCount} neurons · ${net.liveSynapseCount} synapses` +
-    `   ·   light ${showLight ? 'on' : 'off'}  smell ${showFood ? 'on' : 'off'}  bonds ${showBonds ? 'on' : 'off'}  rocks ${showRocks ? 'on' : 'off'}  temp ${showTemp ? 'on' : 'off'}  glow ${showGlow ? 'on' : 'off'}  toxin ${showToxin ? 'on' : 'off'}  curr ${showCurrent ? 'on' : 'off'}` +
+    `   ·   light ${showLight ? 'on' : 'off'}  smell ${showFood ? 'on' : 'off'}  bonds ${showBonds ? 'on' : 'off'}  rocks ${showRocks ? 'on' : 'off'}  temp ${showTemp ? 'on' : 'off'}  glow ${showGlow ? 'on' : 'off'}  toxin ${showToxin ? 'on' : 'off'}  curr-force ${currentForceOn ? 'on' : 'off'}${showCurrent ? '▸' : ''}` +
     `${followId >= 0 ? `  ·  follow #${followId}` : ''}   ·   ${legend && !legend.classList.contains('hidden') ? 'H hide legend' : 'H legend'}`;
 }
 
@@ -609,6 +619,8 @@ interface SimHandle {
   species: () => SpeciesSummary[];
   /** Manual debug spawn of champion `k`'s representative genome (clone keeps its founderId). */
   spawnChampion: (k?: number) => number;
+  /** Toggle the current drift force on/off live (no rebuild). Returns the new on-state. */
+  toggleCurrent: () => boolean;
 }
 const cx0 = () => world.config.worldWidth * 0.5;
 const cy0 = () => world.config.worldHeight * 0.5;
@@ -710,5 +722,10 @@ function nearestGenomeOrg(x: number, y: number): number {
     if (g === undefined) return -1;
     // Clone keeps founderId → the spawned champion joins its own dynasty (a member, not a new founder).
     return developInto(cloneGenome(g), cx0(), cy0(), 0);
+  },
+  toggleCurrent: () => {
+    currentForceOn = !currentForceOn;
+    config.currentStrength = currentForceOn ? CURRENT_STRENGTH : 0;
+    return currentForceOn;
   },
 };
