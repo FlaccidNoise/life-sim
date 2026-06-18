@@ -42,8 +42,19 @@ const hud = document.getElementById('hud');
 // foragers (ambush-loiter in prey-scent, latch, drain), and foragers FLEE the predator-scent. Light
 // is ~10 small sharp pockets with dark gaps, so plants survive only in light and spores in the dark
 // starve. Free-clone PHOTO division is OFF (sessilePlants), so the only free PHOTO is a spore.
-const FORAGER_INIT_E = 45; // per-cell forager seed energy (r4 rescale; ~0.44× the old r6 100)
-const PRED_INIT_E = FORAGER_INIT_E * 8; // 8× predator reserve — survives the early hunt-establish gauntlet
+// GOAL B (creature survival, NO food increase): the binding failure was the PREDATOR layer, not the
+// foragers — headless tracing showed foragers already boom (4→147+) but the 2 seed predators never
+// land a kill and bleed out on schedule (~t1370). The bleed decomposes ~90% basal / ~10% movement,
+// so the fix is the LIFESPAN levers Josh named: basalCost + moveCost down (below). With those, the
+// 2 predators coast to t3000+ with a wide energy margin while the foragers thrive. Reserve below is
+// stored creature energy (NOT environmental food); 8× already suffices once the bleed is reduced.
+// NOTE on MASS (the prompt's open question): lowering genome mass DOES raise terminal speed (mass 2→1
+// gave 0.37→0.88 u/tick in isolation) but FRAGMENTS the body — at the live thrust (14, predator 28) a
+// lighter mover snaps its soft spokes (11→5 bonds at mass 1, 0→ at mass 0.5), breaking cohesion and
+// critter-cohesion.test.ts. That is why the prior "no usable speed gain" finding stands: a disintegrated
+// cloud isn't faster swimming. So mass is left at 2; survival leans on basal/move, exactly as directed.
+const FORAGER_INIT_E = 70; // per-cell forager seed energy (own reserve, not food)
+const PRED_INIT_E = FORAGER_INIT_E * 8; // 8× predator reserve — ample once the basal/move bleed is cut
 const config = defaultConfig({
   seed: 3,
   maxCells: 300_000,
@@ -68,7 +79,7 @@ const config = defaultConfig({
   reproThreshold: 280, // organism repro threshold (rescaled from 600 @ r6)
   reproParentFloor: 60,
   organismDeathFloor: 0, // an unfed creature starves to MEAT, feeding the next trophic level
-  basalCost: 0.004, // low upkeep so creatures bleed slowly between meals; env temp/toxin adds on top
+  basalCost: 0.0015, // GOAL B: basal is the DOMINANT creature bleed (headless decomposition: ~90% of a predator's drain at the old 0.0025, vs ~10% movement). Cutting it ~40% extends every creature's LIFESPAN — the lever Josh asked for — and is the fix that carries the non-breeding 2-predator layer past t3000 (env temp/toxin adds on top). NOT a food lever.
   cruiseThrust: 1, // friskier roam so a searching forager visibly explores the open water
   // ~2× faster swim (live-feel layer). Terminal speed ≈ thrust/mass, so we lift the neural thrust
   // output + cap and quicken turning. moveCost (energy = moveCost·thrust²) is HALVED so the ~2×
@@ -78,7 +89,7 @@ const config = defaultConfig({
   thrustScale: 5, // neural thrust per motor activation (probe default 3)
   thrustBias: 3, // baseline cruise term (probe default 2)
   turnScale: 0.45, // faster steering so they don't overshoot at the higher speed (default 0.3)
-  moveCost: 0.01, // halved from 0.02 to offset the quadratic cost of the higher thrust
+  moveCost: 0.003, // GOAL B: cheaper to search — the predator's ambush brain still cruises at thrustBias·carnivoreThrustMult ≈ 6.8 forever, so moveCost·thrust² is a real (~10%) bleed term; halving it lets it loiter in prey-scent without bleeding out (covers more water per joule between meals)
   // PREDATION + FLEEING (the validated 3-trophic balance — feel-probe.ts LOCKED):
   preyDeposit: 5, // forager flesh emits the prey-scent gradient predators hunt
   predDigestRate: 40, // energy a PREDATOR cell drains from held prey per tick (richer kills)
@@ -159,10 +170,15 @@ const config = defaultConfig({
   plantGrowthThreshold: 12,
   plantGrowthCost: 8,
   plantBondLen: 10, // 2.5·cellRadius at r4
-  plantSporeThreshold: 60,
-  plantSporeCost: 40,
-  plantSporeImpulse: 16, // total drift ≈ impulse world-units (damping 0.5) — fills the parent pocket
-  plantSettleSpeed: 0.5,
+  // SPORE CONTAINMENT (GOAL A): pockets now sit ~500–680 units apart (jittered macro-grid below), so
+  // spores are reined to stay INSIDE the parent pocket — they fill it but don't bridge to a neighbour.
+  // A spore that drifts into the dark gap settles in darkness and starves (pockets self-select).
+  // Fewer, costlier, shorter-drift, sooner-settling spores → densify, not spread. Cost < threshold so
+  // emitting a spore never starves the base below maturity.
+  plantSporeThreshold: 90,
+  plantSporeCost: 55,
+  plantSporeImpulse: 8, // halved drift (was 16) — keeps offspring within the parent pocket's lit zone
+  plantSettleSpeed: 1.0, // anchor sooner (was 0.5) so a spore re-roots near the parent, not mid-gap
   // ── LIGHT POCKETS: ~10 small sharp patches with dark gaps so spores in the dark starve ──
   // Background between pockets must stay below the basal/photoGain ≈ 0.08 break-even, so diffuse is
   // tiny; regen stays high so each pocket holds near full light. Pockets select plants spatially.
@@ -179,9 +195,10 @@ function developInto(genome: Genome, x: number, y: number, heading: number): num
 
 // ── SESSILE-PLANT FOUNDER SCENE ──
 // No seedLife / no 250-forager-24-predator sprawl. The food base is ~10 hand-placed plant BASES,
-// one per bright light pocket, that grow chains + spore on their own. The light patches are placed
-// by the field RNG, so we READ BACK the seeded field to find the actual pocket centres (the brightest
-// grid cells) rather than hardcoding positions blind. Then a few creatures near pockets to graze/hunt.
+// one per bright light pocket, that grow chains + spore on their own. The light patches are now SPREAD
+// across the world on a jittered macro-grid (World.initSpread), so we READ BACK the seeded field to
+// find the actual pocket centres (the brightest grid cells) — one founder per distinct pocket. Then a
+// few creatures near pockets to graze/hunt.
 const PLANT_COUNT = 10;
 const FORAGER_COUNT = 4;
 const PRED_COUNT = 2;
