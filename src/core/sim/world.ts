@@ -6,6 +6,7 @@ import { computeRepulsion } from '../physics/forces';
 import { integrate } from '../physics/integrator';
 import { LightField } from '../environment/light-field';
 import { FoodField } from '../environment/food-field';
+import { NoiseField } from '../environment/noise-field';
 import { RockField } from '../environment/rock-field';
 import { TemperatureField } from '../environment/temperature-field';
 import { CurrentField } from '../environment/current-field';
@@ -72,6 +73,11 @@ export class World {
   /** Predator-scent field (P4 fleeing): carnivore flesh deposits, herbivore sensors flee down its
    *  gradient. Same grid geometry as `food`. Derived environment state (not on the contract). */
   readonly predScent: FoodField;
+  /** Motion/loudness field (Phase 2 HEARING): live cells deposit `loudnessGain·speed`, HEARING sensors
+   *  read its gradient. Same grid geometry as `food`. OFF by default (`loudnessGain === 0` ⇒ deposit+step
+   *  skipped, no HEARING override) → byte-identical. Deposit/step lands in Task 10; the field exists now
+   *  so sense() can route HEARING sensors. Derived environment state (not on the contract). */
+  readonly noise: NoiseField;
   readonly net: NeuralNetwork;
   readonly bonds: BondNetwork;
   readonly organisms: OrganismTable;
@@ -176,6 +182,12 @@ export class World {
       config.worldHeight,
     );
     this.predScent = new FoodField(
+      config.foodGridCols,
+      config.foodGridRows,
+      config.worldWidth,
+      config.worldHeight,
+    );
+    this.noise = new NoiseField(
       config.foodGridCols,
       config.foodGridRows,
       config.worldWidth,
@@ -478,6 +490,14 @@ export class World {
       this.organisms.carnivore,
       this.predScent,
       cfg.predFleeWeight,
+      this.net,
+      this.noise,
+      cfg.loudnessGain,
+      this.hash,
+      0, // viewRange — Phase 3 (SIGHT is a zero-stub now, value irrelevant)
+      0, // viewHalfAngle — Phase 3
+      cfg.worldWidth,
+      cfg.worldHeight,
     );
 
     // M9-early: precompute scalar sensor values (AMBIENT_LIGHT / TEMP / TOXIN / GLOW).
