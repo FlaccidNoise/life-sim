@@ -55,6 +55,7 @@ describe('M6 acceptance — a genome-DEVELOPED critter swims to food via its bra
       cfg.worldWidth,
       cfg.worldHeight,
       scratch,
+    w.glowEffectors,
     );
     expect(org).toBeGreaterThanOrEqual(1);
     const mover = w.organisms.mover[org]!;

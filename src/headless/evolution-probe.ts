@@ -103,6 +103,7 @@ function spawnForager(w: World, turn: number, x: number, y: number): void {
     cfg.worldWidth,
     cfg.worldHeight,
     w.instantiateScratch,
+  w.glowEffectors,
   );
 }
 

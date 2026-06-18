@@ -75,6 +75,7 @@ describe('zero-allocation hot loop', () => {
         w.config.worldWidth,
         w.config.worldHeight,
         w.instantiateScratch,
+      w.glowEffectors,
       );
     }
     expect(w.spawn(48_000)).toBe(48_000);

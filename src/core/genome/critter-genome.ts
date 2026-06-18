@@ -34,6 +34,7 @@ export function buildCritterGenome(cellRadius = 6): Genome {
     initialEnergy: RESERVE,
     bias: 0,
     sensorChannel: -1,
+    glowGain: 0,
     ...over,
   });
   // Gene order = spawnSwimmer alloc order: 0 mover, 1 sensorFwd, 2 sensorLat, 3 clockA,
@@ -113,6 +114,7 @@ export function buildAutotrophGenome(cellRadius = 6): Genome {
     initialEnergy: 50,
     bias: 0,
     sensorChannel: -1,
+    glowGain: 0,
     ...over,
   });
   const genes: Gene[] = [g(), g(), g(), g()];
@@ -161,6 +163,7 @@ export function buildForagerGenome(cellRadius = 6, initialEnergy = 100): Genome 
     initialEnergy,
     bias: 0,
     sensorChannel: -1,
+    glowGain: 0,
     ...over,
   });
   // 0 mover, 1 sensorFwd, 2 sensorLat, 3 turn, 4 thrust, 5 digestive (mouth).

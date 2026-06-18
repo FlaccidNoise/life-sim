@@ -30,6 +30,7 @@ function spawnFounder(w: World, x: number, y: number): void {
     cfg.worldWidth,
     cfg.worldHeight,
     w.instantiateScratch,
+  w.glowEffectors,
   );
 }
 

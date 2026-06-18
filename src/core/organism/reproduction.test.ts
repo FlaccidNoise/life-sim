@@ -11,6 +11,7 @@ import { develop } from '../genome/develop';
 import { buildAutotrophGenome } from '../genome/critter-genome';
 import { type MutationRates } from '../genome/mutate';
 import { Rng } from '../math/rng';
+import { GlowEffectors } from '../neural/glow';
 
 const NO_MUT: MutationRates = {
   paramSigma: 0.1,
@@ -23,6 +24,7 @@ const NO_MUT: MutationRates = {
   rewireRate: 0,
   changeTypeRate: 0,
   duplicateSubgraphRate: 0,
+  sensorChannelRate: 0,
 };
 
 function rig() {
@@ -58,6 +60,7 @@ function seedParent(r: ReturnType<typeof rig>, perCellEnergy: number) {
     2048,
     2048,
     r.scratch,
+  new GlowEffectors(4096),
   );
   const f = r.cells.fields;
   for (let i = 0; i < r.cells.capacity; i++)
@@ -91,6 +94,7 @@ describe('reproduceOrganisms', () => {
       r.bonds,
       r.organisms,
       r.store,
+      new GlowEffectors(4096),
       live,
       n,
       new Rng(1),
@@ -125,6 +129,7 @@ describe('reproduceOrganisms', () => {
       r.bonds,
       r.organisms,
       r.store,
+      new GlowEffectors(4096),
       live,
       n,
       new Rng(1),
@@ -149,6 +154,7 @@ describe('reproduceOrganisms', () => {
       r.bonds,
       r.organisms,
       r.store,
+      new GlowEffectors(4096),
       live,
       n,
       new Rng(1),
@@ -170,6 +176,7 @@ describe('reproduceOrganisms', () => {
       a.bonds,
       a.organisms,
       a.store,
+      new GlowEffectors(4096),
       ra.live,
       ra.n,
       new Rng(7),
@@ -187,6 +194,7 @@ describe('reproduceOrganisms', () => {
       b.bonds,
       b.organisms,
       b.store,
+      new GlowEffectors(4096),
       rb.live,
       rb.n,
       new Rng(7),

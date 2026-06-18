@@ -4,6 +4,7 @@ import { type Genome, GenomeStore } from './genome';
 import { develop } from './develop';
 import { Rng } from '../math/rng';
 import { CellType } from '../cells/types';
+import { SensorChannel } from '../neural/network';
 
 const NO_MUT: MutationRates = {
   paramSigma: 0.1,
@@ -16,6 +17,7 @@ const NO_MUT: MutationRates = {
   rewireRate: 0,
   changeTypeRate: 0,
   duplicateSubgraphRate: 0,
+  sensorChannelRate: 0,
 };
 
 function demoGenome(): Genome {
@@ -27,6 +29,7 @@ function demoGenome(): Genome {
     initialEnergy: 100,
     bias: 0,
     sensorChannel: -1,
+    glowGain: 0,
     ...over,
   });
   return {
@@ -141,6 +144,7 @@ describe('mutateGenome — structural operators (add/duplicate/rewire/changeType
       initialEnergy: 100,
       bias: 0,
       sensorChannel: -1,
+      glowGain: 0,
     });
     const c = mutateGenome(p, new Rng(2), { ...NO_MUT, rewireRate: 1 }, store());
     const rewired = c.divisionRules.some((r, i) => r.childGene !== p.divisionRules[i]!.childGene);
@@ -186,6 +190,7 @@ describe('mutateGenome — delete + duplicate-subgraph (index ops)', () => {
           initialEnergy: 100,
           bias: 0,
           sensorChannel: -1,
+          glowGain: 0,
         },
       ],
       divisionRules: [],
@@ -226,9 +231,49 @@ describe('mutateGenome — delete + duplicate-subgraph (index ops)', () => {
       rewireRate: 0.5,
       changeTypeRate: 0.5,
       duplicateSubgraphRate: 0.5,
+      sensorChannelRate: 0,
     };
     const a = mutateGenome(p, new Rng(99), rates, store());
     const b = mutateGenome(p, new Rng(99), rates, store());
     expect(a).toEqual(b);
+  });
+
+  it('sensorChannelRate=1 changes a SENSOR gene channel', () => {
+    const p = demoGenome();
+    // add a SENSOR gene
+    p.genes.push({
+      innovation: 3,
+      cellType: CellType.SENSOR,
+      radius: 6,
+      mass: 2,
+      initialEnergy: 100,
+      bias: 0,
+      sensorChannel: SensorChannel.FWD_GRAD,
+      glowGain: 0,
+    });
+    const c = mutateGenome(p, new Rng(7), { ...NO_MUT, sensorChannelRate: 1 }, store());
+    const sensorGene = c.genes.find((g) => g.cellType === CellType.SENSOR);
+    expect(sensorGene).toBeDefined();
+    // The channel should have changed from FWD_GRAD (0) since rate=1 forces a mutation.
+    expect(sensorGene!.sensorChannel).not.toBe(SensorChannel.FWD_GRAD);
+    // It must be a valid channel [0,5].
+    expect(sensorGene!.sensorChannel).toBeGreaterThanOrEqual(0);
+    expect(sensorGene!.sensorChannel).toBeLessThan(6);
+  });
+
+  it('changeType to SENSOR sets a valid channel (not -1)', () => {
+    const p = demoGenome();
+    // Use a seed that deterministically picks gene 1 (NEURON) and changes it to SENSOR.
+    const c = mutateGenome(p, new Rng(42), { ...NO_MUT, changeTypeRate: 1 }, store());
+    // At least one gene changed type.
+    const changed = c.genes.some((g, i) => g.cellType !== p.genes[i]!.cellType);
+    expect(changed).toBe(true);
+    // If any gene is a SENSOR, it must have a valid channel.
+    for (const g of c.genes) {
+      if (g.cellType === CellType.SENSOR) {
+        expect(g.sensorChannel).toBeGreaterThanOrEqual(0);
+        expect(g.sensorChannel).toBeLessThan(6);
+      }
+    }
   });
 });

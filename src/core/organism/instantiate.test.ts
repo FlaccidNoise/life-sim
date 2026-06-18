@@ -8,6 +8,7 @@ import { BondNetwork } from './bonds';
 import { OrganismTable } from './organisms';
 import { CellType } from '../cells/types';
 import { SensorChannel } from '../neural/network';
+import { GlowEffectors } from '../neural/glow';
 
 function rig(maxCells = 64) {
   return {
@@ -16,6 +17,7 @@ function rig(maxCells = 64) {
     bonds: new BondNetwork(maxCells, 64, 8),
     organisms: new OrganismTable(16),
     scratch: new Int32Array(64),
+    glow: new GlowEffectors(4096),
   };
 }
 
@@ -29,6 +31,7 @@ function miniGenome(): Genome {
     initialEnergy: 100,
     bias: 0,
     sensorChannel: -1,
+    glowGain: 0,
     ...over,
   });
   return {
@@ -53,7 +56,7 @@ function miniGenome(): Genome {
 
 describe('instantiateBody', () => {
   it('writes cells/bonds/synapses/sensor/motor into the live structures and returns the org id', () => {
-    const { cells, net, bonds, organisms, scratch } = rig();
+    const { cells, net, bonds, organisms, scratch, glow } = rig();
     const body = develop(miniGenome(), 256, 16);
     const org = instantiateBody(
       body,
@@ -68,6 +71,7 @@ describe('instantiateBody', () => {
       2048,
       2048,
       scratch,
+      glow,
     );
     expect(org).toBeGreaterThanOrEqual(1);
     expect(cells.aliveCount).toBe(3);
@@ -95,7 +99,7 @@ describe('instantiateBody', () => {
   }
 
   it('cleanly aborts (returns -1, allocates nothing) when cells are short', () => {
-    const { net, bonds, organisms, scratch } = rig();
+    const { net, bonds, organisms, scratch, glow } = rig();
     const cells = new CellStore(2, false); // only 2 slots, body needs 3
     const body = develop(miniGenome(), 256, 16);
     const org = instantiateBody(
@@ -111,6 +115,7 @@ describe('instantiateBody', () => {
       2048,
       2048,
       scratch,
+      glow,
     );
     expect(org).toBe(-1);
     expect(cells.aliveCount).toBe(0); // nothing allocated
@@ -118,7 +123,7 @@ describe('instantiateBody', () => {
   });
 
   it('cleanly aborts when a cell would exceed the bond degree cap', () => {
-    const { cells, net, organisms, scratch } = rig();
+    const { cells, net, organisms, scratch, glow } = rig();
     const bonds = new BondNetwork(64, 64, 2); // degree cap 2
     // A star: seed + 3 children all bonded to the seed → seed degree 3 > cap 2.
     const g = (cellType: number) => ({
@@ -129,6 +134,7 @@ describe('instantiateBody', () => {
       initialEnergy: 100,
       bias: 0,
       sensorChannel: -1,
+      glowGain: 0,
     });
     const star: Genome = {
       seedGene: 0,
@@ -155,8 +161,60 @@ describe('instantiateBody', () => {
       2048,
       2048,
       scratch,
+      glow,
     );
     expect(org).toBe(-1);
     expect(cells.aliveCount).toBe(0);
+  });
+
+  it('registers glow effectors on instantiation and reclaims them on death', () => {
+    const { cells, net, bonds, organisms, scratch, glow } = rig();
+    // A genome with a glow NEURON.
+    const g = (cellType: number, over = {}) => ({
+      innovation: 0,
+      cellType,
+      radius: 6,
+      mass: 2,
+      initialEnergy: 100,
+      bias: 0,
+      sensorChannel: -1,
+      glowGain: 0,
+      ...over,
+    });
+    const genome: Genome = {
+      seedGene: 0,
+      genes: [
+        g(CellType.MOVER),
+        g(CellType.NEURON, { glowGain: 0.7 }),
+      ],
+      divisionRules: [
+        { parentGene: 0, childGene: 1, angle: 0, dist: 24, stiffness: 1, repeat: 1 },
+      ],
+      bondRules: [],
+      connectionRules: [],
+      motorRules: [],
+      parentRef: -1,
+      generation: 0,
+      founderId: -1,
+    };
+    const body = develop(genome, 256, 16);
+    expect(body.glow).toHaveLength(1);
+
+    const org = instantiateBody(
+      body, cells, net, bonds, organisms, 0,
+      1000, 1000, 0, 2048, 2048, scratch, glow,
+    );
+    expect(org).toBeGreaterThanOrEqual(1);
+    expect(glow.effectorCount).toBe(1);
+
+    // Verify the binding targets the instantiated neuron slot.
+    const neuronSlot = body.glow[0]!.cell;
+    const slot = scratch[neuronSlot]!;
+    expect(glow.neuronCell[0]).toBe(slot);
+    expect(glow.gain[0]).toBeCloseTo(0.7, 6);
+
+    // Simulate death: mark all cells of the org as dead, then removeFor.
+    glow.removeFor(slot);
+    expect(glow.effectorCount).toBe(0);
   });
 });

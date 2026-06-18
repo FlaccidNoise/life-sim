@@ -30,6 +30,7 @@ function spawn(w: World, genome: Genome, x: number, y: number): void {
     cfg.worldWidth,
     cfg.worldHeight,
     w.instantiateScratch,
+  w.glowEffectors,
   );
 }
 

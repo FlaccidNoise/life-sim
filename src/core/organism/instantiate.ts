@@ -5,6 +5,7 @@ import { type OrganismTable } from './organisms';
 import { type DevelopedBody } from '../genome/develop';
 import { CellType } from '../cells/types';
 import { wrapDelta } from '../math/vec2';
+import { type GlowEffectors } from '../neural/glow';
 
 /**
  * Instantiate a developed body into the live world (the second half of §4.7 development:
@@ -30,6 +31,7 @@ export function instantiateBody(
   worldWidth: number,
   worldHeight: number,
   slotScratch: Int32Array,
+  glowEffectors: GlowEffectors,
 ): number {
   const count = body.count;
   if (count <= 0 || count > slotScratch.length) return -1;
@@ -45,6 +47,7 @@ export function instantiateBody(
   }
   if (net.sensorCount + bodySensors > net.sensorCell.length) return -1;
   if (net.motorCount + body.motors.length > net.moverCell.length) return -1;
+  if (glowEffectors.maxEffectors - glowEffectors.effectorCount < body.glow.length) return -1;
 
   // Degree pre-check: reuse slotScratch as a per-cell bond-degree counter.
   for (let i = 0; i < count; i++) slotScratch[i] = 0;
@@ -127,6 +130,13 @@ export function instantiateBody(
   for (let mi = 0; mi < body.motors.length; mi++) {
     const mo = body.motors[mi]!;
     net.addMotor(slotScratch[mo.mover]!, slotScratch[mo.turn]!, slotScratch[mo.thrust]!);
+  }
+
+  // Glow effector registrations.
+  for (let gi = 0; gi < body.glow.length; gi++) {
+    const g = body.glow[gi]!;
+    const slot = slotScratch[g.cell]!;
+    glowEffectors.addEffector(slot, f.generation[slot]!, g.gain);
   }
 
   organisms.mover[org] = body.motors.length > 0 ? slotScratch[body.motors[0]!.mover]! : -1;

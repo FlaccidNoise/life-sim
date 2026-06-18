@@ -16,13 +16,11 @@ import { renderGenomeInspector } from './genome-inspector';
 import { renderHallOfFame } from './hall-of-fame';
 import { renderPhylogeny } from './phylogeny-panel';
 import { renderMenagerie } from './menagerie-panel';
-import { develop } from '../core/genome/develop';
 import {
   buildCritterGenome,
   buildAutotrophGenome,
   buildForagerGenome,
 } from '../core/genome/critter-genome';
-import { instantiateBody } from '../core/organism/instantiate';
 import { CellType } from '../core/cells/types';
 import { cloneGenome, type Genome } from '../core/genome/genome';
 import type { LineageSummary } from '../core/sim/lineage-board';
@@ -104,22 +102,7 @@ world.seedLife(6500);
 
 // M6 demo: organisms DEVELOPED from a genome (proves the encoding drives the live demo).
 function developInto(genome: Genome, x: number, y: number, heading: number): number {
-  const ref = world.genomes.register(genome);
-  const body = develop(genome, world.config.maxCellsPerOrganism, world.config.maxRecursionDepth);
-  return instantiateBody(
-    body,
-    world.cells,
-    world.net,
-    world.bonds,
-    world.organisms,
-    ref,
-    x,
-    y,
-    heading,
-    world.config.worldWidth,
-    world.config.worldHeight,
-    world.instantiateScratch,
-  );
+  return world.spawnOrganism(genome, x, y, heading);
 }
 // The ACTIVE population: brain-driven FORAGERS (MOVER+SENSOR+NEURON+DIGESTIVE) scattered across
 // the dish. They sense the food gradient, swim to plants, eat them, reproduce when fed, and

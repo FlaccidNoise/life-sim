@@ -32,6 +32,7 @@ describe('renderGenomeInspector', () => {
       w.config.worldWidth,
       w.config.worldHeight,
       w.instantiateScratch,
+    w.glowEffectors,
     );
     const p = fakePanel();
     renderGenomeInspector(w, org, p as unknown as HTMLElement);

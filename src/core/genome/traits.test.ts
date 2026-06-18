@@ -53,6 +53,7 @@ describe('genomeSignature', () => {
         rewireRate: 0,
         changeTypeRate: 0,
         duplicateSubgraphRate: 0,
+        sensorChannelRate: 0,
       },
       store,
     );
