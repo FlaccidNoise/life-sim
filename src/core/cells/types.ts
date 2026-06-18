@@ -39,11 +39,13 @@ export function isEdibleBy(eater: number, prey: number): boolean {
 
 /**
  * Is `prey` huntable flesh for a PREDATOR mouth? Living forager-body cells (DIGESTIVE/MOTILE/SENSOR/
- * NEURON/MOVER) — i.e. NOT plants (PHOTO), NOT corpses (MEAT, scavenger food), and NOT other
- * predators (PREDATOR), so predators don't cannibalize each other and collapse. The caller pairs
- * this with a different-organism check (a predator never eats its own body). Type-only here — the
- * "different organism" identity check (organismId, structural like bonds) lives in the kernel, so no
- * fitness/lineage decision is involved. */
+ * NEURON/MOVER) — i.e. NOT plants (PHOTO) and NOT corpses (MEAT, scavenger food). The PREDATOR mouth
+ * cell itself is excluded, so a predator's *mouth* is never prey; but a predator's BODY cells (its
+ * MOVER/SENSOR/NEURON) ARE flesh, so predators can drain each other's bodies — rare in practice
+ * (hunters are sparse), and an accepted part of the validated balance, not a guaranteed taboo. The
+ * caller pairs this with a different-organism check (a predator never eats its own body). Type-only
+ * here — the "different organism" identity check (organismId, structural like bonds) lives in the
+ * kernel, so no fitness/lineage decision is involved. */
 export function isFlesh(prey: number): boolean {
   return (
     prey === CellType.DIGESTIVE ||

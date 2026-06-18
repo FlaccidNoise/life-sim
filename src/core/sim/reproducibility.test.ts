@@ -332,6 +332,7 @@ describe('reproducibility — predation + fleeing (3-trophic ecology) ON', () =>
     w: World;
     births: number;
     latched: boolean;
+    sustained: boolean;
     foragersEnd: number;
     predatorsEnd: number;
   } {
@@ -410,18 +411,24 @@ describe('reproducibility — predation + fleeing (3-trophic ecology) ON', () =>
     const f = w.cells.fields;
     let births = 0;
     let latched = false;
+    let sustained = false; // a predator kept draining the SAME prey org across consecutive ticks (hold path)
+    const prevLatch = new Map<number, number>(); // predator cell idx → its latchPrey last tick
     for (let t = 0; t < 600; t++) {
       w.tick();
       births += w.lastOrganismBirths;
-      if (!latched) {
-        for (let i = 0; i < w.liveCount; i++) {
-          const idx = w.liveIndices[i]!;
-          if (f.cellType[idx] === CellType.PREDATOR && f.latchCell[idx]! > 0) {
-            latched = true;
-            break;
-          }
+      const seen = new Map<number, number>();
+      for (let i = 0; i < w.liveCount; i++) {
+        const idx = w.liveIndices[i]!;
+        if (f.cellType[idx] !== CellType.PREDATOR) continue;
+        const lp = f.latchPrey[idx]!;
+        if (f.latchCell[idx]! > 0) latched = true;
+        if (lp !== 0) {
+          seen.set(idx, lp);
+          if (prevLatch.get(idx) === lp) sustained = true; // same held org as last tick → hold reacquired
         }
       }
+      prevLatch.clear();
+      for (const [k, v] of seen) prevLatch.set(k, v);
     }
     let foragersEnd = 0;
     let predatorsEnd = 0;
@@ -432,7 +439,7 @@ describe('reproducibility — predation + fleeing (3-trophic ecology) ON', () =>
       if (carn[org] === 1) predatorsEnd++;
       else foragersEnd++;
     }
-    return { w, births, latched, foragersEnd, predatorsEnd };
+    return { w, births, latched, sustained, foragersEnd, predatorsEnd };
   }
 
   it('produces byte-identical SoA + predScent + lineage across two runs (latch fires, all 3 coexist)', () => {
@@ -456,6 +463,11 @@ describe('reproducibility — predation + fleeing (3-trophic ecology) ON', () =>
     let predScentMax = 0;
     for (const v of a.w.predScent.field) if (v > predScentMax) predScentMax = v;
     expect(predScentMax).toBeGreaterThan(0); // carnivore flesh deposited flee-scent (fleeing path ran)
+    let preyFieldMax = 0;
+    for (const v of a.w.preyField.field) if (v > preyFieldMax) preyFieldMax = v;
+    expect(preyFieldMax).toBeGreaterThan(0); // forager flesh deposited prey-scent (the field predators hunt)
+    expect(a.sustained).toBe(true); // a predator drained the same prey org across ticks (hold/tether path)
+    expect(a.sustained).toBe(b.sustained);
     expect(a.births).toBeGreaterThan(0);
     expect(a.births).toBe(b.births);
     expect(a.foragersEnd).toBeGreaterThan(0); // all three trophic levels coexist at the end
