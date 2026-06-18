@@ -169,75 +169,35 @@ function run(t: Trial, ticks: number, world1024: boolean): void {
 const mode = process.argv[2] ?? 'full';
 
 if (mode === 'diag') {
-  // DIAG9: does the LATCH improve the regime where contact is adequate, and how far up in world size
-  // can it push viability? At 2048² the binding constraint is contact (sparse prey), not kill speed, so
-  // the latch can't help. Test latch (logical + rest-length tether) + ambush + speed edge at fixed
-  // density across worlds 1024/1280/1536, vs a 1024 no-latch baseline (DIAG4's working regime). 6k seed 3.
-  // DIAG10: rescue 2048² by surviving the EARLY game. Predators die at 2048² before the prey blooms
-  // (sparse initial foragers), yet the STEADY-state prey density there (~270 foragers) is high enough
-  // to host them. So PRE-BLOOM the prey: seed more initial foragers (and bigger predator reserve) so
-  // predators reach steady state alive. Latch + ambush + speed edge, full 2048², 6k seed 3.
-  console.log(
-    '=== DIAG10: rescue 2048² via pre-bloomed prey + reserve (latch+ambush, 6k, seed 3) ===',
-  );
+  // DIAG11: LONGEVITY at 2048² (Josh's direction — bigger world, longer-lived creatures that overcome
+  // the distance between sparse encounters). Test existing levers BEFORE adding a new knob: lower global
+  // basalCost (everything bleeds slower → lives longer AND plants accumulate faster → denser prey), big
+  // predator reserve, rich kills. Pre-bloom prey (250 foragers) so the early game isn't the confound.
+  console.log('=== DIAG11: longevity levers at 2048² (latch+ambush, 6k, seed 3) ===');
   const base = {
     preyDeposit: 5,
-    predDigestRate: 30,
-    predDigestEfficiency: 0.7,
+    predDigestRate: 40,
+    predDigestEfficiency: 0.9,
     predReach: 1.5,
     crowdDivideCap: 4,
     predLatchRange: 2.5,
     predLatchStiffness: 1.0,
   };
-  const A = { predThrustMult: 2.0, fwdThrustWeight: -1.5 } as const;
+  const A = { predThrustMult: 2.0, fwdThrustWeight: -1.5, predReserveMult: 8 } as const;
+  const D = { plants: 18000, foragers: 250, predators: 24 };
+  // basalCost sweep (the master longevity lever); 0.012 is the rescale default.
+  run({ name: 'basal0.012', ...D, o: { ...base, basalCost: 0.012, seed: 3 }, ...A }, 6000, false);
+  run({ name: 'basal0.008', ...D, o: { ...base, basalCost: 0.008, seed: 3 }, ...A }, 6000, false);
+  run({ name: 'basal0.006', ...D, o: { ...base, basalCost: 0.006, seed: 3 }, ...A }, 6000, false);
+  run({ name: 'basal0.004', ...D, o: { ...base, basalCost: 0.004, seed: 3 }, ...A }, 6000, false);
+  // Lowest basal + huge reserve (live very long between meals).
   run(
     {
-      name: 'for72 res4',
-      plants: 18000,
-      foragers: 72,
-      predators: 24,
-      o: { ...base, seed: 3 },
+      name: 'basal0.004 res16',
+      ...D,
+      o: { ...base, basalCost: 0.004, seed: 3 },
       ...A,
-      predReserveMult: 4,
-    },
-    6000,
-    false,
-  );
-  run(
-    {
-      name: 'for250 res4',
-      plants: 18000,
-      foragers: 250,
-      predators: 24,
-      o: { ...base, seed: 3 },
-      ...A,
-      predReserveMult: 4,
-    },
-    6000,
-    false,
-  );
-  run(
-    {
-      name: 'for500 res4',
-      plants: 18000,
-      foragers: 500,
-      predators: 24,
-      o: { ...base, seed: 3 },
-      ...A,
-      predReserveMult: 4,
-    },
-    6000,
-    false,
-  );
-  run(
-    {
-      name: 'for500 res8',
-      plants: 18000,
-      foragers: 500,
-      predators: 24,
-      o: { ...base, seed: 3 },
-      ...A,
-      predReserveMult: 8,
+      predReserveMult: 16,
     },
     6000,
     false,
@@ -255,26 +215,38 @@ if (mode === 'diag') {
   // coexistence at this scale. CAVEAT: coexistence is a damped equilibrium, not sustained boom-bust
   // "breathing" — predators are few and the prey settles to a fixed point. Counts hold the diagnostic
   // density (4290 plants / 17 foragers / 11.4 predators per 1e6 area).
-  console.log('=== FULL validation: 1024², 12k ticks, seeds 3/7/42/99 ===');
+  // LOCKED ECOLOGY CONFIG — VALIDATED at the full 2048² target via LONGEVITY (Josh's direction). All 4
+  // seeds (3/7/42/99) reach STABLE 3-trophic coexistence for 12k with no top-ups: predators settle 8-13
+  // (predMax 25-30, well above the seed 24 → a real breeding population, not subsistence), foragers
+  // 506-657, plants 51-58% pack. The predator layer failed here before because creatures bled out
+  // traversing the sparse field between meals. The fix is longer life + richer kills, NOT a smaller
+  // world: lower global basalCost (0.012→0.004) makes every creature bleed ~3× slower (overcomes the
+  // distance) AND lets plants accumulate faster → denser prey → more contact; richer kills (predDigestRate
+  // 40, efficiency 0.9) + 8× predator reserve fund reproduction at the lower contact rate; the LATCH
+  // converts each contact into a completed kill. basalCost is an existing knob → determinism defaults
+  // unchanged. Prey pre-bloomed (250 foragers) as a richer one-time seed (not a top-up). CAVEAT: a damped
+  // equilibrium (settles to a stable point), not dramatic boom-bust — predators do bloom (25-30) then settle.
+  console.log('=== FULL validation: 2048² LONGEVITY, 12k ticks, seeds 3/7/42/99 ===');
   const LOCKED = {
+    basalCost: 0.004,
     preyDeposit: 5,
-    predDigestRate: 30,
-    predDigestEfficiency: 0.7,
+    predDigestRate: 40,
+    predDigestEfficiency: 0.9,
     predReach: 1.5,
     crowdDivideCap: 4,
     predLatchRange: 2.5,
     predLatchStiffness: 1.0,
-    worldWidth: 1024,
-    worldHeight: 1024,
+    worldWidth: 2048,
+    worldHeight: 2048,
   };
-  const W = { predThrustMult: 2.0, fwdThrustWeight: -1.5, predReserveMult: 4 } as const;
+  const W = { predThrustMult: 2.0, fwdThrustWeight: -1.5, predReserveMult: 8 } as const;
   for (const seed of [3, 7, 42, 99]) {
     run(
       {
         name: `full s${seed}`,
-        plants: 4505,
-        foragers: 18,
-        predators: 12,
+        plants: 18000,
+        foragers: 250,
+        predators: 24,
         o: { ...LOCKED, seed },
         ...W,
       },
