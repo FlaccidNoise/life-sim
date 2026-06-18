@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { type Genome } from './genome';
+import { type Genome, type Gene } from './genome';
 import { develop } from './develop';
 import { CellType } from '../cells/types';
+import { buildForagerGenome } from './critter-genome';
+import { SenseSource, SightTarget } from '../cells/sense-source';
 
 function gene(
   cellType: number,
@@ -233,5 +235,29 @@ describe('develop — gene-keyed bond/connection/motor tables', () => {
     };
     const b = develop(g, 256, 16);
     expect(b.motors).toEqual([{ mover: 0, turn: 1, thrust: 2 }]);
+  });
+});
+
+describe('develop — senseSource/sightTarget parallel arrays', () => {
+  it('emits senseSource/sightTarget per instance, copied from the gene', () => {
+    const g = buildForagerGenome();
+    // make the forward sensor gene (index 1) a HEARING/PREY eye to prove the copy
+    g.genes[1] = {
+      ...(g.genes[1] as Gene),
+      senseSource: SenseSource.HEARING,
+      sightTarget: SightTarget.PREY,
+    };
+    const body = develop(g, 256, 16);
+    expect(body.senseSource.length).toBe(body.count);
+    expect(body.sightTarget.length).toBe(body.count);
+    // find the instance grown from gene 1 and check its modality copied through
+    const inst = body.geneOf.findIndex((gn) => gn === 1);
+    expect(inst).toBeGreaterThanOrEqual(0);
+    expect(body.senseSource[inst]).toBe(SenseSource.HEARING);
+    expect(body.sightTarget[inst]).toBe(SightTarget.PREY);
+    // a SMELL-default gene stays SMELL/FOOD
+    const mover = body.geneOf.findIndex((gn) => gn === 0);
+    expect(body.senseSource[mover]).toBe(SenseSource.SMELL);
+    expect(body.sightTarget[mover]).toBe(SightTarget.FOOD);
   });
 });

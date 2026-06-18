@@ -18,6 +18,8 @@ export interface DevelopedBody {
   initialEnergy: number[];
   bias: number[];
   sensorChannel: number[];
+  senseSource: number[];
+  sightTarget: number[];
   localX: number[];
   localY: number[];
   localHeading: number[];
@@ -49,6 +51,8 @@ export function develop(genome: Genome, maxCells: number, maxDepth: number): Dev
     initialEnergy: [],
     bias: [],
     sensorChannel: [],
+    senseSource: [],
+    sightTarget: [],
     localX: [],
     localY: [],
     localHeading: [],
@@ -74,6 +78,8 @@ export function develop(genome: Genome, maxCells: number, maxDepth: number): Dev
     body.initialEnergy[i] = gn.initialEnergy;
     body.bias[i] = gn.bias;
     body.sensorChannel[i] = gn.sensorChannel;
+    body.senseSource[i] = gn.senseSource;
+    body.sightTarget[i] = gn.sightTarget;
     if (gn.cellType === CellType.NEURON && gn.glowGain > 0) {
       body.glow.push({ cell: i, gain: gn.glowGain });
     }
