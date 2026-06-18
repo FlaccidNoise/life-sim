@@ -721,6 +721,9 @@ export class World {
     this.lastBirths = this.lifecycleResult.births;
     this.lastDeaths = this.lifecycleResult.deaths;
 
+    // Phase-1 drifting zones: recompute the light cap at the drifted patch centers BEFORE the
+    // field relaxes toward it. Hard-skipped at amplitude 0 → cap[] is never touched (byte-identical).
+    if (cfg.driftAmplitude > 0) this.light.driftCap(this.tickCount, cfg.driftAmplitude);
     this.light.step(cfg.lightDiffuse, cfg.lightRegen);
 
     // M9-early: environment field steps (all allocation-free). Guarded on enable flags
