@@ -337,7 +337,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     foodDecay: 0.03, // PERSISTENT field (NOT cleared per tick): deposit balanced by decay → equilibrium ∝ local food density, diffused into a smooth long-range gradient
 
     preyDeposit: 0, // OFF by default (no predation) — the verified M2-M7 economy is byte-identical; the demo opts in
-    predDigestRate: 12, // a predator drains flesh ~1.7× faster than a herbivore strips a plant (digestRate 7) — hunting must pay
+    predDigestRate: 40, // a predator BITE drains flesh fast (vs digestRate 7 for stripping a plant) so a latched predator kills a ~600-energy forager in a sustained chase, not 50 ticks
     predDigestEfficiency: 0.7, // same conversion loss as herbivore digestion
 
     senseThreshold: 1e-4,
