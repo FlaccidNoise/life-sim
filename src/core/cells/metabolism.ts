@@ -1,7 +1,7 @@
 import { type SpatialHash } from '../spatial/spatial-hash';
 import { type LightField } from '../environment/light-field';
 import { type CellArrays } from '../memory/cell-store';
-import { CellType, isEdibleBy, isNeural } from './types';
+import { CellType, isEdibleBy, isFlesh, isNeural } from './types';
 import { wrapDelta } from '../math/vec2';
 import { type TemperatureField } from '../environment/temperature-field';
 import { type ToxinField } from '../environment/toxin-field';
@@ -39,6 +39,11 @@ export interface EnvEffects {
  *   scaled by the clustering multiplier 1 + digestClusterBonus·digestBonus[i] — a
  *   bonded digestive cluster out-harvests lone cells (the multicellular payoff, §4.5).
  *   With no bonds digestBonus is all-zero → multiplier 1 → identical pre-M5 behaviour.
+ * - PREDATOR (ecology pass): same FIRST-neighbour 3×3 scan, but eats FLESH (living forager-body
+ *   cells) of a DIFFERENT organism — never plants/corpses/other-predators, never its own body. Drains
+ *   up to predDigestRate from the prey cell → the prey organism's aggregate falls → it dies atomically
+ *   via the existing organism-death path (NO per-cell death; that's deferred). The "different organism"
+ *   test is structural (organismId), not lineage. predDigestRate=0 keeps this branch a no-op.
  * - All living cells pay basalCost · area + moveCost · thrust²; SENSOR/NEURON/MOVER
  *   additionally pay neuralCost per tick (the brain isn't free, §4.5; per-synapse cost
  *   deferred). MEAT loses meatDecay per tick.
@@ -61,6 +66,8 @@ export function metabolize(
   digestBonus: Uint8Array,
   digestClusterBonus: number,
   env: EnvEffects,
+  predDigestRate: number,
+  predDigestEfficiency: number,
 ): void {
   const { cols, rows, width, height, sorted, bucketStart } = hash;
 
@@ -114,6 +121,40 @@ export function metabolize(
                 f.energy[j] = avail - extracted;
                 const mult = 1 + digestClusterBonus * digestBonus[i]!;
                 f.energy[i] = f.energy[i]! + extracted * digestEfficiency * mult;
+                eaten = true;
+                break;
+              }
+            }
+          }
+        }
+      }
+    } else if (type === CellType.PREDATOR && predDigestRate > 0) {
+      const xi = f.posX[i]!;
+      const yi = f.posY[i]!;
+      const myOrg = f.organismId[i]!;
+      const cx = hash.colOf(xi);
+      const cy = hash.rowOf(yi);
+      let eaten = false;
+      for (let dy = -1; dy <= 1 && !eaten; dy++) {
+        const by = (cy + dy + rows) % rows;
+        for (let dx = -1; dx <= 1 && !eaten; dx++) {
+          const bx = (cx + dx + cols) % cols;
+          const b = by * cols + bx;
+          const end = bucketStart[b + 1]!;
+          for (let idx = bucketStart[b]!; idx < end; idx++) {
+            const j = sorted[idx]!;
+            if (j === i) continue;
+            if (f.organismId[j]! === myOrg) continue; // never eat own body
+            if (!isFlesh(f.cellType[j]!)) continue; // flesh only: not plants/corpses/other predators
+            const ddx = wrapDelta(xi - f.posX[j]!, width);
+            const ddy = wrapDelta(yi - f.posY[j]!, height);
+            const rsum = ri + f.radius[j]!;
+            if (ddx * ddx + ddy * ddy < rsum * rsum) {
+              const avail = f.energy[j]!;
+              const extracted = avail < predDigestRate ? avail : predDigestRate;
+              if (extracted > 0) {
+                f.energy[j] = avail - extracted;
+                f.energy[i] = f.energy[i]! + extracted * predDigestEfficiency;
                 eaten = true;
                 break;
               }

@@ -78,6 +78,8 @@ describe('metabolism — photosynthesis', () => {
       noBonus,
       0,
       noEnv,
+      0,
+      0,
     );
 
     const area = 2 * 2;
@@ -130,6 +132,8 @@ describe('metabolism — digestion', () => {
       noBonus,
       0,
       noEnv,
+      0,
+      0,
     );
 
     const area = 3 * 3;
@@ -175,6 +179,8 @@ describe('metabolism — digestion', () => {
       noBonus,
       0,
       noEnv,
+      0,
+      0,
     );
     expect(f.energy[a]).toBeCloseTo(100 - cfg.basalCost * 9, 4);
   });
@@ -214,6 +220,8 @@ describe('metabolism — basal cost and meat decay', () => {
       noBonus,
       0,
       noEnv,
+      0,
+      0,
     );
     expect(f.energy[m]).toBeCloseTo(20 - cfg.meatDecay, 4);
   });
@@ -251,6 +259,8 @@ describe('metabolism — basal cost and meat decay', () => {
       noBonus,
       0,
       noEnv,
+      0,
+      0,
     );
     expect(f.energy[big]).toBeCloseTo(100 - cfg.basalCost * 16, 4);
   });
@@ -274,7 +284,7 @@ describe('metabolism — M3 movement cost & MOTILE digestion', () => {
     lf.light.fill(0); // no photosynthesis
     const hash = buildHash(store, live, 1, 1024, 1024, 12);
     // photoGain 0, photoDepletion 0, digestRate 7, eff 0.7, basal 0.01, meatDecay 0.5, moveCost 0.02
-    metabolize(live, 1, f, hash, lf, 0, 0, 7, 0.7, 0.01, 0.5, 0.02, 0, noBonus, 0, noEnv);
+    metabolize(live, 1, f, hash, lf, 0, 0, 7, 0.7, 0.01, 0.5, 0.02, 0, noBonus, 0, noEnv, 0, 0);
     // energy = 100 − basal(0.01·4) − moveCost(0.02·3²) = 100 − 0.04 − 0.18
     expect(f.energy[i]).toBeCloseTo(100 - 0.04 - 0.18, 4);
   });
@@ -302,7 +312,7 @@ describe('metabolism — M3 movement cost & MOTILE digestion', () => {
     lf.cap.fill(0);
     lf.light.fill(0); // isolate digestion (prey photosynthesises 0)
     const hash = buildHash(store, live, 2, 1024, 1024, 12);
-    metabolize(live, 2, f, hash, lf, 0, 0, 7, 0.7, 0.01, 0.5, 0.02, 0, noBonus, 0, noEnv);
+    metabolize(live, 2, f, hash, lf, 0, 0, 7, 0.7, 0.01, 0.5, 0.02, 0, noBonus, 0, noEnv, 0, 0);
     const area = 9;
     // MOTILE extracts min(7,50)=7, keeps 0.7·7=4.9, pays basal 0.01·9, move 0.
     expect(f.energy[a]).toBeCloseTo(100 + 7 * 0.7 - 0.01 * area, 4);
@@ -329,7 +339,7 @@ describe('metabolism — M4 neuralCost', () => {
     lf.light.fill(0);
     const hash = buildHash(store, live, 1, 1024, 1024, 12);
     // photoGain 0, photoDepletion 0, digestRate 7, eff 0.7, basal 0.01, meatDecay 0.5, moveCost 0.02, neuralCost 0.05
-    metabolize(live, 1, f, hash, lf, 0, 0, 7, 0.7, 0.01, 0.5, 0.02, 0.05, noBonus, 0, noEnv);
+    metabolize(live, 1, f, hash, lf, 0, 0, 7, 0.7, 0.01, 0.5, 0.02, 0.05, noBonus, 0, noEnv, 0, 0);
     // energy = 100 − basal(0.01·4) − neural(0.05) = 100 − 0.04 − 0.05
     expect(f.energy[i]).toBeCloseTo(100 - 0.04 - 0.05, 4);
   });
@@ -350,7 +360,7 @@ describe('metabolism — M4 neuralCost', () => {
     lf.cap.fill(0);
     lf.light.fill(0);
     const hash = buildHash(store, live, 1, 1024, 1024, 12);
-    metabolize(live, 1, f, hash, lf, 0, 0, 7, 0.7, 0.01, 0.5, 0.02, 0.05, noBonus, 0, noEnv);
+    metabolize(live, 1, f, hash, lf, 0, 0, 7, 0.7, 0.01, 0.5, 0.02, 0.05, noBonus, 0, noEnv, 0, 0);
     // 100 − basal(0.04) − neural(0.05) − move(0.02·9=0.18)
     expect(f.energy[i]).toBeCloseTo(100 - 0.04 - 0.05 - 0.18, 4);
   });
@@ -372,7 +382,7 @@ describe('metabolism — M4 neuralCost', () => {
     lf.light.fill(0); // no photosynthesis gain
     const hash = buildHash(store, live, 1, 1024, 1024, 12);
     // neuralCost 99 — must be ignored for PHOTO; only basal(0.01·4) applies.
-    metabolize(live, 1, f, hash, lf, 0, 0, 7, 0.7, 0.01, 0.5, 0.02, 99, noBonus, 0, noEnv);
+    metabolize(live, 1, f, hash, lf, 0, 0, 7, 0.7, 0.01, 0.5, 0.02, 99, noBonus, 0, noEnv, 0, 0);
     expect(f.energy[i]).toBeCloseTo(100 - 0.04, 4);
   });
 });
@@ -405,7 +415,7 @@ describe('metabolism — M5 digestion-clustering bonus', () => {
     digestBonus[eater] = 2; // pretend it has 2 bonded digestive neighbours
     // digestRate 7, eff 0.7, basal 0, meatDecay 0.5, moveCost 0, neuralCost 0, clusterBonus 0.5
     // extracted 7, base gain 7·0.7 = 4.9; multiplier 1 + 0.5·2 = 2 → 9.8 gained. start 100.
-    metabolize(live, 2, f, hash, lf, 0, 0, 7, 0.7, 0, 0.5, 0, 0, digestBonus, 0.5, noEnv);
+    metabolize(live, 2, f, hash, lf, 0, 0, 7, 0.7, 0, 0.5, 0, 0, digestBonus, 0.5, noEnv, 0, 0);
     expect(f.energy[eater]).toBeCloseTo(100 + 4.9 * 2, 4);
   });
 
@@ -431,7 +441,114 @@ describe('metabolism — M5 digestion-clustering bonus', () => {
     lf.light.fill(0);
     const hash = buildHash(store, live, 2, 1024, 1024, 12);
     const digestBonus = new Uint8Array(8); // all zero
-    metabolize(live, 2, f, hash, lf, 0, 0, 7, 0.7, 0, 0.5, 0, 0, digestBonus, 0.5, noEnv);
+    metabolize(live, 2, f, hash, lf, 0, 0, 7, 0.7, 0, 0.5, 0, 0, digestBonus, 0.5, noEnv, 0, 0);
     expect(f.energy[eater]).toBeCloseTo(100 + 4.9, 4); // unchanged from the no-bonus path
+  });
+});
+
+describe('metabolism — PREDATOR (ecology pass)', () => {
+  // metabolize signature tail: (..., digestBonus, digestClusterBonus, predDigestRate, predDigestEfficiency)
+  function setup() {
+    const store = new CellStore(8, false);
+    const f = store.fields;
+    const lf = new LightField(16, 16, 1024, 1024);
+    lf.cap.fill(0);
+    lf.light.fill(0); // isolate predation (no photosynthesis)
+    return { store, f, lf };
+  }
+
+  it('a PREDATOR drains an adjacent FLESH cell of a DIFFERENT organism (keeps efficiency)', () => {
+    const { store, f, lf } = setup();
+    const p = store.alloc(); // predator mouth, organism 1
+    const prey = store.alloc(); // forager NEURON, organism 2, adjacent
+    f.posX[p] = 500;
+    f.posY[p] = 500;
+    f.radius[p] = 3;
+    f.energy[p] = 100;
+    f.cellType[p] = CellType.PREDATOR;
+    f.organismId[p] = 1;
+    f.posX[prey] = 503;
+    f.posY[prey] = 500;
+    f.radius[prey] = 3;
+    f.energy[prey] = 200;
+    f.cellType[prey] = CellType.NEURON;
+    f.organismId[prey] = 2;
+    const live = new Uint32Array([p, prey]);
+    const hash = buildHash(store, live, 2, 1024, 1024, 12);
+    // predDigestRate 40, predDigestEfficiency 0.7; basal 0 so the math is exact.
+    metabolize(live, 2, f, hash, lf, 0, 0, 7, 0.7, 0, 0.5, 0, 0, noBonus, 0, noEnv, 40, 0.7);
+    expect(f.energy[prey]).toBeCloseTo(200 - 40, 4); // prey cell drained
+    expect(f.energy[p]).toBeCloseTo(100 + 40 * 0.7, 4); // predator keeps 70%
+  });
+
+  it('a PREDATOR does NOT eat a cell of its OWN organism', () => {
+    const { store, f, lf } = setup();
+    const p = store.alloc();
+    const sibling = store.alloc(); // same organism (1)
+    f.posX[p] = 500;
+    f.posY[p] = 500;
+    f.radius[p] = 3;
+    f.energy[p] = 100;
+    f.cellType[p] = CellType.PREDATOR;
+    f.organismId[p] = 1;
+    f.posX[sibling] = 503;
+    f.posY[sibling] = 500;
+    f.radius[sibling] = 3;
+    f.energy[sibling] = 200;
+    f.cellType[sibling] = CellType.MOVER;
+    f.organismId[sibling] = 1;
+    const live = new Uint32Array([p, sibling]);
+    const hash = buildHash(store, live, 2, 1024, 1024, 12);
+    metabolize(live, 2, f, hash, lf, 0, 0, 7, 0.7, 0, 0.5, 0, 0, noBonus, 0, noEnv, 40, 0.7);
+    expect(f.energy[sibling]).toBe(200); // untouched — never eats own body
+    expect(f.energy[p]).toBe(100);
+  });
+
+  it('a PREDATOR does NOT eat PHOTO, MEAT, or another PREDATOR', () => {
+    for (const preyType of [CellType.PHOTO, CellType.MEAT, CellType.PREDATOR]) {
+      const { store, f, lf } = setup();
+      const p = store.alloc();
+      const other = store.alloc();
+      f.posX[p] = 500;
+      f.posY[p] = 500;
+      f.radius[p] = 3;
+      f.energy[p] = 100;
+      f.cellType[p] = CellType.PREDATOR;
+      f.organismId[p] = 1;
+      f.posX[other] = 503;
+      f.posY[other] = 500;
+      f.radius[other] = 3;
+      f.energy[other] = 200;
+      f.cellType[other] = preyType;
+      f.organismId[other] = 2; // different org, but not flesh → not eaten
+      const live = new Uint32Array([p, other]);
+      const hash = buildHash(store, live, 2, 1024, 1024, 12);
+      metabolize(live, 2, f, hash, lf, 0, 0, 7, 0.7, 0, 0.5, 0, 0, noBonus, 0, noEnv, 40, 0.7);
+      expect(f.energy[other]).toBe(preyType === CellType.MEAT ? 200 - 0.5 : 200); // MEAT only loses meatDecay
+      expect(f.energy[p]).toBe(100); // predator ate nothing
+    }
+  });
+
+  it('predDigestRate 0 makes predation a no-op (the OFF default)', () => {
+    const { store, f, lf } = setup();
+    const p = store.alloc();
+    const prey = store.alloc();
+    f.posX[p] = 500;
+    f.posY[p] = 500;
+    f.radius[p] = 3;
+    f.energy[p] = 100;
+    f.cellType[p] = CellType.PREDATOR;
+    f.organismId[p] = 1;
+    f.posX[prey] = 503;
+    f.posY[prey] = 500;
+    f.radius[prey] = 3;
+    f.energy[prey] = 200;
+    f.cellType[prey] = CellType.NEURON;
+    f.organismId[prey] = 2;
+    const live = new Uint32Array([p, prey]);
+    const hash = buildHash(store, live, 2, 1024, 1024, 12);
+    metabolize(live, 2, f, hash, lf, 0, 0, 7, 0.7, 0, 0.5, 0, 0, noBonus, 0, noEnv, 0, 0.7);
+    expect(f.energy[prey]).toBe(200); // untouched
+    expect(f.energy[p]).toBe(100);
   });
 });
