@@ -85,6 +85,16 @@ export interface Config {
   /** Fraction of smell lost per tick, in [0, 1). Keeps the field at equilibrium. */
   foodDecay: number;
 
+  // Predation (ecology pass). A PREDATOR mouth hunts forager organisms via a 2nd "prey-scent" field
+  // and drains the prey ORGANISM's energy on contact → prey dies atomically via the existing path.
+  // The prey-scent field reuses food's grid + diffuse/decay. 0 = OFF (no predation; M7 economy intact).
+  /** Prey-scent emitted per living forager (non-carnivore) flesh cell per tick. 0 = predation OFF. */
+  preyDeposit: number;
+  /** Max energy a PREDATOR cell drains from one prey cell per tick (the carnivore digestRate). */
+  predDigestRate: number;
+  /** Fraction of drained prey energy the predator keeps (<1). */
+  predDigestEfficiency: number;
+
   // Sensing & movement (§4.4). All live knobs.
   /** Gradient magnitude below which a mover coasts at cruiseThrust instead of steering. */
   senseThreshold: number;
@@ -325,6 +335,10 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     foodDeposit: 2,
     foodDiffuse: 0.22, // near the 0.25 stability cap (4·diffuse < 1) → long smell range
     foodDecay: 0.03, // PERSISTENT field (NOT cleared per tick): deposit balanced by decay → equilibrium ∝ local food density, diffused into a smooth long-range gradient
+
+    preyDeposit: 0, // OFF by default (no predation) — the verified M2-M7 economy is byte-identical; the demo opts in
+    predDigestRate: 12, // a predator drains flesh ~1.7× faster than a herbivore strips a plant (digestRate 7) — hunting must pay
+    predDigestEfficiency: 0.7, // same conversion loss as herbivore digestion
 
     senseThreshold: 1e-4,
     turnRate: 0.25, // ~14°/tick — visibly curves toward food without snapping

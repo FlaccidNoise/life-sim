@@ -141,6 +141,16 @@ export function instantiateBody(
 
   organisms.mover[org] = body.motors.length > 0 ? slotScratch[body.motors[0]!.mover]! : -1;
   organisms.genomeRef[org] = genomeRef;
+  // Diet flag: an organism whose developed body has a PREDATOR mouth is a carnivore — routes its
+  // sensors to the prey-scent field and is excluded from prey-scent deposit. Structural, not lineage.
+  let carnivore = 0;
+  for (let i = 0; i < body.count; i++) {
+    if (body.cellType[i]! === CellType.PREDATOR) {
+      carnivore = 1;
+      break;
+    }
+  }
+  organisms.carnivore[org] = carnivore;
 
   net.rebuildLive(cells);
   bonds.rebuildLive(cells);
