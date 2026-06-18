@@ -30,6 +30,7 @@ export function spawnProvisionedAutotroph(
     w.config.worldWidth,
     w.config.worldHeight,
     w.instantiateScratch,
+  w.glowEffectors,
   );
   const f = w.cells.fields;
   for (let i = 0; i < w.cells.capacity; i++)

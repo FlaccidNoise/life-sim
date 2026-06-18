@@ -34,14 +34,16 @@ import { SplitChecker } from '../organism/split';
 import { makeMetrics, sampleMetrics, sampleEvolutionMetrics, type Metrics } from './metrics';
 import { sampleLineages, type LineageSummary, type LineageStat } from './lineage-board';
 import { sampleSpecies, type SpeciesSummary } from './species-board';
-import { GenomeStore } from '../genome/genome';
+import { GenomeStore, type Genome } from '../genome/genome';
 import { LineageLog } from '../genome/lineage-log';
 import { reproduceOrganisms, type ReproParams } from '../organism/reproduction';
+import { instantiateBody } from '../organism/instantiate';
 import { killStarvedOrganisms } from '../organism/organism-death';
 import { type MutationRates } from '../genome/mutate';
 import { lightMultiplier } from '../environment/cycle';
 import { senseScalars } from '../neural/env-sense';
 import { GlowEffectors, computeGlow } from '../neural/glow';
+import { develop } from '../genome/develop';
 
 /**
  * The simulation world. Each `tick()` runs the M5 pipeline:
@@ -179,6 +181,7 @@ export class World {
       rewireRate: 0,
       changeTypeRate: 0,
       duplicateSubgraphRate: 0,
+      sensorChannelRate: 0,
     };
 
     // Environmental features (M9-early)
@@ -303,6 +306,28 @@ export class World {
     this.spawn(motile, CellType.MOTILE);
   }
 
+  /** Centralised develop+instantiate: registers the genome, develops + places the organism.
+   * Returns the new organism id, or -1 on failure. */
+  spawnOrganism(genome: Genome, x: number, y: number, heading: number): number {
+    const ref = this.genomes.register(genome);
+    const body = develop(genome, this.config.maxCellsPerOrganism, this.config.maxRecursionDepth);
+    return instantiateBody(
+      body,
+      this.cells,
+      this.net,
+      this.bonds,
+      this.organisms,
+      ref,
+      x,
+      y,
+      heading,
+      this.config.worldWidth,
+      this.config.worldHeight,
+      this.instantiateScratch,
+      this.glowEffectors,
+    );
+  }
+
   /**
    * Rebuild the compact live set in ascending slot order (canonical, deterministic).
    *
@@ -380,7 +405,9 @@ export class World {
     mr.duplicateGeneRate = cfg.mutationDuplicateGeneRate;
     mr.rewireRate = cfg.mutationRewireRate;
     mr.changeTypeRate = cfg.mutationChangeTypeRate;
+    mr.changeTypeRate = cfg.mutationChangeTypeRate;
     mr.duplicateSubgraphRate = cfg.mutationDuplicateSubgraphRate;
+    mr.sensorChannelRate = cfg.mutationSensorChannelRate;
   }
 
   /**
@@ -676,6 +703,7 @@ export class World {
       this.bonds,
       this.organisms,
       this.genomes,
+      this.glowEffectors,
       this.liveIndices,
       this.liveCount,
       cfg.organismDeathFloor,
@@ -702,6 +730,7 @@ export class World {
       this.bonds,
       this.organisms,
       this.genomes,
+      this.glowEffectors,
       this.liveIndices,
       this.liveCount,
       this.mutationRng,

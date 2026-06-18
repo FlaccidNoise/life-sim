@@ -11,6 +11,7 @@ function gene(
     initialEnergy: number;
     bias: number;
     sensorChannel: number;
+    glowGain: 0,
   }> = {},
 ) {
   return {
@@ -21,6 +22,7 @@ function gene(
     initialEnergy: 100,
     bias: 0,
     sensorChannel: -1,
+    glowGain: 0,
     ...over,
   };
 }

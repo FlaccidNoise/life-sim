@@ -48,6 +48,7 @@ for (let k = 0; k < 20; k++) {
       cfg.worldWidth,
       cfg.worldHeight,
       scratch,
+      world.glowEffectors,
     ) >= 1
   )
     spawned++;

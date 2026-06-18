@@ -1,4 +1,5 @@
 import { type Genome } from './genome';
+import { CellType } from '../cells/types';
 
 /**
  * A developed body in abstract LOCAL space (seed at origin, heading 0) — the output of
@@ -23,6 +24,8 @@ export interface DevelopedBody {
   bonds: { a: number; b: number; stiffness: number }[];
   synapses: { pre: number; post: number; weight: number }[];
   motors: { mover: number; turn: number; thrust: number }[];
+  /** Glow effector bindings to register at instantiation: NEURON instances with glowGain>0. */
+  glow: { cell: number; gain: number }[];
   totalEnergy: number;
   truncated: boolean;
 }
@@ -52,6 +55,7 @@ export function develop(genome: Genome, maxCells: number, maxDepth: number): Dev
     bonds: [],
     synapses: [],
     motors: [],
+    glow: [],
     totalEnergy: 0,
     truncated: false,
   };
@@ -70,6 +74,9 @@ export function develop(genome: Genome, maxCells: number, maxDepth: number): Dev
     body.initialEnergy[i] = gn.initialEnergy;
     body.bias[i] = gn.bias;
     body.sensorChannel[i] = gn.sensorChannel;
+    if (gn.cellType === CellType.NEURON && gn.glowGain > 0) {
+      body.glow.push({ cell: i, gain: gn.glowGain });
+    }
     body.localX[i] = x;
     body.localY[i] = y;
     body.localHeading[i] = heading;

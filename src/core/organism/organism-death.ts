@@ -4,6 +4,7 @@ import { type BondNetwork } from './bonds';
 import { type OrganismTable } from './organisms';
 import { type GenomeStore } from '../genome/genome';
 import { CellType } from '../cells/types';
+import { type GlowEffectors } from '../neural/glow';
 
 /**
  * Atomic organism death (§4.8, the M5-deferred death cascade). An organism whose aggregate
@@ -22,6 +23,7 @@ export function killStarvedOrganisms(
   bonds: BondNetwork,
   organisms: OrganismTable,
   store: GenomeStore,
+  glowEffectors: GlowEffectors,
   liveIndices: Uint32Array,
   liveCount: number,
   deathFloor: number,
@@ -71,6 +73,7 @@ export function killStarvedOrganisms(
     // slot recycles into) + zero severed activations (the slot may recycle into a new neuron).
     net.removeMotorsFor(i);
     net.removeSensorsFor(i);
+    glowEffectors.removeFor(i);
     net.actCur[i] = 0;
     net.actNxt[i] = 0;
   }

@@ -25,6 +25,8 @@ export interface Gene {
   bias: number;
   /** SensorChannel for a SENSOR gene; -1 otherwise. */
   sensorChannel: number;
+  /** Glow gain for a NEURON gene (>0 = this instance emits light ∝ activation·gain); 0 = no glow. */
+  glowGain: number;
 }
 
 /**

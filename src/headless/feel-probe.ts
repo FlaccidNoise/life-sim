@@ -72,6 +72,7 @@ function trace(
       world.config.worldWidth,
       world.config.worldHeight,
       world.instantiateScratch,
+    world.glowEffectors,
     );
   }
   const worldArea = config.worldWidth * config.worldHeight;

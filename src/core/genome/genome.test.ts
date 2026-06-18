@@ -22,6 +22,7 @@ function tinyGenome(): Genome {
         initialEnergy: 100,
         bias: 0,
         sensorChannel: -1,
+        glowGain: 0,
       },
       {
         innovation: 1,
@@ -31,6 +32,7 @@ function tinyGenome(): Genome {
         initialEnergy: 100,
         bias: 0,
         sensorChannel: -1,
+        glowGain: 0,
       },
     ],
     divisionRules: [{ parentGene: 0, childGene: 1, angle: 0, dist: 15, stiffness: 1, repeat: 1 }],
@@ -57,6 +59,7 @@ describe('Genome — clone + serialize', () => {
       initialEnergy: 0,
       bias: 0,
       sensorChannel: -1,
+      glowGain: 0,
     });
     expect(a.genes[0]!.mass).toBe(2);
     expect(a.divisionRules[0]!.dist).toBe(15);

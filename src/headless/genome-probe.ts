@@ -46,6 +46,7 @@ for (let k = 0; k < 8; k++) {
     cfg.worldWidth,
     cfg.worldHeight,
     scratch,
+  world.glowEffectors,
   );
 }
 

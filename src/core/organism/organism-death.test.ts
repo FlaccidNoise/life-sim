@@ -9,6 +9,7 @@ import { GenomeStore } from '../genome/genome';
 import { develop } from '../genome/develop';
 import { buildAutotrophGenome, buildCritterGenome } from '../genome/critter-genome';
 import { CellType } from '../cells/types';
+import { GlowEffectors } from '../neural/glow';
 
 function rig() {
   const cells = new CellStore(64, false);
@@ -46,6 +47,7 @@ describe('killStarvedOrganisms', () => {
       2048,
       2048,
       r.scratch,
+    new GlowEffectors(4096),
     );
     const f = r.cells.fields;
     // starve it: set every cell's energy to 0 and set the aggregate ≤ floor.
@@ -64,6 +66,7 @@ describe('killStarvedOrganisms', () => {
       r.bonds,
       r.organisms,
       r.store,
+      new GlowEffectors(4096),
       live,
       n,
       0,
@@ -104,6 +107,7 @@ describe('killStarvedOrganisms', () => {
       2048,
       2048,
       r.scratch,
+    new GlowEffectors(4096),
     );
     r.organisms.energy[org] = 500;
     r.organisms.cellCount[org] = body.count;
@@ -116,6 +120,7 @@ describe('killStarvedOrganisms', () => {
         r.bonds,
         r.organisms,
         r.store,
+        new GlowEffectors(4096),
         live,
         n,
         0,
@@ -145,6 +150,7 @@ describe('killStarvedOrganisms', () => {
         r.bonds,
         r.organisms,
         r.store,
+        new GlowEffectors(4096),
         live,
         n,
         0,
@@ -173,6 +179,7 @@ describe('killStarvedOrganisms', () => {
       2048,
       2048,
       r.scratch,
+    new GlowEffectors(4096),
     );
     expect(r.net.motorCount).toBe(1);
     expect(r.net.sensorCount).toBe(2);
@@ -190,6 +197,7 @@ describe('killStarvedOrganisms', () => {
       r.bonds,
       r.organisms,
       r.store,
+      new GlowEffectors(4096),
       live,
       n,
       0,

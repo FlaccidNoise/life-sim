@@ -8,6 +8,7 @@ import { type MutationRates, mutateGenome } from '../genome/mutate';
 import { develop } from '../genome/develop';
 import { instantiateBody } from './instantiate';
 import { wrap } from '../math/vec2';
+import { type GlowEffectors } from '../neural/glow';
 
 /** Scalar parameters for one reproduction pass (plain data — NOT Config). */
 export interface ReproParams {
@@ -38,6 +39,7 @@ export function reproduceOrganisms(
   bonds: BondNetwork,
   organisms: OrganismTable,
   store: GenomeStore,
+  glowEffectors: GlowEffectors,
   liveIndices: Uint32Array,
   liveCount: number,
   mutationRng: Rng,
@@ -89,6 +91,7 @@ export function reproduceOrganisms(
       params.worldWidth,
       params.worldHeight,
       slotScratch,
+      glowEffectors,
     );
     if (newOrg < 0) {
       store.free(childRef); // capacity → clean abort, undo the registration

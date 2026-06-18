@@ -22,6 +22,7 @@ export interface MutationRates {
   rewireRate: number;
   changeTypeRate: number;
   duplicateSubgraphRate: number;
+  sensorChannelRate: number;
 }
 
 /** Standard-normal sample via Box–Muller. Deterministic from `rng` (two floats per call). */
@@ -50,12 +51,14 @@ export function mutateGenome(
 
   // Numeric gene-param perturbation.
   for (let gi = 0; gi < child.genes.length; gi++) {
+    const gene = child.genes[gi]!;
     if (rng.float() < rates.paramRate) {
-      const gene = child.genes[gi]!;
       gene.radius = Math.max(0.5, gene.radius + gaussian(rng) * rates.paramSigma);
       gene.mass = Math.max(0.1, gene.mass + gaussian(rng) * rates.paramSigma);
       gene.initialEnergy = Math.max(0, gene.initialEnergy + gaussian(rng) * rates.paramSigma);
       gene.bias = gene.bias + gaussian(rng) * rates.paramSigma;
+      // Glow gain nudge (harmless for non-neurons; lets NEURON genes discover glow).
+      gene.glowGain = Math.max(0, gene.glowGain + gaussian(rng) * rates.paramSigma);
     }
   }
 
@@ -66,13 +69,28 @@ export function mutateGenome(
     }
   }
 
+  // Sensor-channel mutation: each SENSOR gene may get a fresh random channel (discovers env scalars).
+  for (let gi = 0; gi < child.genes.length; gi++) {
+    const gene = child.genes[gi]!;
+    if (gene.cellType === CellType.SENSOR && rng.float() < rates.sensorChannelRate) {
+      gene.sensorChannel = rng.int(6);
+    }
+  }
+
   // Change a gene's cell type to a different palette value.
   if (child.genes.length > 0 && rng.float() < rates.changeTypeRate) {
     const gi = rng.int(child.genes.length);
-    const cur = child.genes[gi]!.cellType;
+    const gene = child.genes[gi]!;
+    const cur = gene.cellType;
     let t = PALETTE[rng.int(PALETTE.length)]!;
     if (t === cur) t = PALETTE[(PALETTE.indexOf(cur) + 1) % PALETTE.length]!;
-    child.genes[gi]!.cellType = t;
+    // When changing TO SENSOR, assign a valid random channel; when changing AWAY from SENSOR, clear it.
+    if (cur !== CellType.SENSOR && t === CellType.SENSOR) {
+      gene.sensorChannel = rng.int(6);
+    } else if (cur === CellType.SENSOR && t !== CellType.SENSOR) {
+      gene.sensorChannel = -1;
+    }
+    gene.cellType = t;
   }
 
   // Rewire a division rule to a different child gene.
@@ -101,14 +119,16 @@ export function mutateGenome(
 
   // Add a brand-new gene (random palette type, fresh innovation id) + a division rule.
   if (rng.float() < rates.addGeneRate) {
+    const type = PALETTE[rng.int(PALETTE.length)]!;
     const gene: Gene = {
       innovation: store.nextInnovationId(),
-      cellType: PALETTE[rng.int(PALETTE.length)]!,
+      cellType: type,
       radius: 6,
       mass: 2,
       initialEnergy: 100,
       bias: 0,
-      sensorChannel: -1,
+      sensorChannel: type === CellType.SENSOR ? rng.int(6) : -1,
+      glowGain: 0,
     };
     const newIndex = child.genes.push(gene) - 1;
     child.divisionRules.push({
