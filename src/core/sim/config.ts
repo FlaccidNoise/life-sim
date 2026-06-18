@@ -114,6 +114,12 @@ export interface Config {
    *  so a mobile prey can't outswim the drain. Scatter spring (mutual), so subject to the same
    *  symplectic-Euler stability ceiling as bonds; keep it modest. 0 = no tether. Default 0 (no-op). */
   predLatchStiffness: number;
+  /** Predator-scent emitted per living carnivore flesh cell per tick (mirrors preyDeposit). Foragers
+   *  read this field and flee down its gradient. 0 = fleeing OFF (no predScent field work, byte-identical). */
+  predScentDeposit: number;
+  /** Herbivore flee strength: multiplier on the predator-scent gradient a forager sensor subtracts from
+   *  its steering (climbs food, slides away from predators). 0 = no fleeing (no-op, byte-identical). Default 0. */
+  predFleeWeight: number;
 
   // Sensing & movement (§4.4). All live knobs.
   /** Gradient magnitude below which a mover coasts at cruiseThrust instead of steering. */
@@ -363,6 +369,8 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     carnivoreThrustMult: 1, // OFF by default (no-op); the ecology config raises it to give predators a speed edge over equal-speed prey
     predLatchRange: 0, // OFF by default (no-op → old single-strike bite); the ecology config enables the latch hold
     predLatchStiffness: 0, // OFF by default (no tether); the ecology config enables the attachment spring
+    predScentDeposit: 0, // OFF by default (no fleeing) — predScent field is skipped entirely, byte-identical
+    predFleeWeight: 0, // OFF by default (no-op); the ecology config raises it so foragers flee predator scent
 
     senseThreshold: 1e-4,
     turnRate: 0.25, // ~14°/tick — visibly curves toward food without snapping
