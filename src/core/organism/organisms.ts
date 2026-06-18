@@ -19,6 +19,10 @@ export class OrganismTable {
   readonly birthTick: Int32Array;
   /** 1 once the organism first reached reproThreshold (births-reaching-adulthood, §8 M6). */
   readonly reachedAdulthood: Uint8Array;
+  /** 1 if the organism is a PREDATOR (its developed body has a PREDATOR mouth). Set at instantiate.
+   *  Routes its sensors to the prey-scent field and gates prey-scent deposit (predators aren't prey
+   *  in v1). Structural diet flag — NOT lineage/fitness. */
+  readonly carnivore: Uint8Array;
 
   private readonly orgAlive: Uint8Array;
   private readonly orgFree: Int32Array;
@@ -34,6 +38,7 @@ export class OrganismTable {
     this.genomeRef = new Int32Array(maxOrganisms).fill(-1);
     this.birthTick = new Int32Array(maxOrganisms).fill(-1);
     this.reachedAdulthood = new Uint8Array(maxOrganisms);
+    this.carnivore = new Uint8Array(maxOrganisms);
     this.orgAlive = new Uint8Array(maxOrganisms);
     // Free-list of ids 1..maxOrganisms-1 (0 reserved). Pop returns 1, 2, 3, … ascending.
     const n = maxOrganisms - 1;
@@ -51,6 +56,7 @@ export class OrganismTable {
     this.genomeRef[id] = -1;
     this.birthTick[id] = -1;
     this.reachedAdulthood[id] = 0;
+    this.carnivore[id] = 0;
     this.energy[id] = 0;
     this.cellCount[id] = 0;
     return id;
@@ -64,6 +70,7 @@ export class OrganismTable {
     this.genomeRef[id] = -1;
     this.birthTick[id] = -1;
     this.reachedAdulthood[id] = 0;
+    this.carnivore[id] = 0;
     this.orgFree[this.orgFreeTop++] = id;
   }
 
