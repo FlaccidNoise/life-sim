@@ -3,10 +3,15 @@ import {
   buildCritterGenome,
   buildForagerGenome,
   buildHandicappedForagerGenome,
+  buildNightForagerGenome,
+  buildGlowForagerGenome,
+  buildToxinAvoiderGenome,
 } from './critter-genome';
 import { develop } from './develop';
 import { CellType } from '../cells/types';
 import { SensorChannel } from '../neural/network';
+import { World } from '../sim/world';
+import { defaultConfig } from '../sim/config';
 
 const key = (a: number, b: number): string => (a < b ? `${a}-${b}` : `${b}-${a}`);
 
@@ -142,5 +147,118 @@ describe('buildHandicappedForagerGenome', () => {
     const weak = buildHandicappedForagerGenome();
     expect(latTurn(weak).weight).toBeCloseTo(0.2, 6);
     expect(fwdThrust(weak).weight).toBeCloseTo(1.5, 6);
+  });
+});
+
+// ─── Env-sensor forager variants ────────────────────────────────────────────
+
+/** Helper: find a connection rule by (preGene, postGene) on a Genome. */
+const conn = (g: ReturnType<typeof buildForagerGenome>, pre: number, post: number) =>
+  g.connectionRules.find((c) => c.preGene === pre && c.postGene === post)!;
+
+/** Helper: find a SENSOR gene by its sensorChannel in a Genome. */
+const sensorGene = (g: ReturnType<typeof buildForagerGenome>, channel: number) =>
+  g.genes.find((x) => x.cellType === CellType.SENSOR && x.sensorChannel === channel)!;
+
+describe('buildNightForagerGenome — nocturnal energy conservation', () => {
+  const g = buildNightForagerGenome(6, 100);
+  const body = develop(g, 256, 16);
+
+  it('has 7 genes (6 forager + 1 AMBIENT_LIGHT sensor)', () => {
+    expect(g.genes.length).toBe(7);
+  });
+
+  it('preserves the core foraging loop', () => {
+    expect(conn(g, 2, 3).weight).toBeCloseTo(1.5, 6); // sensorLat→turn
+    expect(conn(g, 1, 4).weight).toBeCloseTo(1.5, 6); // sensorFwd→thrust
+  });
+
+  it('has an AMBIENT_LIGHT sensor wired to thrust with negative weight', () => {
+    const amb = sensorGene(g, SensorChannel.AMBIENT_LIGHT);
+    expect(amb).toBeDefined();
+    expect(amb.sensorChannel).toBe(SensorChannel.AMBIENT_LIGHT);
+    const rule = conn(g, 6, 4);
+    expect(rule.weight).toBeCloseTo(-0.8, 6);
+  });
+
+  it('develops a 7-cell body with no truncation and positive energy', () => {
+    expect(body.count).toBe(7);
+    expect(body.truncated).toBe(false);
+    expect(body.totalEnergy).toBeGreaterThan(0);
+  });
+
+  it('instantiates into a small World without error', () => {
+    const w = new World(defaultConfig({ maxCells: 2000 }), false);
+    const org = w.spawnOrganism(g, 500, 500, 0);
+    expect(org).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe('buildGlowForagerGenome — glow signaling / flocking', () => {
+  const g = buildGlowForagerGenome(6, 100);
+  const body = develop(g, 256, 16);
+
+  it('has 7 genes (6 forager + 1 GLOW sensor); turn neuron has glowGain>0', () => {
+    expect(g.genes.length).toBe(7);
+    expect(g.genes[3]!.glowGain).toBeGreaterThan(0);
+  });
+
+  it('preserves the core foraging loop', () => {
+    expect(conn(g, 2, 3).weight).toBeCloseTo(1.5, 6); // sensorLat→turn
+    expect(conn(g, 1, 4).weight).toBeCloseTo(1.5, 6); // sensorFwd→thrust
+  });
+
+  it('has a GLOW sensor wired to thrust with positive weight', () => {
+    const glow = sensorGene(g, SensorChannel.GLOW);
+    expect(glow).toBeDefined();
+    expect(glow.sensorChannel).toBe(SensorChannel.GLOW);
+    const rule = conn(g, 6, 4);
+    expect(rule.weight).toBeCloseTo(1.2, 6);
+  });
+
+  it('develops a 7-cell body with no truncation and positive energy', () => {
+    expect(body.count).toBe(7);
+    expect(body.truncated).toBe(false);
+    expect(body.totalEnergy).toBeGreaterThan(0);
+  });
+
+  it('instantiates into a small World without error', () => {
+    const w = new World(defaultConfig({ maxCells: 2000 }), false);
+    const org = w.spawnOrganism(g, 500, 500, 0);
+    expect(org).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe('buildToxinAvoiderGenome — toxin avoidance wiggle', () => {
+  const g = buildToxinAvoiderGenome(6, 100);
+  const body = develop(g, 256, 16);
+
+  it('has 7 genes (6 forager + 1 TOXIN sensor)', () => {
+    expect(g.genes.length).toBe(7);
+  });
+
+  it('preserves the core foraging loop', () => {
+    expect(conn(g, 2, 3).weight).toBeCloseTo(1.5, 6); // sensorLat→turn
+    expect(conn(g, 1, 4).weight).toBeCloseTo(1.5, 6); // sensorFwd→thrust
+  });
+
+  it('has a TOXIN sensor wired to turn with positive weight', () => {
+    const tox = sensorGene(g, SensorChannel.TOXIN);
+    expect(tox).toBeDefined();
+    expect(tox.sensorChannel).toBe(SensorChannel.TOXIN);
+    const rule = conn(g, 6, 3);
+    expect(rule.weight).toBeCloseTo(1.5, 6);
+  });
+
+  it('develops a 7-cell body with no truncation and positive energy', () => {
+    expect(body.count).toBe(7);
+    expect(body.truncated).toBe(false);
+    expect(body.totalEnergy).toBeGreaterThan(0);
+  });
+
+  it('instantiates into a small World without error', () => {
+    const w = new World(defaultConfig({ maxCells: 2000 }), false);
+    const org = w.spawnOrganism(g, 500, 500, 0);
+    expect(org).toBeGreaterThanOrEqual(0);
   });
 });
