@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { CellType, isLiving, isEdibleBy, isNeural } from './types';
+import { CellType, isLiving, isEdibleBy, isNeural, isFlesh } from './types';
 
 describe('cell type palette', () => {
   it('assigns distinct stable indices', () => {
@@ -74,5 +74,33 @@ describe('M4 neural cell types', () => {
     expect(isEdibleBy(CellType.DIGESTIVE, CellType.NEURON)).toBe(false);
     expect(isEdibleBy(CellType.MOTILE, CellType.MOVER)).toBe(false);
     expect(isEdibleBy(CellType.MOTILE, CellType.SENSOR)).toBe(false);
+  });
+});
+
+describe('PREDATOR type (ecology pass)', () => {
+  it('appends PREDATOR=7 without renumbering the existing palette', () => {
+    expect(CellType.MOVER).toBe(6);
+    expect(CellType.PREDATOR).toBe(7);
+  });
+
+  it('PREDATOR is living and is NOT a neural cell', () => {
+    expect(isLiving(CellType.PREDATOR)).toBe(true);
+    expect(isNeural(CellType.PREDATOR)).toBe(false);
+  });
+
+  it('isFlesh is true for forager-body cells, false for plants/corpses/predators', () => {
+    expect(isFlesh(CellType.DIGESTIVE)).toBe(true);
+    expect(isFlesh(CellType.MOTILE)).toBe(true);
+    expect(isFlesh(CellType.SENSOR)).toBe(true);
+    expect(isFlesh(CellType.NEURON)).toBe(true);
+    expect(isFlesh(CellType.MOVER)).toBe(true);
+    expect(isFlesh(CellType.PHOTO)).toBe(false); // plants are the herbivore niche, not flesh
+    expect(isFlesh(CellType.MEAT)).toBe(false); // corpses are scavenger food
+    expect(isFlesh(CellType.PREDATOR)).toBe(false); // predators don't cannibalize each other
+  });
+
+  it('PREDATOR is NOT edible by herbivore mouths (it is not PHOTO/MEAT)', () => {
+    expect(isEdibleBy(CellType.DIGESTIVE, CellType.PREDATOR)).toBe(false);
+    expect(isEdibleBy(CellType.MOTILE, CellType.PREDATOR)).toBe(false);
   });
 });

@@ -12,6 +12,9 @@ export const CellType = {
   SENSOR: 4,
   NEURON: 5,
   MOVER: 6,
+  /** Carnivore mouth: drains energy from contacting living cells of OTHER organisms (the prey-eating
+   *  analogue of DIGESTIVE). Lets a predator organism hunt foragers. Added in the ecology pass. */
+  PREDATOR: 7,
 } as const;
 
 export type CellTypeValue = (typeof CellType)[keyof typeof CellType];
@@ -31,5 +34,22 @@ export function isEdibleBy(eater: number, prey: number): boolean {
   return (
     (eater === CellType.DIGESTIVE || eater === CellType.MOTILE) &&
     (prey === CellType.PHOTO || prey === CellType.MEAT)
+  );
+}
+
+/**
+ * Is `prey` huntable flesh for a PREDATOR mouth? Living forager-body cells (DIGESTIVE/MOTILE/SENSOR/
+ * NEURON/MOVER) — i.e. NOT plants (PHOTO), NOT corpses (MEAT, scavenger food), and NOT other
+ * predators (PREDATOR), so predators don't cannibalize each other and collapse. The caller pairs
+ * this with a different-organism check (a predator never eats its own body). Type-only here — the
+ * "different organism" identity check (organismId, structural like bonds) lives in the kernel, so no
+ * fitness/lineage decision is involved. */
+export function isFlesh(prey: number): boolean {
+  return (
+    prey === CellType.DIGESTIVE ||
+    prey === CellType.MOTILE ||
+    prey === CellType.SENSOR ||
+    prey === CellType.NEURON ||
+    prey === CellType.MOVER
   );
 }
