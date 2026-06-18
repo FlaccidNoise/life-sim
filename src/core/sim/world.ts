@@ -161,6 +161,7 @@ export class World {
       config.lightPatchCount,
       config.lightPatchRadius,
       config.lightMax,
+      this.rng.split(6 /* STREAM_DRIFT */),
     );
     this.food = new FoodField(
       config.foodGridCols,
