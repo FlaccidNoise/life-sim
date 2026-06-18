@@ -4,7 +4,11 @@ import { defaultConfig } from './config';
 import { spawnSwimmer, type Critter } from './critter';
 import { CellType } from '../cells/types';
 import { develop } from '../genome/develop';
-import { buildAutotrophGenome, buildForagerGenome } from '../genome/critter-genome';
+import {
+  buildAutotrophGenome,
+  buildForagerGenome,
+  buildPredatorGenome,
+} from '../genome/critter-genome';
 import { instantiateBody } from '../organism/instantiate';
 import { serializeGenomeLibrary } from '../genome/genome';
 import { serializeLineageLog } from '../genome/lineage-log';
@@ -315,4 +319,148 @@ describe('reproducibility — crowdDivideCap (density-dependent division)', () =
     const uncapped = runCapped(7, 65535).cells.aliveCount; // OFF sentinel = the un-capped sim
     expect(uncapped).toBeGreaterThan(capped); // the cap actually limited the field (guard fired)
   });
+});
+
+describe('reproducibility — predation + fleeing (3-trophic ecology) ON', () => {
+  // The default OFF paths (preyDeposit/predScentDeposit 0) are covered by every suite above. This
+  // pins the FULL ecology hot path — predation kernel (latch-and-drain), the latch tether force pass,
+  // and prey fleeing (predScent deposit + flee steering) — must be byte-deterministic AND non-vacuously
+  // active (the latch actually engages, carnivores deposit flee-scent, all 3 trophic levels coexist).
+  // A small DENSE arena so predators contact prey within a few hundred ticks (the balance itself is
+  // validated separately at 2048² in feel-probe.ts; here we only need the code paths to fire).
+  function runEco(): {
+    w: World;
+    births: number;
+    latched: boolean;
+    foragersEnd: number;
+    predatorsEnd: number;
+  } {
+    const cfg = defaultConfig({
+      seed: 7,
+      maxCells: 8000,
+      maxBonds: 16384,
+      maxOrganisms: 4096,
+      cellRadius: 4,
+      worldWidth: 384,
+      worldHeight: 384,
+      initialPhotoFraction: 1,
+      initialMotileFraction: 0,
+      crowdDivideCap: 4,
+      crowdGridSize: 32,
+      divideThreshold: 70,
+      reproThreshold: 280,
+      reproParentFloor: 60,
+      organismDeathFloor: 0,
+      basalCost: 0.004,
+      cruiseThrust: 1,
+      maxThrust: 8,
+      // predation + fleeing, the validated LOCKED levers (feel-probe.ts)
+      preyDeposit: 5,
+      predDigestRate: 40,
+      predDigestEfficiency: 0.9,
+      predReach: 1.5,
+      predLatchRange: 2.5,
+      predLatchStiffness: 1.0,
+      carnivoreThrustMult: 2.0,
+      predScentDeposit: 5,
+      predFleeWeight: 1.0,
+      mutationWeightRate: 0.25,
+      mutationWeightSigma: 0.1,
+      mutationParamRate: 0.1,
+      mutationParamSigma: 0.1,
+    });
+    const w = new World(cfg, false);
+    w.seedLife(2000);
+    const spawn = (g: ReturnType<typeof buildForagerGenome>, x: number, y: number, h: number) => {
+      const ref = w.genomes.register(g);
+      const body = develop(g, cfg.maxCellsPerOrganism, cfg.maxRecursionDepth);
+      instantiateBody(
+        body,
+        w.cells,
+        w.net,
+        w.bonds,
+        w.organisms,
+        ref,
+        x,
+        y,
+        h,
+        cfg.worldWidth,
+        cfg.worldHeight,
+        w.instantiateScratch,
+      );
+    };
+    // Foragers and predators interleaved in the same cluster → fast, deterministic first contact.
+    for (let k = 0; k < 20; k++) {
+      spawn(
+        buildForagerGenome(cfg.cellRadius, 45),
+        cfg.worldWidth * (0.2 + (0.6 * (k % 5)) / 5),
+        cfg.worldHeight * (0.2 + (0.6 * Math.floor(k / 5)) / 4),
+        (k * 2.39996) % (Math.PI * 2),
+      );
+    }
+    for (let k = 0; k < 8; k++) {
+      spawn(
+        buildPredatorGenome(cfg.cellRadius, 360, -1.5),
+        cfg.worldWidth * (0.25 + (0.5 * (k % 4)) / 4),
+        cfg.worldHeight * (0.25 + (0.5 * Math.floor(k / 4)) / 2),
+        (k * 1.7) % (Math.PI * 2),
+      );
+    }
+
+    const f = w.cells.fields;
+    let births = 0;
+    let latched = false;
+    for (let t = 0; t < 600; t++) {
+      w.tick();
+      births += w.lastOrganismBirths;
+      if (!latched) {
+        for (let i = 0; i < w.liveCount; i++) {
+          const idx = w.liveIndices[i]!;
+          if (f.cellType[idx] === CellType.PREDATOR && f.latchCell[idx]! > 0) {
+            latched = true;
+            break;
+          }
+        }
+      }
+    }
+    let foragersEnd = 0;
+    let predatorsEnd = 0;
+    const cc = w.organisms.cellCount;
+    const carn = w.organisms.carnivore;
+    for (let org = 1; org < cc.length; org++) {
+      if (cc[org]! === 0) continue;
+      if (carn[org] === 1) predatorsEnd++;
+      else foragersEnd++;
+    }
+    return { w, births, latched, foragersEnd, predatorsEnd };
+  }
+
+  it('produces byte-identical SoA + predScent + lineage across two runs (latch fires, all 3 coexist)', () => {
+    const a = runEco();
+    const b = runEco();
+    const fa = a.w.cells.fields;
+    const fb = b.w.cells.fields;
+    expect(Array.from(fa.energy)).toEqual(Array.from(fb.energy));
+    expect(Array.from(fa.posX)).toEqual(Array.from(fb.posX));
+    expect(Array.from(fa.posY)).toEqual(Array.from(fb.posY));
+    expect(Array.from(fa.organismId)).toEqual(Array.from(fb.organismId));
+    expect(Array.from(fa.latchCell)).toEqual(Array.from(fb.latchCell));
+    expect(Array.from(fa.latchPrey)).toEqual(Array.from(fb.latchPrey));
+    expect(Array.from(a.w.predScent.field)).toEqual(Array.from(b.w.predScent.field));
+    expect(Array.from(a.w.preyField.field)).toEqual(Array.from(b.w.preyField.field));
+    expect(serializeLineageLog(a.w.lineage)).toBe(serializeLineageLog(b.w.lineage));
+
+    // Non-vacuity: the new code paths actually fired, and both runs fired them identically.
+    expect(a.latched).toBe(true); // the predation LATCH engaged at least once
+    expect(a.latched).toBe(b.latched);
+    let predScentMax = 0;
+    for (const v of a.w.predScent.field) if (v > predScentMax) predScentMax = v;
+    expect(predScentMax).toBeGreaterThan(0); // carnivore flesh deposited flee-scent (fleeing path ran)
+    expect(a.births).toBeGreaterThan(0);
+    expect(a.births).toBe(b.births);
+    expect(a.foragersEnd).toBeGreaterThan(0); // all three trophic levels coexist at the end
+    expect(a.predatorsEnd).toBeGreaterThan(0);
+    expect(a.foragersEnd).toBe(b.foragersEnd);
+    expect(a.predatorsEnd).toBe(b.predatorsEnd);
+  }, 30000);
 });
