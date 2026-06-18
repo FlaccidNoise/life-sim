@@ -795,6 +795,23 @@ export class World {
     if (predationOn) preyField.step(cfg.foodDiffuse, cfg.foodDecay);
     if (fleeOn) predScent.step(cfg.foodDiffuse, cfg.foodDecay);
 
+    // Step 11b HEARING: deposit `loudnessGain·speed` (speed = hypot(velX, velY)) per live cell over
+    // the post-lifecycle live set, then step (same diffuse/decay as the smell fields). SENSE reads the
+    // gradient NEXT tick (one-tick coupling, like smell). OFF (loudnessGain===0, default) → both the
+    // deposit loop AND the step are skipped entirely: zero added cost, NoiseField stays all-zero,
+    // byte-identical (mirrors the predationOn/fleeOn guards above).
+    if (cfg.loudnessGain > 0) {
+      const noise = this.noise;
+      const gain = cfg.loudnessGain;
+      for (let k = 0; k < this.liveCount; k++) {
+        const idx = this.liveIndices[k]!;
+        const vx = f.velX[idx]!;
+        const vy = f.velY[idx]!;
+        noise.depositAt(f.posX[idx]!, f.posY[idx]!, gain * Math.hypot(vx, vy));
+      }
+      noise.step(cfg.foodDiffuse, cfg.foodDecay);
+    }
+
     // M5: recompute per-organism aggregates over the post-lifecycle live set.
     aggregateOrganisms(
       this.liveIndices,

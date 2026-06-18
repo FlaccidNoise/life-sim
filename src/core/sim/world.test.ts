@@ -163,3 +163,29 @@ describe('World M2 metabolism integration', () => {
     expect(w.metrics.population).toBe(w.cells.aliveCount);
   });
 });
+
+describe('world — NoiseField hearing deposit', () => {
+  it('with loudnessGain 0 the NoiseField stays empty (OFF, byte-identical)', () => {
+    const w = new World(defaultConfig({ seed: 7, maxCells: 500 }), false);
+    w.seedLife(200);
+    for (let t = 0; t < 30; t++) w.tick();
+    // every patch is exactly 0 — deposit+step were skipped.
+    let max = 0;
+    const fld = w.noise.field;
+    for (let i = 0; i < fld.length; i++) if (fld[i]! > max) max = fld[i]!;
+    expect(max).toBe(0);
+  });
+
+  it('with loudnessGain > 0 a moving population deposits motion into the NoiseField', () => {
+    const w = new World(
+      defaultConfig({ seed: 7, maxCells: 500, loudnessGain: 1, initialMotileFraction: 1 }),
+      false,
+    );
+    w.seedLife(200);
+    for (let t = 0; t < 30; t++) w.tick();
+    let max = 0;
+    const fld = w.noise.field;
+    for (let i = 0; i < fld.length; i++) if (fld[i]! > max) max = fld[i]!;
+    expect(max).toBeGreaterThan(0);
+  });
+});
