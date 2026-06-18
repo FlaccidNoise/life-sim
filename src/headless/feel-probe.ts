@@ -3,6 +3,12 @@
  * (plants → foragers → predators) so the predation balance can be tuned headlessly: do all three
  * coexist (no level goes extinct), does the predator cull the forager swarm, does it breathe?
  * Run: pnpm exec tsx src/headless/feel-probe.ts
+ *
+ * Two modes (gated on argv[2]):
+ *   diag       — FAST single-seed diagnostic in a ¼-area arena (1024²), 5k ticks. The rescale
+ *                economy is scale-invariant (income & basal ∝ area; predator-prey contact is local)
+ *                so behaviour transfers, but a run finishes in seconds → tight tuning loop.
+ *   (default)  — FULL validation: 2048² arena, 12k ticks, seeds 3/7/42/99, the SUCCESS BAR.
  */
 import { World } from '../core/sim/world';
 import { defaultConfig, type Config } from '../core/sim/config';
@@ -83,12 +89,23 @@ interface Trial {
   foragers: number;
   predators: number;
   o: Partial<Config>;
-  predMass?: number; // < 2 → faster predator (speed edge)
-  mouthR?: number; // predator mouth radius (bigger → larger catch range)
+  /** Carnivore speed edge — config.carnivoreThrustMult (>1 = predators outrun equal-speed prey). */
+  predThrustMult?: number;
+  /** Ambush brake strength — buildPredatorGenome's sensorFwd→thrust weight (negative = loiter in scent). */
+  fwdThrustWeight?: number;
+  /** Predator seed reserve as a multiple of FORAGER_INIT_E (survives the early hunt-establish gauntlet). */
+  predReserveMult?: number;
 }
 
-function run(t: Trial): void {
-  const config = defaultConfig({ maxCells: 100_000, ...BASE, ...t.o });
+function run(t: Trial, ticks: number, world1024: boolean): void {
+  const arena: Partial<Config> = world1024 ? { worldWidth: 1024, worldHeight: 1024 } : {};
+  const config = defaultConfig({
+    maxCells: 100_000,
+    ...BASE,
+    ...arena,
+    carnivoreThrustMult: t.predThrustMult ?? 1,
+    ...t.o,
+  });
   const world = new World(config);
   world.seedLife(t.plants);
   for (let k = 0; k < t.foragers; k++) {
@@ -100,12 +117,10 @@ function run(t: Trial): void {
       (k * 2.39996) % (Math.PI * 2),
     );
   }
-  const predMass = t.predMass ?? 2;
-  const mouthR = t.mouthR ?? world.config.cellRadius;
+  const fwd = t.fwdThrustWeight ?? -1.5;
+  const reserveMult = t.predReserveMult ?? 2;
   for (let k = 0; k < t.predators; k++) {
-    const g = buildPredatorGenome(world.config.cellRadius, FORAGER_INIT_E * 2); // 2× forager seed reserve (scaled)
-    g.genes = g.genes.map((gene) => ({ ...gene, mass: predMass })); // lighter → faster (speed edge)
-    g.genes[5] = { ...g.genes[5]!, radius: mouthR }; // bigger maw → larger contact range to snag prey
+    const g = buildPredatorGenome(world.config.cellRadius, FORAGER_INIT_E * reserveMult, fwd);
     spawn(
       world,
       g,
@@ -119,16 +134,23 @@ function run(t: Trial): void {
   const cellArea = Math.PI * config.cellRadius * config.cellRadius;
   let predExtinct = -1;
   let forExtinct = -1;
+  let predMax = t.predators;
+  let predMin = t.predators;
+  let forMax = t.foragers;
+  const sample = Math.round(ticks / 10);
   let series = '';
-  for (let tick = 1; tick <= 12000; tick++) {
+  for (let tick = 1; tick <= ticks; tick++) {
     world.tick();
     const { foragers, predators } = liveOrganisms(world);
+    if (predators > predMax) predMax = predators;
+    if (predators < predMin) predMin = predators;
+    if (foragers > forMax) forMax = foragers;
     if (t.predators > 0 && predators === 0 && predExtinct < 0 && tick > 50) predExtinct = tick;
     if (t.foragers > 0 && foragers === 0 && forExtinct < 0 && tick > 50) forExtinct = tick;
-    if (tick % 3000 === 0) {
+    if (tick % sample === 0) {
       const m = world.metrics;
       const pack = ((m.population * cellArea) / worldArea) * 100;
-      series += `[t${tick / 1000}k F${foragers} P${predators} pk${pack.toFixed(0)}% div${m.diversity.toFixed(2)}] `;
+      series += `[${tick} F${foragers} P${predators} pk${pack.toFixed(0)}%] `;
     }
   }
   const dead = [
@@ -137,50 +159,75 @@ function run(t: Trial): void {
   ]
     .filter(Boolean)
     .join(' ');
-  console.log(`${t.name.padEnd(22)}: ${series}${dead ? '| EXTINCT ' + dead : '| all 3 survive'}`);
+  // predBred = predators reproduced above the seed count → the cycle breathes on the top trophic level.
+  const predBred = predMax > t.predators ? `predMax${predMax}` : 'predNoBreed';
+  console.log(
+    `${t.name.padEnd(26)}: ${series}| ${predBred} forMax${forMax} ${dead ? 'EXTINCT ' + dead : 'ALL3'}`,
+  );
 }
 
-console.log(
-  '=== PHASE 2.2: strike-reach lever — predReach 1.5 (reach 12 @ r4, hash-window cap) ===',
-);
-// reach converts the perpetual ~9-unit pursuit near-miss into a bite. Sweep density + speed edge.
-const P = { preyDeposit: 3, predDigestRate: 30, predReach: 1.5 };
-run({ name: 'reach1.5 cap2 s3', plants: 18000, foragers: 70, predators: 30, o: { seed: 3, ...P } });
-run({
-  name: 'reach1.5 cap4 s3',
-  plants: 18000,
-  foragers: 70,
-  predators: 30,
-  o: { seed: 3, crowdDivideCap: 4, ...P },
-});
-run({
-  name: 'reach1.5 cap6 s3',
-  plants: 20000,
-  foragers: 70,
-  predators: 30,
-  o: { seed: 3, crowdDivideCap: 6, ...P },
-});
-run({
-  name: 'reach1.5 cap4 m1.3 s3',
-  plants: 18000,
-  foragers: 70,
-  predators: 30,
-  o: { seed: 3, crowdDivideCap: 4, ...P },
-  predMass: 1.3,
-});
-run({
-  name: 'reach1.5 cap4 m1.3 s7',
-  plants: 18000,
-  foragers: 70,
-  predators: 30,
-  o: { seed: 7, crowdDivideCap: 4, ...P },
-  predMass: 1.3,
-});
-run({
-  name: 'reach1.5 cap4 m1.3 s42',
-  plants: 18000,
-  foragers: 70,
-  predators: 30,
-  o: { seed: 42, crowdDivideCap: 4, ...P },
-  predMass: 1.3,
-});
+const mode = process.argv[2] ?? 'full';
+
+if (mode === 'diag') {
+  // FAST diagnostic: ¼-area arena (1024²), 5k ticks, single seed. Plants/foragers/predators scaled
+  // to ¼ so densities match the full arena. Sweep ambush brake × speed edge × strike-reach.
+  // DIAG6: world-size sweep at FIXED density. The ¼-scale diag (1024²) sustained predators; the full
+  // 2048² collapsed because ambush bite-rate ∝ local prey density and 2048² is 4× sparser at the same
+  // counts. There is a MAX world size for a given prey density. Sweep W from the worked 1024² up,
+  // holding density at the diag's (4290 plants / 17 foragers / 11.4 predators per 1e6 area).
+  console.log('=== DIAG6: world-size sweep at FIXED density (winner config, 6k, seed 3) ===');
+  const best = {
+    preyDeposit: 5,
+    predDigestRate: 30,
+    predDigestEfficiency: 0.7,
+    predReach: 1.5,
+    crowdDivideCap: 4,
+  };
+  const W = { predThrustMult: 2.0, fwdThrustWeight: -1.5, predReserveMult: 4 } as const;
+  for (const ws of [1024, 1280, 1536, 1792]) {
+    const a = (ws * ws) / 1e6;
+    run(
+      {
+        name: `world${ws} s3`,
+        plants: Math.round(4290 * a),
+        foragers: Math.round(17 * a),
+        predators: Math.round(11.4 * a),
+        o: { ...best, worldWidth: ws, worldHeight: ws, seed: 3 },
+        ...W,
+      },
+      6000,
+      false,
+    );
+  }
+} else {
+  // LOCKED ECOLOGY CONFIG (the ambush+speed-edge balance, derived in DIAG1-4 at ¼ scale, validated
+  // here at full scale): ambush brain (sensorFwd→thrust -1.5 → predator brakes/loiters in prey-scent
+  // instead of charging, sidestepping pursuit-lag) + carnivore speed edge (carnivoreThrustMult 2.0 →
+  // outruns equal-speed prey to reposition) + strike-reach (predReach 1.5) + STRONG prey-scent
+  // (preyDeposit 5 — the dominant lever; lets scattered predators find prey before their seed reserve
+  // runs out) + 4× predator seed reserve (survives the early hunt-establish gauntlet). Counts/plants
+  // are the diagnostic densities ×4 (full arena is 4× area).
+  console.log('=== FULL validation: 2048², 12k ticks, seeds 3/7/42/99 ===');
+  const LOCKED = {
+    preyDeposit: 5,
+    predDigestRate: 30,
+    predDigestEfficiency: 0.7,
+    predReach: 1.5,
+    crowdDivideCap: 4,
+  };
+  const W = { predThrustMult: 2.0, fwdThrustWeight: -1.5, predReserveMult: 4 } as const;
+  for (const seed of [3, 7, 42, 99]) {
+    run(
+      {
+        name: `full s${seed}`,
+        plants: 18000,
+        foragers: 72,
+        predators: 48,
+        o: { ...LOCKED, seed },
+        ...W,
+      },
+      12000,
+      false,
+    );
+  }
+}

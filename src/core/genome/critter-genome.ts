@@ -218,16 +218,29 @@ export function buildForagerGenome(cellRadius = 6, initialEnergy = 100): Genome 
 }
 
 /**
- * A PREDATOR: the SAME body plan + brain as a forager, but its leading mouth (gene 5) is a PREDATOR
- * (carnivore) cell instead of DIGESTIVE. At instantiate the PREDATOR mouth flags the organism
- * carnivore → its SENSORs route to the prey-scent field (it hunts foragers) and it is excluded from
- * prey-scent deposit. It eats forager flesh via the predation branch of metabolize. DRY over
- * buildForagerGenome — identical genome, one gene's cellType overridden. Evolves under the same
- * economic selection (mutation may even flip the mouth back to herbivore — diet can drift, lineage-blind).
+ * A PREDATOR: the forager body plan with its leading mouth (gene 5) swapped DIGESTIVE→PREDATOR
+ * (carnivore) AND an AMBUSH brain. At instantiate the PREDATOR mouth flags the organism carnivore
+ * → its SENSORs route to the prey-scent field (it hunts foragers), it is excluded from prey-scent
+ * deposit, and it eats forager flesh via the predation branch of metabolize. Evolves under the same
+ * economic selection (mutation may flip the mouth back to herbivore — diet drifts, lineage-blind).
+ *
+ * AMBUSH WIRING (the root-cause fix for pursuit-lag): a gradient-CHARGING predator perpetually lags
+ * mobile, equal-speed prey (Phase 2 diagnosis: ~zero bites, starves on schedule). So instead of
+ * advancing into prey-scent like a forager (sensorFwd→thrust +1.5), the predator INVERTS that link
+ * (`fwdThrustWeight`, default negative) → high forward prey-scent CUTS thrust → it brakes and loiters
+ * where prey are dense, letting prey wander into strike-reach. sensorLat→turn stays positive (it still
+ * orients toward prey); thrustBias/cruise + the carnivore speed edge roam it fast between patches.
+ * `fwdThrustWeight` is a tuning knob (swept in the headless probe). DRY over buildForagerGenome.
  */
-export function buildPredatorGenome(cellRadius = 6, initialEnergy = 100): Genome {
+export function buildPredatorGenome(
+  cellRadius = 6,
+  initialEnergy = 100,
+  fwdThrustWeight = -1.5,
+): Genome {
   const g = buildForagerGenome(cellRadius, initialEnergy);
   g.genes[5] = { ...g.genes[5]!, cellType: CellType.PREDATOR };
+  const fwdThrust = g.connectionRules.find((c) => c.preGene === 1 && c.postGene === 4);
+  if (fwdThrust) fwdThrust.weight = fwdThrustWeight;
   return g;
 }
 
