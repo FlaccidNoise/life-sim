@@ -157,3 +157,12 @@ describe('M6 config', () => {
     expect(back.maxCellsPerOrganism).toBe(99);
   });
 });
+
+describe('config — loudnessGain (hearing)', () => {
+  it('defaults to 0 (hearing OFF, byte-identical)', () => {
+    expect(defaultConfig().loudnessGain).toBe(0);
+  });
+  it('is overridable', () => {
+    expect(defaultConfig({ loudnessGain: 0.5 }).loudnessGain).toBe(0.5);
+  });
+});

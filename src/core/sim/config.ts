@@ -126,6 +126,11 @@ export interface Config {
    *  its steering (climbs food, slides away from predators). 0 = no fleeing (no-op, byte-identical). Default 0. */
   predFleeWeight: number;
 
+  /** Hearing deposit gain: each live cell deposits `loudnessGain · hypot(velX, velY)` into the
+   *  NoiseField at end-of-tick. 0 = hearing OFF — NoiseField deposit+step skipped entirely
+   *  (byte-identical to today). Default 0. */
+  loudnessGain: number;
+
   // Sensing & movement (§4.4). All live knobs.
   /** Gradient magnitude below which a mover coasts at cruiseThrust instead of steering. */
   senseThreshold: number;
@@ -377,6 +382,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     predLatchStiffness: 0, // OFF by default (no tether); the ecology config enables the attachment spring
     predScentDeposit: 0, // OFF by default (no fleeing) — predScent field is skipped entirely, byte-identical
     predFleeWeight: 0, // OFF by default (no-op); the ecology config raises it so foragers flee predator scent
+    loudnessGain: 0, // OFF by default — NoiseField deposit+step skipped entirely (byte-identical)
 
     senseThreshold: 1e-4,
     turnRate: 0.25, // ~14°/tick — visibly curves toward food without snapping
