@@ -98,6 +98,12 @@ export interface Config {
    *  equal-speed mobile prey, so contact-only (1) nets ~zero bites; >1 lets it bite from just beyond
    *  contact. MUST keep predReach·(ri+rj) within the 3×3 hash window (≤ ~1.5·cellSize). Default 1. */
   predReach: number;
+  /** Carnivore movement advantage: a multiplier on every MOVER thrust (and its maxThrust ceiling)
+   *  for organisms flagged carnivore. >1 lets a predator reposition/close faster than equal-speed
+   *  prey — the speed half of the ambush+speed fix (chemotaxis pursuit lags equal-speed prey).
+   *  Mass was the wrong lever (lighter cells gave no usable speed gain). Default 1 = no-op (the
+   *  M2-M7 economy is byte-identical; only carnivore organisms exist when predation is enabled). */
+  carnivoreThrustMult: number;
 
   // Sensing & movement (§4.4). All live knobs.
   /** Gradient magnitude below which a mover coasts at cruiseThrust instead of steering. */
@@ -344,6 +350,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     predDigestRate: 40, // a predator BITE drains flesh fast (vs digestRate 7 for stripping a plant) so a latched predator kills a ~600-energy forager in a sustained chase, not 50 ticks
     predDigestEfficiency: 0.7, // same conversion loss as herbivore digestion
     predReach: 1, // contact-only by default (no-op); the demo raises it so hunters can land bites on mobile prey
+    carnivoreThrustMult: 1, // OFF by default (no-op); the ecology config raises it to give predators a speed edge over equal-speed prey
 
     senseThreshold: 1e-4,
     turnRate: 0.25, // ~14°/tick — visibly curves toward food without snapping

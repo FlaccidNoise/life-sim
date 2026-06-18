@@ -490,6 +490,9 @@ export class World {
       cfg.thrustScale,
       cfg.thrustBias,
       cfg.maxThrust,
+      f.organismId,
+      this.organisms.carnivore,
+      cfg.carnivoreThrustMult,
     );
 
     computeRepulsion(this.hash, f.posX, f.posY, f.radius, f.forceX, f.forceY, cfg.repulsion);
