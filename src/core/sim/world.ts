@@ -689,6 +689,7 @@ export class World {
     const preyField = this.preyField;
     const dep = cfg.foodDeposit;
     const preyDep = cfg.preyDeposit;
+    const predationOn = preyDep > 0; // predation OFF (default) → skip ALL prey-field work (zero added cost)
     const carn = this.organisms.carnivore;
     for (let k = 0; k < this.liveCount; k++) {
       const idx = this.liveIndices[k]!;
@@ -696,13 +697,15 @@ export class World {
       if (isEdibleBy(CellType.MOTILE, t)) food.depositAt(f.posX[idx]!, f.posY[idx]!, dep);
       // Prey-scent: living forager (NON-carnivore organism) flesh emits the gradient predators hunt.
       // Predators' own bodies don't deposit (they aren't prey in v1), so the field is pure prey signal.
-      const org = f.organismId[idx]!;
-      if (preyDep > 0 && org !== 0 && carn[org] === 0 && isFlesh(t)) {
-        preyField.depositAt(f.posX[idx]!, f.posY[idx]!, preyDep);
+      if (predationOn) {
+        const org = f.organismId[idx]!;
+        if (org !== 0 && carn[org] === 0 && isFlesh(t)) {
+          preyField.depositAt(f.posX[idx]!, f.posY[idx]!, preyDep);
+        }
       }
     }
     food.step(cfg.foodDiffuse, cfg.foodDecay);
-    preyField.step(cfg.foodDiffuse, cfg.foodDecay);
+    if (predationOn) preyField.step(cfg.foodDiffuse, cfg.foodDecay);
 
     // M5: recompute per-organism aggregates over the post-lifecycle live set.
     aggregateOrganisms(
