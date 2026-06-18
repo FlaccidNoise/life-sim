@@ -477,3 +477,51 @@ describe('reproducibility — predation + fleeing (3-trophic ecology) ON', () =>
     expect(a.predatorsEnd).toBe(b.predatorsEnd);
   }, 30000);
 });
+
+describe('reproducibility — drifting light zones ON', () => {
+  // The default OFF path (driftAmplitude 0) is covered by every suite above (cap[] is never
+  // recomputed). This pins the drift-ON hot path: driftCap must be byte-deterministic across runs
+  // AND non-vacuously active (the cap actually migrates between an early and a late tick).
+  function runDrift(seed: number): { w: World; capEarly: number[]; capLate: number[] } {
+    const w = new World(
+      defaultConfig({
+        seed,
+        maxCells: 2000,
+        worldWidth: 512,
+        worldHeight: 512,
+        lightGridCols: 16,
+        lightGridRows: 16,
+        lightPatchCount: 4,
+        lightPatchRadius: 3,
+        driftAmplitude: 4, // ON: 4 grid-cell sway
+      }),
+      false,
+    );
+    w.seedLife(800);
+    let capEarly: number[] = [];
+    let capLate: number[] = [];
+    for (let t = 0; t < 400; t++) {
+      w.tick();
+      if (t === 10) capEarly = Array.from(w.light.cap);
+      if (t === 399) capLate = Array.from(w.light.cap);
+    }
+    return { w, capEarly, capLate };
+  }
+
+  it('produces byte-identical SoA + light cap across two drift-ON runs', () => {
+    const a = runDrift(31);
+    const b = runDrift(31);
+    const fa = a.w.cells.fields;
+    const fb = b.w.cells.fields;
+    expect(Array.from(fa.posX)).toEqual(Array.from(fb.posX));
+    expect(Array.from(fa.posY)).toEqual(Array.from(fb.posY));
+    expect(Array.from(fa.energy)).toEqual(Array.from(fb.energy));
+    expect(Array.from(a.w.light.cap)).toEqual(Array.from(b.w.light.cap));
+    expect(a.capLate).toEqual(b.capLate);
+  });
+
+  it('is non-vacuous: the cap migrates between early and late ticks (drift actually fired)', () => {
+    const { capEarly, capLate } = runDrift(31);
+    expect(capEarly).not.toEqual(capLate); // the rich zone moved — driftCap recomputed cap[]
+  });
+});
