@@ -82,6 +82,13 @@ export class CellStore {
   readonly capacity: number;
   readonly soa: SoaLayout<CellField>;
   aliveCount: number;
+  /**
+   * (highest live slot index + 1), or 0 when empty. Every live slot is in [0, highWaterMark),
+   * so a live-set scan only needs to cover that prefix instead of the full capacity — the LIFO
+   * free-list keeps live slots packed low, so this stays ~O(peak live) even at large capacity.
+   * Maintained in alloc/free; do not mutate externally.
+   */
+  highWaterMark: number;
 
   private readonly freeStack: Int32Array;
   private freeTop: number;
@@ -90,6 +97,7 @@ export class CellStore {
     this.capacity = capacity;
     this.soa = allocateSoa<CellField>(CELL_FIELDS, capacity, preferShared);
     this.aliveCount = 0;
+    this.highWaterMark = 0;
 
     // Fill so that pops return 0, 1, 2, … ascending.
     this.freeStack = new Int32Array(capacity);
@@ -111,6 +119,7 @@ export class CellStore {
     this.soa.fields.latchPrey[i] = 0;
     this.soa.fields.latchCell[i] = 0;
     this.aliveCount++;
+    if (i >= this.highWaterMark) this.highWaterMark = i + 1;
     return i;
   }
 
@@ -123,6 +132,12 @@ export class CellStore {
     gen[i] = (gen[i]! + 1) >>> 0;
     this.freeStack[this.freeTop++] = i;
     this.aliveCount--;
+    // Keep the mark tight: if the top live slot was freed, walk down past any now-dead trailing slots.
+    if (i === this.highWaterMark - 1) {
+      let h = this.highWaterMark;
+      while (h > 0 && (flags[h - 1]! & FLAG_ALIVE) === 0) h--;
+      this.highWaterMark = h;
+    }
   }
 
   isAlive(i: number): boolean {
