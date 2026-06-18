@@ -40,6 +40,10 @@ export interface CellArrays {
    *  as (cellIndex + 1) so 0 = none (typed arrays zero-init). Consumed by applyLatchTether in the next
    *  tick's force pass to spring the predator to its prey (the physical "attachment"). 0 when unlatched. */
   latchCell: Uint32Array;
+  /** 1 ⇒ this cell is a pinned, tough plant BASE (the integrator zeroes its velocity/force each tick so
+   *  it never moves); 0 ⇒ everything else (chain cells, creatures, spores, MEAT). Set deterministically
+   *  (base-seeding, spore-settle) and ON the byte-identical determinism contract because it drives physics. */
+  anchored: Uint8Array;
 }
 
 const CELL_FIELDS = [
@@ -66,6 +70,7 @@ const CELL_FIELDS = [
   { name: 'localDensity', ctor: Uint16Array },
   { name: 'latchPrey', ctor: Uint32Array },
   { name: 'latchCell', ctor: Uint32Array },
+  { name: 'anchored', ctor: Uint8Array },
 ] as const;
 
 export type CellField = (typeof CELL_FIELDS)[number]['name'];
@@ -118,6 +123,9 @@ export class CellStore {
     // tether reads latchCell before the new cell's first metabolize — stale data would mis-tether it).
     this.soa.fields.latchPrey[i] = 0;
     this.soa.fields.latchCell[i] = 0;
+    // Wipe anchored so a recycled slot never inherits a stale base/settled-spore pin — an un-wiped
+    // anchored=1 would freeze the new occupant (spore/creature cell) in place forever via the integrator.
+    this.soa.fields.anchored[i] = 0;
     this.aliveCount++;
     if (i >= this.highWaterMark) this.highWaterMark = i + 1;
     return i;

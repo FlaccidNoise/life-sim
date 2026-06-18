@@ -32,6 +32,7 @@ import { orientSensors } from '../neural/orient';
 import { BondNetwork } from '../organism/bonds';
 import { OrganismTable, aggregateOrganisms } from '../organism/organisms';
 import { SplitChecker } from '../organism/split';
+import { PlantSystem } from '../organism/plant';
 import { makeMetrics, sampleMetrics, sampleEvolutionMetrics, type Metrics } from './metrics';
 import { sampleLineages, type LineageSummary, type LineageStat } from './lineage-board';
 import { sampleSpecies, type SpeciesSummary } from './species-board';
@@ -76,6 +77,8 @@ export class World {
   readonly bonds: BondNetwork;
   readonly organisms: OrganismTable;
   readonly splitter: SplitChecker;
+  /** Sessile chain-plant lifecycle (grow/spore/settle/sever). Only ticked when config.sessilePlants. */
+  readonly plants: PlantSystem;
   /** Genome store (developmental recipes by ref). */
   readonly genomes: GenomeStore;
   /** M7 phylogeny: births/deaths recorded by genome ref; pruned at metrics cadence. Part of the
@@ -184,6 +187,7 @@ export class World {
     this.bonds = new BondNetwork(config.maxCells, config.maxBonds, config.bondDegreeCap);
     this.organisms = new OrganismTable(config.maxOrganisms);
     this.splitter = new SplitChecker(config.maxCells);
+    this.plants = new PlantSystem(config.maxCells);
     this.genomes = new GenomeStore();
     this.lineage = new LineageLog(this.genomes);
     this.mutationRng = this.rng.split(2 /* STREAM_MUTATION */);
@@ -325,9 +329,44 @@ export class World {
       f.senseX[i] = 0;
       f.senseY[i] = 0;
       f.thrust[i] = 0;
+      f.anchored[i] = 0;
       spawned++;
     }
     return spawned;
+  }
+
+  /** Seed one anchored, tough plant BASE (a 1-cell plant organism) at (x, y). Mirrors `spawn` field
+   *  init but sets anchored=1 and a fresh organism id; the plant grows a chain on subsequent ticks.
+   *  Returns the cell slot, or -1 at capacity / organism-pool exhaustion. */
+  seedPlantBase(x: number, y: number, energy = 15): number {
+    const f = this.cells.fields;
+    const i = this.cells.alloc();
+    if (i < 0) return -1;
+    const org = this.organisms.alloc();
+    if (org < 0) {
+      this.cells.free(i);
+      return -1;
+    }
+    f.posX[i] = x;
+    f.posY[i] = y;
+    f.velX[i] = 0;
+    f.velY[i] = 0;
+    f.forceX[i] = 0;
+    f.forceY[i] = 0;
+    f.radius[i] = this.config.cellRadius;
+    f.mass[i] = 1;
+    f.energy[i] = energy;
+    f.cellType[i] = CellType.PHOTO;
+    f.organismId[i] = org;
+    f.genomeRef[i] = 0;
+    f.brainRef[i] = 0;
+    f.age[i] = 0;
+    f.heading[i] = 0;
+    f.senseX[i] = 0;
+    f.senseY[i] = 0;
+    f.thrust[i] = 0;
+    f.anchored[i] = 1;
+    return i;
   }
 
   /** Seed an initial PHOTO/DIGESTIVE/MOTILE mix per the configured fractions. */
@@ -611,6 +650,7 @@ export class World {
       f.forceX,
       f.forceY,
       f.mass,
+      f.anchored,
       cfg.dt,
       cfg.damping,
       cfg.worldWidth,
@@ -625,10 +665,12 @@ export class World {
       this.splitter,
       f.posX,
       f.posY,
+      f.cellType,
       cfg.bondMaxStrain,
       cfg.maxSplitChecksPerTick,
       cfg.worldWidth,
       cfg.worldHeight,
+      cfg.sessilePlants,
     );
     if (broke > 0) this.bonds.rebuildLive(this.cells);
 
@@ -662,6 +704,7 @@ export class World {
       cfg.photoDepletion,
       cfg.digestRate,
       cfg.digestEfficiency,
+      cfg.baseToughness,
       cfg.basalCost,
       cfg.meatDecay,
       cfg.moveCost,
@@ -689,6 +732,23 @@ export class World {
       cfg.transferEfficiency,
     );
 
+    // Sessile plants: sever drained chain/base PHOTO cells and free cells cut off from a base to
+    // MEAT (the only per-cell plant death path). Runs on post-drain energies, before lifecycle; the
+    // freed cells stay ALIVE slots (now MEAT) so the tick-start live set is unchanged for ageing
+    // and lifecycle. rebuildLive happens inside when anything severed. `broke > 0` forces the
+    // reachability reap so a strain-broken chain fragment (relabelled to a fresh org by split-on-break,
+    // baseless and immortal) is collapsed to MEAT instead of leaking org ids + inflating the field.
+    if (cfg.sessilePlants) {
+      this.plants.severEatenChainCells(
+        this.cells,
+        this.bonds,
+        live,
+        n,
+        cfg.meatEnergyOnDeath,
+        broke > 0,
+      );
+    }
+
     // Age the tick-start live set BEFORE lifecycle. The free-list is LIFO, so a
     // slot freed in lifecycle is reused for a division child the same tick;
     // ageing first keeps that child at the age 0 lifecycle sets (not 1).
@@ -714,6 +774,7 @@ export class World {
       cfg.divideCost,
       cfg.divideJitter,
       cfg.crowdDivideCap,
+      cfg.sessilePlants,
       this.tickCount,
       this.lifecycleResult,
     );
@@ -782,6 +843,34 @@ export class World {
       this.organisms,
     );
 
+    // Sessile plants: settle slowed spores into fresh bases (reads post-integrate velocity + the
+    // just-aggregated organism numbers) and grow each plant one tip cell when it can afford one.
+    // Both iterate the post-lifecycle live set ascending; growth/settle alloc cells deterministically.
+    if (cfg.sessilePlants) {
+      this.plants.settleSpores(
+        this.cells,
+        this.organisms,
+        this.liveIndices,
+        this.liveCount,
+        cfg.plantSettleSpeed,
+      );
+      this.plants.growPlants(
+        this.cells,
+        this.bonds,
+        this.organisms,
+        this.liveIndices,
+        this.liveCount,
+        cfg.seed,
+        this.tickCount,
+        cfg.worldWidth,
+        cfg.worldHeight,
+        cfg.plantMaxChain,
+        cfg.plantGrowthThreshold,
+        cfg.plantGrowthCost,
+        cfg.plantBondLen,
+      );
+    }
+
     // 11d M6: atomic organism death (starved) — BEFORE reproduction so a dead organism
     // cannot reproduce the same tick. Reaps bonds + frees ids/genomes; rebuild nets if any died.
     this.deathOut.deadRefs.length = 0;
@@ -831,6 +920,26 @@ export class World {
     // M7: record births for the just-committed children (recordBirth reads the store; the
     // children are registered — not freed — during reproduce, so present at drain time).
     for (const ref of this.reproOut.bornRefs) this.lineage.recordBirth(ref, this.tickCount);
+
+    // Sessile plants: a mature plant ejects ONE free PHOTO spore (organismId=0, anchored=0) with a
+    // deterministic impulse; it drifts and settles into a new base on a later tick. Iterates the
+    // post-lifecycle live set ascending; the new spore acts (settles/photosynthesizes) next tick.
+    if (cfg.sessilePlants) {
+      this.plants.producePlantSpores(
+        this.cells,
+        this.organisms,
+        this.liveIndices,
+        this.liveCount,
+        cfg.seed,
+        this.tickCount,
+        cfg.worldWidth,
+        cfg.worldHeight,
+        cfg.plantMaturityChain,
+        cfg.plantSporeThreshold,
+        cfg.plantSporeCost,
+        cfg.plantSporeImpulse,
+      );
+    }
 
     // 11f M6: adulthood tracking + live-organism count (one O(maxOrganisms) scan).
     let liveOrgs = 0;

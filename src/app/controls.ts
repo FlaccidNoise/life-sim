@@ -1,7 +1,12 @@
 import { type Config } from '../core/sim/config';
 
+/** Config keys whose value is a number — the only ones a range-slider knob can drive. */
+type NumericConfigKey = {
+  [K in keyof Config]: Config[K] extends number ? K : never;
+}[keyof Config];
+
 interface Knob {
-  key: keyof Config;
+  key: NumericConfigKey;
   label: string;
   min: number;
   max: number;
