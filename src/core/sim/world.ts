@@ -107,6 +107,9 @@ export class World {
   private readonly densityCols: number;
   private readonly densityRows: number;
   private readonly mutationRates: MutationRates;
+  /** Reused env-effects bundle for metabolize (mutated each tick; pre-allocated to keep the hot loop
+   *  allocation-free, mirroring reproParams). Holds stable temp/toxin refs; scalars synced per tick. */
+  private readonly env: EnvEffects;
   private readonly reproParams: ReproParams;
   private readonly reproOut: { births: number; bornRefs: number[] };
   private readonly deathOut: { deaths: number; deadRefs: number[] };
@@ -262,6 +265,18 @@ export class World {
       config.worldHeight,
     );
 
+    this.env = {
+      lightMultiplier: 1,
+      temp: this.temperature,
+      tempComfortLow: 0,
+      tempComfortHigh: 0,
+      tempColdPenalty: 0,
+      tempHeatPenalty: 0,
+      toxin: this.toxin,
+      toxinDamage: 0,
+      toxinDepositOnMeatDecay: 0,
+    };
+
     this.reproParams = {
       reproThreshold: 0,
       parentFloor: 0,
@@ -350,18 +365,17 @@ export class World {
   /**
    * Rebuild the compact live set in ascending slot order (canonical, deterministic).
    *
-   * This scans full capacity each tick. Correct, and cheap in the dense regime
-   * (forces dominate). Honest caveat: in the sparse post-crash regime M2 can
-   * introduce (mass die-off), the O(maxCells) scan can invert and dominate when
-   * few cells remain. The rebalanced economy keeps populations substantial so the
-   * scan stays fine; if the empty-scan ever dominates, maintain `liveIndices`
-   * incrementally in alloc/free — an M2/M3 follow-up, not done now.
+   * Scans only `[0, highWaterMark)` — the LIFO free-list keeps live slots packed low, so the mark
+   * tracks ~the peak live count, not `maxCells`. This keeps the scan ~O(live) instead of O(capacity),
+   * so a big/sparse world (large `maxCells`, few live cells) no longer pays a full-capacity scan
+   * twice per tick. The skipped tail `[highWaterMark, capacity)` is dead by the mark's invariant, so
+   * the live set is byte-identical to a full-capacity scan (ascending order preserved).
    */
   private rebuildLive(): void {
-    const capacity = this.cells.capacity;
+    const hwm = this.cells.highWaterMark;
     const live = this.liveIndices;
     let n = 0;
-    for (let i = 0; i < capacity; i++) {
+    for (let i = 0; i < hwm; i++) {
       if (this.cells.isAlive(i)) live[n++] = i;
     }
     this.liveCount = n;
@@ -621,25 +635,22 @@ export class World {
     // The digestion-clustering payoff input, read by METABOLIZE.
     computeDigestBonus(this.bonds, f.cellType, this.digestBonus);
 
-    // M9-early: build the env effects bundle for metabolism.
-    const envMult = lightMultiplier(
+    // M9-early: refresh the reused env-effects bundle for metabolism (no per-tick allocation;
+    // temp/toxin refs are stable, only the scalars change — kept in sync so live knob-tuning works).
+    const env = this.env;
+    env.lightMultiplier = lightMultiplier(
       this.tickCount,
       cfg.dayLength,
       cfg.dayNightDepth,
       cfg.seasonLength,
       cfg.seasonDepth,
     );
-    const env: EnvEffects = {
-      lightMultiplier: envMult,
-      temp: this.temperature,
-      tempComfortLow: cfg.tempComfortLow,
-      tempComfortHigh: cfg.tempComfortHigh,
-      tempColdPenalty: cfg.tempColdPenalty,
-      tempHeatPenalty: cfg.tempHeatPenalty,
-      toxin: this.toxin,
-      toxinDamage: cfg.toxinDamage,
-      toxinDepositOnMeatDecay: cfg.toxinDepositOnMeatDecay,
-    };
+    env.tempComfortLow = cfg.tempComfortLow;
+    env.tempComfortHigh = cfg.tempComfortHigh;
+    env.tempColdPenalty = cfg.tempColdPenalty;
+    env.tempHeatPenalty = cfg.tempHeatPenalty;
+    env.toxinDamage = cfg.toxinDamage;
+    env.toxinDepositOnMeatDecay = cfg.toxinDepositOnMeatDecay;
 
     metabolize(
       live,
