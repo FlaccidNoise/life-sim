@@ -24,7 +24,6 @@ import {
   buildAutotrophGenome,
   buildForagerGenome,
   buildNightForagerGenome,
-  buildGlowForagerGenome,
   buildToxinAvoiderGenome,
   buildPredatorGenome,
 } from '../core/genome/critter-genome';
@@ -36,12 +35,13 @@ import type { SpeciesSummary } from '../core/sim/species-board';
 const canvas = document.getElementById('view') as HTMLCanvasElement;
 const hud = document.getElementById('hud');
 
-// The VALIDATED 3-trophic ECOLOGY (M7.5): plants → foragers → predators all coexist with no top-ups
-// across seeds 3/7/42/99 for 12k+ ticks. PHOTO plants are the base food; brain-driven FORAGERS graze
-// them (sense→swim→eat→breed→starve→MEAT→regrow); brain-driven PREDATORS (red) hunt the foragers —
-// ambush-loiter in prey-scent, latch on, and drain them. Foragers in turn FLEE the predator-scent
-// gradient. The plant field has a density carrying capacity (crowdDivideCap) so it stays de-jammed —
-// open water you can watch creatures swim through. Config is the headless/feel-probe.ts LOCKED set.
+// SESSILE-PLANT ECOLOGY: the food base is ~10 hand-placed PHOTO plant ORGANISMS — an anchored tough
+// base + a bonded chain that grows one tip cell at a time to maturity, then emits drifting spores
+// that re-root into new pockets. Brain-driven FORAGERS graze a plant by draining a chain cell to
+// empty (which SEVERS it — cut-off cells fall to MEAT); brain-driven PREDATORS (red) hunt the
+// foragers (ambush-loiter in prey-scent, latch, drain), and foragers FLEE the predator-scent. Light
+// is ~10 small sharp pockets with dark gaps, so plants survive only in light and spores in the dark
+// starve. Free-clone PHOTO division is OFF (sessilePlants), so the only free PHOTO is a spore.
 const FORAGER_INIT_E = 45; // per-cell forager seed energy (r4 rescale; ~0.44× the old r6 100)
 const PRED_INIT_E = FORAGER_INIT_E * 8; // 8× predator reserve — survives the early hunt-establish gauntlet
 const config = defaultConfig({
@@ -140,61 +140,109 @@ const config = defaultConfig({
   toxinDecay: 0.03,
   toxinDamage: 0.04,
   toxinDepositOnMeatDecay: 0.1,
-  // Current ON: a slow vector drift. The probe showed strength 2 SUSTAINS births (drift pushes
-  // foragers into food patches); a mild selection pressure for current-aware movement.
+  // Current OFF: spore dispersal IS the plant drift, so the spec keeps the vector drift dormant
+  // (currentStrength 0 → applyCurrent + current.step both skipped). Shift+U can still toggle it on.
   currentGridCols: 32,
   currentGridRows: 32,
   currentPatchCount: 16,
   currentPatchRadius: 6,
-  currentStrength: 2,
+  currentStrength: 0,
   currentEvolveRate: 0.05,
+  // ── SESSILE CHAIN PLANTS (the demo's food base) ──
+  // A plant is an ORGANISM of PHOTO cells: an anchored tough base + a bonded chain that grows one
+  // tip cell at a time to maturity, then emits drifting spores that re-root into new pockets.
+  // Grazing a chain cell to empty severs it; cut-off cells fall to MEAT. Free-clone PHOTO division
+  // is gated OFF (sessilePlants) so the ONLY free PHOTO is a spore.
+  sessilePlants: true,
+  // r4 economy (area=16): thresholds > costs so a grow/spore never starves the base, and a
+  // marginal-light plant stalls instead of limping to maturity (the spatial light filter).
+  plantGrowthThreshold: 12,
+  plantGrowthCost: 8,
+  plantBondLen: 10, // 2.5·cellRadius at r4
+  plantSporeThreshold: 60,
+  plantSporeCost: 40,
+  plantSporeImpulse: 16, // total drift ≈ impulse world-units (damping 0.5) — fills the parent pocket
+  plantSettleSpeed: 0.5,
+  // ── LIGHT POCKETS: ~10 small sharp patches with dark gaps so spores in the dark starve ──
+  // Background between pockets must stay below the basal/photoGain ≈ 0.08 break-even, so diffuse is
+  // tiny; regen stays high so each pocket holds near full light. Pockets select plants spatially.
+  lightPatchCount: 10,
+  lightPatchRadius: 2, // grid cells (~128-unit sharp pockets over the 64-unit grid)
+  lightDiffuse: 0.02,
 });
 const world = new World(config);
-// ~18000 PHOTO plants ≈ the crowdDivideCap equilibrium density, so food is plentiful from tick 0
-// and both heterotrophs establish before the plant field finishes settling (avoids early starve-out).
-world.seedLife(18000);
 
 // M6 demo: organisms DEVELOPED from a genome (proves the encoding drives the live demo).
 function developInto(genome: Genome, x: number, y: number, heading: number): number {
   return world.spawnOrganism(genome, x, y, heading);
 }
-// The ACTIVE population: a MIX of brain-driven foragers seeded across the dish. The base forager
-// (sense→steer→thrust loop) is the majority; the three env-variant foragers exercise the new
-// sensor channels + glow so the features are ecologically live, not just wired:
-//   • night-forager  — AMBIENT_LIGHT sensor → nocturnal thrust modulation
-//   • glow-forager   — turn-neuron glows + GLOW sensor → signaling/following
-//   • toxin-avoider  — TOXIN sensor → steers away from corpse-field toxin
-// All share the foraging loop so they can eat; mutation (sensorChannelRate>0) lets lineages
-// acquire/lose these channels over generations. Each is a legible brain (brain inspector B).
+
+// ── SESSILE-PLANT FOUNDER SCENE ──
+// No seedLife / no 250-forager-24-predator sprawl. The food base is ~10 hand-placed plant BASES,
+// one per bright light pocket, that grow chains + spore on their own. The light patches are placed
+// by the field RNG, so we READ BACK the seeded field to find the actual pocket centres (the brightest
+// grid cells) rather than hardcoding positions blind. Then a few creatures near pockets to graze/hunt.
+const PLANT_COUNT = 10;
+const FORAGER_COUNT = 4;
+const PRED_COUNT = 2;
+
+// Rank the seeded light grid cells by brightness; take the top PLANT_COUNT that are spread out
+// (skip a pocket whose centre is within one grid cell of an already-chosen brighter pocket, so we
+// land ~one base per distinct pocket instead of clustering on the single brightest patch).
+const lf = world.light;
+const patchW = config.worldWidth / lf.cols;
+const patchH = config.worldHeight / lf.rows;
+const ranked = Array.from(lf.field, (v, i) => ({
+  v,
+  col: i % lf.cols,
+  row: (i / lf.cols) | 0,
+})).sort((a, b) => b.v - a.v);
+const pockets: { x: number; y: number }[] = [];
+for (const cell of ranked) {
+  if (pockets.length >= PLANT_COUNT) break;
+  const x = cell.col * patchW + patchW / 2;
+  const y = cell.row * patchH + patchH / 2;
+  const far = pockets.every((p) => Math.abs(p.x - x) > patchW || Math.abs(p.y - y) > patchH);
+  if (far) pockets.push({ x, y });
+}
+// Plant a tough anchored base at each pocket centre — each grows its own chain + spores.
+for (const p of pockets) world.seedPlantBase(p.x, p.y);
+
+// A few brain-driven creatures placed NEAR (not on) pockets so grazing/hunting is watchable. The
+// genome builders are unchanged; one env-variant forager so the sensor channels stay ecologically
+// live. Offset each creature ~90 units from a pocket along a deterministic angle.
 let firstForagerOrg = -1;
-const spawnX = (k: number) => world.config.worldWidth * (0.1 + (0.8 * ((k * 7) % 20)) / 20);
-const spawnY = (k: number) => world.config.worldHeight * (0.1 + (0.8 * ((k * 13) % 20)) / 20);
-const spawnH = (k: number) => (k * 2.39996) % (Math.PI * 2);
-// 250 foragers — the prey base the predator layer needs to self-sustain (feel-probe.ts LOCKED count).
-// Mostly the base forager (70%); the rest are the three env-sensor variants, interleaved so they're
-// scattered, so the new sensor channels are ecologically live, not just wired.
-for (let k = 0; k < 250; k++) {
-  const r = k % 10;
-  const genome =
-    r < 7
-      ? buildForagerGenome(world.config.cellRadius, FORAGER_INIT_E)
-      : r === 7
-        ? buildNightForagerGenome(world.config.cellRadius, FORAGER_INIT_E)
-        : r === 8
-          ? buildGlowForagerGenome(world.config.cellRadius, FORAGER_INIT_E)
-          : buildToxinAvoiderGenome(world.config.cellRadius, FORAGER_INIT_E);
-  const org = developInto(genome, spawnX(k), spawnY(k), spawnH(k));
+const CREATURE_OFFSET = 90;
+const foragerGenomes = [
+  buildForagerGenome(world.config.cellRadius, FORAGER_INIT_E),
+  buildForagerGenome(world.config.cellRadius, FORAGER_INIT_E),
+  buildNightForagerGenome(world.config.cellRadius, FORAGER_INIT_E),
+  buildToxinAvoiderGenome(world.config.cellRadius, FORAGER_INIT_E),
+];
+for (let k = 0; k < FORAGER_COUNT; k++) {
+  const p = pockets[k % pockets.length] ?? { x: config.worldWidth / 2, y: config.worldHeight / 2 };
+  const a = (k * 2.39996) % (Math.PI * 2);
+  const org = developInto(
+    foragerGenomes[k % foragerGenomes.length]!,
+    p.x + Math.cos(a) * CREATURE_OFFSET,
+    p.y + Math.sin(a) * CREATURE_OFFSET,
+    a,
+  );
   if (k === 0) firstForagerOrg = org;
 }
-// The PREDATOR layer (red): brain-driven hunters that ambush-loiter in prey-scent (sensorFwd→thrust
-// -1.5), latch onto a forager organism and drain it. 24 seeded — they bloom (~25-30) then settle to a
-// healthy breeding population. The ambush brain + speed edge + latch let them self-sustain at 2048².
-for (let k = 0; k < 24; k++) {
+// The PREDATOR layer (red): ambush hunters that latch onto a forager and drain it — placed near
+// pockets where foragers will congregate to graze.
+for (let k = 0; k < PRED_COUNT; k++) {
+  const p = pockets[(k + 1) % pockets.length] ?? {
+    x: config.worldWidth / 2,
+    y: config.worldHeight / 2,
+  };
+  const a = (k * 1.7 + 1) % (Math.PI * 2);
   developInto(
     buildPredatorGenome(world.config.cellRadius, PRED_INIT_E, -1.5),
-    world.config.worldWidth * (0.15 + (0.7 * ((k * 11) % 13)) / 13),
-    world.config.worldHeight * (0.15 + (0.7 * ((k * 5) % 13)) / 13),
-    (k * 1.7) % (Math.PI * 2),
+    p.x + Math.cos(a) * CREATURE_OFFSET,
+    p.y + Math.sin(a) * CREATURE_OFFSET,
+    a,
   );
 }
 

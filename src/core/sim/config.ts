@@ -309,6 +309,34 @@ export interface Config {
   currentStrength: number;
   /** Current field evolution (diffusion) rate, [0,0.25]. */
   currentEvolveRate: number;
+
+  // ──── Sessile chain-plants ────
+  // A plant is an organism of PHOTO cells: a pinned tough BASE (anchored=1) + a bonded chain. Gated on
+  // sessilePlants so the default config keeps the legacy free-clone PHOTO path and every existing test/probe
+  // is byte-identical. The live demo (main.ts) sets it true.
+  /** Master flag for the sessile chain-plant model. false (default) = legacy free-clone PHOTO; true = plants
+   *  grow chains, spore, and are grazed (free-clone PHOTO division is skipped, base cells are pinned/tough). */
+  sessilePlants: boolean;
+  /** Hard cap on cells per plant (base + chain). */
+  plantMaxChain: number;
+  /** Min cells before a plant can spore. */
+  plantMaturityChain: number;
+  /** Organism energy needed to grow one tip cell. */
+  plantGrowthThreshold: number;
+  /** Energy spent (deducted from the base) per tip cell grown. */
+  plantGrowthCost: number;
+  /** Chain link rest length in world units (~2.5·cellRadius). */
+  plantBondLen: number;
+  /** Base energy needed before a mature plant emits a spore. */
+  plantSporeThreshold: number;
+  /** Energy spent (deducted from the base) per spore emitted. */
+  plantSporeCost: number;
+  /** Spore ejection speed; with damping=0.5 the total drift ≈ this value in world units (sets dispersal). */
+  plantSporeImpulse: number;
+  /** Speed below which a drifting spore anchors into a new base. */
+  plantSettleSpeed: number;
+  /** Base digest-rate multiplier (anchored base drains baseToughness× as fast as a chain cell). 0.1 ≈ 10× tougher. */
+  baseToughness: number;
 }
 
 export function defaultConfig(overrides: Partial<Config> = {}): Config {
@@ -481,6 +509,22 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     currentPatchRadius: 6,
     currentStrength: 0,
     currentEvolveRate: 0.05,
+
+    // ──── Sessile chain-plants ────
+    // OFF by default so the legacy free-clone PHOTO path runs and every existing test/probe is byte-identical.
+    // Energy knobs below are scaled for the library default cellRadius=6 (area 36); the r4 demo (area 16)
+    // overrides them ~2.25× smaller. baseToughness/chain-counts/settleSpeed/impulse are geometry/velocity, not energy.
+    sessilePlants: false,
+    plantMaxChain: 7,
+    plantMaturityChain: 7,
+    plantGrowthThreshold: 27, // organism energy gate to grow a tip cell (r6; ~12 at the r4 demo)
+    plantGrowthCost: 18, // deducted from the base per tip cell (threshold > cost keeps a survival buffer)
+    plantBondLen: 15, // 2.5·cellRadius at r6 (10 at the r4 demo)
+    plantSporeThreshold: 135, // base energy gate to spore (r6; ~60 at the r4 demo)
+    plantSporeCost: 90, // deducted from the base per spore (threshold > cost so sporing never self-starves the base)
+    plantSporeImpulse: 25, // total drift ≈ impulse world-units at damping 0.5 (a few cell radii of dispersal)
+    plantSettleSpeed: 0.5, // a spore anchors when speed < this (anchors ~6 ticks after a 25-impulse launch)
+    baseToughness: 0.1, // a base drains ~10× slower than a chain cell — evolvably killable, not invulnerable
 
     ...overrides,
   };

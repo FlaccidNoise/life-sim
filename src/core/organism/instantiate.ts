@@ -90,6 +90,7 @@ export function instantiateBody(
     f.senseX[slot] = 0;
     f.senseY[slot] = 0;
     f.thrust[slot] = 0;
+    f.anchored[slot] = 0;
     net.actCur[slot] = 0; // zero neural state for a recycled slot
     net.actNxt[slot] = 0;
     net.bias[slot] = body.bias[i]!;

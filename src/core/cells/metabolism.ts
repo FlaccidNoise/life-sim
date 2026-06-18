@@ -63,6 +63,7 @@ export function metabolize(
   photoDepletion: number,
   digestRate: number,
   digestEfficiency: number,
+  baseToughness: number,
   basalCost: number,
   meatDecay: number,
   moveCost: number,
@@ -125,7 +126,10 @@ export function metabolize(
             const rsum = ri + f.radius[j]!;
             if (ddx * ddx + ddy * ddy < rsum * rsum) {
               const avail = f.energy[j]!;
-              const extracted = avail < digestRate ? avail : digestRate;
+              // A pinned plant BASE (anchored) drains ~baseToughness× as fast, so a forager must camp on
+              // it to kill it; a chain cell drains at the full rate. baseToughness=1 ⇒ no toughness.
+              const rate = f.anchored[j]! ? digestRate * baseToughness : digestRate;
+              const extracted = avail < rate ? avail : rate;
               if (extracted > 0) {
                 f.energy[j] = avail - extracted;
                 const mult = 1 + digestClusterBonus * digestBonus[i]!;
