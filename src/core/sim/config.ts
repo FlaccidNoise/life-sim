@@ -104,6 +104,16 @@ export interface Config {
    *  Mass was the wrong lever (lighter cells gave no usable speed gain). Default 1 = no-op (the
    *  M2-M7 economy is byte-identical; only carnivore organisms exist when predation is enabled). */
   carnivoreThrustMult: number;
+  /** Predation LATCH hold range, as a multiple of contact (ri+rj). Once a predator strikes a prey
+   *  organism it keeps draining THAT organism each tick while any of its flesh cells stays within
+   *  predLatchRange·(ri+rj) — converting a fleeting contact into a sustained, completed kill. Should
+   *  be ≥ predReach (a wider hold than the strike), but still within the 3×3 hash window (~1.5·cellSize).
+   *  0 = latch disabled → predation degenerates to the old single-strike bite. Default 0 (no-op). */
+  predLatchRange: number;
+  /** Predation tether spring constant — pulls a latched predator toward its prey (the "attachment")
+   *  so a mobile prey can't outswim the drain. Scatter spring (mutual), so subject to the same
+   *  symplectic-Euler stability ceiling as bonds; keep it modest. 0 = no tether. Default 0 (no-op). */
+  predLatchStiffness: number;
 
   // Sensing & movement (§4.4). All live knobs.
   /** Gradient magnitude below which a mover coasts at cruiseThrust instead of steering. */
@@ -351,6 +361,8 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     predDigestEfficiency: 0.7, // same conversion loss as herbivore digestion
     predReach: 1, // contact-only by default (no-op); the demo raises it so hunters can land bites on mobile prey
     carnivoreThrustMult: 1, // OFF by default (no-op); the ecology config raises it to give predators a speed edge over equal-speed prey
+    predLatchRange: 0, // OFF by default (no-op → old single-strike bite); the ecology config enables the latch hold
+    predLatchStiffness: 0, // OFF by default (no tether); the ecology config enables the attachment spring
 
     senseThreshold: 1e-4,
     turnRate: 0.25, // ~14°/tick — visibly curves toward food without snapping

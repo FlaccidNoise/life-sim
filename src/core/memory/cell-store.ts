@@ -30,6 +30,16 @@ export interface CellArrays {
    *  divide cap (a logistic carrying capacity). Derived — NOT on the byte-identical determinism
    *  contract. Only filled when the cap is enabled. */
   localDensity: Uint16Array;
+  /** Predation LATCH: for a PREDATOR cell, the organismId it is currently latched onto (0 = unlatched).
+   *  A latched predator keeps draining the SAME prey organism each tick (sustained kill) instead of
+   *  re-acquiring a fresh target, so a contact converts to a kill even as the mobile prey moves —
+   *  fixing the "≤1 cell/tick on an escaping body" pursuit problem. Only written when predLatchRange>0
+   *  (else the predator branch degenerates to the old single-bite behaviour); 0 for all non-predators. */
+  latchPrey: Uint32Array;
+  /** Predation LATCH tether handle: the prey CELL index a latched predator drained this tick, stored
+   *  as (cellIndex + 1) so 0 = none (typed arrays zero-init). Consumed by applyLatchTether in the next
+   *  tick's force pass to spring the predator to its prey (the physical "attachment"). 0 when unlatched. */
+  latchCell: Uint32Array;
 }
 
 const CELL_FIELDS = [
@@ -54,6 +64,8 @@ const CELL_FIELDS = [
   { name: 'flags', ctor: Uint8Array },
   { name: 'generation', ctor: Uint32Array },
   { name: 'localDensity', ctor: Uint16Array },
+  { name: 'latchPrey', ctor: Uint32Array },
+  { name: 'latchCell', ctor: Uint32Array },
 ] as const;
 
 export type CellField = (typeof CELL_FIELDS)[number]['name'];
@@ -94,6 +106,10 @@ export class CellStore {
     if (this.freeTop === 0) return -1;
     const i = this.freeStack[--this.freeTop]!;
     this.soa.fields.flags[i]! |= FLAG_ALIVE;
+    // Wipe the predation latch so a recycled slot never inherits a stale prey handle (the force-pass
+    // tether reads latchCell before the new cell's first metabolize — stale data would mis-tether it).
+    this.soa.fields.latchPrey[i] = 0;
+    this.soa.fields.latchCell[i] = 0;
     this.aliveCount++;
     return i;
   }

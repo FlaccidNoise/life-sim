@@ -73,6 +73,10 @@ export function metabolize(
   predDigestRate: number,
   predDigestEfficiency: number,
   predReach: number,
+  latchPrey: Uint32Array,
+  latchCell: Uint32Array,
+  organismCellCount: Uint32Array,
+  predLatchRange: number,
 ): void {
   const { cols, rows, width, height, sorted, bucketStart } = hash;
 
@@ -134,38 +138,72 @@ export function metabolize(
         }
       }
     } else if (type === CellType.PREDATOR && predDigestRate > 0) {
+      // PREDATION with a LATCH. A predator drains ≤1 prey cell/tick, so killing a multi-cell forager
+      // takes many ticks; a gradient predator loses a mobile prey after 1-2 bites and never finishes.
+      // The latch fixes this: once a predator strikes a prey ORGANISM it stays latched (latchPrey) and
+      // keeps draining THAT organism each tick — via whichever of its flesh cells is in the wider HOLD
+      // range — until the prey is dead or has escaped the hold. The companion tether (applyLatchTether)
+      // physically drags the predator along so a mobile prey can't simply outswim the drain. With
+      // predLatchRange=0 the hold is disabled → this degenerates to the old single-strike behaviour.
       const xi = f.posX[i]!;
       const yi = f.posY[i]!;
       const myOrg = f.organismId[i]!;
       const cx = hash.colOf(xi);
       const cy = hash.rowOf(yi);
-      let eaten = false;
-      for (let dy = -1; dy <= 1 && !eaten; dy++) {
+      const held = predLatchRange > 0 ? latchPrey[i]! : 0;
+      const heldAlive = held !== 0 && organismCellCount[held]! > 0;
+      let holdJ = -1; // first flesh cell of the HELD organism within HOLD range (keep draining it)
+      let strikeJ = -1; // first flesh cell of ANY other organism within STRIKE range (fresh latch)
+      for (let dy = -1; dy <= 1; dy++) {
         const by = (cy + dy + rows) % rows;
-        for (let dx = -1; dx <= 1 && !eaten; dx++) {
+        for (let dx = -1; dx <= 1; dx++) {
           const bx = (cx + dx + cols) % cols;
           const b = by * cols + bx;
           const end = bucketStart[b + 1]!;
           for (let idx = bucketStart[b]!; idx < end; idx++) {
             const j = sorted[idx]!;
             if (j === i) continue;
-            if (f.organismId[j]! === myOrg) continue; // never eat own body
+            const jOrg = f.organismId[j]!;
+            if (jOrg === myOrg) continue; // never eat own body
             if (!isFlesh(f.cellType[j]!)) continue; // flesh only: not plants/corpses/other predators
+            if (f.energy[j]! <= 0) continue; // drained-empty cell: nothing to take this tick
+            const rsum = ri + f.radius[j]!;
             const ddx = wrapDelta(xi - f.posX[j]!, width);
             const ddy = wrapDelta(yi - f.posY[j]!, height);
-            const reach = (ri + f.radius[j]!) * predReach; // strike-reach: bite from beyond contact
-            if (ddx * ddx + ddy * ddy < reach * reach) {
-              const avail = f.energy[j]!;
-              const extracted = avail < predDigestRate ? avail : predDigestRate;
-              if (extracted > 0) {
-                f.energy[j] = avail - extracted;
-                f.energy[i] = f.energy[i]! + extracted * predDigestEfficiency;
-                eaten = true;
-                break;
-              }
+            const d2 = ddx * ddx + ddy * ddy;
+            if (heldAlive && holdJ < 0 && jOrg === held) {
+              const hold = predLatchRange * rsum;
+              if (d2 < hold * hold) holdJ = j;
+            }
+            if (strikeJ < 0) {
+              const reach = predReach * rsum; // strike-reach: bite from beyond contact
+              if (d2 < reach * reach) strikeJ = j;
             }
           }
         }
+      }
+      // Prefer keeping the latched prey (sustained kill); otherwise strike a fresh one.
+      let prey = -1;
+      let newLatch = 0;
+      if (holdJ >= 0) {
+        prey = holdJ;
+        newLatch = held;
+      } else if (strikeJ >= 0) {
+        prey = strikeJ;
+        newLatch = f.organismId[strikeJ]!;
+      }
+      if (prey >= 0) {
+        const avail = f.energy[prey]!;
+        const extracted = avail < predDigestRate ? avail : predDigestRate;
+        f.energy[prey] = avail - extracted;
+        f.energy[i] = f.energy[i]! + extracted * predDigestEfficiency;
+        if (predLatchRange > 0) {
+          latchPrey[i] = newLatch;
+          latchCell[i] = prey + 1; // (cell+1) handle for the tether; 0 = none
+        }
+      } else if (predLatchRange > 0) {
+        latchPrey[i] = 0; // prey dead or escaped the hold → release
+        latchCell[i] = 0;
       }
     }
 

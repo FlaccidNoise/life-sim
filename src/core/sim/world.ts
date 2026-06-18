@@ -23,6 +23,7 @@ import { NeuralNetwork } from '../neural/network';
 import { think } from '../neural/think';
 import { driveMovers } from '../neural/motor';
 import { computeBondForces } from '../physics/bond-force';
+import { applyLatchTether } from '../physics/latch-tether';
 import { computeAdhesion } from '../physics/adhesion';
 import { breakStrainedBonds } from '../organism/breakage';
 import { transferEnergy } from '../organism/transfer';
@@ -543,6 +544,22 @@ export class World {
       cfg.worldWidth,
       cfg.worldHeight,
     );
+    // Predation tether: drag each latched predator toward its prey (set by last tick's metabolize).
+    if (cfg.predLatchStiffness > 0) {
+      applyLatchTether(
+        live,
+        n,
+        f.latchCell,
+        f.cellType,
+        f.posX,
+        f.posY,
+        f.forceX,
+        f.forceY,
+        cfg.worldWidth,
+        cfg.worldHeight,
+        cfg.predLatchStiffness,
+      );
+    }
 
     // M9-early: water current drift force (post adhesion, pre integrate).
     if (cfg.currentStrength > 0) {
@@ -623,6 +640,10 @@ export class World {
       cfg.predDigestRate,
       cfg.predDigestEfficiency,
       cfg.predReach,
+      f.latchPrey,
+      f.latchCell,
+      this.organisms.cellCount,
+      cfg.predLatchRange,
     );
 
     // M5: intra-organism energy transfer toward needier cells (§4.5).

@@ -136,11 +136,24 @@ describe('buildPredatorGenome — a forager body with a carnivore mouth', () => 
     ]);
   });
 
-  it('keeps the same brain + motor wiring as the forager (only diet differs)', () => {
+  it('keeps the forager motors + sensor channels (only diet + the ambush thrust link differ)', () => {
     const forager = develop(buildForagerGenome(6, 100), 256, 16);
-    expect(body.synapses).toEqual(forager.synapses);
     expect(body.motors).toEqual(forager.motors);
     expect(body.sensorChannel).toEqual(forager.sensorChannel);
+  });
+
+  it('AMBUSH brain: inverts sensorFwd→thrust to negative, keeps sensorLat→turn positive', () => {
+    const g = buildPredatorGenome(6, 100);
+    const fwdThrust = g.connectionRules.find((c) => c.preGene === 1 && c.postGene === 4)!;
+    const latTurn = g.connectionRules.find((c) => c.preGene === 2 && c.postGene === 3)!;
+    expect(fwdThrust.weight).toBeLessThan(0); // brakes in prey-scent (loiter), not charges
+    expect(latTurn.weight).toBeGreaterThan(0); // still orients toward prey
+    // the override is honoured so the probe can sweep the brake strength
+    expect(
+      buildPredatorGenome(6, 100, -2.5).connectionRules.find(
+        (c) => c.preGene === 1 && c.postGene === 4,
+      )!.weight,
+    ).toBeCloseTo(-2.5, 6);
   });
 });
 
