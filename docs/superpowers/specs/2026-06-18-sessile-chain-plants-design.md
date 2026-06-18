@@ -4,13 +4,15 @@
 **Status:** Approved design, pending implementation plan
 **Supersedes:** the free-clone PHOTO plant model (single PHOTO cells that divide into independent drifting clones) in the live demo.
 
+> **"Plant drift" clarified:** plants are brainless creatures that cannot move. Their only way to "drift" — to chase the light and survive as a lineage — is **reproduction**: spores disperse a short distance and a settled spore lives only if it landed in light. Physics drift (`currentStrength`) stays **off**; spore dispersal is the plant's drift.
+
 ## Motivation
 
 The current plant model — single `PHOTO` cells that photosynthesize and divide into independent free-floating clones — produces a near-uniform "drifting green carpet" that is visually illegible and doesn't read as *plants*. Plants should feel rooted and structured: an anchored base with a chain of cells growing off it, immobile, like kelp. Food should appear in discrete **pockets**, and the world should hold still (no drift) so the dynamics are watchable.
 
 ## Goals
 
-1. A plant is a sessile, multicellular **organism**: an anchored, tough **base** cell + a bonded **chain** of up to ~5 PHOTO cells that sways.
+1. A plant is a sessile, multicellular **organism**: an anchored, tough **base** cell + a bonded **chain** of up to **7** PHOTO cells that sways.
 2. Plants grow **gradually** at the tip, paced by their light pocket.
 3. Plants reproduce by **spores** that drift a short distance and anchor as new bases.
 4. Grazing **severs** the chain (freed upper cells become drifting food); the base regrows. The base is **tough** (slow to eat, but evolvably killable).
@@ -60,7 +62,7 @@ The base is immovable; bonded chain cells integrate normally and sway off it. (`
 spore (free PHOTO, drifting)
   └─ settles (speed < ε) ──> ANCHOR: anchored=1, new organism id ──> base (1 cell)
         └─ growPlants: bank light energy ──> add tip cell + bond (up to ~5)
-              └─ mature (≥5 cells, energy ≥ sporeThreshold) ──> emit spore (ejection impulse)
+              └─ mature (≥7 cells, energy ≥ sporeThreshold) ──> emit spore (ejection impulse)
         └─ grazed chain cell drained ≤0 ──> sever: remove its bonds,
               reachability-from-base frees unreachable cells ──> freed cells become MEAT,
               base + stub survive, regrow from new most-distal cell
@@ -76,8 +78,8 @@ spore (free PHOTO, drifting)
    - `bonds.rebuildLive` after.
    - This is the *only* per-cell plant death path (organism cells remain exempt from `lifecycle` death/division).
 
-2. **`growPlants`** — after `aggregateOrganisms` (~line 775). For each plant organism with cell count < `plantMaxChain` (5) and organism energy ≥ `plantGrowthThreshold`:
-   - Find the most-distal cell from the base (BFS over the ≤5-cell chain).
+2. **`growPlants`** — after `aggregateOrganisms` (~line 775). For each plant organism with cell count < `plantMaxChain` (7) and organism energy ≥ `plantGrowthThreshold`:
+   - Find the most-distal cell from the base (BFS over the ≤7-cell chain).
    - Allocate a PHOTO cell at `tip + plantBondLen` along the base→tip axis (deterministic jitter via `hashFloat3`), `organismId` = plant, `anchored = 0`.
    - `addBond(tip, new, plantBondLen)`; deduct `plantGrowthCost` from the base.
    - `bonds.rebuildLive` after.
@@ -117,8 +119,8 @@ All counts/positions are tuning knobs.
 
 | Knob | Default | Meaning |
 |---|---|---|
-| `plantMaxChain` | 5 | hard cap on cells per plant |
-| `plantMaturityChain` | 5 | min cells before it can spore |
+| `plantMaxChain` | 7 | hard cap on cells per plant |
+| `plantMaturityChain` | 7 | min cells before it can spore |
 | `plantGrowthThreshold` | tbd in tuning | organism energy needed to grow a tip cell |
 | `plantGrowthCost` | tbd | energy spent per tip cell |
 | `plantBondLen` | ~2.5·cellRadius | chain link rest length |
