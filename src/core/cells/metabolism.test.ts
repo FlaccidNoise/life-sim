@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { metabolize } from './metabolism';
+import { metabolize, type EnvEffects } from './metabolism';
 import { CellType } from './types';
 import { CellStore } from '../memory/cell-store';
 import { SpatialHash } from '../spatial/spatial-hash';
@@ -22,6 +22,19 @@ function buildHash(
 // Oversized zero-bonus array: covers every store's slot indices (never OOB).
 // All-zero → digestion multiplier 1 + bonus·0 = 1 → identical pre-M5 behaviour.
 const noBonus = new Uint8Array(64);
+
+/** Default OFF env effects for existing M2-M7 tests: no env modulation. */
+const noEnv: EnvEffects = {
+  lightMultiplier: 1,
+  temp: null,
+  tempComfortLow: 0,
+  tempComfortHigh: 0,
+  tempColdPenalty: 0,
+  tempHeatPenalty: 0,
+  toxin: null,
+  toxinDamage: 0,
+  toxinDepositOnMeatDecay: 0,
+};
 
 describe('metabolism — photosynthesis', () => {
   it('a PHOTO cell gains photoGain·light·area and depletes its patch', () => {
@@ -64,6 +77,7 @@ describe('metabolism — photosynthesis', () => {
       0,
       noBonus,
       0,
+      noEnv,
     );
 
     const area = 2 * 2;
@@ -115,6 +129,7 @@ describe('metabolism — digestion', () => {
       0,
       noBonus,
       0,
+      noEnv,
     );
 
     const area = 3 * 3;
@@ -159,6 +174,7 @@ describe('metabolism — digestion', () => {
       0,
       noBonus,
       0,
+      noEnv,
     );
     expect(f.energy[a]).toBeCloseTo(100 - cfg.basalCost * 9, 4);
   });
@@ -197,6 +213,7 @@ describe('metabolism — basal cost and meat decay', () => {
       0,
       noBonus,
       0,
+      noEnv,
     );
     expect(f.energy[m]).toBeCloseTo(20 - cfg.meatDecay, 4);
   });
@@ -233,6 +250,7 @@ describe('metabolism — basal cost and meat decay', () => {
       0,
       noBonus,
       0,
+      noEnv,
     );
     expect(f.energy[big]).toBeCloseTo(100 - cfg.basalCost * 16, 4);
   });
@@ -256,7 +274,7 @@ describe('metabolism — M3 movement cost & MOTILE digestion', () => {
     lf.light.fill(0); // no photosynthesis
     const hash = buildHash(store, live, 1, 1024, 1024, 12);
     // photoGain 0, photoDepletion 0, digestRate 7, eff 0.7, basal 0.01, meatDecay 0.5, moveCost 0.02
-    metabolize(live, 1, f, hash, lf, 0, 0, 7, 0.7, 0.01, 0.5, 0.02, 0, noBonus, 0);
+    metabolize(live, 1, f, hash, lf, 0, 0, 7, 0.7, 0.01, 0.5, 0.02, 0, noBonus, 0, noEnv);
     // energy = 100 − basal(0.01·4) − moveCost(0.02·3²) = 100 − 0.04 − 0.18
     expect(f.energy[i]).toBeCloseTo(100 - 0.04 - 0.18, 4);
   });
@@ -284,7 +302,7 @@ describe('metabolism — M3 movement cost & MOTILE digestion', () => {
     lf.cap.fill(0);
     lf.light.fill(0); // isolate digestion (prey photosynthesises 0)
     const hash = buildHash(store, live, 2, 1024, 1024, 12);
-    metabolize(live, 2, f, hash, lf, 0, 0, 7, 0.7, 0.01, 0.5, 0.02, 0, noBonus, 0);
+    metabolize(live, 2, f, hash, lf, 0, 0, 7, 0.7, 0.01, 0.5, 0.02, 0, noBonus, 0, noEnv);
     const area = 9;
     // MOTILE extracts min(7,50)=7, keeps 0.7·7=4.9, pays basal 0.01·9, move 0.
     expect(f.energy[a]).toBeCloseTo(100 + 7 * 0.7 - 0.01 * area, 4);
@@ -311,7 +329,7 @@ describe('metabolism — M4 neuralCost', () => {
     lf.light.fill(0);
     const hash = buildHash(store, live, 1, 1024, 1024, 12);
     // photoGain 0, photoDepletion 0, digestRate 7, eff 0.7, basal 0.01, meatDecay 0.5, moveCost 0.02, neuralCost 0.05
-    metabolize(live, 1, f, hash, lf, 0, 0, 7, 0.7, 0.01, 0.5, 0.02, 0.05, noBonus, 0);
+    metabolize(live, 1, f, hash, lf, 0, 0, 7, 0.7, 0.01, 0.5, 0.02, 0.05, noBonus, 0, noEnv);
     // energy = 100 − basal(0.01·4) − neural(0.05) = 100 − 0.04 − 0.05
     expect(f.energy[i]).toBeCloseTo(100 - 0.04 - 0.05, 4);
   });
@@ -332,7 +350,7 @@ describe('metabolism — M4 neuralCost', () => {
     lf.cap.fill(0);
     lf.light.fill(0);
     const hash = buildHash(store, live, 1, 1024, 1024, 12);
-    metabolize(live, 1, f, hash, lf, 0, 0, 7, 0.7, 0.01, 0.5, 0.02, 0.05, noBonus, 0);
+    metabolize(live, 1, f, hash, lf, 0, 0, 7, 0.7, 0.01, 0.5, 0.02, 0.05, noBonus, 0, noEnv);
     // 100 − basal(0.04) − neural(0.05) − move(0.02·9=0.18)
     expect(f.energy[i]).toBeCloseTo(100 - 0.04 - 0.05 - 0.18, 4);
   });
@@ -354,7 +372,7 @@ describe('metabolism — M4 neuralCost', () => {
     lf.light.fill(0); // no photosynthesis gain
     const hash = buildHash(store, live, 1, 1024, 1024, 12);
     // neuralCost 99 — must be ignored for PHOTO; only basal(0.01·4) applies.
-    metabolize(live, 1, f, hash, lf, 0, 0, 7, 0.7, 0.01, 0.5, 0.02, 99, noBonus, 0);
+    metabolize(live, 1, f, hash, lf, 0, 0, 7, 0.7, 0.01, 0.5, 0.02, 99, noBonus, 0, noEnv);
     expect(f.energy[i]).toBeCloseTo(100 - 0.04, 4);
   });
 });
@@ -386,8 +404,8 @@ describe('metabolism — M5 digestion-clustering bonus', () => {
     const digestBonus = new Uint8Array(8);
     digestBonus[eater] = 2; // pretend it has 2 bonded digestive neighbours
     // digestRate 7, eff 0.7, basal 0, meatDecay 0.5, moveCost 0, neuralCost 0, clusterBonus 0.5
-    metabolize(live, 2, f, hash, lf, 0, 0, 7, 0.7, 0, 0.5, 0, 0, digestBonus, 0.5);
     // extracted 7, base gain 7·0.7 = 4.9; multiplier 1 + 0.5·2 = 2 → 9.8 gained. start 100.
+    metabolize(live, 2, f, hash, lf, 0, 0, 7, 0.7, 0, 0.5, 0, 0, digestBonus, 0.5, noEnv);
     expect(f.energy[eater]).toBeCloseTo(100 + 4.9 * 2, 4);
   });
 
@@ -413,7 +431,7 @@ describe('metabolism — M5 digestion-clustering bonus', () => {
     lf.light.fill(0);
     const hash = buildHash(store, live, 2, 1024, 1024, 12);
     const digestBonus = new Uint8Array(8); // all zero
-    metabolize(live, 2, f, hash, lf, 0, 0, 7, 0.7, 0, 0.5, 0, 0, digestBonus, 0.5);
+    metabolize(live, 2, f, hash, lf, 0, 0, 7, 0.7, 0, 0.5, 0, 0, digestBonus, 0.5, noEnv);
     expect(f.energy[eater]).toBeCloseTo(100 + 4.9, 4); // unchanged from the no-bonus path
   });
 });

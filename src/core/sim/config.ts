@@ -179,6 +179,98 @@ export interface Config {
   metricsEvolutionInterval: number;
   /** Cap on phylogeny LineageLog nodes; dead subtrees are pruned (leaves-up) beyond this. */
   maxLineageNodes: number;
+
+  // ──── Environmental features (M9-early) — all OFF by default ────
+  // Every env feature defaults OFF so the default Config is byte-identical to M7.
+  // Toggle feature ON by setting its depth / strength / penalty > 0.
+
+  /** Ticks per full day/night cycle. Used by lightMultiplier (pure). */
+  dayLength: number;
+  /** Day/night swing depth, [0,1]. 0 = OFF (eternal noon). >0 = night dims to 1-depth. */
+  dayNightDepth: number;
+  /** Ticks per full season cycle. Used by lightMultiplier (pure). */
+  seasonLength: number;
+  /** Season swing depth, [0,1]. 0 = OFF. >0 = winter dims baseline light. */
+  seasonDepth: number;
+
+  /** Number of immovable rock obstacles. 0 = OFF. Requires restart (maxRocks sized). */
+  rockCount: number;
+  /** Rock radius range min, world units. */
+  rockRadiusMin: number;
+  /** Rock radius range max, world units. */
+  rockRadiusMax: number;
+  /** Soft repulsion stiffness against rock overlap. */
+  rockRepulsion: number;
+  /** RockField grid cell side length, world units. Sizes the uniform grid. */
+  rockGridSize: number;
+  /** RockField buffer capacity. Restart-required. */
+  maxRocks: number;
+
+  /** GlowField grid columns. Sizes the glow field. */
+  glowGridCols: number;
+  /** GlowField grid rows. */
+  glowGridRows: number;
+  /** Glow diffusion coefficient, [0,0.25]. */
+  glowDiffuse: number;
+  /** Glow decay per tick, [0,1). */
+  glowDecay: number;
+  /** Glow emission gain per effector (glowGain * activation deposited per tick). */
+  glowGain: number;
+  /** Energy cost per active glow effector per tick. 0 = OFF. */
+  glowCost: number;
+  /** GlowEffectors buffer capacity. Restart-required. */
+  maxGlowEffectors: number;
+
+  /** TemperatureField grid columns. */
+  tempGridCols: number;
+  /** TemperatureField grid rows. */
+  tempGridRows: number;
+  /** Number of Gaussian temperature patches seeded. */
+  tempPatchCount: number;
+  /** Patch radius in grid cells for temperature seeding. */
+  tempPatchRadius: number;
+  /** Minimum temperature after normalization. */
+  tempMin: number;
+  /** Maximum temperature after normalization. */
+  tempMax: number;
+  /** Temperature diffusion coefficient, [0,0.25]. */
+  tempDiffuse: number;
+  /** Temperature regen rate toward capacity per tick, (0,1]. */
+  tempRegen: number;
+  /** Low comfort bound for basal metabolism penalty. Temps below this incur coldPenalty. */
+  tempComfortLow: number;
+  /** High comfort bound for basal metabolism penalty. Temps above this incur heatPenalty. */
+  tempComfortHigh: number;
+  /** Basal energy multiplier penalty per unit temperature below comfortLow. 0 = OFF. */
+  tempColdPenalty: number;
+  /** Basal energy multiplier penalty per unit temperature above comfortHigh. 0 = OFF. */
+  tempHeatPenalty: number;
+
+  /** ToxinField grid columns. */
+  toxinGridCols: number;
+  /** ToxinField grid rows. */
+  toxinGridRows: number;
+  /** Toxin diffusion coefficient, [0,0.25]. */
+  toxinDiffuse: number;
+  /** Toxin decay per tick, [0,1). */
+  toxinDecay: number;
+  /** Energy loss per unit toxin concentration per tick. 0 = OFF. */
+  toxinDamage: number;
+  /** Toxin deposited per tick at a decaying MEAT cell's position. 0 = OFF. */
+  toxinDepositOnMeatDecay: number;
+
+  /** CurrentField grid columns. */
+  currentGridCols: number;
+  /** CurrentField grid rows. */
+  currentGridRows: number;
+  /** Number of vector-velocity patches seeded. */
+  currentPatchCount: number;
+  /** Patch radius in grid cells for current seeding. */
+  currentPatchRadius: number;
+  /** Current drift strength scale. 0 = OFF. */
+  currentStrength: number;
+  /** Current field evolution (diffusion) rate, [0,0.25]. */
+  currentEvolveRate: number;
 }
 
 export function defaultConfig(overrides: Partial<Config> = {}): Config {
@@ -291,6 +383,55 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     mutationDuplicateSubgraphRate: 0,
     metricsEvolutionInterval: 16,
     maxLineageNodes: 4000,
+
+    // ──── Environmental features (M9-early) — all OFF by default ────
+    // OFF = byte-identical to M7. Toggle feature ON by setting depth/strength/penalty > 0.
+    dayLength: 600,
+    dayNightDepth: 0,
+    seasonLength: 12000,
+    seasonDepth: 0,
+
+    rockCount: 0,
+    rockRadiusMin: 8,
+    rockRadiusMax: 24,
+    rockRepulsion: 4,
+    rockGridSize: 64,
+    maxRocks: 2048,
+
+    glowGridCols: 32,
+    glowGridRows: 32,
+    glowDiffuse: 0.2,
+    glowDecay: 0.05,
+    glowGain: 1,
+    glowCost: 0.05,
+    maxGlowEffectors: 4096,
+
+    tempGridCols: 32,
+    tempGridRows: 32,
+    tempPatchCount: 16,
+    tempPatchRadius: 6,
+    tempMin: 0,
+    tempMax: 1,
+    tempDiffuse: 0.1,
+    tempRegen: 0.3,
+    tempComfortLow: 0.3,
+    tempComfortHigh: 0.7,
+    tempColdPenalty: 0,
+    tempHeatPenalty: 0,
+
+    toxinGridCols: 64,
+    toxinGridRows: 64,
+    toxinDiffuse: 0.2,
+    toxinDecay: 0.03,
+    toxinDamage: 0,
+    toxinDepositOnMeatDecay: 0,
+
+    currentGridCols: 32,
+    currentGridRows: 32,
+    currentPatchCount: 16,
+    currentPatchRadius: 6,
+    currentStrength: 0,
+    currentEvolveRate: 0.05,
 
     ...overrides,
   };

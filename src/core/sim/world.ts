@@ -6,7 +6,14 @@ import { computeRepulsion } from '../physics/forces';
 import { integrate } from '../physics/integrator';
 import { LightField } from '../environment/light-field';
 import { FoodField } from '../environment/food-field';
-import { metabolize } from '../cells/metabolism';
+import { RockField } from '../environment/rock-field';
+import { TemperatureField } from '../environment/temperature-field';
+import { CurrentField } from '../environment/current-field';
+import { GlowField } from '../environment/glow-field';
+import { ToxinField } from '../environment/toxin-field';
+import { applyRockCollision } from '../physics/rock-collision';
+import { applyCurrent } from '../physics/current-force';
+import { metabolize, type EnvEffects } from '../cells/metabolism';
 import { sense } from '../cells/sense';
 import { act } from '../cells/act';
 import { applyThrust } from '../physics/thrust';
@@ -32,6 +39,9 @@ import { LineageLog } from '../genome/lineage-log';
 import { reproduceOrganisms, type ReproParams } from '../organism/reproduction';
 import { killStarvedOrganisms } from '../organism/organism-death';
 import { type MutationRates } from '../genome/mutate';
+import { lightMultiplier } from '../environment/cycle';
+import { senseScalars } from '../neural/env-sense';
+import { GlowEffectors, computeGlow } from '../neural/glow';
 
 /**
  * The simulation world. Each `tick()` runs the M5 pipeline:
@@ -68,6 +78,20 @@ export class World {
   readonly dyingScratch: Uint8Array;
   /** Pre-allocated local→slot scratch for instantiateBody (zero-alloc births). */
   readonly instantiateScratch: Int32Array;
+
+  // ──── Environmental features (M9-early) ────
+  /** Static rock obstacles. */
+  readonly rocks: RockField;
+  /** Temperature gradient field. */
+  readonly temperature: TemperatureField;
+  /** Water current vector field. */
+  readonly current: CurrentField;
+  /** Bioluminescent glow field. */
+  readonly glow: GlowField;
+  /** Glow effector bindings pool. */
+  readonly glowEffectors: GlowEffectors;
+  /** Toxin field. */
+  readonly toxin: ToxinField;
   /** Coarse density grid (cells per bucket) for the crowdDivideCap carrying capacity. Reused each
    *  tick; only filled when the cap is enabled. Not on the determinism contract (derived). */
   private readonly densityGrid: Int32Array;
@@ -156,6 +180,66 @@ export class World {
       changeTypeRate: 0,
       duplicateSubgraphRate: 0,
     };
+
+    // Environmental features (M9-early)
+    this.rocks = new RockField(
+      config.maxRocks,
+      Math.max(3, Math.round(config.worldWidth / config.rockGridSize)),
+      Math.max(3, Math.round(config.worldHeight / config.rockGridSize)),
+      config.worldWidth,
+      config.worldHeight,
+    );
+    if (config.rockCount > 0) {
+      this.rocks.init(
+        this.rng.split(3 /* STREAM_ROCKS */),
+        config.rockCount,
+        config.worldWidth,
+        config.worldHeight,
+        config.rockRadiusMin,
+        config.rockRadiusMax,
+      );
+    }
+    this.temperature = new TemperatureField(
+      config.tempGridCols,
+      config.tempGridRows,
+      config.worldWidth,
+      config.worldHeight,
+    );
+    this.temperature.init(
+      this.rng.split(4 /* STREAM_TEMP */),
+      config.tempPatchCount,
+      config.tempPatchRadius,
+      config.tempMin,
+      config.tempMax,
+    );
+    this.current = new CurrentField(
+      config.currentGridCols,
+      config.currentGridRows,
+      config.worldWidth,
+      config.worldHeight,
+    );
+    if (config.currentStrength > 0) {
+      this.current.init(
+        this.rng.split(5 /* STREAM_CURRENT */),
+        config.currentPatchCount,
+        config.currentPatchRadius,
+        config.currentStrength,
+      );
+    }
+    this.glow = new GlowField(
+      config.glowGridCols,
+      config.glowGridRows,
+      config.worldWidth,
+      config.worldHeight,
+    );
+    this.glowEffectors = new GlowEffectors(config.maxGlowEffectors);
+    this.toxin = new ToxinField(
+      config.toxinGridCols,
+      config.toxinGridRows,
+      config.worldWidth,
+      config.worldHeight,
+    );
+
     this.reproParams = {
       reproThreshold: 0,
       parentFloor: 0,
@@ -326,12 +410,30 @@ export class World {
     // Step 2 SENSE → step 3 THINK (recurrent forward pass) → step 4 ACT.
     sense(live, n, f, this.food);
 
+    // M9-early: precompute scalar sensor values (AMBIENT_LIGHT / TEMP / TOXIN / GLOW).
+    // No-op when no scalar-channel sensors exist.
+    senseScalars(
+      this.net,
+      f,
+      this.tickCount,
+      cfg.dayLength,
+      cfg.dayNightDepth,
+      this.temperature,
+      this.toxin,
+      this.glow,
+    );
+
     // M5: orient SENSOR cells to their organism's MOVER heading before THINK projects
     // the gradient into the body frame (one-tick orientation lag, documented).
     orientSensors(this.net, f.organismId, this.organisms.mover, f.heading);
 
     think(this.net, f.cellType, f.senseX, f.senseY, f.heading);
     this.net.swap(); // actCur now holds a(t)
+
+    // M9-early: glow effector emission (post-swap so actCur holds a(t)).
+    if (this.glowEffectors.effectorCount > 0) {
+      computeGlow(this.net, this.glow, this.glowEffectors, f, cfg.glowGain, cfg.glowCost);
+    }
 
     act(
       live,
@@ -355,6 +457,20 @@ export class World {
     );
 
     computeRepulsion(this.hash, f.posX, f.posY, f.radius, f.forceX, f.forceY, cfg.repulsion);
+
+    // M9-early: rock collision (immovable terrain obstacles).
+    if (cfg.rockCount > 0 && this.rocks.rockCount > 0) {
+      applyRockCollision(
+        this.rocks,
+        f,
+        live,
+        n,
+        cfg.rockRepulsion,
+        cfg.worldWidth,
+        cfg.worldHeight,
+      );
+    }
+
     applyThrust(live, n, f.heading, f.thrust, f.forceX, f.forceY);
 
     // M5 bond springs (scatter) + minimal adhesion (gather), accumulating into the force
@@ -388,6 +504,11 @@ export class World {
       cfg.worldWidth,
       cfg.worldHeight,
     );
+
+    // M9-early: water current drift force (post adhesion, pre integrate).
+    if (cfg.currentStrength > 0) {
+      applyCurrent(this.current, f, live, n, cfg.currentStrength);
+    }
 
     integrate(
       live,
@@ -423,6 +544,26 @@ export class World {
     // The digestion-clustering payoff input, read by METABOLIZE.
     computeDigestBonus(this.bonds, f.cellType, this.digestBonus);
 
+    // M9-early: build the env effects bundle for metabolism.
+    const envMult = lightMultiplier(
+      this.tickCount,
+      cfg.dayLength,
+      cfg.dayNightDepth,
+      cfg.seasonLength,
+      cfg.seasonDepth,
+    );
+    const env: EnvEffects = {
+      lightMultiplier: envMult,
+      temp: this.temperature,
+      tempComfortLow: cfg.tempComfortLow,
+      tempComfortHigh: cfg.tempComfortHigh,
+      tempColdPenalty: cfg.tempColdPenalty,
+      tempHeatPenalty: cfg.tempHeatPenalty,
+      toxin: this.toxin,
+      toxinDamage: cfg.toxinDamage,
+      toxinDepositOnMeatDecay: cfg.toxinDepositOnMeatDecay,
+    };
+
     metabolize(
       live,
       n,
@@ -439,6 +580,7 @@ export class World {
       cfg.neuralCost,
       this.digestBonus,
       cfg.digestClusterBonus,
+      env,
     );
 
     // M5: intra-organism energy transfer toward needier cells (§4.5).
@@ -484,6 +626,12 @@ export class World {
     this.lastDeaths = this.lifecycleResult.deaths;
 
     this.light.step(cfg.lightDiffuse, cfg.lightRegen);
+
+    // M9-early: environment field steps (all allocation-free).
+    this.temperature.step(cfg.tempDiffuse, cfg.tempRegen);
+    this.glow.step(cfg.glowDiffuse, cfg.glowDecay);
+    this.toxin.step(cfg.toxinDiffuse, cfg.toxinDecay);
+    if (cfg.currentStrength > 0) this.current.step(cfg.currentEvolveRate);
 
     // Re-derive the live set so metrics exclude freed corpses (free() leaves
     // cellType=MEAT) and include fresh-slot newborns; population == aliveCount.

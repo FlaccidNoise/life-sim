@@ -56,8 +56,8 @@ describe('TemperatureField dynamics', () => {
     tf.temp[i] = tf.cap[i]! + 20;
     const cap = tf.cap[i]!;
     tf.step(0, 0.5); // no diffusion, strong regen
-    expect(Math.abs(tf.temp[i]! - cap)).toBeLessThan(Math.abs(orig + 20 - cap));
-    expect(tf.temp[i]! - cap).toBeLessThan(20); // moved closer to cap
+    expect(Math.abs(tf.temp[i] - cap)).toBeLessThan(Math.abs(orig + 20 - cap));
+    expect(tf.temp[i] - cap).toBeLessThan(20); // moved closer to cap
   });
 
   it('pure diffusion (regen=0) conserves total heat', () => {

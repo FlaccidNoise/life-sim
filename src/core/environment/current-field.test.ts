@@ -118,7 +118,6 @@ describe('CurrentField step evolve', () => {
   it('toroidal: evolve diffuses across the wrap edge', () => {
     const cf = new CurrentField(16, 16, 1024, 1024);
     // Manually spike one corner; evolve should spread to wrapped neighbours.
-    const fillField = (arr: Float32Array, val: number) => arr.fill(val);
     // We access private fields indirectly: just init with a target seed, but
     // the hand-set approach from light-field.test also works if we re-create.
     // Instead, verify that after many evolve steps the field is smoothed
