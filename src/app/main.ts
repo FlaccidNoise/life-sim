@@ -26,6 +26,7 @@ import {
   buildNightForagerGenome,
   buildGlowForagerGenome,
   buildToxinAvoiderGenome,
+  buildPredatorGenome,
 } from '../core/genome/critter-genome';
 import { CellType } from '../core/cells/types';
 import { cloneGenome, type Genome } from '../core/genome/genome';
@@ -35,43 +36,52 @@ import type { SpeciesSummary } from '../core/sim/species-board';
 const canvas = document.getElementById('view') as HTMLCanvasElement;
 const hud = document.getElementById('hud');
 
-// A petri-dish world tuned (via headless/feel-probe.ts) so the brain-driven FORAGER organisms
-// sustain a multicellular predator-prey limit cycle: a PHOTO plant field is the only food and the
-// foragers are the only heterotroph, so they boom (sensing→swimming→eating→reproducing), strip the
-// plants, crash (starve→MEAT), the plants regrow, and they recover — generation after generation.
-// The plant field has a density carrying capacity (crowdDivideCap) so it stays de-jammed — open
-// water between food you can actually watch the foragers swim through, not a wall-to-wall carpet.
+// The VALIDATED 3-trophic ECOLOGY (M7.5): plants → foragers → predators all coexist with no top-ups
+// across seeds 3/7/42/99 for 12k+ ticks. PHOTO plants are the base food; brain-driven FORAGERS graze
+// them (sense→swim→eat→breed→starve→MEAT→regrow); brain-driven PREDATORS (red) hunt the foragers —
+// ambush-loiter in prey-scent, latch on, and drain them. Foragers in turn FLEE the predator-scent
+// gradient. The plant field has a density carrying capacity (crowdDivideCap) so it stays de-jammed —
+// open water you can watch creatures swim through. Config is the headless/feel-probe.ts LOCKED set.
+const FORAGER_INIT_E = 45; // per-cell forager seed energy (r4 rescale; ~0.44× the old r6 100)
+const PRED_INIT_E = FORAGER_INIT_E * 8; // 8× predator reserve — survives the early hunt-establish gauntlet
 const config = defaultConfig({
   seed: 3,
-  maxCells: 100_000,
-  // A bigger dish (1536² vs the old 1024²) gives the foragers room to actually swim and be SEEN
-  // rather than jostle shoulder-to-shoulder. Paired with crowdDivideCap below — without a plant
-  // carrying capacity, a bigger world just fills with more plants to the same jam.
-  worldWidth: 1536,
-  worldHeight: 1536,
+  maxCells: 300_000,
+  maxBonds: 131_072,
+  maxOrganisms: 65_536,
+  // Smaller cells (r4) in a bigger 2048² dish — the rescale that de-jams the field and gives every
+  // creature room to swim and be SEEN (feel goal: fewer, longer-lived individuals you can follow).
+  cellRadius: 4,
+  worldWidth: 2048,
+  worldHeight: 2048,
   initialPhotoFraction: 1, // all-plant seed: pure food, no competing single-cell eaters
   initialMotileFraction: 0,
-  // De-jam the plant field. Without this the producers divide unchecked until they PHYSICALLY jam
-  // at ~90% packing (cells permanently overlap → endless repulsion jiggle, nothing legible). The
-  // cap gives plants a logistic carrying capacity: a PHOTO cell whose 32-unit density-grid bucket
-  // already holds >2 cells skips division, pinning the field near ~30% (seed-independent) so there
-  // is open water between food. It caps DENSITY, not regrowth (a thinned patch refills at full
-  // rate), so the predator-prey cycle survives — unlike photoDepletion, which strangles regrowth
-  // and collapses the food web. Found via headless/feel-probe.ts.
-  crowdDivideCap: 2,
+  // De-jam the plant field: a PHOTO cell whose 32-unit density bucket is over the cap skips division
+  // → a logistic carrying capacity that pins density (not regrowth), so the food web breathes.
+  crowdDivideCap: 4,
   crowdGridSize: 32,
-  // Economy RETUNED for environmental pressures (headless/env-feel-probe.ts sweep). The env
-  // features (day/night dimming photosynthesis, temp basal penalty) raise forager upkeep, so the
-  // pre-env M7 knobs starved them post-boom. Cheaper basal + lower repro + bigger seed reserve
-  // keeps the predator-prey cycle breathing across seeds 3/7/42 under the full env load below.
-  reproThreshold: 500,
-  reproParentFloor: 120,
-  organismDeathFloor: 0, // an unfed forager starves to MEAT, feeding the next generation
-  basalCost: 0.008, // cheaper upkeep offsets the temp comfort penalty + dimmer night photosynthesis
+  // Economy: the 3-trophic ECOLOGY-validated base (feel-probe.ts LOCKED) — cheaper upkeep + lower
+  // repro give foragers the slack to withstand predation AND the sparse-2048² distance between meals.
+  // NOTE (M7.5 merge): now also carries the env load below (temp penalty, night dimming, toxin). The
+  // combined economy is RE-VALIDATED headlessly before merge; retune basal/repro here if a level dies.
+  divideThreshold: 70, // plant division threshold (rescaled from 150 @ r6 by area ratio)
+  reproThreshold: 280, // organism repro threshold (rescaled from 600 @ r6)
+  reproParentFloor: 60,
+  organismDeathFloor: 0, // an unfed creature starves to MEAT, feeding the next trophic level
+  basalCost: 0.004, // low upkeep so creatures bleed slowly between meals; env temp/toxin adds on top
   cruiseThrust: 1, // friskier roam so a searching forager visibly explores the open water
   maxThrust: 8,
-  // M7: mutation ON so the forager population ADAPTS and DIVERSIFIES live (library defaults stay 0).
-  // Tuned-safe: explores steering weights/params without collapsing the predator-prey cycle.
+  // PREDATION + FLEEING (the validated 3-trophic balance — feel-probe.ts LOCKED):
+  preyDeposit: 5, // forager flesh emits the prey-scent gradient predators hunt
+  predDigestRate: 40, // energy a PREDATOR cell drains from held prey per tick (richer kills)
+  predDigestEfficiency: 0.9,
+  predReach: 1.5, // strike from just beyond contact (a gradient-follower lags equal-speed prey)
+  predLatchRange: 2.5, // LATCH hold range — keep draining the struck organism each tick
+  predLatchStiffness: 1.0, // rest-length tether drags the predator along so prey can't outswim the drain
+  carnivoreThrustMult: 2.0, // carnivore speed edge — reposition/close faster than equal-speed prey
+  predScentDeposit: 5, // P4: carnivore flesh emits the flee-scent gradient (mirror of preyDeposit)
+  predFleeWeight: 1.0, // P4: foragers steer down the predScent gradient (the two-way arms race)
+  // M7: mutation ON so both heterotrophs ADAPT and DIVERSIFY live (library defaults stay 0).
   mutationWeightRate: 0.25,
   mutationWeightSigma: 0.1,
   mutationParamRate: 0.1,
@@ -132,9 +142,9 @@ const config = defaultConfig({
   currentEvolveRate: 0.05,
 });
 const world = new World(config);
-// ~6500 PHOTO plants ≈ the crowdDivideCap equilibrium density, so food is plentiful from tick 0
-// and the foragers establish before the plant field finishes settling (avoids an early starve-out).
-world.seedLife(6500);
+// ~18000 PHOTO plants ≈ the crowdDivideCap equilibrium density, so food is plentiful from tick 0
+// and both heterotrophs establish before the plant field finishes settling (avoids early starve-out).
+world.seedLife(18000);
 
 // M6 demo: organisms DEVELOPED from a genome (proves the encoding drives the live demo).
 function developInto(genome: Genome, x: number, y: number, heading: number): number {
@@ -152,19 +162,32 @@ let firstForagerOrg = -1;
 const spawnX = (k: number) => world.config.worldWidth * (0.1 + (0.8 * ((k * 7) % 20)) / 20);
 const spawnY = (k: number) => world.config.worldHeight * (0.1 + (0.8 * ((k * 13) % 20)) / 20);
 const spawnH = (k: number) => (k * 2.39996) % (Math.PI * 2);
-for (let k = 0; k < 40; k++) {
-  // 40 foragers: 28 base + 4 each of the three env variants, interleaved so they're scattered.
+// 250 foragers — the prey base the predator layer needs to self-sustain (feel-probe.ts LOCKED count).
+// Mostly the base forager (70%); the rest are the three env-sensor variants, interleaved so they're
+// scattered, so the new sensor channels are ecologically live, not just wired.
+for (let k = 0; k < 250; k++) {
   const r = k % 10;
   const genome =
     r < 7
-      ? buildForagerGenome(world.config.cellRadius, 150)
+      ? buildForagerGenome(world.config.cellRadius, FORAGER_INIT_E)
       : r === 7
-        ? buildNightForagerGenome(world.config.cellRadius, 150)
+        ? buildNightForagerGenome(world.config.cellRadius, FORAGER_INIT_E)
         : r === 8
-          ? buildGlowForagerGenome(world.config.cellRadius, 150)
-          : buildToxinAvoiderGenome(world.config.cellRadius, 150);
+          ? buildGlowForagerGenome(world.config.cellRadius, FORAGER_INIT_E)
+          : buildToxinAvoiderGenome(world.config.cellRadius, FORAGER_INIT_E);
   const org = developInto(genome, spawnX(k), spawnY(k), spawnH(k));
   if (k === 0) firstForagerOrg = org;
+}
+// The PREDATOR layer (red): brain-driven hunters that ambush-loiter in prey-scent (sensorFwd→thrust
+// -1.5), latch onto a forager organism and drain it. 24 seeded — they bloom (~25-30) then settle to a
+// healthy breeding population. The ambush brain + speed edge + latch let them self-sustain at 2048².
+for (let k = 0; k < 24; k++) {
+  developInto(
+    buildPredatorGenome(world.config.cellRadius, PRED_INIT_E, -1.5),
+    world.config.worldWidth * (0.15 + (0.7 * ((k * 11) % 13)) / 13),
+    world.config.worldHeight * (0.15 + (0.7 * ((k * 5) % 13)) / 13),
+    (k * 1.7) % (Math.PI * 2),
+  );
 }
 
 const f = world.cells.fields;
@@ -353,7 +376,14 @@ function drawScene(alpha: number): void {
     foodOverlay.render(camera, world.food, FOOD_DISPLAY_MAX, canvas.width, canvas.height);
   }
   if (showTemp) {
-    tempOverlay.render(camera, world.temperature, config.tempMin, config.tempMax, canvas.width, canvas.height);
+    tempOverlay.render(
+      camera,
+      world.temperature,
+      config.tempMin,
+      config.tempMax,
+      canvas.width,
+      canvas.height,
+    );
   }
   if (showToxin) {
     toxinOverlay.render(camera, world.toxin, TOXIN_DISPLAY_MAX, canvas.width, canvas.height);
@@ -477,6 +507,35 @@ canvas.addEventListener(
 );
 
 // Time controls: space = pause, '.' = single step, ']' / '[' = faster / slower.
+// Jump the follow-cam to the live carnivore nearest the current camera centre (key X). Predators are
+// few and fast, so hunting for one by eye is hard — this snaps you onto the hunt. Scans organisms by
+// the structural carnivore flag (never lineage); picks the nearest live MOVER, toroidal distance.
+function followNearestCarnivore(): void {
+  const cc = world.organisms.cellCount;
+  const carn = world.organisms.carnivore;
+  const mover = world.organisms.mover;
+  let best = -1;
+  let bestD = Infinity;
+  for (let org = 1; org < cc.length; org++) {
+    if (cc[org]! === 0 || carn[org] !== 1) continue;
+    const mv = mover[org]!;
+    if (mv < 0 || !world.cells.isAlive(mv)) continue;
+    const dx = wrapDelta(f.posX[mv]! - camera.x, world.config.worldWidth);
+    const dy = wrapDelta(f.posY[mv]! - camera.y, world.config.worldHeight);
+    const d = dx * dx + dy * dy;
+    if (d < bestD) {
+      bestD = d;
+      best = mv;
+    }
+  }
+  if (best >= 0) {
+    followId = best;
+    followGen = f.generation[best]!;
+    camera.x = f.posX[best]!;
+    camera.y = f.posY[best]!;
+  }
+}
+
 window.addEventListener('keydown', (e) => {
   if (e.key === ' ') {
     paused = !paused;
@@ -521,7 +580,8 @@ window.addEventListener('keydown', (e) => {
     showTemp = !showTemp;
   } else if (e.key === 'n' || e.key === 'N') {
     showGlow = !showGlow;
-  } else if (e.key === 'x' || e.key === 'X') {
+  } else if (e.key === 'p' || e.key === 'P') {
+    // P (poison): toxin overlay. Moved off X — X now follows the nearest predator (ecology demo).
     showToxin = !showToxin;
   } else if (e.shiftKey && (e.key === 'u' || e.key === 'U')) {
     // Shift+U: toggle the current drift FORCE (physics) on/off live, no rebuild.
@@ -530,6 +590,8 @@ window.addEventListener('keydown', (e) => {
   } else if (e.key === 'u' || e.key === 'U') {
     showCurrent = !showCurrent;
     currentCanvas.style.display = showCurrent ? 'block' : 'none';
+  } else if (e.key === 'x' || e.key === 'X') {
+    followNearestCarnivore();
   } else if (e.key === 'c' || e.key === 'C' || e.key === 'Escape') {
     followId = -1;
   }
@@ -543,7 +605,13 @@ function updateHud(): void {
   if (!hud) return;
   const m = world.metrics;
   const net = world.net;
-  const lm = lightMultiplier(world.tickCount, config.dayLength, config.dayNightDepth, config.seasonLength, config.seasonDepth);
+  const lm = lightMultiplier(
+    world.tickCount,
+    config.dayLength,
+    config.dayNightDepth,
+    config.seasonLength,
+    config.seasonDepth,
+  );
   hud.textContent =
     `cells ${world.cells.aliveCount}  ·  tick ${world.tickCount}  ·  ${fps} fps  ·  ` +
     `${speed.toFixed(2)}×${paused ? ' paused' : ''}  ·  zoom ${camera.scale.toFixed(2)}` +
@@ -573,7 +641,15 @@ function loop(): void {
   drawScene(alpha);
 
   // Night dimming: dark overlay fades with (1 - lightMultiplier).
-  const night = 1 - lightMultiplier(world.tickCount, config.dayLength, config.dayNightDepth, config.seasonLength, config.seasonDepth);
+  const night =
+    1 -
+    lightMultiplier(
+      world.tickCount,
+      config.dayLength,
+      config.dayNightDepth,
+      config.seasonLength,
+      config.seasonDepth,
+    );
   nightDiv.style.opacity = String(night * 0.55);
 
   dash.push(world.metrics);
