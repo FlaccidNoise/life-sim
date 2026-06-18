@@ -7,6 +7,14 @@ export const SensorChannel = {
   FWD_GRAD: 0,
   /** Food gradient projected onto the body's lateral (left/right) axis. */
   LAT_GRAD: 1,
+  /** Ambient light scalar [0,1] read from the day/night cycle. */
+  AMBIENT_LIGHT: 2,
+  /** Temperature sampled from the temperature field. */
+  TEMP: 3,
+  /** Toxin concentration sampled from the toxin field. */
+  TOXIN: 4,
+  /** Glow intensity sampled from the glow field. */
+  GLOW: 5,
 } as const;
 export type SensorChannelValue = (typeof SensorChannel)[keyof typeof SensorChannel];
 
@@ -52,6 +60,11 @@ export class NeuralNetwork {
   readonly sensorChannel: Uint8Array;
   sensorCount: number;
 
+  /** Precomputed scalar for each SENSOR cell with channel >= AMBIENT_LIGHT (2).
+   * Written by senseScalars, read by think. Indexed by cell slot; only valid for
+   * the current tick's live sensor bindings. Sized maxCells. */
+  readonly sensorScalar: Float32Array;
+
   // Motor bindings: a MOVER reads (turnNeuron, thrustNeuron) activations.
   readonly moverCell: Uint32Array;
   readonly turnNeuron: Uint32Array;
@@ -89,6 +102,8 @@ export class NeuralNetwork {
     this.turnNeuron = new Uint32Array(maxNeurons);
     this.thrustNeuron = new Uint32Array(maxNeurons);
     this.motorCount = 0;
+
+    this.sensorScalar = new Float32Array(maxCells);
   }
 
   /** Remaining free synapse slots (for a capacity pre-check before a structural build). */

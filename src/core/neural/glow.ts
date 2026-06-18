@@ -82,14 +82,15 @@ export function computeGlow(
   eff: GlowEffectors,
   f: CellArrays,
   glowGain: number,
+  glowCost: number,
 ): void {
   const act = net.actCur;
   const nc = eff.neuronCell;
-  const ng = eff.neuronGen;
   const g = eff.gain;
   const ct = f.cellType;
   const px = f.posX;
   const py = f.posY;
+  const en = f.energy;
   const n = eff.effectorCount;
   for (let k = 0; k < n; k++) {
     const i = nc[k]!;
@@ -97,5 +98,6 @@ export function computeGlow(
     const a = act[i]!;
     if (a <= 0) continue;
     glow.depositAt(px[i]!, py[i]!, glowGain * a * g[k]!);
+    if (glowCost > 0) en[i] = Math.max(0, en[i]! - glowCost);
   }
 }

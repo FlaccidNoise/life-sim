@@ -39,19 +39,24 @@ export function think(
     nxt[post[s]!] = nxt[post[s]!]! + weight[s]! * cur[pre[s]!]!;
   }
 
-  // (c) Inject sensor cells (body-frame projection) — overwrites their accumulator.
+  // (c) Inject sensor cells — overwrites their accumulator.
   const sc = net.sensorCell;
   const ch = net.sensorChannel;
   const sn = net.sensorCount;
   for (let k = 0; k < sn; k++) {
     const i = sc[k]!;
     if (cellType[i]! !== CellType.SENSOR) continue;
-    const h = heading[i]!;
-    const cos = Math.cos(h);
-    const sin = Math.sin(h);
-    const gx = senseX[i]!;
-    const gy = senseY[i]!;
-    nxt[i] = ch[k]! === SensorChannel.FWD_GRAD ? gx * cos + gy * sin : -gx * sin + gy * cos;
+    const c = ch[k]!;
+    if (c === SensorChannel.FWD_GRAD) {
+      const h = heading[i]!;
+      nxt[i] = senseX[i]! * Math.cos(h) + senseY[i]! * Math.sin(h);
+    } else if (c === SensorChannel.LAT_GRAD) {
+      const h = heading[i]!;
+      nxt[i] = -senseX[i]! * Math.sin(h) + senseY[i]! * Math.cos(h);
+    } else {
+      // Scalar channel (AMBIENT_LIGHT / TEMP / TOXIN / GLOW): precomputed by senseScalars.
+      nxt[i] = net.sensorScalar[i]!;
+    }
   }
 
   // (d) Apply bias + tanh to every non-sensor neuron (sensors already set in (c)).

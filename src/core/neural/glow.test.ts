@@ -89,7 +89,7 @@ describe('computeGlow — neuron activation → glow deposit', () => {
       CellType.NEURON,
       CellType.NEURON,
     ]);
-    computeGlow(net, glow, ge, f, 0.5);
+    computeGlow(net, glow, ge, f, 0.5, 0);
     // effector 0: 0.5 * 0.8 * 1.0 = 0.4
     // effector 1: 0.5 * 0.5 * 2.0 = 0.5
     expect(glow.data.length).toBe(2);
@@ -110,7 +110,7 @@ describe('computeGlow — neuron activation → glow deposit', () => {
       CellType.NEURON,
       CellType.NEURON,
     ]);
-    computeGlow(net, glow, ge, f, 1.0);
+    computeGlow(net, glow, ge, f, 1.0, 0);
     expect(glow.data).toEqual([]);
   });
 
@@ -128,7 +128,7 @@ describe('computeGlow — neuron activation → glow deposit', () => {
       CellType.DIGESTIVE,
       CellType.NEURON,
     ]);
-    computeGlow(net, glow, ge, f, 1.0);
+    computeGlow(net, glow, ge, f, 1.0, 0);
     // slot 1 is DIGESTIVE (recycled), skipped; only slot 2 fires (0.3 * 1.0 * 1.0 = 0.3)
     expect(glow.data.length).toBe(1);
     expect(glow.data[0]).toBeCloseTo(0.3, 5);

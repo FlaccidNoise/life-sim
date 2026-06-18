@@ -3,6 +3,29 @@ import { type LightField } from '../environment/light-field';
 import { type CellArrays } from '../memory/cell-store';
 import { CellType, isEdibleBy, isNeural } from './types';
 import { wrapDelta } from '../math/vec2';
+import { type TemperatureField } from '../environment/temperature-field';
+import { type ToxinField } from '../environment/toxin-field';
+
+/**
+ * Environmental modifiers injected into metabolism each tick.
+ * All effects are guarded on their enable flags so OFF = byte-identical to M7.
+ */
+export interface EnvEffects {
+  /** Day/night + seasons light multiplier for photosynthesis (1 = no effect). */
+  lightMultiplier: number;
+  /** Temperature field or null if temp is disabled. */
+  temp: TemperatureField | null;
+  tempComfortLow: number;
+  tempComfortHigh: number;
+  tempColdPenalty: number;
+  tempHeatPenalty: number;
+  /** Toxin field or null. */
+  toxin: ToxinField | null;
+  /** Energy loss per unit toxin concentration per tick. 0 = OFF. */
+  toxinDamage: number;
+  /** Toxin deposited per tick at decaying MEAT cells. 0 = OFF. */
+  toxinDepositOnMeatDecay: number;
+}
 
 /**
  * METABOLIZE step (§4.3). Allocation-free; the OUTER eater loop runs in canonical
@@ -37,6 +60,7 @@ export function metabolize(
   neuralCost: number,
   digestBonus: Uint8Array,
   digestClusterBonus: number,
+  env: EnvEffects,
 ): void {
   const { cols, rows, width, height, sorted, bucketStart } = hash;
 
@@ -46,6 +70,9 @@ export function metabolize(
 
     if (type === CellType.MEAT) {
       f.energy[i] = f.energy[i]! - meatDecay;
+      if (env.toxinDepositOnMeatDecay > 0 && env.toxin) {
+        env.toxin.depositAt(f.posX[i]!, f.posY[i]!, env.toxinDepositOnMeatDecay);
+      }
       continue;
     }
 
@@ -55,8 +82,9 @@ export function metabolize(
     if (type === CellType.PHOTO) {
       const xi = f.posX[i]!;
       const yi = f.posY[i]!;
-      const gain = photoGain * light.sampleAt(xi, yi) * area;
+      let gain = photoGain * light.sampleAt(xi, yi) * area;
       if (gain > 0) {
+        if (env.lightMultiplier !== 1) gain *= env.lightMultiplier;
         f.energy[i] = f.energy[i]! + gain;
         light.depleteAt(xi, yi, gain * photoDepletion);
       }
@@ -98,6 +126,22 @@ export function metabolize(
     // basal (all living) + movement (∝ thrust²; 0 for non-movers) + neural (SENSOR/NEURON/MOVER)
     const th = f.thrust[i]!;
     const neural = isNeural(type) ? neuralCost : 0;
-    f.energy[i] = f.energy[i]! - basalCost * area - moveCost * th * th - neural;
+    let basal = basalCost * area;
+    if (env.temp && (env.tempColdPenalty > 0 || env.tempHeatPenalty > 0)) {
+      const t = env.temp.sampleAt(f.posX[i]!, f.posY[i]!);
+      let mult = 1;
+      if (t < env.tempComfortLow) mult = 1 + env.tempColdPenalty * (env.tempComfortLow - t);
+      else if (t > env.tempComfortHigh) mult = 1 + env.tempHeatPenalty * (t - env.tempComfortHigh);
+      if (mult !== 1) basal *= mult;
+    }
+    f.energy[i] = f.energy[i]! - basal - moveCost * th * th - neural;
+
+    // Toxin damage (living cells only).
+    if (env.toxinDamage > 0 && env.toxin) {
+      f.energy[i] = Math.max(
+        0,
+        f.energy[i] - env.toxinDamage * env.toxin.sampleAt(f.posX[i]!, f.posY[i]!),
+      );
+    }
   }
 }
