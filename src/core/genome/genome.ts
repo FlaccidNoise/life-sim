@@ -27,6 +27,12 @@ export interface Gene {
   sensorChannel: number;
   /** Glow gain for a NEURON gene (>0 = this instance emits light ∝ activation·gain); 0 = no glow. */
   glowGain: number;
+  /** SenseSource enum: which field/query fills (senseX, senseY) for a SENSOR gene.
+   *  Default SenseSource.SMELL (0) so existing genomes are unchanged. */
+  senseSource: number;
+  /** SightTarget enum (FOOD/PREY/PREDATOR); only meaningful when senseSource === SIGHT.
+   *  Default SightTarget.FOOD (0). */
+  sightTarget: number;
 }
 
 /**

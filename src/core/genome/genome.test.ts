@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  type Gene,
   type Genome,
   cloneGenome,
   serializeGenome,
@@ -9,6 +10,7 @@ import {
   loadGenomeLibrary,
 } from './genome';
 import { CellType } from '../cells/types';
+import { SenseSource, SightTarget } from '../cells/sense-source';
 
 function tinyGenome(): Genome {
   return {
@@ -23,6 +25,8 @@ function tinyGenome(): Genome {
         bias: 0,
         sensorChannel: -1,
         glowGain: 0,
+        senseSource: 0,
+        sightTarget: 0,
       },
       {
         innovation: 1,
@@ -33,6 +37,8 @@ function tinyGenome(): Genome {
         bias: 0,
         sensorChannel: -1,
         glowGain: 0,
+        senseSource: 0,
+        sightTarget: 0,
       },
     ],
     divisionRules: [{ parentGene: 0, childGene: 1, angle: 0, dist: 15, stiffness: 1, repeat: 1 }],
@@ -60,6 +66,8 @@ describe('Genome — clone + serialize', () => {
       bias: 0,
       sensorChannel: -1,
       glowGain: 0,
+      senseSource: 0,
+      sightTarget: 0,
     });
     expect(a.genes[0]!.mass).toBe(2);
     expect(a.divisionRules[0]!.dist).toBe(15);
@@ -98,6 +106,44 @@ describe('GenomeStore', () => {
     expect(s.nextInnovationId()).toBe(1);
     s.register(tinyGenome());
     expect(s.nextInnovationId()).toBe(2);
+  });
+});
+
+function geneOf(over: Partial<Gene> = {}): Gene {
+  return {
+    innovation: 0,
+    cellType: 0,
+    radius: 6,
+    mass: 1,
+    initialEnergy: 100,
+    bias: 0,
+    sensorChannel: -1,
+    glowGain: 0,
+    senseSource: SenseSource.SMELL,
+    sightTarget: SightTarget.FOOD,
+    ...over,
+  };
+}
+
+describe('Gene senseSource/sightTarget', () => {
+  it('cloneGenome carries senseSource and sightTarget per gene', () => {
+    const g: Genome = {
+      seedGene: 0,
+      genes: [geneOf({ senseSource: SenseSource.HEARING, sightTarget: SightTarget.PREY })],
+      divisionRules: [],
+      bondRules: [],
+      connectionRules: [],
+      motorRules: [],
+      parentRef: -1,
+      generation: 0,
+      founderId: -1,
+    };
+    const c = cloneGenome(g);
+    expect(c.genes[0]!.senseSource).toBe(SenseSource.HEARING);
+    expect(c.genes[0]!.sightTarget).toBe(SightTarget.PREY);
+    // deep copy — mutating the clone does not touch the parent
+    c.genes[0]!.senseSource = SenseSource.SMELL;
+    expect(g.genes[0]!.senseSource).toBe(SenseSource.HEARING);
   });
 });
 
