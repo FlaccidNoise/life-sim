@@ -17,6 +17,7 @@ export function applyLatchTether(
   n: number,
   latchCell: Uint32Array,
   cellType: Uint8Array,
+  radius: Float32Array,
   posX: Float64Array,
   posY: Float64Array,
   forceX: Float32Array,
@@ -33,8 +34,15 @@ export function applyLatchTether(
     if (!isFlesh(cellType[j]!)) continue; // prey died/decayed/recycled → no tether this tick
     const dx = wrapDelta(posX[j]! - posX[i]!, width);
     const dy = wrapDelta(posY[j]! - posY[i]!, height);
-    const fx = stiffness * dx;
-    const fy = stiffness * dy;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist <= 0) continue;
+    // Spring with REST LENGTH at contact (ri+rj) — like a bond, NOT a pull-to-zero (which fought
+    // repulsion and shook both bodies apart). Holds the predator at the prey's surface so the drain
+    // continues; when overlapping (dist<rest) the term goes negative and merely reinforces repulsion.
+    const rest = radius[i]! + radius[j]!;
+    const f = (stiffness * (dist - rest)) / dist; // /dist normalises (dx,dy) to a unit direction
+    const fx = f * dx;
+    const fy = f * dy;
     forceX[i] = forceX[i]! + fx;
     forceY[i] = forceY[i]! + fy;
     forceX[j] = forceX[j]! - fx;
