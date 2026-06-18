@@ -29,6 +29,11 @@ export interface Config {
   lightRegen: number;
   /** Toroidal diffusion coefficient per tick, in [0, 0.25] (stability bound: 4·diffuse < 1). */
   lightDiffuse: number;
+  /** Drift amplitude: per-patch light-zone center sway, in GRID-CELL units (centers are stored in
+   *  grid coords). 0 = OFF: the light cap is NEVER recomputed after seeding (byte-identical to a
+   *  static field). >0 = each tick cap[] is recomputed as a sum-of-Gaussians at the drifted centers
+   *  via LightField.driftCap, so the rich zones slowly migrate and creatures must follow. */
+  driftAmplitude: number;
 
   // Energy economy (§4.5). Every term is a live knob.
   // NOTE: photosynthesis/digestion/basal all scale with area = radius², so cellRadius
@@ -334,6 +339,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     lightPatchRadius: 6,
     lightRegen: 0.3, // patches recover fast enough to sustain producers (was 0.05)
     lightDiffuse: 0.1,
+    driftAmplitude: 0, // OFF by default — cap[] is never recomputed; the field is static (byte-identical)
 
     photoGain: 0.05,
     photoDepletion: 0.01, // a photo cell no longer strip-mines its patch in one tick (was 0.2)
