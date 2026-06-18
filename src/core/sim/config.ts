@@ -121,6 +121,28 @@ export interface Config {
    *  its steering (climbs food, slides away from predators). 0 = no fleeing (no-op, byte-identical). Default 0. */
   predFleeWeight: number;
 
+  // Herbivore graze-latch (mirrors the predator latch for DIGESTIVE/MOTILE mouths grazing PHOTO chains).
+  // OFF by default → the legacy instant-drain eating path runs and every output is byte-identical.
+  /** Master flag: when true a DIGESTIVE/MOTILE mouth LATCHES onto an edible PHOTO cell and drains it
+   *  at grazeRate/tick over many ticks (sustained grazing) instead of the instant FIRST-edible drain.
+   *  false = legacy overlap-drain path (byte-identical). Default false; the demo opts in. */
+  herbivoreLatch: boolean;
+  /** Energy/tick a latched mouth drains from a held PHOTO cell (absolute, NOT area-scaled — like
+   *  digestRate). Modest so a chain cell takes MANY ticks to consume and a brief brush no longer kills
+   *  it; the cell still only severs at energy≤0 (severEatenChainCells). Anchored bases keep the
+   *  baseToughness factor so foragers prefer chain cells. Only used when herbivoreLatch. */
+  grazeRate: number;
+  /** Graze latch acquire+hold range, as a multiple of contact (ri+rj). A mouth latches the FIRST
+   *  edible PHOTO cell within grazeRange·(ri+rj) and keeps draining it until it's gone or out of range.
+   *  MUST keep grazeLatchRange·(ri+rj) within the 3×3 hash window (≤ ~1.5·cellSize) or distant cells
+   *  are missed. 0 = latch disabled → legacy overlap-drain path. Only used when herbivoreLatch. */
+  grazeLatchRange: number;
+  /** Graze tether spring constant — pulls a latched forager to its plant cell (the "attachment") so
+   *  grazing is sustained. Scatter spring (mutual), subject to the same symplectic-Euler ceiling as
+   *  bonds; keep modest so MOVER thrust can overpower it (a forager can still flee). 0 = no tether.
+   *  Only used when herbivoreLatch. */
+  grazeLatchStiffness: number;
+
   // Sensing & movement (§4.4). All live knobs.
   /** Gradient magnitude below which a mover coasts at cruiseThrust instead of steering. */
   senseThreshold: number;
@@ -399,6 +421,11 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     predLatchStiffness: 0, // OFF by default (no tether); the ecology config enables the attachment spring
     predScentDeposit: 0, // OFF by default (no fleeing) — predScent field is skipped entirely, byte-identical
     predFleeWeight: 0, // OFF by default (no-op); the ecology config raises it so foragers flee predator scent
+
+    herbivoreLatch: false, // OFF by default → legacy instant-drain eating, byte-identical; the demo sets true
+    grazeRate: 1.0, // modest per-tick latch drain; at the r4 economy a lit chain cell refills ~0.78/tick (photoGain·area·light) so net drain is slow → a 10-20 unit cell takes ~15-90 ticks to consume (the OWNER fine-tunes after)
+    grazeLatchRange: 1.5, // acquire+hold radius ×(ri+rj); kept ≤1.5 so grazeLatchRange·(ri+rj) stays inside the 3×3 hash window (the predLatchRange 2.5 risks missing out-of-bucket cells)
+    grazeLatchStiffness: 0.8, // gentle tether (< predLatchStiffness 1.0, ≪ bond ceiling 2.5) so a fleeing forager's MOVER thrust can overpower it and detach
 
     senseThreshold: 1e-4,
     turnRate: 0.25, // ~14°/tick — visibly curves toward food without snapping

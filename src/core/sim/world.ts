@@ -641,6 +641,29 @@ export class World {
         cfg.worldWidth,
         cfg.worldHeight,
         cfg.predLatchStiffness,
+        false,
+      );
+    }
+    // Herbivore graze tether: drag each latched forager mouth toward its grazed PHOTO cell. Shares
+    // latchCell/latchPrey with the predator tether (mouth sets are disjoint); grazePhoto=true selects
+    // the PHOTO validity check (a grazed plant cell is PHOTO, not flesh).
+    if (cfg.herbivoreLatch && cfg.grazeLatchStiffness > 0) {
+      applyLatchTether(
+        live,
+        n,
+        f.latchCell,
+        f.latchPrey,
+        f.cellType,
+        f.organismId,
+        f.radius,
+        f.posX,
+        f.posY,
+        f.forceX,
+        f.forceY,
+        cfg.worldWidth,
+        cfg.worldHeight,
+        cfg.grazeLatchStiffness,
+        true,
       );
     }
 
@@ -728,6 +751,9 @@ export class World {
       f.latchCell,
       this.organisms.cellCount,
       cfg.predLatchRange,
+      cfg.herbivoreLatch,
+      cfg.grazeRate,
+      cfg.grazeLatchRange,
     );
 
     // M5: intra-organism energy transfer toward needier cells (§4.5).

@@ -100,6 +100,17 @@ const config = defaultConfig({
   carnivoreThrustMult: 2.0, // carnivore speed edge — reposition/close faster than equal-speed prey
   predScentDeposit: 5, // P4: carnivore flesh emits the flee-scent gradient (mirror of preyDeposit)
   predFleeWeight: 1.0, // P4: foragers steer down the predScent gradient (the two-way arms race)
+  // HERBIVORE GRAZE-LATCH: a forager mouth latches onto a PHOTO chain cell and grazes it gradually
+  // (grazeRate/tick) instead of the instant-kill bite — a brief brush no longer severs the cell and
+  // feeding is sustained. NOTE (open tuning, co-owned): gradual grazing alone does NOT yet make
+  // foragers THRIVE in this sparse 10-pocket world — headless sweep shows foragers peak ~4-9 then
+  // decline at every grazeRate (low rate starves them, high rate is instant-kill again). The real
+  // lever is the food ECONOMY (pocket density/count, repro cost, harvestable plant energy), tuned
+  // next. grazeRate 4 = a visibly GRADUAL graze (a ~15-energy cell takes ~5 ticks) for the feel.
+  herbivoreLatch: true,
+  grazeRate: 4, // gradual drain (was 1.0 = too slow, starved foragers); pending economy co-tuning
+  grazeLatchRange: 1.5, // acquire+hold radius ×(ri+rj); stays inside the 3×3 hash window
+  grazeLatchStiffness: 1.0, // tether holds the forager at the plant; MOVER thrust (maxThrust 14) can still tow it off to flee
   // M7: mutation ON so both heterotrophs ADAPT and DIVERSIFY live (library defaults stay 0).
   mutationWeightRate: 0.25,
   mutationWeightSigma: 0.1,
