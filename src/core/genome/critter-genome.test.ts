@@ -7,10 +7,12 @@ import {
   buildGlowForagerGenome,
   buildToxinAvoiderGenome,
   buildPredatorGenome,
+  buildSightedForagerGenome,
 } from './critter-genome';
 import { develop } from './develop';
 import { CellType } from '../cells/types';
 import { SensorChannel } from '../neural/network';
+import { SenseSource, SightTarget } from '../cells/sense-source';
 import { World } from '../sim/world';
 import { defaultConfig } from '../sim/config';
 
@@ -154,6 +156,59 @@ describe('buildPredatorGenome — a forager body with a carnivore mouth', () => 
         (c) => c.preGene === 1 && c.postGene === 4,
       )!.weight,
     ).toBeCloseTo(-2.5, 6);
+  });
+});
+
+describe('buildSightedForagerGenome — forager with a FOOD-eye pair + smell', () => {
+  const g = buildSightedForagerGenome(6, 100);
+  const body = develop(g, 256, 16);
+
+  it('has 8 genes: 6-cell forager + a FWD/LAT eye pair', () => {
+    expect(g.genes.length).toBe(8);
+  });
+
+  it('keeps the smell SENSOR pair as senseSource SMELL', () => {
+    // genes 1,2 are the original forager smell sensors
+    expect(g.genes[1]!.senseSource).toBe(SenseSource.SMELL);
+    expect(g.genes[1]!.sensorChannel).toBe(SensorChannel.FWD_GRAD);
+    expect(g.genes[2]!.senseSource).toBe(SenseSource.SMELL);
+    expect(g.genes[2]!.sensorChannel).toBe(SensorChannel.LAT_GRAD);
+  });
+
+  it('adds an eye pair: senseSource SIGHT, sightTarget FOOD, on a FWD + a LAT channel', () => {
+    const eyeFwd = g.genes[6]!;
+    const eyeLat = g.genes[7]!;
+    expect(eyeFwd.cellType).toBe(CellType.SENSOR);
+    expect(eyeFwd.senseSource).toBe(SenseSource.SIGHT);
+    expect(eyeFwd.sightTarget).toBe(SightTarget.FOOD);
+    expect(eyeFwd.sensorChannel).toBe(SensorChannel.FWD_GRAD);
+    expect(eyeLat.senseSource).toBe(SenseSource.SIGHT);
+    expect(eyeLat.sightTarget).toBe(SightTarget.FOOD);
+    expect(eyeLat.sensorChannel).toBe(SensorChannel.LAT_GRAD);
+  });
+
+  it('wires the eye pair into the steering loop (FWD-eye→thrust, LAT-eye→turn)', () => {
+    const conn = (pre: number, post: number) =>
+      g.connectionRules.find((c) => c.preGene === pre && c.postGene === post)!;
+    expect(conn(6, 4).weight).toBeCloseTo(1.5, 6); // FWD-eye → thrust (advance toward seen food)
+    expect(conn(7, 3).weight).toBeCloseTo(1.5, 6); // LAT-eye → turn (steer toward seen food)
+    // the original smell loop is untouched
+    expect(conn(1, 4).weight).toBeCloseTo(1.5, 6);
+    expect(conn(2, 3).weight).toBeCloseTo(1.5, 6);
+  });
+
+  it('develops an 8-cell body with no truncation and positive energy', () => {
+    expect(body.count).toBe(8);
+    expect(body.truncated).toBe(false);
+    expect(body.totalEnergy).toBeGreaterThan(0);
+    expect(body.senseSource[6]).toBe(SenseSource.SIGHT);
+    expect(body.sightTarget[6]).toBe(SightTarget.FOOD);
+  });
+
+  it('instantiates into a small World without error', () => {
+    const w = new World(defaultConfig({ maxCells: 2000 }), false);
+    const org = w.spawnOrganism(g, 500, 500, 0);
+    expect(org).toBeGreaterThanOrEqual(0);
   });
 });
 
