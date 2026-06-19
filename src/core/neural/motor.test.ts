@@ -27,6 +27,7 @@ describe('driveMovers — motor neuron activations → MOVER thrust/turn', () =>
       0,
       0,
       0,
+      0,
     );
     expect(heading[0]).toBeCloseTo(0.2 + 0.4 * 0.5, 6);
     expect(thrust[0]).toBeCloseTo(4 * 1.0 + 1, 6); // 5, under the cap
@@ -55,6 +56,7 @@ describe('driveMovers — motor neuron activations → MOVER thrust/turn', () =>
       0,
       0,
       0,
+      0,
     );
     expect(thrust[0]).toBeCloseTo(3, 6);
 
@@ -72,6 +74,7 @@ describe('driveMovers — motor neuron activations → MOVER thrust/turn', () =>
       1,
       new Float32Array(3),
       1e9,
+      0,
       0,
       0,
       0,
@@ -105,6 +108,7 @@ describe('driveMovers — motor neuron activations → MOVER thrust/turn', () =>
       0,
       0,
       0,
+      0,
     );
     expect(thrust[0]).toBeCloseTo(7.5, 6);
 
@@ -124,6 +128,7 @@ describe('driveMovers — motor neuron activations → MOVER thrust/turn', () =>
       1.5,
       new Float32Array(3),
       1e9,
+      0,
       0,
       0,
       0,

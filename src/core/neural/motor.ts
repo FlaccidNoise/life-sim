@@ -37,6 +37,7 @@ export function driveMovers(
   exploreWander: number,
   seed: number,
   tick: number,
+  patrolCruise: number,
 ): void {
   const act = net.actCur;
   const mc = net.moverCell;
@@ -45,6 +46,7 @@ export function driveMovers(
   const n = net.motorCount;
   const edge = carnivoreThrustMult !== 1;
   const explore = exploreWander > 0;
+  const patrol = patrolCruise > 0;
   for (let k = 0; k < n; k++) {
     const m = mc[k]!;
     const org = organismId[m]!;
@@ -60,6 +62,13 @@ export function driveMovers(
     if (edge && carnivore[org]! === 1) {
       t *= carnivoreThrustMult;
       cap = maxThrust * carnivoreThrustMult;
+    } else if (patrol) {
+      // BASELINE PATROL (hunger-independent): a thrust FLOOR + gentle wander layered on top of the
+      // chemotaxis steer (act[tn] already applied above), so a HUNGRY herbivore keeps swimming and
+      // patrolling its community instead of camping the food-gradient peak and oscillating (the
+      // steady-state "wiggle"). It still climbs the gradient — it just never sits still. Default 0 = off.
+      if (t < patrolCruise) t = patrolCruise;
+      heading[m] = heading[m]! + (hashFloat3(seed, tick, m) - 0.5) * 2 * exploreWander;
     }
     if (t < 0) t = 0;
     else if (t > cap) t = cap;
