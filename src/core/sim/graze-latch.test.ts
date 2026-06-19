@@ -87,29 +87,18 @@ function callMetabolize(
     f,
     hash,
     lf,
-    cfg.photoGain,
-    cfg.photoDepletion,
-    cfg.digestRate,
-    cfg.digestEfficiency,
-    cfg.baseToughness,
-    cfg.basalCost,
-    cfg.meatDecay,
-    0, // moveCost
-    0, // neuralCost
-    noBonus,
-    0, // digestClusterBonus
+    { photoGain: cfg.photoGain, photoDepletion: cfg.photoDepletion, digestRate: cfg.digestRate, digestEfficiency: cfg.digestEfficiency, baseToughness: cfg.baseToughness, basalCost: cfg.basalCost, meatDecay: cfg.meatDecay, moveCost: 0, neuralCost: // moveCost
+    0, digestClusterBonus: 0 },
+    // digestClusterBonus
     noEnv,
-    0, // predDigestRate
-    0, // predDigestEfficiency
-    1, // predReach
-    f.latchPrey,
-    f.latchCell,
-    noCC,
-    0, // predLatchRange
-    herbivoreLatch,
-    grazeRate,
-    grazeLatchRange,
-    Number.MAX_SAFE_INTEGER,
+    { predDigestRate: 0, predDigestEfficiency: // predDigestRate
+    0, predReach: // predDigestEfficiency
+    1, predLatchRange: 0 },
+    { herbivoreLatch: // predLatchRange
+    herbivoreLatch, grazeRate: grazeRate, grazeLatchRange: grazeLatchRange, grazeSatiation: Number.MAX_SAFE_INTEGER },
+    { digestBonus: // neuralCost
+    noBonus, latchPrey: // predReach
+    f.latchPrey, latchCell: f.latchCell, organismCellCount: noCC },
   );
 }
 
