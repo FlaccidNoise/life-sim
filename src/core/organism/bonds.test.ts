@@ -87,6 +87,67 @@ describe('BondNetwork', () => {
   });
 });
 
+describe('BondNetwork — bondHighWaterMark', () => {
+  // Mirrors cell-store.test.ts highWaterMark test structure.
+  // bondHighWaterMark is (highest live bond slot + 1), or 0 when empty.
+  it('is 0 for an empty network', () => {
+    const b = new BondNetwork(8, 16, 4);
+    expect(b.bondHighWaterMark).toBe(0);
+  });
+
+  it('equals the count after a run of ascending allocations', () => {
+    const b = new BondNetwork(8, 16, 4);
+    b.addBond(0, 0, 1, 0, 1, 1); // slot 0
+    b.addBond(2, 0, 3, 0, 1, 1); // slot 1
+    b.addBond(4, 0, 5, 0, 1, 1); // slot 2
+    expect(b.bondHighWaterMark).toBe(3);
+  });
+
+  it('is unchanged when a non-top slot is freed', () => {
+    const b = new BondNetwork(8, 16, 4);
+    b.addBond(0, 0, 1, 0, 1, 1); // slot 0
+    b.addBond(2, 0, 3, 0, 1, 1); // slot 1
+    b.addBond(4, 0, 5, 0, 1, 1); // slot 2
+    b.removeBond(1); // not the top slot (2 is still live)
+    expect(b.bondHighWaterMark).toBe(3);
+  });
+
+  it('shrinks past trailing dead slots when the top slot is freed', () => {
+    const b = new BondNetwork(8, 16, 4);
+    b.addBond(0, 0, 1, 0, 1, 1); // slot 0
+    b.addBond(2, 0, 3, 0, 1, 1); // slot 1
+    b.addBond(4, 0, 5, 0, 1, 1); // slot 2
+    b.removeBond(1); // dead, but interior
+    b.removeBond(2); // top → hwm must walk down past slot 1 (dead) to slot 0 (alive)
+    expect(b.bondHighWaterMark).toBe(1);
+  });
+
+  it('returns to 0 when every bond is freed', () => {
+    const b = new BondNetwork(8, 16, 4);
+    b.addBond(0, 0, 1, 0, 1, 1);
+    b.addBond(2, 0, 3, 0, 1, 1);
+    b.removeBond(0);
+    b.removeBond(1);
+    expect(b.bondHighWaterMark).toBe(0);
+  });
+
+  it('always bounds the live set: every alive bond is below bondHighWaterMark', () => {
+    const b = new BondNetwork(16, 16, 8);
+    b.addBond(0, 0, 1, 0, 1, 1); // 0
+    b.addBond(2, 0, 3, 0, 1, 1); // 1
+    b.addBond(4, 0, 5, 0, 1, 1); // 2
+    b.addBond(6, 0, 7, 0, 1, 1); // 3
+    b.addBond(8, 0, 9, 0, 1, 1); // 4
+    b.removeBond(1);
+    b.removeBond(3);
+    b.addBond(10, 0, 11, 0, 1, 1); // reuses slot 3 (LIFO free-list)
+    for (let s = 0; s < 16; s++) {
+      if (b.isAlive(s)) expect(s).toBeLessThan(b.bondHighWaterMark);
+    }
+    expect(b.isAlive(b.bondHighWaterMark - 1)).toBe(true);
+  });
+});
+
 describe('BondNetwork — freeCount', () => {
   it('reports remaining pool slots (decrements on add, restores on remove)', () => {
     const b = new BondNetwork(8, 4, 4);

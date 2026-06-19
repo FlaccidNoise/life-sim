@@ -24,6 +24,9 @@ export class OrganismTable {
    *  in v1). Structural diet flag — NOT lineage/fitness. */
   readonly carnivore: Uint8Array;
 
+  /** (highest live organism id + 1), or 0 when empty. Maintained in alloc/free. */
+  highWaterMark: number;
+
   private readonly orgAlive: Uint8Array;
   private readonly orgFree: Int32Array;
   private orgFreeTop: number;
@@ -39,6 +42,7 @@ export class OrganismTable {
     this.birthTick = new Int32Array(maxOrganisms).fill(-1);
     this.reachedAdulthood = new Uint8Array(maxOrganisms);
     this.carnivore = new Uint8Array(maxOrganisms);
+    this.highWaterMark = 0;
     this.orgAlive = new Uint8Array(maxOrganisms);
     // Free-list of ids 1..maxOrganisms-1 (0 reserved). Pop returns 1, 2, 3, … ascending.
     const n = maxOrganisms - 1;
@@ -59,6 +63,7 @@ export class OrganismTable {
     this.carnivore[id] = 0;
     this.energy[id] = 0;
     this.cellCount[id] = 0;
+    if (id >= this.highWaterMark) this.highWaterMark = id + 1;
     return id;
   }
 
@@ -72,6 +77,11 @@ export class OrganismTable {
     this.reachedAdulthood[id] = 0;
     this.carnivore[id] = 0;
     this.orgFree[this.orgFreeTop++] = id;
+    if (id === this.highWaterMark - 1) {
+      let h = this.highWaterMark;
+      while (h > 0 && this.orgAlive[h - 1] === 0) h--;
+      this.highWaterMark = h;
+    }
   }
 
   isAlive(id: number): boolean {

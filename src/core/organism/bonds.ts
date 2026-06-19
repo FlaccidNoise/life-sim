@@ -35,6 +35,8 @@ export class BondNetwork {
   // Compact live-bond list, rebuilt on structural events (ascending slot order).
   readonly liveBonds: Uint32Array;
   liveBondCount: number;
+  /** (highest live bond slot + 1), or 0 when empty. Maintained in addBond/removeBond. */
+  bondHighWaterMark: number;
 
   constructor(maxCells: number, maxBonds: number, degreeCap: number) {
     this.maxCells = maxCells;
@@ -57,6 +59,7 @@ export class BondNetwork {
 
     this.liveBonds = new Uint32Array(maxBonds);
     this.liveBondCount = 0;
+    this.bondHighWaterMark = 0;
   }
 
   isAlive(s: number): boolean {
@@ -92,6 +95,7 @@ export class BondNetwork {
     this.degree[a] = (this.degree[a]! + 1) & 0xff;
     this.adj[b * cap + this.degree[b]!] = s;
     this.degree[b] = (this.degree[b]! + 1) & 0xff;
+    if (s >= this.bondHighWaterMark) this.bondHighWaterMark = s + 1;
     return s;
   }
 
@@ -102,6 +106,11 @@ export class BondNetwork {
     this.detach(this.cellA[s]!, s);
     this.detach(this.cellB[s]!, s);
     this.bondFree[this.bondFreeTop++] = s;
+    if (s === this.bondHighWaterMark - 1) {
+      let h = this.bondHighWaterMark;
+      while (h > 0 && this.bondAlive[h - 1] === 0) h--;
+      this.bondHighWaterMark = h;
+    }
   }
 
   private detach(c: number, s: number): void {
@@ -125,7 +134,7 @@ export class BondNetwork {
    */
   rebuildLive(store: CellStore): void {
     let nb = 0;
-    for (let s = 0; s < this.maxBonds; s++) {
+    for (let s = 0; s < this.bondHighWaterMark; s++) {
       if (this.bondAlive[s] === 0) continue;
       if (!store.validate(this.cellA[s]!, this.genA[s]!)) continue;
       if (!store.validate(this.cellB[s]!, this.genB[s]!)) continue;
