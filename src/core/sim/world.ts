@@ -329,8 +329,9 @@ export class World {
       grazeLatchRange: 0,
       grazeSatiation: 0,
     };
+    this.digestBonus = new Uint8Array(config.maxCells);
     this.latchArrays = {
-      digestBonus: new Uint8Array(0),
+      digestBonus: this.digestBonus,
       latchPrey: new Uint32Array(0),
       latchCell: new Uint32Array(0),
       organismCellCount: new Uint32Array(0),
@@ -340,7 +341,6 @@ export class World {
     this.birthsReachedAdulthood = 0;
     this.lastOrganismBirths = 0;
     this.lastOrganismDeaths = 0;
-    this.digestBonus = new Uint8Array(config.maxCells);
     this.metrics = makeMetrics();
     this.lifecycleResult = { births: 0, deaths: 0 };
     this.lastBirths = 0;
