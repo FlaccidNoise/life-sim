@@ -120,6 +120,11 @@ const config = defaultConfig({
   // food-steering with a gentle wander + cruise so it swims OFF to explore open water, then re-engages
   // food-seeking when hungry (feed→patrol→feed) — what makes creatures read as life swimming around.
   exploreWander: 0.3,
+  // BASELINE PATROL: a hunger-independent thrust floor (~6) + the exploreWander drift on top of
+  // chemotaxis, so a HUNGRY forager keeps swimming/patrolling its community instead of camping the
+  // food-gradient peak (the steady-state wiggle). It still climbs the gradient toward food — it just
+  // never sits still. Tuned to swim without burning so much it starves (validated live).
+  patrolCruise: 6,
   // M7: mutation ON so both heterotrophs ADAPT and DIVERSIFY live (library defaults stay 0).
   mutationWeightRate: 0.25,
   mutationWeightSigma: 0.1,

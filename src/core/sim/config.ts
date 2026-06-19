@@ -153,6 +153,12 @@ export interface Config {
    *  thrust, so a fed forager swims off to explore instead of oscillating on the food patch (the
    *  "wiggle"). 0 (default) = off → legacy motor path byte-identical. The demo sets it. */
   exploreWander: number;
+  /** BASELINE PATROL: a thrust FLOOR (world-units) for non-carnivore MOVERs, applied on top of the
+   *  chemotaxis steer + an exploreWander heading wander, EVERY tick regardless of hunger. So a hungry
+   *  forager keeps swimming/patrolling its community (it still climbs the food gradient) instead of
+   *  camping the gradient peak and oscillating in place — the steady-state "wiggle". 0 (default) =
+   *  off → legacy motor path byte-identical. The demo sets it. */
+  patrolCruise: number;
 
   // Sensing & movement (§4.4). All live knobs.
   /** Gradient magnitude below which a mover coasts at cruiseThrust instead of steering. */
@@ -446,6 +452,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     grazeLatchStiffness: 0.8, // gentle tether (< predLatchStiffness 1.0, ≪ bond ceiling 2.5) so a fleeing forager's MOVER thrust can overpower it and detach
     grazeSatiation: 1e9, // OFF by default (effectively never satiated → byte-identical legacy); the demo lowers it so a fed forager stops grazing and roams
     exploreWander: 0, // OFF by default (no satiated-roam override → byte-identical motor path); the demo sets it so fed foragers swim off and explore
+    patrolCruise: 0, // OFF by default (no thrust floor → byte-identical motor path); the demo sets it so hungry foragers keep swimming/patrolling instead of camping the food peak
 
     senseThreshold: 1e-4,
     turnRate: 0.25, // ~14°/tick — visibly curves toward food without snapping

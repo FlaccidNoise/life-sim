@@ -579,6 +579,7 @@ export class World {
       cfg.exploreWander,
       cfg.seed,
       this.tickCount,
+      cfg.patrolCruise,
     );
 
     computeRepulsion(this.hash, f.posX, f.posY, f.radius, f.forceX, f.forceY, cfg.repulsion);
