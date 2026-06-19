@@ -1,5 +1,6 @@
 import { type World } from '../core/sim/world';
 import { CellType } from '../core/cells/types';
+import { syncCanvasDpr } from './canvas-dpr';
 
 /** Single-letter tag per neural cell type, drawn inside each node. */
 const TYPE_TAG: Record<number, string> = {
@@ -29,29 +30,12 @@ export class BrainInspector {
     this.ctx = ctx;
     this.cssW = canvas.width;
     this.cssH = canvas.height;
-    const dpr = Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, 2);
-    this.dpr = dpr;
-    canvas.width = Math.round(this.cssW * dpr);
-    canvas.height = Math.round(this.cssH * dpr);
-    if (canvas.style) {
-      canvas.style.width = `${this.cssW}px`;
-      canvas.style.height = `${this.cssH}px`;
-    }
+    this.dpr = syncCanvasDpr(canvas, ctx, this.cssW, this.cssH, 1);
   }
 
   render(world: World, organismId?: number): void {
     const { ctx } = this;
-    const dpr = Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, 2);
-    if (dpr !== this.dpr) {
-      this.dpr = dpr;
-      this.canvas.width = Math.round(this.cssW * dpr);
-      this.canvas.height = Math.round(this.cssH * dpr);
-      if (this.canvas.style) {
-        this.canvas.style.width = `${this.cssW}px`;
-        this.canvas.style.height = `${this.cssH}px`;
-      }
-    }
-    if (typeof ctx.setTransform === 'function') ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    this.dpr = syncCanvasDpr(this.canvas, ctx, this.cssW, this.cssH, this.dpr);
     const w = this.cssW;
     const h = this.cssH;
     ctx.clearRect(0, 0, w, h);

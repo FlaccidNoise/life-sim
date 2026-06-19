@@ -1,5 +1,6 @@
 import { type Metrics } from '../core/sim/metrics';
 import { PALETTE } from '../render/palette';
+import { syncCanvasDpr } from './canvas-dpr';
 
 const CAP = 600;
 
@@ -127,18 +128,7 @@ export class TelemetryDashboard {
   /** Draw three stacked mini-charts: populations, mean energy, diversity (0..1). */
   draw(latest: Metrics): void {
     const ctx = this.ctx;
-    const dpr = Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, 2);
-    if (dpr !== this.dpr) {
-      // devicePixelRatio changed (e.g. window dragged between displays) — rescale backing.
-      this.dpr = dpr;
-      this.canvas.width = Math.round(this.cssW * dpr);
-      this.canvas.height = Math.round(this.cssH * dpr);
-      if (this.canvas.style) {
-        this.canvas.style.width = `${this.cssW}px`;
-        this.canvas.style.height = `${this.cssH}px`;
-      }
-    }
-    if (typeof ctx.setTransform === 'function') ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    this.dpr = syncCanvasDpr(this.canvas, ctx, this.cssW, this.cssH, this.dpr);
     const W = this.cssW;
     const H = this.cssH;
     ctx.clearRect(0, 0, W, H);
