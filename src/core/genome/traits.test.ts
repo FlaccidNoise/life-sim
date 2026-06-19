@@ -2,8 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { genomeTraits, genomeSignature } from './traits';
 import { buildForagerGenome, buildAutotrophGenome } from './critter-genome';
 import { mutateGenome } from './mutate';
-import { GenomeStore } from './genome';
+import { GenomeStore, type Gene } from './genome';
 import { Rng } from '../math/rng';
+import { SenseSource, SightTarget } from '../cells/sense-source';
 
 describe('genomeTraits', () => {
   it('counts genes by type, rules, and means for the forager', () => {
@@ -31,6 +32,29 @@ describe('genomeTraits', () => {
     expect(t.meanMass).toBe(0);
     expect(t.meanInitialEnergy).toBe(0);
     expect(t.meanAbsWeight).toBe(0);
+  });
+});
+
+describe('genomeTraits — sense modality counts', () => {
+  it('counts SENSOR genes by senseSource', () => {
+    const g = buildForagerGenome(); // genes 1,2 are SENSOR, default SMELL
+    g.genes[1] = { ...(g.genes[1] as Gene), senseSource: SenseSource.HEARING };
+    g.genes[2] = {
+      ...(g.genes[2] as Gene),
+      senseSource: SenseSource.SIGHT,
+      sightTarget: SightTarget.PREY,
+    };
+    const t = genomeTraits(g);
+    expect(t.smellGenes).toBe(0);
+    expect(t.hearingGenes).toBe(1);
+    expect(t.sightGenes).toBe(1);
+  });
+
+  it('a default forager has only SMELL sensors', () => {
+    const t = genomeTraits(buildForagerGenome());
+    expect(t.smellGenes).toBe(2);
+    expect(t.hearingGenes).toBe(0);
+    expect(t.sightGenes).toBe(0);
   });
 });
 
