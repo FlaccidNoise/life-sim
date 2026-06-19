@@ -20,16 +20,40 @@ const TYPE_TAG: Record<number, string> = {
  */
 export class BrainInspector {
   private readonly ctx: CanvasRenderingContext2D;
+  private readonly cssW: number;
+  private readonly cssH: number;
+  private dpr: number;
   constructor(private readonly canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('brain inspector needs a 2D context');
     this.ctx = ctx;
+    this.cssW = canvas.width;
+    this.cssH = canvas.height;
+    const dpr = Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, 2);
+    this.dpr = dpr;
+    canvas.width = Math.round(this.cssW * dpr);
+    canvas.height = Math.round(this.cssH * dpr);
+    if (canvas.style) {
+      canvas.style.width = `${this.cssW}px`;
+      canvas.style.height = `${this.cssH}px`;
+    }
   }
 
   render(world: World, organismId?: number): void {
-    const { ctx, canvas } = this;
-    const w = canvas.width;
-    const h = canvas.height;
+    const { ctx } = this;
+    const dpr = Math.min(typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1, 2);
+    if (dpr !== this.dpr) {
+      this.dpr = dpr;
+      this.canvas.width = Math.round(this.cssW * dpr);
+      this.canvas.height = Math.round(this.cssH * dpr);
+      if (this.canvas.style) {
+        this.canvas.style.width = `${this.cssW}px`;
+        this.canvas.style.height = `${this.cssH}px`;
+      }
+    }
+    if (typeof ctx.setTransform === 'function') ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    const w = this.cssW;
+    const h = this.cssH;
     ctx.clearRect(0, 0, w, h);
     const net = world.net;
     const f = world.cells.fields;
