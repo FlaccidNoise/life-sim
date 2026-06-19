@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { CellStore } from '../memory/cell-store';
 import { SpatialHash } from '../spatial/spatial-hash';
+import { RockField } from '../environment/rock-field';
 import { CellType } from './types';
 import { SightTarget } from './sense-source';
 import { sightVector } from './sight';
@@ -11,6 +12,25 @@ function buildHash(store: CellStore, live: number[], w = 800, h = 800, cellSize 
   const hash = new SpatialHash(w, h, cellSize, store.capacity);
   hash.build(Uint32Array.from(live), live.length, f.posX, f.posY);
   return hash;
+}
+
+// Build a RockField over manually-placed rocks (mirrors sight-occlusion.test.ts's helper).
+function rocksWith(centers: Array<[number, number, number]>, w = 800, h = 800): RockField {
+  const rf = new RockField(
+    8,
+    Math.max(3, Math.round(w / 64)),
+    Math.max(3, Math.round(h / 64)),
+    w,
+    h,
+  );
+  for (let i = 0; i < centers.length; i++) {
+    rf.cx[i] = centers[i]![0];
+    rf.cy[i] = centers[i]![1];
+    rf.radius[i] = centers[i]![2];
+  }
+  rf.rockCount = centers.length;
+  rf.buildGrid();
+  return rf;
 }
 
 describe('sightVector — FOOD target, no occlusion', () => {
@@ -426,6 +446,79 @@ describe('sightVector — toroidal seam', () => {
     const hash = buildHash(store, [eye, above, below], 96, 96, 32);
     sightVector(eye, f, hash, new Uint8Array(8), SightTarget.FOOD, 40, Math.PI / 2, 96, 96);
     expect(f.senseY[eye]).toBeGreaterThan(0); // above-axis (canonical-first) wins
+  });
+});
+
+describe('sightVector — rock occlusion (optional rocks param)', () => {
+  // Eye at (400,400) looking +x with a 60° half-angle cone. A NEARER FOOD target sits up-and-right at
+  // (425,425) (dist ~35, 45° off-axis → in-cone); a FARTHER FOOD target is straight ahead at (470,400)
+  // (dist 70). A rock at (412,412) r=5 sits on the eye→near diagonal but ~12 units off the +x axis, so
+  // it occludes ONLY the near target. Occlusion ON → near skipped, far wins; OFF → near (closer) wins.
+  const nearDist = Math.sqrt(25 * 25 + 25 * 25);
+  const nearProx = (100 - nearDist) / 100;
+  const nearComp = (25 / nearDist) * nearProx; // senseX == senseY for the 45° near target
+
+  function buildOcclusionScene(): { store: CellStore; eye: number; hash: SpatialHash } {
+    const store = new CellStore(8, false);
+    const f = store.fields;
+    const eye = store.alloc(); // 0
+    f.posX[eye] = 400;
+    f.posY[eye] = 400;
+    f.heading[eye] = 0; // +x
+    f.cellType[eye] = CellType.SENSOR;
+    f.organismId[eye] = 1;
+    const near = store.alloc(); // 1 — ~35 away at 45°, hidden behind the rock
+    f.posX[near] = 425;
+    f.posY[near] = 425;
+    f.cellType[near] = CellType.PHOTO;
+    f.organismId[near] = 0;
+    const far = store.alloc(); // 2 — 70 ahead in +x, clear line of sight
+    f.posX[far] = 470;
+    f.posY[far] = 400;
+    f.cellType[far] = CellType.PHOTO;
+    f.organismId[far] = 0;
+    const hash = buildHash(store, [eye, near, far]);
+    return { store, eye, hash };
+  }
+
+  it('skips an occluded nearer target so an unoccluded farther one wins', () => {
+    const { store, eye, hash } = buildOcclusionScene();
+    const f = store.fields;
+    const rocks = rocksWith([[412, 412, 5]]); // on the eye→near diagonal, off the +x axis to far
+    const carn = new Uint8Array(8);
+    sightVector(eye, f, hash, carn, SightTarget.FOOD, 100, Math.PI / 3, 800, 800, rocks);
+    // near is occluded → far (dist 70) wins: proximity (100-70)/100 = 0.3, +x.
+    expect(f.senseX[eye]).toBeCloseTo(0.3, 5);
+    expect(f.senseY[eye]).toBeCloseTo(0, 5);
+  });
+
+  it('without rocks, the nearer target wins (occlusion OFF → unchanged behaviour)', () => {
+    const { store, eye, hash } = buildOcclusionScene();
+    const f = store.fields;
+    sightVector(eye, f, hash, new Uint8Array(8), SightTarget.FOOD, 100, Math.PI / 3, 800, 800);
+    // No rocks → nearer (~35) wins: unit dir (1/√2,1/√2) × nearProx.
+    expect(f.senseX[eye]).toBeCloseTo(nearComp, 5);
+    expect(f.senseY[eye]).toBeCloseTo(nearComp, 5);
+  });
+
+  it('with an empty RockField (rockCount 0), the nearer target still wins', () => {
+    const { store, eye, hash } = buildOcclusionScene();
+    const f = store.fields;
+    const rocks = rocksWith([]); // rockCount 0 → occlusion gated OFF
+    const carn = new Uint8Array(8);
+    sightVector(eye, f, hash, carn, SightTarget.FOOD, 100, Math.PI / 3, 800, 800, rocks);
+    expect(f.senseX[eye]).toBeCloseTo(nearComp, 5);
+    expect(f.senseY[eye]).toBeCloseTo(nearComp, 5);
+  });
+
+  it('a rock beside the corridor does not occlude (nearer target still wins)', () => {
+    const { store, eye, hash } = buildOcclusionScene();
+    const f = store.fields;
+    const rocks = rocksWith([[412, 360, 5]]); // far off both lines of sight → no block
+    const carn = new Uint8Array(8);
+    sightVector(eye, f, hash, carn, SightTarget.FOOD, 100, Math.PI / 3, 800, 800, rocks);
+    expect(f.senseX[eye]).toBeCloseTo(nearComp, 5);
+    expect(f.senseY[eye]).toBeCloseTo(nearComp, 5);
   });
 });
 

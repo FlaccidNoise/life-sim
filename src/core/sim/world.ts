@@ -500,6 +500,7 @@ export class World {
       cfg.viewHalfAngle,
       cfg.worldWidth,
       cfg.worldHeight,
+      this.rocks,
     );
 
     // M9-early: precompute scalar sensor values (AMBIENT_LIGHT / TEMP / TOXIN / GLOW).

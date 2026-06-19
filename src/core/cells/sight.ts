@@ -1,8 +1,10 @@
 import { type CellArrays } from '../memory/cell-store';
+import { type RockField } from '../environment/rock-field';
 import { type SpatialHash } from '../spatial/spatial-hash';
 import { wrapDelta } from '../math/vec2';
 import { CellType, isEdibleBy, isFlesh } from './types';
 import { SightTarget } from './sense-source';
+import { isOccluded } from './sight-occlusion';
 
 /**
  * SIGHT cone query (§ "Senses & Smarter Creatures" Phase 3). Looks along eye cell `i`'s heading
@@ -10,6 +12,11 @@ import { SightTarget } from './sense-source';
  * eye's `sightTarget` class within `viewRange` and `viewHalfAngle`; zero vector when the cone is
  * empty. Allocation-free; reads ONLY f.cellType[j] + carnivore[organismId[j]] (cardinal-safe),
  * excludes the eye's own organism (f.organismId[j] !== f.organismId[i]).
+ *
+ * Rock occlusion (optional `rocks`): when a RockField is passed AND `rocks.rockCount > 0`, an in-cone
+ * candidate whose eye→target segment is blocked by a rock is SKIPPED, so an unoccluded farther target
+ * can win. When `rocks` is undefined OR `rockCount === 0` (the default config), no occlusion test runs
+ * and the result is byte-identical to pre-occlusion sight.
  *
  * Scans a (2R+1)×(2R+1) hash block, R = ceil(viewRange/cellSize) — NOT the shared 3×3 loop. The
  * canonical scan order is ascending bucket index (row-major: dyOff outer, dxOff inner), then
@@ -44,6 +51,7 @@ export function sightVector(
   viewHalfAngle: number,
   worldWidth: number,
   worldHeight: number,
+  rocks?: RockField,
 ): void {
   const cols = hash.cols;
   const rows = hash.rows;
@@ -64,6 +72,9 @@ export function sightVector(
   // Half-grid cutoff (seam guard): offsets beyond this alias a nearer offset already scanned.
   const halfCols = (cols - 1) / 2;
   const halfRows = (rows - 1) / 2;
+
+  // Occlusion is OFF (byte-identical to pre-occlusion sight) unless rocks are present AND non-empty.
+  const occlude = rocks !== undefined && rocks.rockCount > 0;
 
   let bestD2 = Infinity;
   let bestDx = 0;
@@ -100,6 +111,9 @@ export function sightVector(
         const dist = Math.sqrt(d2);
         const dot = dx * cosH + dy * sinH;
         if (dot < dist * cosHalf) continue; // outside the cone half-angle (also rejects behind-eye)
+        // Rock occlusion (OFF unless rocks present): a candidate hidden behind a rock is skipped, so
+        // an unoccluded farther target can still win. dx/dy are the toroidal eye→target delta.
+        if (occlude && isOccluded(xi, yi, dx, dy, rocks, worldWidth, worldHeight)) continue;
         if (d2 < bestD2) {
           // strict `<`: an equal-d2 tie keeps the earlier (canonical-first) candidate.
           bestD2 = d2;
