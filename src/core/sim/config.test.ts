@@ -102,6 +102,14 @@ describe('M5 config', () => {
     // is ~3; a multi-spoke hub is tighter; k=8 diverges to ~1e162. Gate the default well under the ceiling so a
     // future re-tune to an unstable value fails HERE (Task 1) instead of as Inf/NaN 13 tasks later (Task 14).
     expect(c.bondStiffness * c.dt * c.dt).toBeLessThanOrEqual(2.5);
+    // Latch tether springs share the bond spring's symplectic-Euler divergence
+    // physics (mutual fx=stiffness·dx, same force stage, same mass regime — see
+    // latch-tether.ts). Gate their defaults under the same k·dt² ≤ 2.5 ceiling so
+    // a future re-tune past the ~3 two-free-mass ceiling fails here, not as Inf/NaN
+    // in the SoA force buffers. (Defaults are 0 and 0.8, both well under; this
+    // guards against a bad slider/re-tune.)
+    expect(c.predLatchStiffness * c.dt * c.dt).toBeLessThanOrEqual(2.5);
+    expect(c.grazeLatchStiffness * c.dt * c.dt).toBeLessThanOrEqual(2.5);
     expect(c.bondMaxStrain).toBeGreaterThan(0);
     expect(c.transferRate).toBeGreaterThan(0);
     expect(c.transferRate).toBeLessThanOrEqual(0.5); // stability bound
