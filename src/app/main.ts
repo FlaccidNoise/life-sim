@@ -51,8 +51,8 @@ const hud = document.getElementById('hud');
 // gave 0.37→0.88 u/tick) but FRAGMENTS the body at the live thrust (11→5 bonds at mass 1, 0 at 0.5),
 // breaking cohesion — so the prior "no usable speed gain" finding stands; mass stays 2, survival leans
 // on basal/move (slowburn), exactly as directed.
-const FORAGER_INIT_E = 70; // per-cell forager seed energy (own reserve, not food)
-const PRED_INIT_E = FORAGER_INIT_E * 8; // 8× predator reserve — ample once the basal/move bleed is cut
+const FORAGER_INIT_E = 40; // CHEAP OFFSPRING (was 70): the real breeding bar is offspringCost(6·FE)+parentFloor, NOT reproThreshold. At 40 a forager breeds after banking ~255 (vs 480 at 70) — r-selected prey that actually multiplies. (headless: foragers go from never-breeding to a stable 66/archipelago)
+const PRED_INIT_E = 560; // predator reserve, decoupled from FORAGER_INIT_E so cheap forager offspring doesn't starve the predators' own provisioning
 const config = defaultConfig({
   seed: 3,
   maxCells: 400_000,
@@ -76,8 +76,8 @@ const config = defaultConfig({
   // NOTE (M7.5 merge): now also carries the env load below (temp penalty, night dimming, toxin). The
   // combined economy is RE-VALIDATED headlessly before merge; retune basal/repro here if a level dies.
   divideThreshold: 70, // plant division threshold (rescaled from 150 @ r6 by area ratio)
-  reproThreshold: 280, // organism repro threshold (rescaled from 600 @ r6)
-  reproParentFloor: 60,
+  reproThreshold: 150, // eligibility floor; the BINDING breeding gate is offspringCost(6·FE=240)+reproParentFloor below
+  reproParentFloor: 15, // energy the parent keeps after provisioning — low so a fed forager can afford to split
   organismDeathFloor: 0, // an unfed creature starves to MEAT, feeding the next trophic level
   basalCost: 0.0008, // SLOWBURN (headless sweep winner — the dominant thrive lever): basal is ~90% of creature bleed, so slowing it is what lets foragers live long enough to breed AND survive a swim across the empty gaps between communities. NOT a food lever. (was 0.0015)
   cruiseThrust: 1, // friskier roam so a searching forager visibly explores the open water
@@ -109,8 +109,8 @@ const config = defaultConfig({
   // next. grazeRate 4 = a visibly GRADUAL graze (a ~15-energy cell takes ~5 ticks) for the feel.
   herbivoreLatch: true,
   grazeRate: 4, // gradual drain (was 1.0 = too slow, starved foragers); pending economy co-tuning
-  grazeLatchRange: 1.5, // acquire+hold radius ×(ri+rj); stays inside the 3×3 hash window
-  grazeLatchStiffness: 1.0, // tether holds the forager at the plant; MOVER thrust (maxThrust 14) can still tow it off to flee
+  grazeLatchRange: 2.5, // acquire+hold radius ×(ri+rj)
+  grazeLatchStiffness: 20, // STRONG hold — the breakthrough: at 1.0 a forager's cruise thrust towed it off food after one nibble (graze→swim into void→starve, the boom-bust crash). A firm tether makes it STAY and feed until banked, which is what lets the population sustain instead of crash. Latch still releases when the cell is eaten/gone.
   // M7: mutation ON so both heterotrophs ADAPT and DIVERSIFY live (library defaults stay 0).
   mutationWeightRate: 0.25,
   mutationWeightSigma: 0.1,
@@ -210,12 +210,15 @@ function developInto(genome: Genome, x: number, y: number, heading: number): num
 // ~20 isolated COMMUNITIES, one per bright light pocket, scattered across the 8192² ocean. The light
 // patches are SPREAD on a jittered macro-grid (World.initSpread), so we READ BACK the seeded field to
 // find the pocket centres (brightest grid cells, kept ≥2 grid cells apart so communities are distinct).
-// Each community is its OWN little ecosystem: a tough anchored plant base (grows a chain + spores) plus
-// a couple of brain-driven foragers and one ambush predator nearby — so life starts everywhere, not in
-// one corner. The empty water between communities is the frontier the slowburn-extended creatures may,
-// in time, cross to colonise a neighbour (the reproduction needed to make that routine is still being
-// tuned — today they persist locally and grazing is visible per island).
+// Each community is a SELF-SUFFICIENT little ecosystem (headless-validated stable to 4000+ ticks): a
+// THICKET of 3 tough anchored plant bases (they grow chains + spore → dense local food), ~5 brain-driven
+// foragers that GRAZE-LATCH and BREED on the island, and one ambush predator — all three trophic levels
+// sustain locally (≈66 foragers / 20 predators archipelago-wide, dead stable). Dense local food + enough
+// founders are what make an island survive in isolation at this grand scale. The empty water between
+// islands is the frontier slowburn-extended foragers may, in time, cross to colonise an empty pocket.
 const COMMUNITY_COUNT = 20;
+const PLANT_BASES_PER_ISLAND = 3; // a thicket of dense local food — the key to island self-sufficiency
+const FORAGERS_PER_ISLAND = 5; // a viable founding group that breeds and sustains
 const lf = world.light;
 const patchW = config.worldWidth / lf.cols;
 const patchH = config.worldHeight / lf.rows;
@@ -236,7 +239,7 @@ for (const cell of ranked) {
   if (far) pockets.push({ x, y });
 }
 
-// Per-community seeding: plant base + 2 foragers + 1 predator at each island. Genome builders unchanged;
+// Per-island seeding: a 3-base plant thicket + 5 foragers + 1 predator. Genome builders unchanged;
 // rotate the forager variants so the env-sensor channels stay ecologically live across the archipelago.
 let firstForagerOrg = -1;
 const CREATURE_OFFSET = 90;
@@ -244,8 +247,12 @@ const foragerVariants = [buildForagerGenome, buildNightForagerGenome, buildToxin
 let fIdx = 0;
 for (let c = 0; c < pockets.length; c++) {
   const p = pockets[c]!;
-  world.seedPlantBase(p.x, p.y); // the island's anchored food base — grows its chain + spores
-  for (let k = 0; k < 2; k++) {
+  // a thicket of anchored plant bases — dense local food that grows chains + spores to fill the pocket.
+  for (let b = 0; b < PLANT_BASES_PER_ISLAND; b++) {
+    const a = (b / PLANT_BASES_PER_ISLAND) * Math.PI * 2;
+    world.seedPlantBase(p.x + Math.cos(a) * 50 * b, p.y + Math.sin(a) * 50 * b);
+  }
+  for (let k = 0; k < FORAGERS_PER_ISLAND; k++) {
     const a = (fIdx * 2.39996) % (Math.PI * 2);
     const org = developInto(
       foragerVariants[fIdx % foragerVariants.length]!(world.config.cellRadius, FORAGER_INIT_E),
