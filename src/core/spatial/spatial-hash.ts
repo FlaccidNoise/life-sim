@@ -24,6 +24,9 @@ export class SpatialHash {
 
   private readonly counts: Uint32Array;
   private readonly cursor: Uint32Array;
+  /** Per-bucket generation stamp: a bucket's counts are valid only when generation[b] === epoch. */
+  private readonly generation: Uint32Array;
+  private epoch: number;
 
   constructor(width: number, height: number, cellSize: number, capacity: number) {
     this.width = width;
@@ -45,6 +48,8 @@ export class SpatialHash {
     this.bucketStart = new Uint32Array(n + 1);
     this.counts = new Uint32Array(n);
     this.cursor = new Uint32Array(n);
+    this.generation = new Uint32Array(n);
+    this.epoch = 0;
     this.sorted = new Uint32Array(capacity);
     this.liveCount = 0;
   }
@@ -63,28 +68,56 @@ export class SpatialHash {
     return r;
   }
 
-  /** Rebuild the buckets from the current live set. Allocation-free after construction. */
+  /** Rebuild the buckets from the current live set. Allocation-free after construction.
+   *
+   * Byte-identity: uses generation stamps instead of `counts.fill(0)` so per-build work tracks
+   * live cell count rather than total buckets. A full-clear build would have counts[b]=0 for
+   * untouched buckets; the stamp scheme has stale counts[b] BUT every read treats
+   * generation[b]!==epoch as 0, so prefix-sum contributions and sorted layout are identical.
+   * bucketStart / sorted / liveCount — the only outputs callers read — are byte-identical. */
   build(liveIndices: Uint32Array, liveCount: number, posX: Float64Array, posY: Float64Array): void {
     const n = this.counts.length;
-    this.counts.fill(0);
 
+    // Bump the epoch to invalidate all bucket counts. Uses unsigned 32-bit math so the
+    // 2^32-wrap fallback (full counts.clear) is reachable. After 4 billion ticks of a single
+    // hash instance, the full clear is a ~1-bucket/tick amortized cost.
+    this.epoch = (this.epoch + 1) >>> 0;
+    if (this.epoch === 0) {
+      this.counts.fill(0);
+      this.epoch = 1;
+    }
+
+    // Count pass: first-touch clears a bucket's stale count before incrementing.
+    const gen = this.generation;
+    const epoch = this.epoch;
     for (let k = 0; k < liveCount; k++) {
       const i = liveIndices[k]!;
       const b = this.rowOf(posY[i]!) * this.cols + this.colOf(posX[i]!);
+      if (gen[b] !== epoch) {
+        gen[b] = epoch;
+        this.counts[b] = 0;
+      }
       this.counts[b]!++;
     }
 
+    // Prefix sum: untouched buckets (gen[b]!==epoch) contribute 0.
     let acc = 0;
     for (let b = 0; b < n; b++) {
+      const c = gen[b] !== epoch ? 0 : this.counts[b]!;
       this.bucketStart[b] = acc;
       this.cursor[b] = acc;
-      acc += this.counts[b]!;
+      acc += c;
     }
     this.bucketStart[n] = acc;
 
+    // Scatter pass with first-touch guard: re-seed cursor from bucketStart on first write.
     for (let k = 0; k < liveCount; k++) {
       const i = liveIndices[k]!;
       const b = this.rowOf(posY[i]!) * this.cols + this.colOf(posX[i]!);
+      if (gen[b] !== epoch) {
+        gen[b] = epoch;
+        this.cursor[b] = this.bucketStart[b]!;
+      }
       this.sorted[this.cursor[b]!++] = i;
     }
 
