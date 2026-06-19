@@ -126,6 +126,16 @@ export interface Config {
    *  its steering (climbs food, slides away from predators). 0 = no fleeing (no-op, byte-identical). Default 0. */
   predFleeWeight: number;
 
+  // Sight (Phase 3 — senses). A SIGHT sensor cell runs a dedicated (2R+1)×(2R+1) cone query
+  // (R = ceil(viewRange/cellSize)) and locks the nearest cell of its sightTarget class. 0 = OFF
+  // (no query runs; byte-identical to pre-sight). Cost ceiling: keep R ≤ 3–4 (profiled in scaling-bench).
+  /** Sight cone reach in world units. 0 = sight OFF (no cone query). */
+  viewRange: number;
+  /** Sight cone half-angle in radians. Only meaningful when viewRange > 0. When enabling sight, keep
+   *  viewHalfAngle in (0, π/2): a half-angle ≥ π/2 would make the cone accept candidates behind the eye.
+   *  Default 0 is safe (sight OFF). */
+  viewHalfAngle: number;
+
   /** Hearing deposit gain: each live cell deposits `loudnessGain · hypot(velX, velY)` into the
    *  NoiseField at end-of-tick. 0 = hearing OFF — NoiseField deposit+step skipped entirely
    *  (byte-identical to today). Default 0. */
@@ -385,6 +395,8 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     predLatchStiffness: 0, // OFF by default (no tether); the ecology config enables the attachment spring
     predScentDeposit: 0, // OFF by default (no fleeing) — predScent field is skipped entirely, byte-identical
     predFleeWeight: 0, // OFF by default (no-op); the ecology config raises it so foragers flee predator scent
+    viewRange: 0, // OFF by default (no cone query) — byte-identical to pre-sight; founder genomes opt in
+    viewHalfAngle: 0,
     loudnessGain: 0, // OFF by default — NoiseField deposit+step skipped entirely (byte-identical)
 
     senseThreshold: 1e-4,
