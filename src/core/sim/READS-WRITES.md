@@ -9,7 +9,7 @@ order means changing this table first.
 | 1 | rebuildLive | flags | liveIndices, liveCount |
 | 1b | **bonds.rebuildLive** (M5) | bond pool (alive flags + endpoint slots/gens); cell generations | liveBonds, liveBondCount (prunes bonds with a dangling endpoint) |
 | 2 | hash.build | posX, posY | hash buckets |
-| 2b | **SENSE** | cellType, pos; **previous** tick's food field | senseX, senseY (**MOTILE and SENSOR**) |
+| 2b | **SENSE** | cellType, pos; **previous** tick's food field; (HEARING) noise field; (SIGHT) hash buckets + cellType + organismId + organisms.carnivore; net sensor bindings (sensorSource/sensorSightTarget) | senseX, senseY (**MOTILE and SENSOR**; SIGHT/HEARING sensors overwrite per their senseSource) |
 | 2c | **orientSensors** (M5) | net.sensorCell; organismId; `organisms.mover`; **previous** tick's MOVER heading | heading (SENSOR cells ← their organism's MOVER heading) |
 | 3 | **THINK** (M4) | sensor bindings + senseX/senseY + heading (body-frame projection); snapshotted live-synapse pool (pre/post); `actCur` (a(t−1)); bias; cellType (per-neuron re-check) | `actNxt` then **swap** → `actCur` holds a(t) (SENSOR/NEURON/MOVER activations) |
 | 4 | **ACT** | MOTILE: cellType, senseX, senseY, heading (reflex). **driveMovers (M4):** motor bindings + `actCur`[turn/thrust neuron] + heading | heading, thrust (**MOTILE reflex AND MOVER from neurons**) |
@@ -79,6 +79,30 @@ order means changing this table first.
   are pre-integrate within the next tick's frame). This is an intentional, documented
   asymmetry: smell is laid down where a cell *ends up*, light is consumed where it
   *was* — both self-consistent within their own step ordering and stable at equilibrium.
+
+## SIGHT cone query (Phase 3 — senses)
+
+- A SIGHT sensor (net.sensorSource[k] === SenseSource.SIGHT) runs `sightVector` over a
+  (2R+1)×(2R+1) hash block, R = ceil(viewRange/cellSize) — NOT the shared 3×3 loop. It is
+  gated on `viewRange > 0`; with the default 0 no query runs and the field reads/writes are
+  byte-identical to pre-sight.
+- **Classification is cardinal-safe:** reads ONLY `f.cellType[j]` + `organisms.carnivore[organismId[j]]`.
+  FOOD = nearest PHOTO/MEAT (isEdibleBy); PREY = nearest isFlesh on a non-carnivore organism;
+  PREDATOR = nearest isFlesh on a carnivore organism. The eye's own organism is excluded
+  (`organismId[j] !== organismId[i]`), never a lineage/founder id.
+- **Nearest + tie-break:** strict `<` on **squared toroidal distance** (`wrapDelta`). Equal-distance
+  ties (which occur on a torus) keep the FIRST candidate in canonical scan order = ascending bucket
+  index, then ascending `hash.sorted` slot within the bucket. The strict `<` is what makes the order
+  deterministic — do not relax to `<=`.
+- **Toroidal-seam guard:** the cone scans a (2R+1)×(2R+1) bucket block, R = ceil(viewRange/cellSize).
+  A seam guard skips bucket offsets beyond the half-grid (`|dxOff| <= (cols-1)/2`,
+  `|dyOff| <= (rows-1)/2`) so no bucket is visited twice when 2R+1 > cols/rows. This guard is a
+  PERFORMANCE optimization only: the strict-`<` nearest tie-break already makes a duplicate
+  bucket-visit idempotent, so the RESULT is guard-independent. The guard's `|offset| <= (cols-1)/2`
+  rule assumes ODD-or-LARGE grids; on EVEN tiny grids (cols even, R≥2) it can skip an in-range
+  column — UNREACHABLE in production (worlds have cols,rows ≫ 2R+1, so the guard never fires).
+- **Output:** senseX/senseY = unitDirToTarget × proximity, proximity = clamp((viewRange−dist)/viewRange,
+  0, 1); zero vector when the cone is empty (then THINK's FWD/LAT projection yields 0).
 
 ## THINK / neural coupling notes (M4)
 
