@@ -89,6 +89,14 @@ const config = defaultConfig({
   carnivoreThrustMult: 2.0, // carnivore speed edge — reposition/close faster than equal-speed prey
   predScentDeposit: 5, // P4: carnivore flesh emits the flee-scent gradient (mirror of preyDeposit)
   predFleeWeight: 1.0, // P4: foragers steer down the predScent gradient (the two-way arms race)
+  // ── Senses ON (Phase 5): validated non-destabilizing headlessly via feel-probe.ts `senses` mode
+  // (seeds 3/7/42/99/123 @ 2048²/12k — all 3 trophic levels coexist; senses are demo-only overrides,
+  // defaultConfig stays OFF so reproducibility.test.ts's baseline is byte-identical).
+  driftAmplitude: 48, // food/light zones migrate; creatures must follow
+  loudnessGain: 0.5, // hearing: motion deposits into the NoiseField
+  viewRange: 32, // sight cone range; R = ceil(32/8) = 4 (within the R≤4 cost ceiling)
+  viewHalfAngle: 0.6, // sight half-cone (~34°)
+  mutationSenseSourceRate: 0.02, // evolution can acquire/swap sense modalities live (smell↔sight↔hearing)
   // M7: mutation ON so both heterotrophs ADAPT and DIVERSIFY live (library defaults stay 0).
   mutationWeightRate: 0.25,
   mutationWeightSigma: 0.1,
