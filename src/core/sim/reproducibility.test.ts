@@ -477,3 +477,223 @@ describe('reproducibility — predation + fleeing (3-trophic ecology) ON', () =>
     expect(a.predatorsEnd).toBe(b.predatorsEnd);
   }, 30000);
 });
+
+describe('reproducibility — graze-latch + sessile chain-plants + satiation ON', () => {
+  // Pins the FULL herbivore graze hot-path — graze-latch (acquire + hold + drain at grazeRate),
+  // the latch-tether force pass, chain-plant lifecycle (grow/spore/settle/sever), and eat-and-go
+  // satiation release — must be byte-deterministic AND non-vacuously active. A small DENSE arena
+  // so foragers contact plants within a few hundred ticks (balance validated in feel-probe.ts).
+  function runGraze(): {
+    w: World;
+    births: number;
+    grazed: boolean;
+    sustained: boolean;
+    satiationReleased: boolean;
+    maxPlants: number;
+    maxBases: number;
+    initialBases: number;
+    foragersEnd: number;
+  } {
+    const cfg = defaultConfig({
+      seed: 17,
+      maxCells: 8000,
+      maxBonds: 16384,
+      maxOrganisms: 4096,
+      cellRadius: 4,
+      worldWidth: 384,
+      worldHeight: 384,
+      initialPhotoFraction: 1,
+      initialMotileFraction: 0,
+      crowdDivideCap: 4,
+      crowdGridSize: 32,
+      divideThreshold: 70,
+      reproThreshold: 280,
+      reproParentFloor: 60,
+      organismDeathFloor: 0,
+      basalCost: 0.004,
+      cruiseThrust: 1,
+      maxThrust: 8,
+      // graze-latch ON
+      herbivoreLatch: true,
+      grazeRate: 1.0,
+      grazeLatchRange: 1.5,
+      grazeLatchStiffness: 0.8,
+      grazeSatiation: 40,
+      // sessile plants ON — tune chain-plant knobs for a fast cycle in a small arena
+      sessilePlants: true,
+      plantMaxChain: 7,
+      plantMaturityChain: 4,
+      plantGrowthThreshold: 20,
+      plantGrowthCost: 12,
+      plantBondLen: 15,
+      plantSporeThreshold: 60,
+      plantSporeCost: 40,
+      plantSporeImpulse: 25,
+      plantSettleSpeed: 0.5,
+      plantBaseDensityCap: 65535,
+      // predation OFF
+      preyDeposit: 0,
+      predDigestRate: 0,
+      predDigestEfficiency: 0,
+      predLatchRange: 0,
+      predLatchStiffness: 0,
+      carnivoreThrustMult: 0,
+      predScentDeposit: 0,
+      predFleeWeight: 0,
+      mutationWeightRate: 0.25,
+      mutationWeightSigma: 0.1,
+      mutationParamRate: 0.1,
+      mutationParamSigma: 0.1,
+    });
+    const w = new World(cfg, false);
+    w.seedLife(1500);
+
+    const spawn = (g: ReturnType<typeof buildForagerGenome>, x: number, y: number, h: number) => {
+      const ref = w.genomes.register(g);
+      const body = develop(g, cfg.maxCellsPerOrganism, cfg.maxRecursionDepth);
+      instantiateBody(
+        body,
+        w.cells,
+        w.net,
+        w.bonds,
+        w.organisms,
+        ref,
+        x,
+        y,
+        h,
+        cfg.worldWidth,
+        cfg.worldHeight,
+        w.instantiateScratch,
+        w.glowEffectors,
+      );
+    };
+    // Foragers spread across the world to encounter plants; lower initial energy so mouths
+    // start HUNGRY (below grazeSatiation) and the graze-latch path fires.
+    for (let k = 0; k < 12; k++) {
+      spawn(
+        buildForagerGenome(cfg.cellRadius, 20),
+        cfg.worldWidth * (0.2 + (0.6 * (k % 4)) / 4),
+        cfg.worldHeight * (0.2 + (0.6 * Math.floor(k / 4)) / 3),
+        (k * 2.39996) % (Math.PI * 2),
+      );
+    }
+
+    const f = w.cells.fields;
+    let births = 0;
+    let grazed = false;
+    let sustained = false;
+    let satiationReleased = false;
+    let maxPlants = 0;
+    let maxBases = 0;
+    let initialBases = 0;
+
+    const prevLatch = new Map<number, number>(); // cell idx → its latchPrey last tick
+
+    for (let t = 0; t < 600; t++) {
+      w.tick();
+      births += w.lastOrganismBirths;
+
+      // Count plant cells and bases this tick (PHOTO cells with an organism id).
+      let plantCells = 0;
+      let baseCells = 0;
+      for (let k = 0; k < w.liveCount; k++) {
+        const i = w.liveIndices[k]!;
+        if (f.cellType[i] !== CellType.PHOTO) continue;
+        if (f.organismId[i] === 0) continue;
+        plantCells++;
+        if (f.anchored[i] === 1) baseCells++;
+      }
+      if (plantCells > maxPlants) maxPlants = plantCells;
+      if (baseCells > maxBases) maxBases = baseCells;
+      if (t === 10) initialBases = baseCells; // after initial settling, before sporing chain starts
+
+      // Track graze-latch state on forager mouths (DIGESTIVE or MOTILE cells).
+      const seen = new Map<number, number>();
+      for (let k = 0; k < w.liveCount; k++) {
+        const idx = w.liveIndices[k]!;
+        const ct = f.cellType[idx]!;
+        if (ct !== CellType.DIGESTIVE && ct !== CellType.MOTILE) continue;
+        if (f.latchCell[idx]! > 0) grazed = true;
+        const lp = f.latchPrey[idx]!;
+        if (lp !== 0) {
+          seen.set(idx, lp);
+          if (prevLatch.get(idx) === lp) sustained = true;
+        }
+      }
+
+      // Satiation release: a mouth was latched last tick, is alive this tick with no latch,
+      // and its energy ≥ grazeSatiation → the eat-and-go short-circuit fired.
+      for (const [idx] of prevLatch) {
+        if (
+          w.cells.isAlive(idx) &&
+          f.latchPrey[idx]! === 0 &&
+          f.energy[idx]! >= cfg.grazeSatiation
+        ) {
+          satiationReleased = true;
+        }
+      }
+
+      prevLatch.clear();
+      for (const [k, v] of seen) prevLatch.set(k, v);
+    }
+
+    let foragersEnd = 0;
+    const cc = w.organisms.cellCount;
+    const carn = w.organisms.carnivore;
+    for (let org = 1; org < cc.length; org++) {
+      if (cc[org]! === 0) continue;
+      if (carn[org] === 1) continue;
+      foragersEnd++;
+    }
+
+    return {
+      w,
+      births,
+      grazed,
+      sustained,
+      satiationReleased,
+      maxPlants,
+      maxBases,
+      initialBases,
+      foragersEnd,
+    };
+  }
+
+  it('produces byte-identical SoA + bonds + lineage across two runs (graze-latch, chain-plant, satiation all fire)', () => {
+    const a = runGraze();
+    const b = runGraze();
+    const fa = a.w.cells.fields;
+    const fb = b.w.cells.fields;
+    expect(Array.from(fa.energy)).toEqual(Array.from(fb.energy));
+    expect(Array.from(fa.posX)).toEqual(Array.from(fb.posX));
+    expect(Array.from(fa.posY)).toEqual(Array.from(fb.posY));
+    expect(Array.from(fa.cellType)).toEqual(Array.from(fb.cellType));
+    expect(Array.from(fa.organismId)).toEqual(Array.from(fb.organismId));
+    expect(Array.from(fa.latchCell)).toEqual(Array.from(fb.latchCell));
+    expect(Array.from(fa.latchPrey)).toEqual(Array.from(fb.latchPrey));
+    expect(Array.from(fa.anchored)).toEqual(Array.from(fb.anchored));
+    expect(Array.from(a.w.bonds.liveBonds.slice(0, a.w.bonds.liveBondCount))).toEqual(
+      Array.from(b.w.bonds.liveBonds.slice(0, b.w.bonds.liveBondCount)),
+    );
+    expect(Array.from(a.w.organisms.cellCount)).toEqual(Array.from(b.w.organisms.cellCount));
+    expect(Array.from(a.w.organisms.energy)).toEqual(Array.from(b.w.organisms.energy));
+    expect(Array.from(a.w.organisms.carnivore)).toEqual(Array.from(b.w.organisms.carnivore));
+    expect(serializeLineageLog(a.w.lineage)).toBe(serializeLineageLog(b.w.lineage));
+    expect(Array.from(a.w.preyField.field)).toEqual(Array.from(b.w.preyField.field));
+    expect(Array.from(a.w.predScent.field)).toEqual(Array.from(b.w.predScent.field));
+
+    // Non-vacuity: the new code paths actually fired, and both runs fired them identically.
+    expect(a.grazed).toBe(true); // the graze LATCH engaged at least once
+    expect(a.grazed).toBe(b.grazed);
+    expect(a.sustained).toBe(true); // a forager held the same plant org across ticks (hold/tether path)
+    expect(a.sustained).toBe(b.sustained);
+    expect(a.satiationReleased).toBe(true); // a mouth's energy ≥ grazeSatiation released its latch
+    expect(a.satiationReleased).toBe(b.satiationReleased);
+    // chain-plant grew beyond 1-cell bases: max plant cells exceeds initial base count
+    expect(a.maxPlants).toBeGreaterThan(a.initialBases);
+    // a spore settled into a new base: base count increased above post-settle initial count
+    expect(a.maxBases).toBeGreaterThan(a.initialBases);
+    expect(a.foragersEnd).toBeGreaterThan(0);
+    expect(a.foragersEnd).toBe(b.foragersEnd);
+  }, 30000);
+});
