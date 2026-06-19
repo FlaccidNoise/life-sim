@@ -45,7 +45,8 @@ const noEnv: EnvEffects = {
  * Light off → the plant cell never refills, so its only energy change is the latch drain. The
  * organismCellCount array marks the plant organism alive so the latch's HOLD branch re-engages each tick.
  */
-function setup(mouthType: number, cfg = defaultConfig({ worldWidth: 1024, worldHeight: 1024 })) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function setup(mouthType: number, _cfg = defaultConfig({ worldWidth: 1024, worldHeight: 1024 })) {
   const store = new CellStore(16, false);
   const f = store.fields;
   const mouth = store.alloc(); // slot 0 — lower slot, runs first
@@ -195,7 +196,7 @@ describe('herbivore graze-latch — acquisition + sustained gradual drain', () =
 
     // Count ticks to drain it to ≤0 — it should be ~30 (grazeRate 1, no refill), i.e. MANY ticks.
     let ticks = 3;
-    while (f.energy[plant]! > 0 && ticks < 1000) {
+    while (f.energy[plant] > 0 && ticks < 1000) {
       step(f, live, 2, hash, lf, cfg, orgCC);
       ticks++;
     }
@@ -291,7 +292,7 @@ describe('herbivore graze-latch — SATIATION (eat-and-go)', () => {
     const live = new Uint32Array([mouth, plant]);
     const hash = buildHash(store, live, 2, 1024, 1024, 2 * cfg.cellRadius);
 
-    const mouthE0 = f.energy[mouth]!;
+    const mouthE0 = f.energy[mouth];
     stepSat(f, live, hash, lf, orgCC, SATIATION);
 
     // No eating: the plant is untouched and the mouth gained nothing (basal 0).
@@ -309,7 +310,7 @@ describe('herbivore graze-latch — SATIATION (eat-and-go)', () => {
     const live = new Uint32Array([mouth, plant]);
     const hash = buildHash(store, live, 2, 1024, 1024, 2 * cfg.cellRadius);
 
-    const mouthE0 = f.energy[mouth]!;
+    const mouthE0 = f.energy[mouth];
     stepSat(f, live, hash, lf, orgCC, SATIATION);
 
     // Normal graze: one grazeRate drained, eater credited × efficiency, latch acquired.

@@ -306,7 +306,7 @@ describe('herbivore graze-latch — non-instant-kill (real World + seedPlantBase
     expect(f.cellType[target]).toBe(CellType.PHOTO); // still a living plant cell, not MEAT
     expect(f.organismId[target]).toBe(org); // still part of the plant
     expect(f.energy[target]).toBeCloseTo(startE - w.config.grazeRate, 4);
-    expect(f.energy[target]!).toBeGreaterThan(0);
+    expect(f.energy[target]).toBeGreaterThan(0);
     expect(f.latchCell[mouth]).toBe(target + 1); // latched onto exactly this cell
 
     // SUSTAINED grazing: keep the mouth on the cell. After many ticks it crosses energy<=0 and only
