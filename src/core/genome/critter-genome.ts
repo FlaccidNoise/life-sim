@@ -316,6 +316,82 @@ export function buildPredatorGenome(
 }
 
 /**
+ * A PURSUIT predator: the carnivore-mouth forager body (buildPredatorGenome) PLUS two new sense
+ * organs that drive an active hunt — a SIGHT eye pair (sightTarget PREY) and a HEARING pair. Both
+ * wire FWD→thrust (+) and LAT→turn (+) so the predator CHARGES and ORIENTS on prey it sees/hears.
+ * (The inherited ambush smell wiring — fwd-smell→thrust negative — still brakes it in dense
+ * prey-scent; sight/hearing add the closing burst.) Mutable founder genome under the same economic
+ * selection; the carnivore flag is set STRUCTURALLY by the PREDATOR mouth, never by a role label.
+ * 10 cells: predator body(0..5) + PREY-eye FWD(6)/LAT(7) + hearing FWD(8)/LAT(9).
+ */
+export function buildHearingPredatorGenome(cellRadius = 6, initialEnergy = 100): Genome {
+  const g = buildPredatorGenome(cellRadius, initialEnergy);
+  const r = cellRadius;
+  const off = 3 * r;
+  const lat = off * 0.6;
+  const mkSensor = (channel: number, source: number, target: number): Gene => ({
+    innovation: 0,
+    cellType: CellType.SENSOR,
+    radius: r,
+    mass: 2,
+    initialEnergy,
+    bias: 0,
+    sensorChannel: channel,
+    glowGain: 0,
+    senseSource: source,
+    sightTarget: target,
+  });
+  g.genes.push(mkSensor(SensorChannel.FWD_GRAD, SenseSource.SIGHT, SightTarget.PREY)); // 6
+  g.genes.push(mkSensor(SensorChannel.LAT_GRAD, SenseSource.SIGHT, SightTarget.PREY)); // 7
+  g.genes.push(mkSensor(SensorChannel.FWD_GRAD, SenseSource.HEARING, SightTarget.FOOD)); // 8
+  g.genes.push(mkSensor(SensorChannel.LAT_GRAD, SenseSource.HEARING, SightTarget.FOOD)); // 9
+  g.divisionRules.push({
+    parentGene: 0,
+    childGene: 6,
+    angle: Math.atan2(-lat * 0.5, off),
+    dist: Math.hypot(off, lat * 0.5),
+    stiffness: 1,
+    repeat: 1,
+  });
+  g.divisionRules.push({
+    parentGene: 0,
+    childGene: 7,
+    angle: Math.atan2(lat * 0.5, off),
+    dist: Math.hypot(off, lat * 0.5),
+    stiffness: 1,
+    repeat: 1,
+  });
+  // The hearing pair spokes off the front smell sensors (genes 1, 2), NOT the seed: the MOVER seed
+  // already carries 5 forager spokes + the 2 eye spokes (degree 7); two more would breach
+  // bondDegreeCap (8) and instantiate would reject the body.
+  g.divisionRules.push({
+    parentGene: 1,
+    childGene: 8,
+    angle: Math.atan2(-lat, off),
+    dist: lat,
+    stiffness: 1,
+    repeat: 1,
+  });
+  g.divisionRules.push({
+    parentGene: 2,
+    childGene: 9,
+    angle: Math.atan2(lat, off),
+    dist: lat,
+    stiffness: 1,
+    repeat: 1,
+  });
+  g.bondRules.push({ geneA: 1, geneB: 6, stiffness: 1 });
+  g.bondRules.push({ geneA: 2, geneB: 7, stiffness: 1 });
+  g.bondRules.push({ geneA: 3, geneB: 8, stiffness: 1 });
+  g.bondRules.push({ geneA: 4, geneB: 9, stiffness: 1 });
+  g.connectionRules.push({ preGene: 6, postGene: 4, weight: 1.5 }); // PREY-eye FWD → thrust
+  g.connectionRules.push({ preGene: 7, postGene: 3, weight: 1.5 }); // PREY-eye LAT → turn
+  g.connectionRules.push({ preGene: 8, postGene: 4, weight: 1.0 }); // hearing FWD → thrust
+  g.connectionRules.push({ preGene: 9, postGene: 3, weight: 1.0 }); // hearing LAT → turn
+  return g;
+}
+
+/**
  * The forager handicapped at TURNING TOWARD FOOD: the `sensorLat→turn` connection weight
  * (preGene 2 → postGene 3) is knocked from the hand-tuned 1.5 down to `weight` (default 0.2),
  * while `sensorFwd→thrust` is left at the fit 1.5. A forager that can't steer toward off-axis

@@ -8,6 +8,7 @@ import {
   buildToxinAvoiderGenome,
   buildPredatorGenome,
   buildSightedForagerGenome,
+  buildHearingPredatorGenome,
 } from './critter-genome';
 import { develop } from './develop';
 import { CellType } from '../cells/types';
@@ -209,6 +210,57 @@ describe('buildSightedForagerGenome — forager with a FOOD-eye pair + smell', (
     const w = new World(defaultConfig({ maxCells: 2000 }), false);
     const org = w.spawnOrganism(g, 500, 500, 0);
     expect(org).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe('buildHearingPredatorGenome — sight+hearing pursuit predator', () => {
+  const g = buildHearingPredatorGenome(6, 100);
+  const body = develop(g, 256, 16);
+
+  it('keeps the carnivore mouth (gene 5 = PREDATOR)', () => {
+    expect(g.genes[5]!.cellType).toBe(CellType.PREDATOR);
+  });
+
+  it('has 10 genes: 6-cell predator + a PREY-eye pair + a HEARING pair', () => {
+    expect(g.genes.length).toBe(10);
+  });
+
+  it('grows a PREY-eye pair: senseSource SIGHT, sightTarget PREY, FWD + LAT', () => {
+    expect(g.genes[6]!.senseSource).toBe(SenseSource.SIGHT);
+    expect(g.genes[6]!.sightTarget).toBe(SightTarget.PREY);
+    expect(g.genes[6]!.sensorChannel).toBe(SensorChannel.FWD_GRAD);
+    expect(g.genes[7]!.senseSource).toBe(SenseSource.SIGHT);
+    expect(g.genes[7]!.sightTarget).toBe(SightTarget.PREY);
+    expect(g.genes[7]!.sensorChannel).toBe(SensorChannel.LAT_GRAD);
+  });
+
+  it('grows a HEARING pair: senseSource HEARING, FWD + LAT', () => {
+    expect(g.genes[8]!.senseSource).toBe(SenseSource.HEARING);
+    expect(g.genes[8]!.sensorChannel).toBe(SensorChannel.FWD_GRAD);
+    expect(g.genes[9]!.senseSource).toBe(SenseSource.HEARING);
+    expect(g.genes[9]!.sensorChannel).toBe(SensorChannel.LAT_GRAD);
+  });
+
+  it('wires sight/hearing into PURSUIT (FWD→thrust positive, LAT→turn positive)', () => {
+    const conn = (pre: number, post: number) =>
+      g.connectionRules.find((c) => c.preGene === pre && c.postGene === post)!;
+    expect(conn(6, 4).weight).toBeGreaterThan(0); // PREY-eye FWD → thrust (charge seen prey)
+    expect(conn(7, 3).weight).toBeGreaterThan(0); // PREY-eye LAT → turn (orient on prey)
+    expect(conn(8, 4).weight).toBeGreaterThan(0); // hearing FWD → thrust (home in on motion)
+    expect(conn(9, 3).weight).toBeGreaterThan(0); // hearing LAT → turn
+  });
+
+  it('develops a 10-cell carnivore body with no truncation', () => {
+    expect(body.count).toBe(10);
+    expect(body.truncated).toBe(false);
+    expect(body.cellType[5]).toBe(CellType.PREDATOR);
+  });
+
+  it('instantiates into a small World and flags the organism carnivore', () => {
+    const w = new World(defaultConfig({ maxCells: 2000, preyDeposit: 1 }), false);
+    const org = w.spawnOrganism(g, 500, 500, 0);
+    expect(org).toBeGreaterThanOrEqual(0);
+    expect(w.organisms.carnivore[org]).toBe(1);
   });
 });
 
