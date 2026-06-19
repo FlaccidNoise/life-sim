@@ -25,6 +25,7 @@ const NO_MUT: MutationRates = {
   changeTypeRate: 0,
   duplicateSubgraphRate: 0,
   sensorChannelRate: 0,
+  senseSourceRate: 0,
 };
 
 function rig() {
@@ -60,7 +61,7 @@ function seedParent(r: ReturnType<typeof rig>, perCellEnergy: number) {
     2048,
     2048,
     r.scratch,
-  new GlowEffectors(4096),
+    new GlowEffectors(4096),
   );
   const f = r.cells.fields;
   for (let i = 0; i < r.cells.capacity; i++)

@@ -24,6 +24,7 @@ export interface MutationRates {
   changeTypeRate: number;
   duplicateSubgraphRate: number;
   sensorChannelRate: number;
+  senseSourceRate: number;
 }
 
 /** Standard-normal sample via Box–Muller. Deterministic from `rng` (two floats per call). */
@@ -75,6 +76,19 @@ export function mutateGenome(
     const gene = child.genes[gi]!;
     if (gene.cellType === CellType.SENSOR && rng.float() < rates.sensorChannelRate) {
       gene.sensorChannel = rng.int(6);
+    }
+  }
+
+  // senseSource mutation: gated entirely behind senses-ON so rate-0 draws NO RNG (byte-identical
+  // baseline). Each SENSOR gene may switch modality (SMELL/SIGHT/HEARING); when it lands on SIGHT
+  // its sightTarget is (re)drawn FOOD/PREY/PREDATOR.
+  if (rates.senseSourceRate > 0) {
+    for (let gi = 0; gi < child.genes.length; gi++) {
+      const gene = child.genes[gi]!;
+      if (gene.cellType === CellType.SENSOR && rng.float() < rates.senseSourceRate) {
+        gene.senseSource = rng.int(3); // SMELL=0 / SIGHT=1 / HEARING=2
+        if (gene.senseSource === SenseSource.SIGHT) gene.sightTarget = rng.int(3);
+      }
     }
   }
 
