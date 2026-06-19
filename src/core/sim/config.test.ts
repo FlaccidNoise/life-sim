@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { defaultConfig, serializeConfig, deserializeConfig } from './config';
+import {
+  defaultConfig,
+  decisiveMovementPreset,
+  serializeConfig,
+  deserializeConfig,
+} from './config';
 
 describe('Config', () => {
   it('provides defaults', () => {
@@ -164,5 +169,28 @@ describe('config — loudnessGain (hearing)', () => {
   });
   it('is overridable', () => {
     expect(defaultConfig({ loudnessGain: 0.5 }).loudnessGain).toBe(0.5);
+  });
+});
+
+describe('decisiveMovementPreset — opt-in decisive-steering movement gains', () => {
+  it('raises maxThrust, turnScale, thrustScale above the conservative defaults', () => {
+    const base = defaultConfig();
+    expect(decisiveMovementPreset.maxThrust!).toBeGreaterThan(base.maxThrust);
+    expect(decisiveMovementPreset.turnScale!).toBeGreaterThan(base.turnScale);
+    expect(decisiveMovementPreset.thrustScale!).toBeGreaterThan(base.thrustScale);
+  });
+
+  it('does NOT alter defaultConfig (byte-identical guard stays intact)', () => {
+    const base = defaultConfig();
+    expect(base.maxThrust).toBe(6);
+    expect(base.turnScale).toBeCloseTo(0.3, 6);
+    expect(base.thrustScale).toBe(3);
+    expect(base.thrustBias).toBe(2);
+  });
+
+  it('is applied only when explicitly spread into a config', () => {
+    const tuned = defaultConfig(decisiveMovementPreset);
+    expect(tuned.maxThrust).toBe(decisiveMovementPreset.maxThrust);
+    expect(tuned.turnScale).toBe(decisiveMovementPreset.turnScale);
   });
 });
