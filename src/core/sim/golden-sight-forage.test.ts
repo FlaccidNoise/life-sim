@@ -6,29 +6,40 @@ import { torusDist } from '../math/vec2';
 import { buildForagerGenome, buildSightedForagerGenome } from '../genome/critter-genome';
 import type { Genome } from '../genome/genome';
 
-// GOLDEN (runnable only at Phase 4): with sight ON, a forager that grows a FOOD-eye pair closes
-// distance to a nearby plant cluster FASTER than a smell-only forager from the IDENTICAL start.
-// This is the proof that the FOOD-eye actually improves navigation.
+// GOLDEN (runnable only at Phase 4): a FOOD-eye improves close-approach navigation to an off-axis
+// food cluster — and the ONLY variable that proves it is `viewRange`. We run the SAME sighted-forager
+// body (buildSightedForagerGenome — 8 cells, with the eye pair) TWICE on the IDENTICAL geometry +
+// seed: once eyes-OPEN (viewRange 60, the cone query fires) and once eyes-BLIND (viewRange 0, the
+// cone query is skipped). Same body, same mass, same start pose, same food — the delta in how close
+// the MOVER ends up IS the eye. This isolates the eye organ from any body-plan confound.
 //
-// Each forager runs in its OWN World with the IDENTICAL setup (same food cluster, same start pose,
-// same seed) — the ONLY difference is the genome (smell-only vs smell + FOOD-eye). We measure how
-// close each one's MOVER gets to the food after the same number of ticks.
+// (Earlier this golden compared the 8-cell sighted body vs the 6-cell smell-only body; that ≥10u
+// gap was carried by the heavier 8-cell body, NOT the eye — verified by blinding the sighted body
+// and still beating smell-only. So the body-plan comparison is INFORMATIONAL only, not the proof.)
 //
-// GEOMETRY (why this proves sight helps, honestly): the forager starts at (400,400) facing +x
-// (heading 0); the plant cluster sits ~100 units away at 45° OFF the heading axis (up-and-to-the-
-// right). Smell is a diffuse, central-difference gradient — off-axis its LAT component is weak, so
-// the smell-only forager under-steers, overshoots, and settles into a stable miss ~45 units away.
-// As the body cruises forward the cluster enters the 60-unit view cone; the eye then locks a CLEAN
-// direct vector to the plant and the steering loop (LAT-eye→turn, FWD-eye→thrust) homes it in to
-// ~16-27 units. Sight wins by a robust ~19-unit margin (verified 300-500 ticks, half-angle 45-87°);
-// the smell-only d1 is rock-steady at 45.5 across tick counts because it locks into an orbiting miss.
+// WHY viewRange ISOLATES THE EYE: with viewRange 0 the SIGHT-source sensor cells skip the cone query
+// (sense.ts: `if (!sightOn) continue`) and retain the SMELL-path gradient sampled at their position —
+// i.e. the body degenerates to a pure smell forager (the eye contributes no extra information). With
+// viewRange 60 those same cells run the cone query and lock a CLEAN direct vector to the plant; the
+// steering loop (LAT-eye→turn, FWD-eye→thrust) then homes the body in.
+//
+// GEOMETRY: the forager starts at (400,400) facing +x (heading 0); the plant cluster sits ~100 units
+// away at 45° OFF the heading axis. Smell is a diffuse central-difference gradient — off-axis its LAT
+// component is weak, so a smell-only steerer under-steers, overshoots, and settles into a stable miss
+// ~24 units out. The eye locks the cluster the moment it enters the 60-unit cone and closes to ~3u.
+//
+// TIMING (why ≥800 ticks, not 400): the eye PAYS OFF LONG-RUN, not early. At 400 ticks eyes-OPEN
+// (26.1) is actually ~1.5u WORSE than eyes-BLIND (24.5) — the early cruise hasn't yet brought the
+// cluster into a stable lock. By ~800 ticks the eye has homed in (3.3) while the blind body is stuck
+// in its smell-miss (23.7); that ~20u gap is rock-steady through 3000 ticks. So we measure at 2000.
 //
 // Small 800² torus + 16-grid food field is the proven climbable-gradient geometry (mirrors
-// critter-swim.test.ts); the decisive-movement preset commits the steering; viewRange 60 / half-
-// angle ~79° (safely under the π/2 ceiling) fires the eye once the cluster is in range.
+// critter-swim.test.ts); the decisive-movement preset commits the steering; viewRange 60 / half-angle
+// ~79° (safely under the π/2 ceiling) fires the eye once the cluster is in range.
 //
-// dSmell≈45.5, dSight≈26.1 at 400 ticks (margin ≈19).
-function distAfter(genome: Genome, ticks: number): { d0: number; d1: number } {
+// MEASURED (deterministic): at 2000 ticks eyesOpen.d1≈3.3, eyesBlind.d1≈23.7 (gap ≈20). The smell-
+// only 6-cell body (informational baseline) stalls at d1≈45.5 across all tick counts.
+function distAfter(genome: Genome, ticks: number, viewRange: number): { d0: number; d1: number } {
   const cfg = defaultConfig({
     ...decisiveMovementPreset,
     maxCells: 256,
@@ -40,7 +51,7 @@ function distAfter(genome: Genome, ticks: number): { d0: number; d1: number } {
     divideThreshold: 1e9, // plants don't divide; forager can't reach repro
     basalCost: 0,
     initialMotileFraction: 0,
-    viewRange: 60, // sight ON (R = ceil(60/50) = 2 within the cost ceiling)
+    viewRange, // the ONLY variable: 60 = eyes-OPEN (cone query fires), 0 = eyes-BLIND (query skipped)
     viewHalfAngle: Math.PI / 2 - 0.2, // ~79°: wide cone, safely under the π/2 accept-behind ceiling
   });
   const w = new World(cfg, false);
@@ -58,7 +69,7 @@ function distAfter(genome: Genome, ticks: number): { d0: number; d1: number } {
   }
   const foodX = 400 + off - 3 + 6;
   const foodY = 400 + off - 4 + 4;
-  // Identical start pose for both genomes: (400,400) facing +x → the food is OFF-axis.
+  // Identical start pose: (400,400) facing +x → the food is OFF-axis.
   const org = w.spawnOrganism(genome, 400, 400, 0);
   expect(org).toBeGreaterThanOrEqual(0);
   // find the MOVER cell of this organism for distance measurement
@@ -76,15 +87,25 @@ function distAfter(genome: Genome, ticks: number): { d0: number; d1: number } {
   return { d0, d1 };
 }
 
-describe('GOLDEN — sight forager out-forages smell-only forager', () => {
-  it('the sighted forager is meaningfully closer to off-axis food after the same ticks', () => {
-    const TICKS = 400;
-    const smell = distAfter(buildForagerGenome(6, 100), TICKS);
-    const sight = distAfter(buildSightedForagerGenome(6, 100), TICKS);
-    // Both start at the same distance (sanity: identical setup).
-    expect(sight.d0).toBeCloseTo(smell.d0, 5);
-    // The FOOD-eye locks the off-axis cluster and homes in; smell under-steers and stalls in a miss.
-    // Assert a MEANINGFUL margin (≥10 units), not a 1-unit fluke. Measured margin ≈19 at 400 ticks.
-    expect(sight.d1).toBeLessThan(smell.d1 - 10);
+describe('GOLDEN — the FOOD-eye improves close-approach navigation (viewRange is the only variable)', () => {
+  it('the SAME sighted body homes in closer with eyes OPEN than with eyes BLIND', () => {
+    // Long enough for the eye to win: the payoff is long-run (at 400 ticks the eye is ~1.5u WORSE;
+    // the ~20u win is stable from ~800 ticks through 3000). Measure at 2000.
+    const TICKS = 2000;
+    const body = () => buildSightedForagerGenome(6, 100); // identical 8-cell body for BOTH runs
+    const eyesOpen = distAfter(body(), TICKS, 60); // cone query fires
+    const eyesBlind = distAfter(body(), TICKS, 0); // cone query skipped → degenerates to smell
+    // Same body, same mass, same geometry, same seed: both start at the identical distance.
+    expect(eyesOpen.d0).toBeCloseTo(eyesBlind.d0, 5);
+    // The eye is the cause: with the cone query firing the body homes in (~3u); blinded it stalls in
+    // a smell-miss (~24u). Assert a MEANINGFUL margin (≥10u) against the measured ~20u gap — not a
+    // fluke, and one a stalled-blind body provably FAILS (eyesBlind 23.7 ≥ 23.7−10, so the blind run
+    // does NOT satisfy this assertion → the eye, not the body plan, carries the win).
+    expect(eyesOpen.d1).toBeLessThan(eyesBlind.d1 - 10);
+
+    // INFORMATIONAL CONTEXT (not part of the proof): the bare 6-cell smell-only body stalls even
+    // further out (~45u) — but that larger gap is a body-plan difference, so it is NOT asserted here.
+    const smellOnly = distAfter(buildForagerGenome(6, 100), TICKS, 0);
+    expect(smellOnly.d0).toBeCloseTo(eyesOpen.d0, 5); // identical start (sanity only)
   });
 });
