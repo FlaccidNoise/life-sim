@@ -5,6 +5,7 @@ import { type NeuralNetwork } from '../neural/network';
 import { type SpatialHash } from '../spatial/spatial-hash';
 import { CellType } from './types';
 import { SenseSource } from './sense-source';
+import { sightVector } from './sight';
 import { wrap } from '../math/vec2';
 
 /**
@@ -24,12 +25,12 @@ import { wrap } from '../math/vec2';
  * flesh (position/type based, never lineage). `fleeWeight === 0` (default) skips the term entirely →
  * the M2-M7 + Phase-3 economy stays byte-identical.
  *
- * Modality routing (Phase 2): the SMELL/flee path above runs for every MOTILE + SENSOR cell exactly
+ * Modality routing (Phase 2/3): the SMELL/flee path above runs for every MOTILE + SENSOR cell exactly
  * as before; THEN, ONLY when `loudnessGain > 0 || viewRange > 0`, a second pass over the sensor
  * BINDINGS (canonical `net.sensorCell` order, mirroring think.ts) OVERRIDES (senseX, senseY) for any
- * binding whose `net.sensorSource[k]` is HEARING (NoiseField gradient) or SIGHT (a ZERO vector —
- * Phase 3 fills the cone query). With both knobs 0 the override pass is skipped ENTIRELY →
- * byte-identical to the pre-hearing sim. Allocation-free.
+ * binding whose `net.sensorSource[k]` is HEARING (NoiseField gradient) or SIGHT (the cone-query vector
+ * from `sightVector`, toward the nearest target of the binding's `sensorSightTarget` class). With both
+ * knobs 0 the override pass is skipped ENTIRELY → byte-identical to the pre-hearing sim. Allocation-free.
  */
 export function sense(
   live: Uint32Array,
@@ -102,14 +103,21 @@ export function sense(
       f.senseY[i] = noise.sampleAt(x, wrap(y + nhy, nh)) - noise.sampleAt(x, wrap(y - nhy, nh));
     } else if (source === SenseSource.SIGHT) {
       if (!sightOn) continue; // leave the SMELL-path value
-      // Phase 3 wires the cone query (sightVector) here using hash/viewRange/viewHalfAngle/
-      // worldWidth/worldHeight. Until then a SIGHT sensor sees nothing → zero vector. The `void`s
-      // mark the Phase-3-only params as intentionally unused now (no-unused-vars, trailing args).
-      void viewHalfAngle;
-      void worldWidth;
-      void worldHeight;
-      f.senseX[i] = 0;
-      f.senseY[i] = 0;
+      // SIGHT cone query: route per binding (modality lives on net.sensorSource, not cellType).
+      // Overwrites (senseX, senseY) with the cone-query vector toward the nearest target of this
+      // binding's sightTarget class. Gated on viewRange>0 (sightOn) so the default path is
+      // byte-identical to pre-sight. Allocation-free; reads only type + organisms.carnivore.
+      sightVector(
+        i,
+        f,
+        hash,
+        carnivore,
+        net.sensorSightTarget[k]!,
+        viewRange,
+        viewHalfAngle,
+        worldWidth,
+        worldHeight,
+      );
     }
     // SenseSource.SMELL: already filled by the SMELL path above; nothing to do.
   }

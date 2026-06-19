@@ -496,8 +496,8 @@ export class World {
       this.noise,
       cfg.loudnessGain,
       this.hash,
-      0, // viewRange — Phase 3 (SIGHT is a zero-stub now, value irrelevant)
-      0, // viewHalfAngle — Phase 3
+      cfg.viewRange,
+      cfg.viewHalfAngle,
       cfg.worldWidth,
       cfg.worldHeight,
     );

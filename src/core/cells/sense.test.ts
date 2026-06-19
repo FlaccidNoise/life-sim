@@ -380,3 +380,82 @@ describe('sense — senseSource routing (SMELL vs HEARING)', () => {
     expect(f.senseY[i]).toBe(0);
   });
 });
+
+describe('sense — SIGHT routing (senseSource SIGHT → cone query overwrites the smell gradient)', () => {
+  it('a SIGHT sensor’s senseX/senseY come from the nearest food in its cone, not the smell field', () => {
+    const store = new CellStore(8, false);
+    const f = store.fields;
+    // Smell field rises in +y so, if the SIGHT cell wrongly read smell, senseY would be +.
+    const food = new FoodField(8, 8, 800, 800);
+    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) food.field[r * 8 + c] = r;
+
+    const eye = store.alloc(); // 0
+    f.posX[eye] = 400;
+    f.posY[eye] = 400;
+    f.heading[eye] = 0; // looking +x
+    f.cellType[eye] = CellType.SENSOR;
+    f.organismId[eye] = 1;
+    const target = store.alloc(); // 1 — edible 50 ahead in +x
+    f.posX[target] = 450;
+    f.posY[target] = 400;
+    f.cellType[target] = CellType.PHOTO;
+    f.organismId[target] = 0;
+
+    const live = Uint32Array.from([eye, target]);
+    const hash = new SpatialHash(800, 800, 16, store.capacity);
+    hash.build(live, 2, f.posX, f.posY);
+
+    const net = new NeuralNetwork(8, 16, 8);
+    net.addSensor(eye, /*channel*/ 0 /*FWD_GRAD*/, SenseSource.SIGHT, SightTarget.FOOD);
+
+    const noise = new NoiseField(8, 8, 800, 800);
+    sense(
+      live,
+      2,
+      f,
+      food,
+      food,
+      new Uint8Array(8),
+      food,
+      0,
+      net,
+      noise,
+      0,
+      hash,
+      100,
+      Math.PI / 4,
+      800,
+      800,
+    );
+
+    // SIGHT: dist 50, viewRange 100 → proximity 0.5 toward +x. NOT the +y smell gradient.
+    expect(f.senseX[eye]).toBeCloseTo(0.5, 5);
+    expect(f.senseY[eye]).toBeCloseTo(0, 5);
+  });
+
+  it('is byte-identical to smell when viewRange is 0 (sight OFF): a SIGHT sensor falls back to nothing', () => {
+    // With viewRange 0 the SIGHT pass is skipped; the SMELL pass still wrote the cell. A SIGHT sensor
+    // is not a SMELL sensor, but the existing per-cell SMELL loop fills MOTILE/SENSOR cells regardless,
+    // so senseX/senseY hold the smell gradient — exactly as before sight existed.
+    const store = new CellStore(8, false);
+    const f = store.fields;
+    const food = new FoodField(8, 8, 800, 800);
+    for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) food.field[r * 8 + c] = c; // +x ramp
+    const eye = store.alloc();
+    f.posX[eye] = 350;
+    f.posY[eye] = 350;
+    f.heading[eye] = 0;
+    f.cellType[eye] = CellType.SENSOR;
+    f.organismId[eye] = 1;
+    const live = Uint32Array.from([eye]);
+    const hash = new SpatialHash(800, 800, 16, store.capacity);
+    hash.build(live, 1, f.posX, f.posY);
+    const net = new NeuralNetwork(8, 16, 8);
+    net.addSensor(eye, 0, SenseSource.SIGHT, SightTarget.FOOD);
+    const noise = new NoiseField(8, 8, 800, 800);
+    sense(live, 1, f, food, food, new Uint8Array(8), food, 0, net, noise, 0, hash, 0, 0, 800, 800);
+    // viewRange 0 → no cone; cell keeps the smell gradient (+x = 2 over the 100-unit patch ramp).
+    expect(f.senseX[eye]).toBeCloseTo(2, 5);
+    expect(f.senseY[eye]).toBeCloseTo(0, 5);
+  });
+});
