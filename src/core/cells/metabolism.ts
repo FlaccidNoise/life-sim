@@ -81,6 +81,7 @@ export function metabolize(
   herbivoreLatch: boolean,
   grazeRate: number,
   grazeLatchRange: number,
+  grazeSatiation: number,
 ): void {
   const { cols, rows, width, height, sorted, bucketStart } = hash;
 
@@ -113,8 +114,16 @@ export function metabolize(
       const yi = f.posY[i]!;
       const cx = hash.colOf(xi);
       const cy = hash.rowOf(yi);
+      // SATIATION (eat-and-go): a well-fed mouth (energy ≥ grazeSatiation) releases its graze-latch and
+      // skips ALL eating this tick — neither the graze-latch drain NOR the legacy overlap fallback — so
+      // it roams instead of camping the food-knot. Strictly gated on herbivoreLatch: with the latch off
+      // satiation NEVER applies (grazeSatiation default 1e9 → also inert), so the legacy path is byte-identical.
+      const satiated = herbivoreLatch && f.energy[i]! >= grazeSatiation;
       let grazed = false;
-      if (herbivoreLatch && grazeLatchRange > 0) {
+      if (satiated) {
+        latchPrey[i] = 0;
+        latchCell[i] = 0;
+      } else if (herbivoreLatch && grazeLatchRange > 0) {
         // GRAZE-LATCH (mirrors the PREDATOR latch): the mouth latches one PHOTO cell and drains it at
         // the modest grazeRate over many ticks, so a chain cell is consumed gradually instead of in one
         // instant-kill bite. held = the latched PLANT organismId (0 = unlatched); a fresh holdJ scan
@@ -176,7 +185,8 @@ export function metabolize(
       }
       // Legacy overlap-drain path: runs verbatim when the latch is off, AND as the MEAT fallback when a
       // latching mouth found no PHOTO to graze this tick (so a forager doesn't starve next to a corpse).
-      let eaten = grazed;
+      // A satiated mouth short-circuits it too (eaten starts true) — eat-and-go skips this fallback.
+      let eaten = grazed || satiated;
       for (let dy = -1; dy <= 1 && !eaten; dy++) {
         const by = (cy + dy + rows) % rows;
         for (let dx = -1; dx <= 1 && !eaten; dx++) {

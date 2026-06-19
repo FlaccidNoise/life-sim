@@ -754,6 +754,7 @@ export class World {
       cfg.herbivoreLatch,
       cfg.grazeRate,
       cfg.grazeLatchRange,
+      cfg.grazeSatiation,
     );
 
     // M5: intra-organism energy transfer toward needier cells (§4.5).
@@ -888,6 +889,7 @@ export class World {
         this.liveIndices,
         this.liveCount,
         cfg.plantSettleSpeed,
+        cfg.plantBaseDensityCap,
       );
       this.plants.growPlants(
         this.cells,

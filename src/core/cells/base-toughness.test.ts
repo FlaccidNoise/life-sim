@@ -89,6 +89,7 @@ function biteOnce(anchored: boolean, preyEnergy: number): { prey: number; eater:
     false,
     0,
     0,
+    Number.MAX_SAFE_INTEGER,
   );
   return { prey: f.energy[prey], eater: f.energy[eater] };
 }
@@ -178,6 +179,7 @@ describe('base toughness', () => {
           false,
           0,
           0,
+          Number.MAX_SAFE_INTEGER,
         );
         bites++;
       }

@@ -105,6 +105,7 @@ function runMetabolize(s: ReturnType<typeof mouthOnChainCell>, herbivoreLatch: b
     herbivoreLatch,
     cfg.grazeRate,
     cfg.grazeLatchRange,
+    Number.MAX_SAFE_INTEGER,
   );
 }
 
@@ -239,6 +240,7 @@ function grazeAndSever(w: World): void {
     cfg.herbivoreLatch,
     cfg.grazeRate,
     cfg.grazeLatchRange,
+    Number.MAX_SAFE_INTEGER,
   );
   w.plants.severEatenChainCells(w.cells, w.bonds, live, n, cfg.meatEnergyOnDeath, false);
 }
