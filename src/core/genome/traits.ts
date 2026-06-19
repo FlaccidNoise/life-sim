@@ -6,12 +6,16 @@
  */
 import { type Genome } from './genome';
 import { CellType } from '../cells/types';
+import { SenseSource } from '../cells/sense-source';
 
 export interface GenomeTraits {
   geneCount: number;
   photoGenes: number;
   digestiveGenes: number;
   sensorGenes: number;
+  smellGenes: number;
+  sightGenes: number;
+  hearingGenes: number;
   neuronGenes: number;
   moverGenes: number;
   meatGenes: number;
@@ -33,6 +37,9 @@ export function genomeTraits(g: Genome): GenomeTraits {
   let photo = 0;
   let digestive = 0;
   let sensor = 0;
+  let smell = 0;
+  let sight = 0;
+  let hearing = 0;
   let neuron = 0;
   let mover = 0;
   let meat = 0;
@@ -50,6 +57,9 @@ export function genomeTraits(g: Genome): GenomeTraits {
         break;
       case CellType.SENSOR:
         sensor++;
+        if (gene.senseSource === SenseSource.HEARING) hearing++;
+        else if (gene.senseSource === SenseSource.SIGHT) sight++;
+        else smell++;
         break;
       case CellType.NEURON:
         neuron++;
@@ -76,6 +86,9 @@ export function genomeTraits(g: Genome): GenomeTraits {
     photoGenes: photo,
     digestiveGenes: digestive,
     sensorGenes: sensor,
+    smellGenes: smell,
+    sightGenes: sight,
+    hearingGenes: hearing,
     neuronGenes: neuron,
     moverGenes: mover,
     meatGenes: meat,
