@@ -240,8 +240,31 @@ if (mode === 'flee') {
       false,
     );
   }
+} else if (mode === 'sensesweep') {
+  // TEMP DIAGNOSTIC (not the gate): the gate at driftAmplitude 48 makes predators CRASH (s3: 24->3,
+  // predNoBreed) because drifting light patches migrate the prey field -> local prey density at the
+  // ambush spot thins -> bite-rate collapses. The SMELL-only founders run() spawns have no SIGHT/
+  // HEARING sensors, so viewRange/loudnessGain are behaviorally inert here -- drift is the only active
+  // lever. Sweep drift on the representative seed (s3) at the FULL gate scale (2048^2/12k) to find the
+  // largest drift that still lets predators breed (predMax > 24).
+  const SW: Partial<Config> = { loudnessGain: 0.5, viewRange: 32, viewHalfAngle: 0.6 };
+  console.log('=== SENSESWEEP: 2048^2/12k, seed 3, sweep driftAmplitude (find predMax>24) ===');
+  for (const drift of [48, 24, 16, 8, 0]) {
+    run(
+      {
+        name: `drift${drift} s3`,
+        plants: 18000,
+        foragers: 250,
+        predators: 24,
+        o: { ...LOCKED, ...SW, driftAmplitude: drift, seed: 3 },
+        ...PRED,
+      },
+      12000,
+      false,
+    );
+  }
 } else if (mode === 'senses') {
-  // PHASE 5 SUCCESS-BAR GATE: drift + sight + hearing ON, 5 seeds, 12k ticks, 2048².
+  // PHASE 5 SUCCESS-BAR GATE: drift + sight + hearing ON, 5 seeds, 12k ticks, 2048^2.
   // (run(...,false) selects the 2048² arena — world1024 is false so BASE's 2048² stands; LOCKED re-asserts it.)
   // Reads off, per seed: all-3-coexist (ALL3 vs EXTINCT), predMax (predator breeds?), forMax.
   // Run all 5: `tsx feel-probe.ts senses`  |  one seed (parallelizable across cores): `… senses <seed>`.

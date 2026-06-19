@@ -39,6 +39,7 @@ export function lifecycle(
   divideCost: number,
   divideJitter: number,
   crowdDivideCap: number,
+  sessilePlants: boolean,
   tick: number,
   out: LifecycleResult,
 ): void {
@@ -71,6 +72,9 @@ export function lifecycle(
     const type = f.cellType[i]!;
     if (!isLiving(type)) continue;
     if (isNeural(type) || f.organismId[i]! !== 0) continue; // M5: organism cells don't divide (M6 reproduces organisms)
+    // Sessile plants: free PHOTO cells are unsettled SPORES that must anchor (not free-clone), so the
+    // legacy free-clone PHOTO path is skipped entirely. Heterotrophs (DIGESTIVE/MOTILE) still divide.
+    if (sessilePlants && type === CellType.PHOTO) continue;
     // Density-dependent carrying capacity for the plant field: a PHOTO cell whose coarse
     // density-grid bucket is already full (localDensity > cap) skips division. localDensity is the
     // type-blind per-bucket cell count filled by World.fillDensity this tick (a grid measure, not an
@@ -102,6 +106,7 @@ export function lifecycle(
     f.senseX[child] = 0;
     f.senseY[child] = 0;
     f.thrust[child] = 0;
+    f.anchored[child] = 0;
     f.localDensity[child] = 0; // clear the recycled slot's stale density (next fillDensity overwrites it; reset so no mid-tick reader ever sees a prior occupant's value)
     births++;
   }

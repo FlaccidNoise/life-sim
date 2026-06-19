@@ -1,7 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { integrate } from './integrator';
 
-function single(opts: { x: number; vx?: number; fx?: number; damping?: number; width?: number }) {
+function single(opts: {
+  x: number;
+  vx?: number;
+  fx?: number;
+  damping?: number;
+  width?: number;
+  anchored?: number;
+}) {
   const posX = new Float64Array([opts.x]);
   const posY = new Float64Array([0]);
   const velX = new Float32Array([opts.vx ?? 0]);
@@ -9,6 +16,7 @@ function single(opts: { x: number; vx?: number; fx?: number; damping?: number; w
   const forceX = new Float32Array([opts.fx ?? 0]);
   const forceY = new Float32Array([0]);
   const mass = new Float32Array([1]);
+  const anchored = new Uint8Array([opts.anchored ?? 0]);
   const live = new Uint32Array([0]);
   integrate(
     live,
@@ -20,6 +28,7 @@ function single(opts: { x: number; vx?: number; fx?: number; damping?: number; w
     forceX,
     forceY,
     mass,
+    anchored,
     1,
     opts.damping ?? 1,
     opts.width ?? 1000,
@@ -69,6 +78,7 @@ describe('integrate', () => {
       forceX,
       forceY,
       mass,
+      new Uint8Array([0]),
       1,
       1,
       1e6,
@@ -76,5 +86,12 @@ describe('integrate', () => {
     );
     expect(posX[0]).not.toBe(1e5);
     expect(posX[0]).toBeCloseTo(1e5 + 1e-3, 6);
+  });
+
+  it('pins an anchored cell: zeroes its velocity/force and never moves it', () => {
+    const { posX, velX, forceX } = single({ x: 100, vx: 10, fx: 5, anchored: 1 });
+    expect(posX[0]).toBe(100);
+    expect(velX[0]).toBe(0);
+    expect(forceX[0]).toBe(0);
   });
 });

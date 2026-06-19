@@ -29,6 +29,7 @@ function makeCellArrays(n: number) {
     localDensity: new Uint16Array(n),
     latchPrey: new Uint32Array(n),
     latchCell: new Uint32Array(n),
+    anchored: new Uint8Array(n),
   };
 }
 

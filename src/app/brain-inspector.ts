@@ -1,6 +1,7 @@
 import { type World } from '../core/sim/world';
 import { CellType } from '../core/cells/types';
 import { SenseSource, SightTarget } from '../core/cells/sense-source';
+import { syncCanvasDpr } from './canvas-dpr';
 
 /** Single-letter tag per neural cell type, drawn inside each node. */
 const TYPE_TAG: Record<number, string> = {
@@ -53,16 +54,23 @@ export function sensorLabel(
  */
 export class BrainInspector {
   private readonly ctx: CanvasRenderingContext2D;
+  private readonly cssW: number;
+  private readonly cssH: number;
+  private dpr: number;
   constructor(private readonly canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('brain inspector needs a 2D context');
     this.ctx = ctx;
+    this.cssW = canvas.width;
+    this.cssH = canvas.height;
+    this.dpr = syncCanvasDpr(canvas, ctx, this.cssW, this.cssH, 1);
   }
 
   render(world: World, organismId?: number): void {
-    const { ctx, canvas } = this;
-    const w = canvas.width;
-    const h = canvas.height;
+    const { ctx } = this;
+    this.dpr = syncCanvasDpr(this.canvas, ctx, this.cssW, this.cssH, this.dpr);
+    const w = this.cssW;
+    const h = this.cssH;
     ctx.clearRect(0, 0, w, h);
     const net = world.net;
     const f = world.cells.fields;

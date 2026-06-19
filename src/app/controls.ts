@@ -1,7 +1,12 @@
 import { type Config } from '../core/sim/config';
 
+/** Config keys whose value is a number — the only ones a range-slider knob can drive. */
+type NumericConfigKey = {
+  [K in keyof Config]: Config[K] extends number ? K : never;
+}[keyof Config];
+
 interface Knob {
-  key: keyof Config;
+  key: NumericConfigKey;
   label: string;
   min: number;
   max: number;
@@ -110,8 +115,8 @@ export function mountControls(host: HTMLElement, config: Config): void {
 
   for (const section of SECTIONS) {
     const head = document.createElement('div');
-    head.className = 'knob-section muted';
-    head.textContent = `· ${section.title}`;
+    head.className = 'knob-section';
+    head.textContent = section.title;
     host.append(head);
 
     for (const k of section.knobs) {
