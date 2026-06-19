@@ -142,6 +142,12 @@ export interface Config {
    *  bonds; keep modest so MOVER thrust can overpower it (a forager can still flee). 0 = no tether.
    *  Only used when herbivoreLatch. */
   grazeLatchStiffness: number;
+  /** SATIATION: a forager mouth whose own cell energy ≥ grazeSatiation stops eating — it releases any
+   *  graze-latch and skips ALL feeding this tick (no graze drain, no legacy overlap drain), so a
+   *  well-fed forager roams instead of camping the food-knot. Gated STRICTLY on herbivoreLatch, so
+   *  with the latch off satiation never applies and the legacy path is byte-identical. 1e9 (default)
+   *  = effectively never satiated → no-op. Only used when herbivoreLatch. */
+  grazeSatiation: number;
 
   // Sensing & movement (§4.4). All live knobs.
   /** Gradient magnitude below which a mover coasts at cruiseThrust instead of steering. */
@@ -357,6 +363,13 @@ export interface Config {
   plantSporeImpulse: number;
   /** Speed below which a drifting spore anchors into a new base. */
   plantSettleSpeed: number;
+  /** Plant-base density cap: a slowed free-PHOTO spore does NOT anchor into a new base if its coarse
+   *  density-grid bucket already holds more than this many live cells (localDensity, the same field
+   *  crowdDivideCap fills via World.fillDensity) — it keeps drifting (settles later or starves), so a
+   *  pocket stays discrete patches with open water instead of a packed green wall. localDensity is only
+   *  filled when crowdDivideCap is on; when off it's 0 so this cap never triggers (safe). 65535 (Uint16
+   *  max, default) = OFF (no-op), mirroring crowdDivideCap. */
+  plantBaseDensityCap: number;
   /** Base digest-rate multiplier (anchored base drains baseToughness× as fast as a chain cell). 0.1 ≈ 10× tougher. */
   baseToughness: number;
 }
@@ -426,6 +439,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     grazeRate: 1.0, // modest per-tick latch drain; at the r4 economy a lit chain cell refills ~0.78/tick (photoGain·area·light) so net drain is slow → a 10-20 unit cell takes ~15-90 ticks to consume (the OWNER fine-tunes after)
     grazeLatchRange: 1.5, // acquire+hold radius ×(ri+rj); kept ≤1.5 so grazeLatchRange·(ri+rj) stays inside the 3×3 hash window (the predLatchRange 2.5 risks missing out-of-bucket cells)
     grazeLatchStiffness: 0.8, // gentle tether (< predLatchStiffness 1.0, ≪ bond ceiling 2.5) so a fleeing forager's MOVER thrust can overpower it and detach
+    grazeSatiation: 1e9, // OFF by default (effectively never satiated → byte-identical legacy); the demo lowers it so a fed forager stops grazing and roams
 
     senseThreshold: 1e-4,
     turnRate: 0.25, // ~14°/tick — visibly curves toward food without snapping
@@ -551,6 +565,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     plantSporeCost: 90, // deducted from the base per spore (threshold > cost so sporing never self-starves the base)
     plantSporeImpulse: 25, // total drift ≈ impulse world-units at damping 0.5 (a few cell radii of dispersal)
     plantSettleSpeed: 0.5, // a spore anchors when speed < this (anchors ~6 ticks after a 25-impulse launch)
+    plantBaseDensityCap: 65535, // OFF by default (Uint16 max → no-op, mirrors crowdDivideCap); the demo lowers it to rein plant-base overgrowth into discrete patches
     baseToughness: 0.1, // a base drains ~10× slower than a chain cell — evolvably killable, not invulnerable
 
     ...overrides,

@@ -109,6 +109,7 @@ function callMetabolize(
     herbivoreLatch,
     grazeRate,
     grazeLatchRange,
+    Number.MAX_SAFE_INTEGER,
   );
 }
 

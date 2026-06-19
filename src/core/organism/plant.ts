@@ -341,6 +341,7 @@ export class PlantSystem {
     live: Uint32Array,
     n: number,
     plantSettleSpeed: number,
+    plantBaseDensityCap: number,
   ): void {
     const f = cells.fields;
     const settleSq = plantSettleSpeed * plantSettleSpeed;
@@ -353,6 +354,11 @@ export class PlantSystem {
       const vx = f.velX[i]!;
       const vy = f.velY[i]!;
       if (vx * vx + vy * vy >= settleSq) continue;
+      // Plant-base density cap: a slowed spore in an already-crowded bucket does NOT anchor — it keeps
+      // drifting (settles later or starves), so a pocket stays discrete patches with open water instead
+      // of a packed wall. localDensity is filled by World.fillDensity only when crowdDivideCap is on; when
+      // off it's 0 so this never triggers (no-op). Default cap 65535 (Uint16 max) is also a no-op.
+      if (f.localDensity[i]! > plantBaseDensityCap) continue;
       const org = organisms.alloc();
       if (org < 0) continue; // pool exhausted → keep drifting, retry next tick
       f.organismId[i] = org;

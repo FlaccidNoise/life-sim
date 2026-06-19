@@ -111,6 +111,10 @@ const config = defaultConfig({
   grazeRate: 4, // gradual drain (was 1.0 = too slow, starved foragers); pending economy co-tuning
   grazeLatchRange: 2.5, // acquire+hold radius ×(ri+rj)
   grazeLatchStiffness: 20, // STRONG hold — the breakthrough: at 1.0 a forager's cruise thrust towed it off food after one nibble (graze→swim into void→starve, the boom-bust crash). A firm tether makes it STAY and feed until banked, which is what lets the population sustain instead of crash. Latch still releases when the cell is eaten/gone.
+  // SATIATION (eat-and-go): a forager mouth satiates at ~50/cell (~300 organism energy across 6 cells),
+  // ABOVE the ~255 breeding bar, so it still BREEDS before it stops grazing — then it releases the
+  // strong latch and roams, freeing the food-knot and making creatures visibly swim instead of jostle.
+  grazeSatiation: 50,
   // M7: mutation ON so both heterotrophs ADAPT and DIVERSIFY live (library defaults stay 0).
   mutationWeightRate: 0.25,
   mutationWeightSigma: 0.1,
@@ -190,6 +194,10 @@ const config = defaultConfig({
   plantSporeCost: 55,
   plantSporeImpulse: 8, // halved drift (was 16) — keeps offspring within the parent pocket's lit zone
   plantSettleSpeed: 1.0, // anchor sooner (was 0.5) so a spore re-roots near the parent, not mid-gap
+  // PLANT DENSITY CAP (rein overgrowth): a slowed spore in an already-crowded density bucket (>6 live
+  // cells) refuses to anchor and keeps drifting — keeps pockets as discrete green patches with open
+  // water between, not a packed wall. Live because crowdDivideCap (above) fills localDensity each tick.
+  plantBaseDensityCap: 6,
   // ── LIGHT POCKETS: ~10 small sharp patches with dark gaps so spores in the dark starve ──
   // Background between pockets must stay below the basal/photoGain ≈ 0.08 break-even, so diffuse is
   // tiny; regen stays high so each pocket holds near full light. Pockets select plants spatially.

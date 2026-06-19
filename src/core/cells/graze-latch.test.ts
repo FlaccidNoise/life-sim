@@ -117,6 +117,7 @@ function step(
     cfg.herbivoreLatch,
     cfg.grazeRate,
     cfg.grazeLatchRange,
+    Number.MAX_SAFE_INTEGER,
   );
 }
 
@@ -224,6 +225,98 @@ describe('herbivore graze-latch — acquisition + sustained gradual drain', () =
     step(f, live, 2, hash, lf, cfg, orgCC);
     expect(f.latchCell[mouth]).toBe(0);
     expect(f.latchPrey[mouth]).toBe(0);
+  });
+});
+
+describe('herbivore graze-latch — SATIATION (eat-and-go)', () => {
+  // A FED mouth (energy ≥ grazeSatiation) releases any latch and skips ALL eating → it roams; a HUNGRY
+  // mouth (below the threshold) feeds normally. Both share the SAME setup; only the mouth energy differs.
+  const cfg = defaultConfig({
+    worldWidth: 1024,
+    worldHeight: 1024,
+    herbivoreLatch: true,
+    grazeRate: 1.0,
+    grazeLatchRange: 1.5,
+    basalCost: 0, // isolate the graze accounting from upkeep
+  });
+  const SATIATION = 50;
+
+  /** metabolize with an explicit grazeSatiation (the shared `step` helper hard-codes it inert). */
+  function stepSat(
+    f: CellArrays,
+    live: Uint32Array,
+    hash: SpatialHash,
+    lf: LightField,
+    orgCC: Uint32Array,
+    satiation: number,
+  ) {
+    metabolize(
+      live,
+      2,
+      f,
+      hash,
+      lf,
+      cfg.photoGain,
+      cfg.photoDepletion,
+      cfg.digestRate,
+      cfg.digestEfficiency,
+      cfg.baseToughness,
+      cfg.basalCost,
+      cfg.meatDecay,
+      cfg.moveCost,
+      cfg.neuralCost,
+      noBonus,
+      0,
+      noEnv,
+      0,
+      0,
+      1,
+      f.latchPrey,
+      f.latchCell,
+      orgCC,
+      0,
+      cfg.herbivoreLatch,
+      cfg.grazeRate,
+      cfg.grazeLatchRange,
+      satiation,
+    );
+  }
+
+  it('a FED mouth (energy ≥ grazeSatiation) releases its latch and does NOT eat the adjacent PHOTO', () => {
+    const { store, f, mouth, plant, lf, orgCC } = setup(CellType.DIGESTIVE, cfg);
+    f.energy[mouth] = 100; // ≥ SATIATION (50) → satiated
+    f.energy[plant] = 30;
+    f.latchPrey[mouth] = 2; // pretend it was latched last tick — satiation must RELEASE it
+    f.latchCell[mouth] = plant + 1;
+    const live = new Uint32Array([mouth, plant]);
+    const hash = buildHash(store, live, 2, 1024, 1024, 2 * cfg.cellRadius);
+
+    const mouthE0 = f.energy[mouth]!;
+    stepSat(f, live, hash, lf, orgCC, SATIATION);
+
+    // No eating: the plant is untouched and the mouth gained nothing (basal 0).
+    expect(f.energy[plant]).toBe(30);
+    expect(f.energy[mouth]).toBe(mouthE0);
+    // Latch released → it roams.
+    expect(f.latchPrey[mouth]).toBe(0);
+    expect(f.latchCell[mouth]).toBe(0);
+  });
+
+  it('a HUNGRY mouth (energy < grazeSatiation) still grazes the adjacent PHOTO', () => {
+    const { store, f, mouth, plant, lf, orgCC } = setup(CellType.DIGESTIVE, cfg);
+    f.energy[mouth] = 10; // < SATIATION (50) → hungry
+    f.energy[plant] = 30;
+    const live = new Uint32Array([mouth, plant]);
+    const hash = buildHash(store, live, 2, 1024, 1024, 2 * cfg.cellRadius);
+
+    const mouthE0 = f.energy[mouth]!;
+    stepSat(f, live, hash, lf, orgCC, SATIATION);
+
+    // Normal graze: one grazeRate drained, eater credited × efficiency, latch acquired.
+    expect(f.energy[plant]).toBeCloseTo(30 - cfg.grazeRate, 4);
+    expect(f.energy[mouth]).toBeCloseTo(mouthE0 + cfg.grazeRate * cfg.digestEfficiency, 4);
+    expect(f.latchCell[mouth]).toBe(plant + 1);
+    expect(f.latchPrey[mouth]).toBe(2);
   });
 });
 
