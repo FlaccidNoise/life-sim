@@ -211,6 +211,12 @@ const config = defaultConfig({
   lightPatchCount: 20, // ~20 communities scattered across the archipelago
   lightPatchRadius: 2, // grid cells (~256-unit sharp pockets over the 128-unit grid)
   lightDiffuse: 0.02,
+  // FOOD SMELL GRADIENT (chemotaxis): foodDiffuse stays 0.22 (≈ the 0.25 stability ceiling → max
+  // reach). foodDecay raised 0.03→0.06 (live-dialed): at 0.03 the diffused smell barely decayed, so a
+  // weak food signal pooled across the WHOLE map (~14% of peak everywhere = the "flat green" haze). At
+  // 0.06 the far-field floor drops to ~3% — open water reads as "no food" — while the gradient keeps
+  // broad reach (~24% of peak 380u out), so a forager gets a clean directional signal to swim toward.
+  foodDecay: 0.06,
 });
 const world = new World(config);
 
