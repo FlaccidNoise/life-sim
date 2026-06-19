@@ -97,15 +97,11 @@ function step(
     hash,
     lf,
     { photoGain: cfg.photoGain, photoDepletion: cfg.photoDepletion, digestRate: cfg.digestRate, digestEfficiency: cfg.digestEfficiency, baseToughness: cfg.baseToughness, basalCost: cfg.basalCost, meatDecay: cfg.meatDecay, moveCost: cfg.moveCost, neuralCost: cfg.neuralCost, digestClusterBonus: 0 },
-    // digestClusterBonus
     noEnv,
-    { predDigestRate: 0, predDigestEfficiency: // predDigestRate
-    0, predReach: // predDigestEfficiency
-    1, predLatchRange: 0 },
-    { herbivoreLatch: // predLatchRange (predator latch off)
-    cfg.herbivoreLatch, grazeRate: cfg.grazeRate, grazeLatchRange: cfg.grazeLatchRange, grazeSatiation: Number.MAX_SAFE_INTEGER },
-    { digestBonus: noBonus, latchPrey: // predReach
-    f.latchPrey, latchCell: f.latchCell, organismCellCount: orgCC },
+    // predation OFF for the herbivore graze test: predDigestRate 0 (no drain), predReach 1 (contact only)
+    { predDigestRate: 0, predDigestEfficiency: 0, predReach: 1, predLatchRange: 0 },
+    { herbivoreLatch: cfg.herbivoreLatch, grazeRate: cfg.grazeRate, grazeLatchRange: cfg.grazeLatchRange, grazeSatiation: Number.MAX_SAFE_INTEGER },
+    { digestBonus: noBonus, latchPrey: f.latchPrey, latchCell: f.latchCell, organismCellCount: orgCC },
   );
 }
 
