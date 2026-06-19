@@ -14,7 +14,7 @@ import { GlowField } from '../environment/glow-field';
 import { ToxinField } from '../environment/toxin-field';
 import { applyRockCollision } from '../physics/rock-collision';
 import { applyCurrent } from '../physics/current-force';
-import { metabolize, type EnvEffects } from '../cells/metabolism';
+import { metabolize, type EnvEffects, type EconomyParams, type PredationParams, type GrazeParams, type LatchArrays } from '../cells/metabolism';
 import { sense } from '../cells/sense';
 import { act } from '../cells/act';
 import { applyThrust } from '../physics/thrust';
@@ -120,6 +120,10 @@ export class World {
    *  allocation-free, mirroring reproParams). Holds stable temp/toxin refs; scalars synced per tick. */
   private readonly env: EnvEffects;
   private readonly reproParams: ReproParams;
+  private readonly economy: EconomyParams;
+  private readonly predParams: PredationParams;
+  private readonly grazeParams: GrazeParams;
+  private readonly latchArrays: LatchArrays;
   private readonly reproOut: { births: number; bornRefs: number[] };
   private readonly deathOut: { deaths: number; deadRefs: number[] };
   /** Cumulative organisms that ever reached reproThreshold (births-reaching-adulthood). */
@@ -324,12 +328,42 @@ export class World {
       worldHeight: config.worldHeight,
       tick: 0,
     };
+    this.economy = {
+      photoGain: 0,
+      photoDepletion: 0,
+      digestRate: 0,
+      digestEfficiency: 0,
+      baseToughness: 0,
+      basalCost: 0,
+      meatDecay: 0,
+      moveCost: 0,
+      neuralCost: 0,
+      digestClusterBonus: 0,
+    };
+    this.predParams = {
+      predDigestRate: 0,
+      predDigestEfficiency: 0,
+      predReach: 0,
+      predLatchRange: 0,
+    };
+    this.grazeParams = {
+      herbivoreLatch: false,
+      grazeRate: 0,
+      grazeLatchRange: 0,
+      grazeSatiation: 0,
+    };
+    this.digestBonus = new Uint8Array(config.maxCells);
+    this.latchArrays = {
+      digestBonus: this.digestBonus,
+      latchPrey: new Uint32Array(0),
+      latchCell: new Uint32Array(0),
+      organismCellCount: new Uint32Array(0),
+    };
     this.reproOut = { births: 0, bornRefs: [] };
     this.deathOut = { deaths: 0, deadRefs: [] };
     this.birthsReachedAdulthood = 0;
     this.lastOrganismBirths = 0;
     this.lastOrganismDeaths = 0;
-    this.digestBonus = new Uint8Array(config.maxCells);
     this.metrics = makeMetrics();
     this.lifecycleResult = { births: 0, deaths: 0 };
     this.lastBirths = 0;
@@ -765,36 +799,38 @@ export class World {
     env.toxinDamage = cfg.toxinDamage;
     env.toxinDepositOnMeatDecay = cfg.toxinDepositOnMeatDecay;
 
-    metabolize(
-      live,
-      n,
-      f,
-      this.hash,
-      this.light,
-      cfg.photoGain,
-      cfg.photoDepletion,
-      cfg.digestRate,
-      cfg.digestEfficiency,
-      cfg.baseToughness,
-      cfg.basalCost,
-      cfg.meatDecay,
-      cfg.moveCost,
-      cfg.neuralCost,
-      this.digestBonus,
-      cfg.digestClusterBonus,
-      env,
-      cfg.predDigestRate,
-      cfg.predDigestEfficiency,
-      cfg.predReach,
-      f.latchPrey,
-      f.latchCell,
-      this.organisms.cellCount,
-      cfg.predLatchRange,
-      cfg.herbivoreLatch,
-      cfg.grazeRate,
-      cfg.grazeLatchRange,
-      cfg.grazeSatiation,
-    );
+    // Sync economy + latch knobs into reused scratch structs (no per-tick allocation).
+    const economy = this.economy;
+    economy.photoGain = cfg.photoGain;
+    economy.photoDepletion = cfg.photoDepletion;
+    economy.digestRate = cfg.digestRate;
+    economy.digestEfficiency = cfg.digestEfficiency;
+    economy.baseToughness = cfg.baseToughness;
+    economy.basalCost = cfg.basalCost;
+    economy.meatDecay = cfg.meatDecay;
+    economy.moveCost = cfg.moveCost;
+    economy.neuralCost = cfg.neuralCost;
+    economy.digestClusterBonus = cfg.digestClusterBonus;
+
+    const pred = this.predParams;
+    pred.predDigestRate = cfg.predDigestRate;
+    pred.predDigestEfficiency = cfg.predDigestEfficiency;
+    pred.predReach = cfg.predReach;
+    pred.predLatchRange = cfg.predLatchRange;
+
+    const graze = this.grazeParams;
+    graze.herbivoreLatch = cfg.herbivoreLatch;
+    graze.grazeRate = cfg.grazeRate;
+    graze.grazeLatchRange = cfg.grazeLatchRange;
+    graze.grazeSatiation = cfg.grazeSatiation;
+
+    const arrays = this.latchArrays;
+    arrays.digestBonus = this.digestBonus;
+    arrays.latchPrey = f.latchPrey;
+    arrays.latchCell = f.latchCell;
+    arrays.organismCellCount = this.organisms.cellCount;
+
+    metabolize(live, n, f, this.hash, this.light, economy, env, pred, graze, arrays);
 
     // M5: intra-organism energy transfer toward needier cells (§4.5).
     transferEnergy(

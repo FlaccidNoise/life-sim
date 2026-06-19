@@ -95,29 +95,12 @@ function step(
     f,
     hash,
     lf,
-    cfg.photoGain,
-    cfg.photoDepletion,
-    cfg.digestRate,
-    cfg.digestEfficiency,
-    cfg.baseToughness,
-    cfg.basalCost,
-    cfg.meatDecay,
-    cfg.moveCost,
-    cfg.neuralCost,
-    noBonus,
-    0, // digestClusterBonus
+    { photoGain: cfg.photoGain, photoDepletion: cfg.photoDepletion, digestRate: cfg.digestRate, digestEfficiency: cfg.digestEfficiency, baseToughness: cfg.baseToughness, basalCost: cfg.basalCost, meatDecay: cfg.meatDecay, moveCost: cfg.moveCost, neuralCost: cfg.neuralCost, digestClusterBonus: 0 },
     noEnv,
-    0, // predDigestRate
-    0, // predDigestEfficiency
-    1, // predReach
-    f.latchPrey,
-    f.latchCell,
-    orgCC,
-    0, // predLatchRange (predator latch off)
-    cfg.herbivoreLatch,
-    cfg.grazeRate,
-    cfg.grazeLatchRange,
-    Number.MAX_SAFE_INTEGER,
+    // predation OFF for the herbivore graze test: predDigestRate 0 (no drain), predReach 1 (contact only)
+    { predDigestRate: 0, predDigestEfficiency: 0, predReach: 1, predLatchRange: 0 },
+    { herbivoreLatch: cfg.herbivoreLatch, grazeRate: cfg.grazeRate, grazeLatchRange: cfg.grazeLatchRange, grazeSatiation: Number.MAX_SAFE_INTEGER },
+    { digestBonus: noBonus, latchPrey: f.latchPrey, latchCell: f.latchCell, organismCellCount: orgCC },
   );
 }
 
@@ -251,35 +234,17 @@ describe('herbivore graze-latch — SATIATION (eat-and-go)', () => {
     satiation: number,
   ) {
     metabolize(
-      live,
-      2,
-      f,
-      hash,
-      lf,
-      cfg.photoGain,
-      cfg.photoDepletion,
-      cfg.digestRate,
-      cfg.digestEfficiency,
-      cfg.baseToughness,
-      cfg.basalCost,
-      cfg.meatDecay,
-      cfg.moveCost,
-      cfg.neuralCost,
-      noBonus,
-      0,
-      noEnv,
-      0,
-      0,
-      1,
-      f.latchPrey,
-      f.latchCell,
-      orgCC,
-      0,
-      cfg.herbivoreLatch,
-      cfg.grazeRate,
-      cfg.grazeLatchRange,
-      satiation,
-    );
+    live,
+    2,
+    f,
+    hash,
+    lf,
+    { photoGain: cfg.photoGain, photoDepletion: cfg.photoDepletion, digestRate: cfg.digestRate, digestEfficiency: cfg.digestEfficiency, baseToughness: cfg.baseToughness, basalCost: cfg.basalCost, meatDecay: cfg.meatDecay, moveCost: cfg.moveCost, neuralCost: cfg.neuralCost, digestClusterBonus: 0 },
+    noEnv,
+    { predDigestRate: 0, predDigestEfficiency: 0, predReach: 1, predLatchRange: 0 },
+    { herbivoreLatch: cfg.herbivoreLatch, grazeRate: cfg.grazeRate, grazeLatchRange: cfg.grazeLatchRange, grazeSatiation: satiation },
+    { digestBonus: noBonus, latchPrey: f.latchPrey, latchCell: f.latchCell, organismCellCount: orgCC },
+  );
   }
 
   it('a FED mouth (energy ≥ grazeSatiation) releases its latch and does NOT eat the adjacent PHOTO', () => {
