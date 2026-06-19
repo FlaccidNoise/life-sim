@@ -9,6 +9,7 @@ import {
   buildPredatorGenome,
   buildSightedForagerGenome,
   buildHearingPredatorGenome,
+  buildFleeingPreyGenome,
 } from './critter-genome';
 import { develop } from './develop';
 import { CellType } from '../cells/types';
@@ -261,6 +262,64 @@ describe('buildHearingPredatorGenome — sight+hearing pursuit predator', () => 
     const org = w.spawnOrganism(g, 500, 500, 0);
     expect(org).toBeGreaterThanOrEqual(0);
     expect(w.organisms.carnivore[org]).toBe(1);
+  });
+});
+
+describe('buildFleeingPreyGenome — approaches food, flees seen/heard predators', () => {
+  const g = buildFleeingPreyGenome(6, 100);
+  const body = develop(g, 256, 16);
+
+  it('is NOT carnivore: the mouth stays DIGESTIVE', () => {
+    expect(g.genes[5]!.cellType).toBe(CellType.DIGESTIVE);
+  });
+
+  it('has 12 genes: sighted forager(8) + a PREDATOR-eye pair + a HEARING pair', () => {
+    expect(g.genes.length).toBe(12);
+  });
+
+  it('keeps the FOOD-approach senses (smell pair + FOOD-eye pair)', () => {
+    expect(g.genes[6]!.senseSource).toBe(SenseSource.SIGHT);
+    expect(g.genes[6]!.sightTarget).toBe(SightTarget.FOOD);
+  });
+
+  it('grows a PREDATOR-eye pair (gene 8/9) wired to FLEE (FWD→thrust neg, LAT→turn neg)', () => {
+    expect(g.genes[8]!.senseSource).toBe(SenseSource.SIGHT);
+    expect(g.genes[8]!.sightTarget).toBe(SightTarget.PREDATOR);
+    expect(g.genes[9]!.sightTarget).toBe(SightTarget.PREDATOR);
+    const conn = (pre: number, post: number) =>
+      g.connectionRules.find((c) => c.preGene === pre && c.postGene === post)!;
+    expect(conn(8, 4).weight).toBeLessThan(0); // predator-eye FWD → thrust (brake/flip)
+    expect(conn(9, 3).weight).toBeLessThan(0); // predator-eye LAT → turn (veer away)
+  });
+
+  it('grows a HEARING flee pair (gene 10/11) wired to FLEE', () => {
+    expect(g.genes[10]!.senseSource).toBe(SenseSource.HEARING);
+    expect(g.genes[11]!.senseSource).toBe(SenseSource.HEARING);
+    const conn = (pre: number, post: number) =>
+      g.connectionRules.find((c) => c.preGene === pre && c.postGene === post)!;
+    expect(conn(11, 3).weight).toBeLessThan(0); // hearing LAT → turn (veer from motion)
+  });
+
+  it('develops a 12-cell body, no truncation, positive energy', () => {
+    expect(body.count).toBe(12);
+    expect(body.truncated).toBe(false);
+    expect(body.totalEnergy).toBeGreaterThan(0);
+  });
+
+  it('keeps every cell within bondDegreeCap (8) — no cell breaches the cap', () => {
+    const degree = new Array<number>(body.count).fill(0);
+    for (const b of body.bonds) {
+      degree[b.a]!++;
+      degree[b.b]!++;
+    }
+    expect(Math.max(...degree)).toBeLessThanOrEqual(8);
+  });
+
+  it('instantiates into a small World as a non-carnivore', () => {
+    const w = new World(defaultConfig({ maxCells: 2000, preyDeposit: 1 }), false);
+    const org = w.spawnOrganism(g, 500, 500, 0);
+    expect(org).toBeGreaterThanOrEqual(0);
+    expect(w.organisms.carnivore[org]).toBe(0);
   });
 });
 
