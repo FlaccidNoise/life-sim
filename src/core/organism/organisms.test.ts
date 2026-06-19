@@ -69,6 +69,67 @@ describe('aggregateOrganisms — per-tick recompute', () => {
   });
 });
 
+describe('OrganismTable — highWaterMark', () => {
+  // Mirrors cell-store.test.ts highWaterMark test structure.
+  // highWaterMark is (highest live organism id + 1), or 0 when empty.
+  it('is 0 for an empty table', () => {
+    const t = new OrganismTable(8);
+    expect(t.highWaterMark).toBe(0);
+  });
+
+  it('equals the count after a run of ascending allocations (plus 1 for id=0 sentinel)', () => {
+    const t = new OrganismTable(8);
+    t.alloc(); // 1
+    t.alloc(); // 2
+    t.alloc(); // 3
+    expect(t.highWaterMark).toBe(4); // max id + 1
+  });
+
+  it('is unchanged when a non-top slot is freed', () => {
+    const t = new OrganismTable(8);
+    t.alloc(); // 1
+    t.alloc(); // 2
+    t.alloc(); // 3
+    t.free(2); // not the top slot (3 is still live)
+    expect(t.highWaterMark).toBe(4);
+  });
+
+  it('shrinks past trailing dead slots when the top slot is freed', () => {
+    const t = new OrganismTable(8);
+    t.alloc(); // 1
+    t.alloc(); // 2
+    t.alloc(); // 3
+    t.free(2); // dead, but interior
+    t.free(3); // top → hwm must walk down past slot 2 (dead) to slot 1 (alive)
+    expect(t.highWaterMark).toBe(2); // id 1 is alive, so hwm = 1 + 1 = 2
+  });
+
+  it('returns to 0 when every organism is freed', () => {
+    const t = new OrganismTable(8);
+    t.alloc();
+    t.alloc();
+    t.free(2);
+    t.free(1);
+    expect(t.highWaterMark).toBe(0);
+  });
+
+  it('always bounds the live set: every alive organism is below highWaterMark', () => {
+    const t = new OrganismTable(16);
+    t.alloc(); // 1
+    t.alloc(); // 2
+    t.alloc(); // 3
+    t.alloc(); // 4
+    t.alloc(); // 5
+    t.free(2);
+    t.free(4);
+    t.alloc(); // reuses id 4 (LIFO free-list)
+    for (let id = 1; id < 16; id++) {
+      if (t.isAlive(id)) expect(id).toBeLessThan(t.highWaterMark);
+    }
+    expect(t.isAlive(t.highWaterMark - 1)).toBe(true);
+  });
+});
+
 describe('OrganismTable — lineage fields', () => {
   it('alloc resets genomeRef/birthTick to -1 and reachedAdulthood to 0', () => {
     const t = new OrganismTable(8);
