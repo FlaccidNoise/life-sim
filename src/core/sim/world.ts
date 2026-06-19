@@ -1022,7 +1022,7 @@ export class World {
     // 11f M6: adulthood tracking + live-organism count (one O(maxOrganisms) scan).
     let liveOrgs = 0;
     let newlyAdult = 0;
-    for (let org = 1; org < this.organisms.maxOrganisms; org++) {
+    for (let org = 1; org < this.organisms.highWaterMark; org++) {
       if (!this.organisms.isAlive(org) || this.organisms.cellCount[org]! === 0) continue;
       liveOrgs++;
       if (
