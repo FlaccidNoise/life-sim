@@ -115,6 +115,11 @@ const config = defaultConfig({
   // ABOVE the ~255 breeding bar, so it still BREEDS before it stops grazing — then it releases the
   // strong latch and roams, freeing the food-knot and making creatures visibly swim instead of jostle.
   grazeSatiation: 50,
+  // SATIATED-ROAM: a forager is pure chemotaxis (steer-to-food/thrust-to-food), so once fed it just
+  // OSCILLATES on the food patch — the "wiggle". When sated (energy ≥ grazeSatiation) we override the
+  // food-steering with a gentle wander + cruise so it swims OFF to explore open water, then re-engages
+  // food-seeking when hungry (feed→patrol→feed) — what makes creatures read as life swimming around.
+  exploreWander: 0.3,
   // M7: mutation ON so both heterotrophs ADAPT and DIVERSIFY live (library defaults stay 0).
   mutationWeightRate: 0.25,
   mutationWeightSigma: 0.1,

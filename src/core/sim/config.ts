@@ -148,6 +148,11 @@ export interface Config {
    *  with the latch off satiation never applies and the legacy path is byte-identical. 1e9 (default)
    *  = effectively never satiated → no-op. Only used when herbivoreLatch. */
   grazeSatiation: number;
+  /** SATIATED-ROAM: when >0, a non-carnivore MOVER whose cell energy ≥ grazeSatiation has its
+   *  food-steering brain OVERRIDDEN by a wander (heading drift of ±exploreWander rad/tick) + a cruise
+   *  thrust, so a fed forager swims off to explore instead of oscillating on the food patch (the
+   *  "wiggle"). 0 (default) = off → legacy motor path byte-identical. The demo sets it. */
+  exploreWander: number;
 
   // Sensing & movement (§4.4). All live knobs.
   /** Gradient magnitude below which a mover coasts at cruiseThrust instead of steering. */
@@ -440,6 +445,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     grazeLatchRange: 1.5, // acquire+hold radius ×(ri+rj); kept ≤1.5 so grazeLatchRange·(ri+rj) stays inside the 3×3 hash window (the predLatchRange 2.5 risks missing out-of-bucket cells)
     grazeLatchStiffness: 0.8, // gentle tether (< predLatchStiffness 1.0, ≪ bond ceiling 2.5) so a fleeing forager's MOVER thrust can overpower it and detach
     grazeSatiation: 1e9, // OFF by default (effectively never satiated → byte-identical legacy); the demo lowers it so a fed forager stops grazing and roams
+    exploreWander: 0, // OFF by default (no satiated-roam override → byte-identical motor path); the demo sets it so fed foragers swim off and explore
 
     senseThreshold: 1e-4,
     turnRate: 0.25, // ~14°/tick — visibly curves toward food without snapping
