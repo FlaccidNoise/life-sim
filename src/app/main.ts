@@ -19,6 +19,7 @@ import { renderGenomeInspector } from './genome-inspector';
 import { renderHallOfFame } from './hall-of-fame';
 import { renderPhylogeny } from './phylogeny-panel';
 import { renderMenagerie } from './menagerie-panel';
+import { PALETTE } from '../render/palette';
 import {
   buildCritterGenome,
   buildAutotrophGenome,
@@ -33,7 +34,7 @@ import type { LineageSummary } from '../core/sim/lineage-board';
 import type { SpeciesSummary } from '../core/sim/species-board';
 
 const canvas = document.getElementById('view') as HTMLCanvasElement;
-const hud = document.getElementById('hud');
+const hudBody = document.getElementById('hud-body');
 
 // ARCHIPELAGO ECOLOGY (grander scale): an 8192² ocean dotted with ~20 isolated COMMUNITIES, one per
 // bright light pocket, each its own little ecosystem — a tough anchored PHOTO plant base that grows a
@@ -305,7 +306,7 @@ function createRenderer(): Renderer {
     return new Renderer(canvas, config.maxCells, config.cellRadius * 1.3);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    if (hud) hud.textContent = `Viewer needs WebGL2 — initialisation failed: ${msg}`;
+    if (hudBody) hudBody.textContent = `Viewer needs WebGL2 — initialisation failed: ${msg}`;
     throw err;
   }
 }
@@ -382,8 +383,27 @@ let showPhylo = false;
 const menagPanel = document.getElementById('menagerie') as HTMLElement;
 let showMenag = false;
 
-// Legend / "what am I seeing" overlay (toggled with `H`); shown by default.
+// Legend / "what am I seeing" overlay (toggled with `H`); hidden by default so the sim is
+// visible on first open. Swatch colours are applied from PALETTE (single source of truth).
 const legend = document.getElementById('legend');
+if (legend) {
+  const swatchMap: Record<string, string> = {
+    photo: PALETTE.photo,
+    digestive: PALETTE.digestive,
+    meat: PALETTE.meat,
+    motile: PALETTE.motile,
+    sensor: PALETTE.sensor,
+    neuron: PALETTE.neuron,
+    mover: PALETTE.mover,
+    predator: PALETTE.predator,
+  };
+  for (const [key, hex] of Object.entries(swatchMap)) {
+    const el = legend.querySelector<HTMLElement>(`[data-sw="${key}"]`);
+    if (el) el.style.background = hex;
+    const wedge = legend.querySelector<HTMLElement>(`[data-swedge="${key}"]`);
+    if (wedge) wedge.style.borderLeftColor = hex;
+  }
+}
 
 // Telemetry dashboard + inspect panel + live economy knobs.
 const dash = new TelemetryDashboard(document.getElementById('telemetry') as HTMLCanvasElement);
@@ -530,13 +550,23 @@ function drawScene(alpha: number): void {
 // so individual foragers are legible from the start instead of specks in a whole-world fit. The
 // wheel zooms out to the full ecosystem; resize preserves the user's current zoom.
 const DEFAULT_VIEW_SPAN = 520;
+// device pixel ratio (capped at 2) for crisp rendering on Retina; recomputed on resize.
+// camera.scale and canvas backing live in device px; pointer events are multiplied by dpr
+// to match (see the mousedown/mouseup/mousemove handlers).
+let dpr = 1;
 function fit(initial: boolean): void {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
+  const cssW = window.innerWidth;
+  const cssH = window.innerHeight;
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = Math.round(cssW * dpr);
+  canvas.height = Math.round(cssH * dpr);
+  canvas.style.width = `${cssW}px`;
+  canvas.style.height = `${cssH}px`;
   renderer.resize(canvas.width, canvas.height);
-  bondOverlay.resize(canvas.width, canvas.height);
-  rockOverlay.resize(canvas.width, canvas.height);
-  currentOverlay.resize(canvas.width, canvas.height);
+  // Canvas2D overlays take CSS px + dpr (they scale their own backing + line widths).
+  bondOverlay.resize(cssW, cssH, dpr);
+  rockOverlay.resize(cssW, cssH, dpr);
+  currentOverlay.resize(cssW, cssH, dpr);
   if (initial) camera.scale = Math.min(canvas.width, canvas.height) / DEFAULT_VIEW_SPAN;
 }
 window.addEventListener('resize', () => fit(false));
@@ -569,24 +599,26 @@ let downX = 0;
 let downY = 0;
 canvas.addEventListener('mousedown', (e) => {
   dragging = true;
-  lastX = e.clientX;
-  lastY = e.clientY;
-  downX = e.clientX;
-  downY = e.clientY;
+  lastX = e.clientX * dpr;
+  lastY = e.clientY * dpr;
+  downX = lastX;
+  downY = lastY;
 });
 window.addEventListener('mouseup', (e) => {
   if (dragging) {
-    const moved = Math.hypot(e.clientX - downX, e.clientY - downY);
-    if (moved < 4) {
+    const px = e.clientX * dpr;
+    const py = e.clientY * dpr;
+    const moved = Math.hypot(px - downX, py - downY);
+    if (moved < 4 * dpr) {
       // shift+click = drop a forager at the cursor (hand-of-god, §11); alt+click = autotroph.
       if (e.shiftKey || e.altKey) {
-        const wx = camera.x + (e.clientX - canvas.width / 2) / camera.scale;
-        const wy = camera.y + (e.clientY - canvas.height / 2) / camera.scale;
+        const wx = camera.x + (px - canvas.width / 2) / camera.scale;
+        const wy = camera.y + (py - canvas.height / 2) / camera.scale;
         if (e.altKey) developInto(buildAutotrophGenome(world.config.cellRadius), wx, wy, 0);
         else developInto(buildForagerGenome(world.config.cellRadius), wx, wy, Math.random() * 6.28);
       } else {
-        inspectAt(world, camera, e.clientX, e.clientY, canvas.width, canvas.height, inspectPanel);
-        const id = pickNearest(e.clientX, e.clientY);
+        inspectAt(world, camera, px, py, canvas.width, canvas.height, inspectPanel);
+        const id = pickNearest(px, py);
         if (id >= 0) {
           followId = id;
           followGen = f.generation[id]!;
@@ -598,10 +630,12 @@ window.addEventListener('mouseup', (e) => {
 });
 window.addEventListener('mousemove', (e) => {
   if (!dragging) return;
-  camera.x -= (e.clientX - lastX) / camera.scale;
-  camera.y -= (e.clientY - lastY) / camera.scale;
-  lastX = e.clientX;
-  lastY = e.clientY;
+  const px = e.clientX * dpr;
+  const py = e.clientY * dpr;
+  camera.x -= (px - lastX) / camera.scale;
+  camera.y -= (py - lastY) / camera.scale;
+  lastX = px;
+  lastY = py;
 });
 
 // Zoom with wheel.
@@ -710,7 +744,7 @@ let fps = 0;
 let lastFpsT = performance.now();
 
 function updateHud(): void {
-  if (!hud) return;
+  if (!hudBody) return;
   const m = world.metrics;
   const net = world.net;
   const lm = lightMultiplier(
@@ -720,16 +754,19 @@ function updateHud(): void {
     config.seasonLength,
     config.seasonDepth,
   );
-  hud.textContent =
-    `cells ${world.cells.aliveCount}  ·  tick ${world.tickCount}  ·  ${fps} fps  ·  ` +
-    `${speed.toFixed(2)}×${paused ? ' paused' : ''}  ·  zoom ${camera.scale.toFixed(2)}` +
-    `  ·  day ${(lm * 100).toFixed(0)}%\n` +
-    `photo ${m.photo}  dig ${m.digestive}  motile ${m.motile}  meat ${m.meat}` +
-    `   ·   ⌀energy ${m.meanEnergy.toFixed(0)}  ·  diversity ${m.diversity.toFixed(3)}\n` +
-    `evolve: geno-div ${m.genotypicDiversity.toFixed(3)}  ·  gen ${m.maxGeneration}  ·  ⌀genome ${m.meanGenomeSize.toFixed(1)} cells/org ${m.meanCellsPerOrganism.toFixed(1)}\n` +
-    `brain: ${net.liveNeuronCount} neurons · ${net.liveSynapseCount} synapses` +
-    `   ·   light ${showLight ? 'on' : 'off'}  smell ${showFood ? 'on' : 'off'}  bonds ${showBonds ? 'on' : 'off'}  rocks ${showRocks ? 'on' : 'off'}  temp ${showTemp ? 'on' : 'off'}  glow ${showGlow ? 'on' : 'off'}  toxin ${showToxin ? 'on' : 'off'}  curr-force ${currentForceOn ? 'on' : 'off'}${showCurrent ? '▸' : ''}` +
-    `${followId >= 0 ? `  ·  follow #${followId}` : ''}   ·   ${legend && !legend.classList.contains('hidden') ? 'H hide legend' : 'H legend'}`;
+  const layers =
+    `light ${showLight ? 'on' : 'off'} · smell ${showFood ? 'on' : 'off'} · bonds ${showBonds ? 'on' : 'off'} · ` +
+    `rocks ${showRocks ? 'on' : 'off'} · temp ${showTemp ? 'on' : 'off'} · glow ${showGlow ? 'on' : 'off'} · ` +
+    `toxin ${showToxin ? 'on' : 'off'} · curr-force ${currentForceOn ? 'on' : 'off'}` +
+    (showCurrent ? ' (arrow)' : '');
+  hudBody.textContent =
+    `cells ${world.cells.aliveCount} · tick ${world.tickCount} · ${fps} fps · ` +
+    `${speed.toFixed(2)}×${paused ? ' paused' : ''} · zoom ${(camera.scale / dpr).toFixed(2)} · ` +
+    `day ${(lm * 100).toFixed(0)}%${followId >= 0 ? ` · follow #${followId}` : ''}\n` +
+    `photo ${m.photo}  dig ${m.digestive}  motile ${m.motile}  meat ${m.meat}  ·  avg energy ${m.meanEnergy.toFixed(0)}  ·  diversity ${m.diversity.toFixed(3)}\n` +
+    `geno-div ${m.genotypicDiversity.toFixed(3)} · gen ${m.maxGeneration} · avg genome ${m.meanGenomeSize.toFixed(1)} · cells/org ${m.meanCellsPerOrganism.toFixed(1)}\n` +
+    `brain: ${net.liveNeuronCount} neurons · ${net.liveSynapseCount} synapses\n` +
+    `${layers}   ·   ${legend && !legend.classList.contains('hidden') ? 'H hide legend' : 'H legend'}`;
 }
 
 function loop(): void {
