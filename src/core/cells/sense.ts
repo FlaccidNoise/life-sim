@@ -1,6 +1,7 @@
 import { type CellArrays } from '../memory/cell-store';
 import { type FoodField } from '../environment/food-field';
 import { type NoiseField } from '../environment/noise-field';
+import { type RockField } from '../environment/rock-field';
 import { type NeuralNetwork } from '../neural/network';
 import { type SpatialHash } from '../spatial/spatial-hash';
 import { CellType } from './types';
@@ -31,6 +32,10 @@ import { wrap } from '../math/vec2';
  * binding whose `net.sensorSource[k]` is HEARING (NoiseField gradient) or SIGHT (the cone-query vector
  * from `sightVector`, toward the nearest target of the binding's `sensorSightTarget` class). With both
  * knobs 0 the override pass is skipped ENTIRELY → byte-identical to the pre-hearing sim. Allocation-free.
+ *
+ * Rock occlusion (Phase 3 3b): the optional `rocks` field is forwarded to `sightVector`; when present
+ * and non-empty it lets the cone query skip targets hidden behind rocks. `rocks` undefined or
+ * `rockCount === 0` (default) → no occlusion → byte-identical sight.
  */
 export function sense(
   live: Uint32Array,
@@ -49,6 +54,7 @@ export function sense(
   viewHalfAngle: number,
   worldWidth: number,
   worldHeight: number,
+  rocks?: RockField,
 ): void {
   const hx = food.patchW;
   const hy = food.patchH;
@@ -117,6 +123,7 @@ export function sense(
         viewHalfAngle,
         worldWidth,
         worldHeight,
+        rocks,
       );
     }
     // SenseSource.SMELL: already filled by the SMELL path above; nothing to do.
