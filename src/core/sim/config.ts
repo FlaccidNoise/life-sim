@@ -223,6 +223,9 @@ export interface Config {
   mutationDuplicateSubgraphRate: number;
   /** Probability of assigning a new random sensor channel to a SENSOR gene (discovers env scalars). */
   mutationSensorChannelRate: number;
+  /** Probability a SENSOR gene's senseSource (SMELL/SIGHT/HEARING) is reassigned per reproduction.
+   *  0 = OFF (no RNG drawn → baseline byte-identical). Gated behind senses-ON. */
+  mutationSenseSourceRate: number;
   /** Ticks between evolution-telemetry samples (read-only; keeps the hot loop alloc-free). */
   metricsEvolutionInterval: number;
   /** Cap on phylogeny LineageLog nodes; dead subtrees are pruned (leaves-up) beyond this. */
@@ -442,6 +445,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     mutationChangeTypeRate: 0,
     mutationDuplicateSubgraphRate: 0,
     mutationSensorChannelRate: 0,
+    mutationSenseSourceRate: 0,
     metricsEvolutionInterval: 16,
     maxLineageNodes: 4000,
 

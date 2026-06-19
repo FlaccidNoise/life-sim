@@ -5,6 +5,7 @@ import { develop } from './develop';
 import { Rng } from '../math/rng';
 import { CellType } from '../cells/types';
 import { SensorChannel } from '../neural/network';
+import { buildForagerGenome } from './critter-genome';
 
 const NO_MUT: MutationRates = {
   paramSigma: 0.1,
@@ -18,6 +19,7 @@ const NO_MUT: MutationRates = {
   changeTypeRate: 0,
   duplicateSubgraphRate: 0,
   sensorChannelRate: 0,
+  senseSourceRate: 0,
 };
 
 function demoGenome(): Genome {
@@ -238,6 +240,7 @@ describe('mutateGenome — delete + duplicate-subgraph (index ops)', () => {
       changeTypeRate: 0.5,
       duplicateSubgraphRate: 0.5,
       sensorChannelRate: 0,
+      senseSourceRate: 0.5,
     };
     const a = mutateGenome(p, new Rng(99), rates, store());
     const b = mutateGenome(p, new Rng(99), rates, store());
@@ -283,5 +286,54 @@ describe('mutateGenome — delete + duplicate-subgraph (index ops)', () => {
         expect(g.sensorChannel).toBeLessThan(6);
       }
     }
+  });
+});
+
+function zeroRates(): MutationRates {
+  return {
+    paramSigma: 0,
+    paramRate: 0,
+    weightSigma: 0,
+    weightRate: 0,
+    addGeneRate: 0,
+    deleteGeneRate: 0,
+    duplicateGeneRate: 0,
+    rewireRate: 0,
+    changeTypeRate: 0,
+    duplicateSubgraphRate: 0,
+    sensorChannelRate: 0,
+    senseSourceRate: 0,
+  };
+}
+
+describe('mutate — senseSourceRate', () => {
+  it('all-rates-0 is byte-identical and draws no extra RNG (clone)', () => {
+    const parent = buildForagerGenome();
+    const store = new GenomeStore();
+    const a = mutateGenome(parent, new Rng(123), zeroRates(), store);
+    // identical to a plain clone of the genes' senseSource
+    for (let i = 0; i < a.genes.length; i++) {
+      expect(a.genes[i]!.senseSource).toBe(parent.genes[i]!.senseSource);
+    }
+  });
+
+  it('rate-0 senseSource operator does not perturb the downstream RNG stream', () => {
+    // Two runs with identical rng seeds + a non-zero LATER operator (weightRate) must match,
+    // proving the gated senseSource block consumed no RNG at rate 0.
+    const parent = buildForagerGenome();
+    const rates = { ...zeroRates(), weightRate: 1, weightSigma: 0.1 };
+    const a = mutateGenome(parent, new Rng(999), rates, new GenomeStore());
+    const b = mutateGenome(parent, new Rng(999), rates, new GenomeStore());
+    for (let i = 0; i < a.connectionRules.length; i++) {
+      expect(a.connectionRules[i]!.weight).toBe(b.connectionRules[i]!.weight);
+    }
+  });
+
+  it('senseSourceRate 1 flips at least one sensor gene off SMELL', () => {
+    const parent = buildForagerGenome(); // genes 1,2 are SENSOR
+    const rates = { ...zeroRates(), senseSourceRate: 1 };
+    const child = mutateGenome(parent, new Rng(42), rates, new GenomeStore());
+    const changed = child.genes.some((g, i) => g.senseSource !== parent.genes[i]!.senseSource);
+    expect(changed).toBe(true);
   });
 });

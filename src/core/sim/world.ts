@@ -217,6 +217,7 @@ export class World {
       changeTypeRate: 0,
       duplicateSubgraphRate: 0,
       sensorChannelRate: 0,
+      senseSourceRate: 0,
     };
 
     // Environmental features (M9-early)
@@ -454,6 +455,7 @@ export class World {
     mr.changeTypeRate = cfg.mutationChangeTypeRate;
     mr.duplicateSubgraphRate = cfg.mutationDuplicateSubgraphRate;
     mr.sensorChannelRate = cfg.mutationSensorChannelRate;
+    mr.senseSourceRate = cfg.mutationSenseSourceRate;
   }
 
   /**
