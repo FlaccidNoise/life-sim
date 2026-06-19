@@ -115,8 +115,8 @@ export function mountControls(host: HTMLElement, config: Config): void {
 
   for (const section of SECTIONS) {
     const head = document.createElement('div');
-    head.className = 'knob-section muted';
-    head.textContent = `· ${section.title}`;
+    head.className = 'knob-section';
+    head.textContent = section.title;
     host.append(head);
 
     for (const k of section.knobs) {

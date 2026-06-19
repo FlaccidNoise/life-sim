@@ -17,6 +17,7 @@ import { wrapDelta } from '../core/math/vec2';
  */
 export class BondOverlay {
   private readonly ctx: CanvasRenderingContext2D;
+  private dpr = 1;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d');
@@ -24,9 +25,14 @@ export class BondOverlay {
     this.ctx = ctx;
   }
 
-  resize(width: number, height: number): void {
-    this.canvas.width = width;
-    this.canvas.height = height;
+  /** `width`/`height` are CSS pixels; `dpr` scales the backing store so lines stay
+   *  crisp on Retina. Line widths are multiplied by `dpr` to keep visual parity. */
+  resize(width: number, height: number, dpr = 1): void {
+    this.dpr = dpr;
+    this.canvas.width = Math.round(width * dpr);
+    this.canvas.height = Math.round(height * dpr);
+    this.canvas.style.width = `${width}px`;
+    this.canvas.style.height = `${height}px`;
   }
 
   render(world: World, camera: Camera): void {
@@ -42,7 +48,7 @@ export class BondOverlay {
     const halfH = h / 2;
     const scale = camera.scale;
 
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1.5 * this.dpr;
     for (let k = 0; k < bonds.liveBondCount; k++) {
       const s = bonds.liveBonds[k]!;
       const a = bonds.cellA[s]!;
@@ -72,7 +78,7 @@ export class BondOverlay {
         const ry = gap > 0 ? by : ay;
         ctx.fillStyle = `rgba(120,${g},200,0.9)`;
         ctx.beginPath();
-        ctx.arc(rx, ry, 2.5, 0, Math.PI * 2);
+        ctx.arc(rx, ry, 2.5 * this.dpr, 0, Math.PI * 2);
         ctx.fill();
       }
     }

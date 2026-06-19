@@ -1,5 +1,6 @@
 import { type World } from '../core/sim/world';
 import { lerpWrapped } from '../core/math/vec2';
+import { PALETTE_VEC3 } from './palette';
 
 export interface Camera {
   /** World-space point at the centre of the viewport. */
@@ -23,7 +24,9 @@ void main() {
   vec2 screen = (a_pos - u_offset) * u_scale;
   vec2 clip = screen / (u_res * 0.5);
   gl_Position = vec4(clip.x, -clip.y, 0.0, 1.0);
-  gl_PointSize = clamp(u_point * u_scale, 1.0, 64.0);
+  // Floor of 2.0 (not 1.0) so a cell stays a visible 2px speck when zoomed out
+  // to the whole ecosystem; at default zoom this is well above the floor.
+  gl_PointSize = clamp(u_point * u_scale, 2.0, 64.0);
   v_type = a_type;
   v_heading = a_heading;
 }`;
@@ -41,18 +44,18 @@ void main() {
     vec2 d = vec2(co * c.x - s * c.y, s * c.x + co * c.y);
     if (d.x > 0.45 || d.x < -0.35 || abs(d.y) > (0.40 - d.x * 0.45)) discard;
     frag = (v_type > 5.5)
-      ? vec4(0.95, 0.85, 0.30, 1.0)   // MOVER  amber
-      : vec4(0.30, 0.85, 0.95, 1.0);  // MOTILE cyan
+      ? vec4(${PALETTE_VEC3.mover}, 1.0)    // MOVER  amber
+      : vec4(${PALETTE_VEC3.motile}, 1.0);  // MOTILE teal (distinct from UI accent cyan)
     return;
   }
   if (dot(c, c) > 0.25) discard;            // disc for the rest
   vec3 col;
-  if (v_type < 0.5)       col = vec3(0.13, 0.34, 0.17);  // PHOTO    dim green (plants recede so foragers pop)
-  else if (v_type < 1.5)  col = vec3(0.95, 0.45, 0.20);  // DIGEST   orange-red
-  else if (v_type < 2.5)  col = vec3(0.34, 0.30, 0.26);  // MEAT     dim grey-brown
-  else if (v_type < 4.5)  col = vec3(0.85, 0.35, 0.85);  // SENSOR   magenta
-  else if (v_type < 6.5)  col = vec3(0.45, 0.55, 0.95);  // NEURON   blue
-  else                    col = vec3(0.95, 0.15, 0.15);  // PREDATOR menacing red
+  if (v_type < 0.5)       col = vec3(0.13, 0.34, 0.17);  // PHOTO  dimmer than the palette swatch so foragers pop
+  else if (v_type < 1.5)  col = ${PALETTE_VEC3.digestive};
+  else if (v_type < 2.5)  col = vec3(0.34, 0.30, 0.26);  // MEAT   dimmer than the palette swatch (decay recedes)
+  else if (v_type < 4.5)  col = ${PALETTE_VEC3.sensor};
+  else if (v_type < 6.5)  col = ${PALETTE_VEC3.neuron};
+  else                    col = ${PALETTE_VEC3.predator};
   frag = vec4(col, 1.0);
 }`;
 
