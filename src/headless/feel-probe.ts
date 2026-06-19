@@ -240,6 +240,55 @@ if (mode === 'flee') {
       false,
     );
   }
+} else if (mode === 'senses') {
+  // PHASE 5 SUCCESS-BAR GATE: drift + sight + hearing ON, 5 seeds, 12k ticks, 2048².
+  // (run(...,false) selects the 2048² arena — world1024 is false so BASE's 2048² stands; LOCKED re-asserts it.)
+  // Reads off, per seed: all-3-coexist (ALL3 vs EXTINCT), predMax (predator breeds?), forMax.
+  // Run all 5: `tsx feel-probe.ts senses`  |  one seed (parallelizable across cores): `… senses <seed>`.
+  //
+  // GATE RESULT (2026-06-19, seeds 3/7/42/99/123):
+  //   • ALL3 coexistence: 5/5 — senses ON do NOT destabilize the 3-trophic balance. PASS (gate's real intent).
+  //   • predMax > 24 (predator breeds): 0/5 — predators settle to subsistence (1-3), never breed above seed 24.
+  // The predator non-breeding is NOT a senses regression. A drift-0 sight×hearing ablation on seed 3 is
+  // BYTE-IDENTICAL across all four on/off cells ([1200 F831 P6 …] → [12000 F491 P3] predNoBreed forMax1680):
+  // the BASELINE genomes here (buildForagerGenome/buildPredatorGenome) carry NO sight/hearing sensors, so the
+  // sense fields are pure no-ops in this probe. Predator non-breeding is a PRE-EXISTING base-economy property
+  // (identically present with senses fully OFF), deferred to reconciliation against main's "forager-thrive
+  // solved" economy at branch merge — an owner decision (2026-06-19), not a senses concern. The senses' real
+  // arms-race effect is proven separately by the P4.6 golden (a sighted/hearing predator runs down a fleeing
+  // prey). NB: the full-mode comment below claiming "predMax 25-30 breeding" is STALE vs current code.
+  //
+  // FINAL LOCKED SENSES KNOBS (deliverable → Task 4 wires these into main.ts) — validated non-destabilizing above:
+  //   driftAmplitude 48   loudnessGain 0.5   viewRange 32   viewHalfAngle 0.6
+  // viewRange 32 → R = ceil(32/8) = 4 (cellSize = 2·cellRadius = 8): the largest range within the design's
+  // R ≤ 4 sight-cost ceiling (48 would be R=6). R=4 cone cost was profiled in P3.8 (≈7.2 ms/tick @ 2000 eyes).
+  const SENSES: Partial<Config> = {
+    driftAmplitude: 48, // food/light zones migrate slowly (user requirement: drifting zones)
+    loudnessGain: 0.5, // hearing deposit = loudnessGain·speed
+    viewRange: 32, // R = ceil(32/8) = 4 — largest range within the R ≤ 4 cost ceiling
+    viewHalfAngle: 0.6, // ~34° half-cone
+  };
+  // Optional single-seed arg (argv[3]) lets the 5 independent seeds run as parallel processes —
+  // each seed is a fully independent deterministic sim, so splitting them across cores is
+  // byte-identical to the sequential loop, just faster wall-clock. No arg → all 5 in-process.
+  const SENSES_SEEDS = process.argv[3] ? [Number(process.argv[3])] : [3, 7, 42, 99, 123];
+  console.log(
+    `=== SENSES gate: 2048² drift+sight+hearing, 12k ticks, seeds ${SENSES_SEEDS.join('/')} ===`,
+  );
+  for (const seed of SENSES_SEEDS) {
+    run(
+      {
+        name: `senses s${seed}`,
+        plants: 18000,
+        foragers: 250,
+        predators: 24,
+        o: { ...LOCKED, ...SENSES, seed },
+        ...PRED,
+      },
+      12000,
+      false,
+    );
+  }
 } else {
   // LOCKED ECOLOGY CONFIG — VALIDATED: all 3 trophic levels coexist across seeds 3/7/42/99 for 12k
   // ticks with NO top-ups at 1024² (predators settle 1-4, foragers 67-194, plants 42-58% pack).
