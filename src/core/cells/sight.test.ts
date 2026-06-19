@@ -429,10 +429,16 @@ describe('sightVector — toroidal seam', () => {
   });
 });
 
-describe('sightVector — toroidal-seam guard on the minimum 3×3 grid', () => {
-  it('does not double-count when 2R+1 exceeds the grid width', () => {
+describe('sightVector — wide-window output value-lock on the minimum 3×3 grid', () => {
+  it('produces the locked sense vector when 2R+1 exceeds the grid width', () => {
+    // OUTPUT VALUE-LOCK for the wide-window (2R+1 > cols) scan on the minimum 3×3 grid.
     // world 48×48, cellSize 16 → exactly cols=rows=3 (the hash minimum). viewRange 30 → R=2,
-    // so a 5×5 window over a 3×3 grid: every column/row offset beyond ±1 must be skipped.
+    // so a 5×5 window wraps around a 3×3 grid. This locks the produced sense vector so a refactor
+    // that mangles the modulo wrap (NaN, or scanning the wrong direction) is caught.
+    // NOTE: the toroidal-seam guard (skipping buckets already visited via the wrap) is a PERFORMANCE
+    // optimization, not what this test discriminates. With a single FOOD target the strict-< nearest
+    // tie-break makes a double bucket-visit idempotent, so this test would still pass with the guard
+    // removed — it is a value-lock, not a guard-discriminator.
     const store = new CellStore(8, false);
     const f = store.fields;
     const eye = store.alloc(); // 0
@@ -451,8 +457,7 @@ describe('sightVector — toroidal-seam guard on the minimum 3×3 grid', () => {
     hash.build(Uint32Array.from([eye, food]), 2, f.posX, f.posY);
 
     sightVector(eye, f, hash, new Uint8Array(8), SightTarget.FOOD, 30, Math.PI / 2, 48, 48);
-    // dist 20, viewRange 30 → proximity 1/3; +x. A double-scan would still pick the same winner
-    // by strict-<, but the guard makes the scan visit each bucket exactly once.
+    // dist 20, viewRange 30 → proximity 1/3; +x. This is the locked output value.
     expect(f.senseX[eye]).toBeCloseTo(1 / 3, 5);
     expect(f.senseY[eye]).toBeCloseTo(0, 5);
   });
