@@ -574,6 +574,11 @@ export class World {
       f.organismId,
       this.organisms.carnivore,
       cfg.carnivoreThrustMult,
+      f.energy,
+      cfg.grazeSatiation,
+      cfg.exploreWander,
+      cfg.seed,
+      this.tickCount,
     );
 
     computeRepulsion(this.hash, f.posX, f.posY, f.radius, f.forceX, f.forceY, cfg.repulsion);
