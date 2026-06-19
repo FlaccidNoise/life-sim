@@ -140,6 +140,44 @@ export interface Config {
    *  NoiseField at end-of-tick. 0 = hearing OFF — NoiseField deposit+step skipped entirely
    *  (byte-identical to today). Default 0. */
   loudnessGain: number;
+  // Herbivore graze-latch (mirrors the predator latch for DIGESTIVE/MOTILE mouths grazing PHOTO chains).
+  // OFF by default → the legacy instant-drain eating path runs and every output is byte-identical.
+  /** Master flag: when true a DIGESTIVE/MOTILE mouth LATCHES onto an edible PHOTO cell and drains it
+   *  at grazeRate/tick over many ticks (sustained grazing) instead of the instant FIRST-edible drain.
+   *  false = legacy overlap-drain path (byte-identical). Default false; the demo opts in. */
+  herbivoreLatch: boolean;
+  /** Energy/tick a latched mouth drains from a held PHOTO cell (absolute, NOT area-scaled — like
+   *  digestRate). Modest so a chain cell takes MANY ticks to consume and a brief brush no longer kills
+   *  it; the cell still only severs at energy≤0 (severEatenChainCells). Anchored bases keep the
+   *  baseToughness factor so foragers prefer chain cells. Only used when herbivoreLatch. */
+  grazeRate: number;
+  /** Graze latch acquire+hold range, as a multiple of contact (ri+rj). A mouth latches the FIRST
+   *  edible PHOTO cell within grazeRange·(ri+rj) and keeps draining it until it's gone or out of range.
+   *  MUST keep grazeLatchRange·(ri+rj) within the 3×3 hash window (≤ ~1.5·cellSize) or distant cells
+   *  are missed. 0 = latch disabled → legacy overlap-drain path. Only used when herbivoreLatch. */
+  grazeLatchRange: number;
+  /** Graze tether spring constant — pulls a latched forager to its plant cell (the "attachment") so
+   *  grazing is sustained. Scatter spring (mutual), subject to the same symplectic-Euler ceiling as
+   *  bonds; keep modest so MOVER thrust can overpower it (a forager can still flee). 0 = no tether.
+   *  Only used when herbivoreLatch. */
+  grazeLatchStiffness: number;
+  /** SATIATION: a forager mouth whose own cell energy ≥ grazeSatiation stops eating — it releases any
+   *  graze-latch and skips ALL feeding this tick (no graze drain, no legacy overlap drain), so a
+   *  well-fed forager roams instead of camping the food-knot. Gated STRICTLY on herbivoreLatch, so
+   *  with the latch off satiation never applies and the legacy path is byte-identical. 1e9 (default)
+   *  = effectively never satiated → no-op. Only used when herbivoreLatch. */
+  grazeSatiation: number;
+  /** SATIATED-ROAM: when >0, a non-carnivore MOVER whose cell energy ≥ grazeSatiation has its
+   *  food-steering brain OVERRIDDEN by a wander (heading drift of ±exploreWander rad/tick) + a cruise
+   *  thrust, so a fed forager swims off to explore instead of oscillating on the food patch (the
+   *  "wiggle"). 0 (default) = off → legacy motor path byte-identical. The demo sets it. */
+  exploreWander: number;
+  /** BASELINE PATROL: a thrust FLOOR (world-units) for non-carnivore MOVERs, applied on top of the
+   *  chemotaxis steer + an exploreWander heading wander, EVERY tick regardless of hunger. So a hungry
+   *  forager keeps swimming/patrolling its community (it still climbs the food gradient) instead of
+   *  camping the gradient peak and oscillating in place — the steady-state "wiggle". 0 (default) =
+   *  off → legacy motor path byte-identical. The demo sets it. */
+  patrolCruise: number;
 
   // Sensing & movement (§4.4). All live knobs.
   /** Gradient magnitude below which a mover coasts at cruiseThrust instead of steering. */
@@ -332,6 +370,41 @@ export interface Config {
   currentStrength: number;
   /** Current field evolution (diffusion) rate, [0,0.25]. */
   currentEvolveRate: number;
+
+  // ──── Sessile chain-plants ────
+  // A plant is an organism of PHOTO cells: a pinned tough BASE (anchored=1) + a bonded chain. Gated on
+  // sessilePlants so the default config keeps the legacy free-clone PHOTO path and every existing test/probe
+  // is byte-identical. The live demo (main.ts) sets it true.
+  /** Master flag for the sessile chain-plant model. false (default) = legacy free-clone PHOTO; true = plants
+   *  grow chains, spore, and are grazed (free-clone PHOTO division is skipped, base cells are pinned/tough). */
+  sessilePlants: boolean;
+  /** Hard cap on cells per plant (base + chain). */
+  plantMaxChain: number;
+  /** Min cells before a plant can spore. */
+  plantMaturityChain: number;
+  /** Organism energy needed to grow one tip cell. */
+  plantGrowthThreshold: number;
+  /** Energy spent (deducted from the base) per tip cell grown. */
+  plantGrowthCost: number;
+  /** Chain link rest length in world units (~2.5·cellRadius). */
+  plantBondLen: number;
+  /** Base energy needed before a mature plant emits a spore. */
+  plantSporeThreshold: number;
+  /** Energy spent (deducted from the base) per spore emitted. */
+  plantSporeCost: number;
+  /** Spore ejection speed; with damping=0.5 the total drift ≈ this value in world units (sets dispersal). */
+  plantSporeImpulse: number;
+  /** Speed below which a drifting spore anchors into a new base. */
+  plantSettleSpeed: number;
+  /** Plant-base density cap: a slowed free-PHOTO spore does NOT anchor into a new base if its coarse
+   *  density-grid bucket already holds more than this many live cells (localDensity, the same field
+   *  crowdDivideCap fills via World.fillDensity) — it keeps drifting (settles later or starves), so a
+   *  pocket stays discrete patches with open water instead of a packed green wall. localDensity is only
+   *  filled when crowdDivideCap is on; when off it's 0 so this cap never triggers (safe). 65535 (Uint16
+   *  max, default) = OFF (no-op), mirroring crowdDivideCap. */
+  plantBaseDensityCap: number;
+  /** Base digest-rate multiplier (anchored base drains baseToughness× as fast as a chain cell). 0.1 ≈ 10× tougher. */
+  baseToughness: number;
 }
 
 export function defaultConfig(overrides: Partial<Config> = {}): Config {
@@ -398,6 +471,14 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     viewRange: 0, // OFF by default (no cone query) — byte-identical to pre-sight; founder genomes opt in
     viewHalfAngle: 0,
     loudnessGain: 0, // OFF by default — NoiseField deposit+step skipped entirely (byte-identical)
+
+    herbivoreLatch: false, // OFF by default → legacy instant-drain eating, byte-identical; the demo sets true
+    grazeRate: 1.0, // modest per-tick latch drain; at the r4 economy a lit chain cell refills ~0.78/tick (photoGain·area·light) so net drain is slow → a 10-20 unit cell takes ~15-90 ticks to consume (the OWNER fine-tunes after)
+    grazeLatchRange: 1.5, // acquire+hold radius ×(ri+rj); kept ≤1.5 so grazeLatchRange·(ri+rj) stays inside the 3×3 hash window (the predLatchRange 2.5 risks missing out-of-bucket cells)
+    grazeLatchStiffness: 0.8, // gentle tether (< predLatchStiffness 1.0, ≪ bond ceiling 2.5) so a fleeing forager's MOVER thrust can overpower it and detach
+    grazeSatiation: 1e9, // OFF by default (effectively never satiated → byte-identical legacy); the demo lowers it so a fed forager stops grazing and roams
+    exploreWander: 0, // OFF by default (no satiated-roam override → byte-identical motor path); the demo sets it so fed foragers swim off and explore
+    patrolCruise: 0, // OFF by default (no thrust floor → byte-identical motor path); the demo sets it so hungry foragers keep swimming/patrolling instead of camping the food peak
 
     senseThreshold: 1e-4,
     turnRate: 0.25, // ~14°/tick — visibly curves toward food without snapping
@@ -509,6 +590,23 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     currentPatchRadius: 6,
     currentStrength: 0,
     currentEvolveRate: 0.05,
+
+    // ──── Sessile chain-plants ────
+    // OFF by default so the legacy free-clone PHOTO path runs and every existing test/probe is byte-identical.
+    // Energy knobs below are scaled for the library default cellRadius=6 (area 36); the r4 demo (area 16)
+    // overrides them ~2.25× smaller. baseToughness/chain-counts/settleSpeed/impulse are geometry/velocity, not energy.
+    sessilePlants: false,
+    plantMaxChain: 7,
+    plantMaturityChain: 7,
+    plantGrowthThreshold: 27, // organism energy gate to grow a tip cell (r6; ~12 at the r4 demo)
+    plantGrowthCost: 18, // deducted from the base per tip cell (threshold > cost keeps a survival buffer)
+    plantBondLen: 15, // 2.5·cellRadius at r6 (10 at the r4 demo)
+    plantSporeThreshold: 135, // base energy gate to spore (r6; ~60 at the r4 demo)
+    plantSporeCost: 90, // deducted from the base per spore (threshold > cost so sporing never self-starves the base)
+    plantSporeImpulse: 25, // total drift ≈ impulse world-units at damping 0.5 (a few cell radii of dispersal)
+    plantSettleSpeed: 0.5, // a spore anchors when speed < this (anchors ~6 ticks after a 25-impulse launch)
+    plantBaseDensityCap: 65535, // OFF by default (Uint16 max → no-op, mirrors crowdDivideCap); the demo lowers it to rein plant-base overgrowth into discrete patches
+    baseToughness: 0.1, // a base drains ~10× slower than a chain cell — evolvably killable, not invulnerable
 
     ...overrides,
   };

@@ -19,12 +19,12 @@ import { renderGenomeInspector } from './genome-inspector';
 import { renderHallOfFame } from './hall-of-fame';
 import { renderPhylogeny } from './phylogeny-panel';
 import { renderMenagerie } from './menagerie-panel';
+import { PALETTE } from '../render/palette';
 import {
   buildCritterGenome,
   buildAutotrophGenome,
   buildForagerGenome,
   buildNightForagerGenome,
-  buildGlowForagerGenome,
   buildToxinAvoiderGenome,
   buildPredatorGenome,
 } from '../core/genome/critter-genome';
@@ -34,26 +34,38 @@ import type { LineageSummary } from '../core/sim/lineage-board';
 import type { SpeciesSummary } from '../core/sim/species-board';
 
 const canvas = document.getElementById('view') as HTMLCanvasElement;
-const hud = document.getElementById('hud');
+const hudBody = document.getElementById('hud-body');
 
-// The VALIDATED 3-trophic ECOLOGY (M7.5): plants → foragers → predators all coexist with no top-ups
-// across seeds 3/7/42/99 for 12k+ ticks. PHOTO plants are the base food; brain-driven FORAGERS graze
-// them (sense→swim→eat→breed→starve→MEAT→regrow); brain-driven PREDATORS (red) hunt the foragers —
-// ambush-loiter in prey-scent, latch on, and drain them. Foragers in turn FLEE the predator-scent
-// gradient. The plant field has a density carrying capacity (crowdDivideCap) so it stays de-jammed —
-// open water you can watch creatures swim through. Config is the headless/feel-probe.ts LOCKED set.
-const FORAGER_INIT_E = 45; // per-cell forager seed energy (r4 rescale; ~0.44× the old r6 100)
-const PRED_INIT_E = FORAGER_INIT_E * 8; // 8× predator reserve — survives the early hunt-establish gauntlet
+// ARCHIPELAGO ECOLOGY (grander scale): an 8192² ocean dotted with ~20 isolated COMMUNITIES, one per
+// bright light pocket, each its own little ecosystem — a tough anchored PHOTO plant base that grows a
+// bonded chain to maturity then emits drifting spores, plus a couple of brain-driven FORAGERS that
+// GRAZE-LATCH the chain (drain a cell gradually; draining it empty SEVERS it → cut-off cells fall to
+// MEAT) and one ambush PREDATOR (red) that latches + drains foragers (foragers FLEE the predator-scent).
+// Light is sharp pockets with vast dark gaps between, so plants survive only on their island and spores
+// drifting into the void starve. Free-clone PHOTO division is OFF (sessilePlants) → the only free PHOTO
+// is a spore. THE VISION: communities form, and over time slowburn-extended creatures cross the empty
+// gaps to colonise neighbours. THRIVE STATUS (honest, co-owned tuning): plants thrive per island and
+// creatures persist much longer under SLOWBURN (basalCost/moveCost down — the headless sweep's clear
+// winner; piling on food made it worse), but foragers do NOT yet reproduce enough to overflow + cross
+// gaps — that reproduction balance is the next tuning pass (beads life-sim-61v).
+// NOTE on MASS (an earlier open question): lowering genome mass DOES raise terminal speed (mass 2→1
+// gave 0.37→0.88 u/tick) but FRAGMENTS the body at the live thrust (11→5 bonds at mass 1, 0 at 0.5),
+// breaking cohesion — so the prior "no usable speed gain" finding stands; mass stays 2, survival leans
+// on basal/move (slowburn), exactly as directed.
+const FORAGER_INIT_E = 40; // CHEAP OFFSPRING (was 70): the real breeding bar is offspringCost(6·FE)+parentFloor, NOT reproThreshold. At 40 a forager breeds after banking ~255 (vs 480 at 70) — r-selected prey that actually multiplies. (headless: foragers go from never-breeding to a stable 66/archipelago)
+const PRED_INIT_E = 560; // predator reserve, decoupled from FORAGER_INIT_E so cheap forager offspring doesn't starve the predators' own provisioning
 const config = defaultConfig({
   seed: 3,
-  maxCells: 300_000,
-  maxBonds: 131_072,
-  maxOrganisms: 65_536,
-  // Smaller cells (r4) in a bigger 2048² dish — the rescale that de-jams the field and gives every
-  // creature room to swim and be SEEN (feel goal: fewer, longer-lived individuals you can follow).
+  maxCells: 400_000,
+  maxBonds: 262_144,
+  maxOrganisms: 131_072,
+  // GRANDER SCALE — an 8192² archipelago. Isolated little communities (one per light pocket) sit far
+  // apart in vast empty water; the hope is that over time creatures cross the gaps to colonise new
+  // islands. Performance holds (validated headless ~3ms/tick) because the per-tick work is O(live),
+  // not O(area), so the mostly-empty ocean is nearly free. Cells stay r4 so individuals are legible.
   cellRadius: 4,
-  worldWidth: 2048,
-  worldHeight: 2048,
+  worldWidth: 8192,
+  worldHeight: 8192,
   initialPhotoFraction: 1, // all-plant seed: pure food, no competing single-cell eaters
   initialMotileFraction: 0,
   // De-jam the plant field: a PHOTO cell whose 32-unit density bucket is over the cap skips division
@@ -65,10 +77,10 @@ const config = defaultConfig({
   // NOTE (M7.5 merge): now also carries the env load below (temp penalty, night dimming, toxin). The
   // combined economy is RE-VALIDATED headlessly before merge; retune basal/repro here if a level dies.
   divideThreshold: 70, // plant division threshold (rescaled from 150 @ r6 by area ratio)
-  reproThreshold: 280, // organism repro threshold (rescaled from 600 @ r6)
-  reproParentFloor: 60,
+  reproThreshold: 150, // eligibility floor; the BINDING breeding gate is offspringCost(6·FE=240)+reproParentFloor below
+  reproParentFloor: 15, // energy the parent keeps after provisioning — low so a fed forager can afford to split
   organismDeathFloor: 0, // an unfed creature starves to MEAT, feeding the next trophic level
-  basalCost: 0.004, // low upkeep so creatures bleed slowly between meals; env temp/toxin adds on top
+  basalCost: 0.0008, // SLOWBURN (headless sweep winner — the dominant thrive lever): basal is ~90% of creature bleed, so slowing it is what lets foragers live long enough to breed AND survive a swim across the empty gaps between communities. NOT a food lever. (was 0.0015)
   cruiseThrust: 1, // friskier roam so a searching forager visibly explores the open water
   // ~2× faster swim (live-feel layer). Terminal speed ≈ thrust/mass, so we lift the neural thrust
   // output + cap and quicken turning. moveCost (energy = moveCost·thrust²) is HALVED so the ~2×
@@ -78,7 +90,7 @@ const config = defaultConfig({
   thrustScale: 5, // neural thrust per motor activation (probe default 3)
   thrustBias: 3, // baseline cruise term (probe default 2)
   turnScale: 0.45, // faster steering so they don't overshoot at the higher speed (default 0.3)
-  moveCost: 0.01, // halved from 0.02 to offset the quadratic cost of the higher thrust
+  moveCost: 0.0015, // SLOWBURN: cheaper to search the larger ocean — covers more water per joule between meals/communities (was 0.003)
   // PREDATION + FLEEING (the validated 3-trophic balance — feel-probe.ts LOCKED):
   preyDeposit: 5, // forager flesh emits the prey-scent gradient predators hunt
   predDigestRate: 40, // energy a PREDATOR cell drains from held prey per tick (richer kills)
@@ -97,6 +109,31 @@ const config = defaultConfig({
   viewRange: 32, // sight cone range; R = ceil(32/8) = 4 (within the R≤4 cost ceiling)
   viewHalfAngle: 0.6, // sight half-cone (~34°)
   mutationSenseSourceRate: 0.02, // evolution can acquire/swap sense modalities live (smell↔sight↔hearing)
+  // HERBIVORE GRAZE-LATCH: a forager mouth latches onto a PHOTO chain cell and grazes it gradually
+  // (grazeRate/tick) instead of the instant-kill bite — a brief brush no longer severs the cell and
+  // feeding is sustained. NOTE (open tuning, co-owned): gradual grazing alone does NOT yet make
+  // foragers THRIVE in this sparse 10-pocket world — headless sweep shows foragers peak ~4-9 then
+  // decline at every grazeRate (low rate starves them, high rate is instant-kill again). The real
+  // lever is the food ECONOMY (pocket density/count, repro cost, harvestable plant energy), tuned
+  // next. grazeRate 4 = a visibly GRADUAL graze (a ~15-energy cell takes ~5 ticks) for the feel.
+  herbivoreLatch: true,
+  grazeRate: 4, // gradual drain (was 1.0 = too slow, starved foragers); pending economy co-tuning
+  grazeLatchRange: 2.5, // acquire+hold radius ×(ri+rj)
+  grazeLatchStiffness: 20, // STRONG hold — the breakthrough: at 1.0 a forager's cruise thrust towed it off food after one nibble (graze→swim into void→starve, the boom-bust crash). A firm tether makes it STAY and feed until banked, which is what lets the population sustain instead of crash. Latch still releases when the cell is eaten/gone.
+  // SATIATION (eat-and-go): a forager mouth satiates at ~50/cell (~300 organism energy across 6 cells),
+  // ABOVE the ~255 breeding bar, so it still BREEDS before it stops grazing — then it releases the
+  // strong latch and roams, freeing the food-knot and making creatures visibly swim instead of jostle.
+  grazeSatiation: 50,
+  // SATIATED-ROAM: a forager is pure chemotaxis (steer-to-food/thrust-to-food), so once fed it just
+  // OSCILLATES on the food patch — the "wiggle". When sated (energy ≥ grazeSatiation) we override the
+  // food-steering with a gentle wander + cruise so it swims OFF to explore open water, then re-engages
+  // food-seeking when hungry (feed→patrol→feed) — what makes creatures read as life swimming around.
+  exploreWander: 0.3,
+  // BASELINE PATROL: a hunger-independent thrust floor (~6) + the exploreWander drift on top of
+  // chemotaxis, so a HUNGRY forager keeps swimming/patrolling its community instead of camping the
+  // food-gradient peak (the steady-state wiggle). It still climbs the gradient toward food — it just
+  // never sits still. Tuned to swim without burning so much it starves (validated live).
+  patrolCruise: 6,
   // M7: mutation ON so both heterotrophs ADAPT and DIVERSIFY live (library defaults stay 0).
   mutationWeightRate: 0.25,
   mutationWeightSigma: 0.1,
@@ -117,14 +154,14 @@ const config = defaultConfig({
   seasonLength: 10000,
   seasonDepth: 0.2,
   // Rocks: static obstacles for shelter / chokepoints.
-  rockCount: 40,
+  rockCount: 80, // more obstacles for the larger ocean
   rockRadiusMin: 8,
   rockRadiusMax: 20,
   rockRepulsion: 4,
   rockGridSize: 64,
   // Temperature: patchy heatmap. Penalty GENTLED to 0.25 (probe showed 0.5 was the dominant
   // forager stressor — crashed the boom; 0.25 keeps it a selection pressure without starving).
-  tempPatchCount: 12,
+  tempPatchCount: 24, // scale patch count with the 16× larger world
   tempMin: 0,
   tempMax: 1,
   tempComfortLow: 0.3,
@@ -133,8 +170,8 @@ const config = defaultConfig({
   tempHeatPenalty: 0.25,
   // Bioluminescence ON: NEURON glow effectors emit into the GlowField (warm additive overlay at
   // night). glowCost is small so glowing is affordable; the seeded glow-foragers pay it actively.
-  glowGridCols: 32,
-  glowGridRows: 32,
+  glowGridCols: 64, // scale field grids with the 8192² world to keep patch resolution
+  glowGridRows: 64,
   glowDiffuse: 0.2,
   glowDecay: 0.05,
   glowGain: 1,
@@ -142,67 +179,129 @@ const config = defaultConfig({
   // Toxin ON, GENTLE: accumulates around decaying MEAT (corpse fields) and lightly damages cells.
   // At toxinDamage 0.5 the probe EXTINCTS foragers by tick 679; 0.04 is a mild pressure that the
   // toxin-avoider variant can exploit without collapsing the ecosystem.
-  toxinGridCols: 64,
-  toxinGridRows: 64,
+  toxinGridCols: 128,
+  toxinGridRows: 128,
   toxinDiffuse: 0.2,
   toxinDecay: 0.03,
   toxinDamage: 0.04,
   toxinDepositOnMeatDecay: 0.1,
-  // Current ON: a slow vector drift. The probe showed strength 2 SUSTAINS births (drift pushes
-  // foragers into food patches); a mild selection pressure for current-aware movement.
-  currentGridCols: 32,
-  currentGridRows: 32,
+  // Current OFF: spore dispersal IS the plant drift, so the spec keeps the vector drift dormant
+  // (currentStrength 0 → applyCurrent + current.step both skipped). Shift+U can still toggle it on.
+  currentGridCols: 64,
+  currentGridRows: 64,
   currentPatchCount: 16,
   currentPatchRadius: 6,
-  currentStrength: 2,
+  currentStrength: 0,
   currentEvolveRate: 0.05,
+  // ── SESSILE CHAIN PLANTS (the demo's food base) ──
+  // A plant is an ORGANISM of PHOTO cells: an anchored tough base + a bonded chain that grows one
+  // tip cell at a time to maturity, then emits drifting spores that re-root into new pockets.
+  // Grazing a chain cell to empty severs it; cut-off cells fall to MEAT. Free-clone PHOTO division
+  // is gated OFF (sessilePlants) so the ONLY free PHOTO is a spore.
+  sessilePlants: true,
+  // r4 economy (area=16): thresholds > costs so a grow/spore never starves the base, and a
+  // marginal-light plant stalls instead of limping to maturity (the spatial light filter).
+  plantGrowthThreshold: 12,
+  plantGrowthCost: 8,
+  plantBondLen: 10, // 2.5·cellRadius at r4
+  // SPORE CONTAINMENT (GOAL A): pockets now sit ~500–680 units apart (jittered macro-grid below), so
+  // spores are reined to stay INSIDE the parent pocket — they fill it but don't bridge to a neighbour.
+  // A spore that drifts into the dark gap settles in darkness and starves (pockets self-select).
+  // Fewer, costlier, shorter-drift, sooner-settling spores → densify, not spread. Cost < threshold so
+  // emitting a spore never starves the base below maturity.
+  plantSporeThreshold: 90,
+  plantSporeCost: 55,
+  plantSporeImpulse: 8, // halved drift (was 16) — keeps offspring within the parent pocket's lit zone
+  plantSettleSpeed: 1.0, // anchor sooner (was 0.5) so a spore re-roots near the parent, not mid-gap
+  // PLANT DENSITY CAP (rein overgrowth): a slowed spore in an already-crowded density bucket (>6 live
+  // cells) refuses to anchor and keeps drifting — keeps pockets as discrete green patches with open
+  // water between, not a packed wall. Live because crowdDivideCap (above) fills localDensity each tick.
+  plantBaseDensityCap: 6,
+  // ── LIGHT POCKETS: ~10 small sharp patches with dark gaps so spores in the dark starve ──
+  // Background between pockets must stay below the basal/photoGain ≈ 0.08 break-even, so diffuse is
+  // tiny; regen stays high so each pocket holds near full light. Pockets select plants spatially.
+  lightGridCols: 64, // scale the light grid with the 8192² world → ~128-unit cells keep pockets sharp
+  lightGridRows: 64,
+  lightPatchCount: 20, // ~20 communities scattered across the archipelago
+  lightPatchRadius: 2, // grid cells (~256-unit sharp pockets over the 128-unit grid)
+  lightDiffuse: 0.02,
+  // FOOD SMELL GRADIENT (chemotaxis): foodDiffuse stays 0.22 (≈ the 0.25 stability ceiling → max
+  // reach). foodDecay raised 0.03→0.06 (live-dialed): at 0.03 the diffused smell barely decayed, so a
+  // weak food signal pooled across the WHOLE map (~14% of peak everywhere = the "flat green" haze). At
+  // 0.06 the far-field floor drops to ~3% — open water reads as "no food" — while the gradient keeps
+  // broad reach (~24% of peak 380u out), so a forager gets a clean directional signal to swim toward.
+  foodDecay: 0.06,
 });
 const world = new World(config);
-// ~18000 PHOTO plants ≈ the crowdDivideCap equilibrium density, so food is plentiful from tick 0
-// and both heterotrophs establish before the plant field finishes settling (avoids early starve-out).
-world.seedLife(18000);
 
 // M6 demo: organisms DEVELOPED from a genome (proves the encoding drives the live demo).
 function developInto(genome: Genome, x: number, y: number, heading: number): number {
   return world.spawnOrganism(genome, x, y, heading);
 }
-// The ACTIVE population: a MIX of brain-driven foragers seeded across the dish. The base forager
-// (sense→steer→thrust loop) is the majority; the three env-variant foragers exercise the new
-// sensor channels + glow so the features are ecologically live, not just wired:
-//   • night-forager  — AMBIENT_LIGHT sensor → nocturnal thrust modulation
-//   • glow-forager   — turn-neuron glows + GLOW sensor → signaling/following
-//   • toxin-avoider  — TOXIN sensor → steers away from corpse-field toxin
-// All share the foraging loop so they can eat; mutation (sensorChannelRate>0) lets lineages
-// acquire/lose these channels over generations. Each is a legible brain (brain inspector B).
-let firstForagerOrg = -1;
-const spawnX = (k: number) => world.config.worldWidth * (0.1 + (0.8 * ((k * 7) % 20)) / 20);
-const spawnY = (k: number) => world.config.worldHeight * (0.1 + (0.8 * ((k * 13) % 20)) / 20);
-const spawnH = (k: number) => (k * 2.39996) % (Math.PI * 2);
-// 250 foragers — the prey base the predator layer needs to self-sustain (feel-probe.ts LOCKED count).
-// Mostly the base forager (70%); the rest are the three env-sensor variants, interleaved so they're
-// scattered, so the new sensor channels are ecologically live, not just wired.
-for (let k = 0; k < 250; k++) {
-  const r = k % 10;
-  const genome =
-    r < 7
-      ? buildForagerGenome(world.config.cellRadius, FORAGER_INIT_E)
-      : r === 7
-        ? buildNightForagerGenome(world.config.cellRadius, FORAGER_INIT_E)
-        : r === 8
-          ? buildGlowForagerGenome(world.config.cellRadius, FORAGER_INIT_E)
-          : buildToxinAvoiderGenome(world.config.cellRadius, FORAGER_INIT_E);
-  const org = developInto(genome, spawnX(k), spawnY(k), spawnH(k));
-  if (k === 0) firstForagerOrg = org;
+
+// ── ARCHIPELAGO FOUNDER SCENE ──
+// ~20 isolated COMMUNITIES, one per bright light pocket, scattered across the 8192² ocean. The light
+// patches are SPREAD on a jittered macro-grid (World.initSpread), so we READ BACK the seeded field to
+// find the pocket centres (brightest grid cells, kept ≥2 grid cells apart so communities are distinct).
+// Each community is a SELF-SUFFICIENT little ecosystem (headless-validated stable to 4000+ ticks): a
+// THICKET of 3 tough anchored plant bases (they grow chains + spore → dense local food), ~5 brain-driven
+// foragers that GRAZE-LATCH and BREED on the island, and one ambush predator — all three trophic levels
+// sustain locally (≈66 foragers / 20 predators archipelago-wide, dead stable). Dense local food + enough
+// founders are what make an island survive in isolation at this grand scale. The empty water between
+// islands is the frontier slowburn-extended foragers may, in time, cross to colonise an empty pocket.
+const COMMUNITY_COUNT = 20;
+const PLANT_BASES_PER_ISLAND = 3; // a thicket of dense local food — the key to island self-sufficiency
+const FORAGERS_PER_ISLAND = 5; // a viable founding group that breeds and sustains
+const lf = world.light;
+const patchW = config.worldWidth / lf.cols;
+const patchH = config.worldHeight / lf.rows;
+const ranked = Array.from(lf.field, (v, i) => ({
+  v,
+  col: i % lf.cols,
+  row: (i / lf.cols) | 0,
+})).sort((a, b) => b.v - a.v);
+const pockets: { x: number; y: number }[] = [];
+for (const cell of ranked) {
+  if (pockets.length >= COMMUNITY_COUNT) break;
+  const x = cell.col * patchW + patchW / 2;
+  const y = cell.row * patchH + patchH / 2;
+  // ≥2 grid cells apart → genuinely separate islands with empty gaps between.
+  const far = pockets.every(
+    (p) => Math.abs(p.x - x) > 2 * patchW || Math.abs(p.y - y) > 2 * patchH,
+  );
+  if (far) pockets.push({ x, y });
 }
-// The PREDATOR layer (red): brain-driven hunters that ambush-loiter in prey-scent (sensorFwd→thrust
-// -1.5), latch onto a forager organism and drain it. 24 seeded — they bloom (~25-30) then settle to a
-// healthy breeding population. The ambush brain + speed edge + latch let them self-sustain at 2048².
-for (let k = 0; k < 24; k++) {
+
+// Per-island seeding: a 3-base plant thicket + 5 foragers + 1 predator. Genome builders unchanged;
+// rotate the forager variants so the env-sensor channels stay ecologically live across the archipelago.
+let firstForagerOrg = -1;
+const CREATURE_OFFSET = 90;
+const foragerVariants = [buildForagerGenome, buildNightForagerGenome, buildToxinAvoiderGenome];
+let fIdx = 0;
+for (let c = 0; c < pockets.length; c++) {
+  const p = pockets[c]!;
+  // a thicket of anchored plant bases — dense local food that grows chains + spores to fill the pocket.
+  for (let b = 0; b < PLANT_BASES_PER_ISLAND; b++) {
+    const a = (b / PLANT_BASES_PER_ISLAND) * Math.PI * 2;
+    world.seedPlantBase(p.x + Math.cos(a) * 50 * b, p.y + Math.sin(a) * 50 * b);
+  }
+  for (let k = 0; k < FORAGERS_PER_ISLAND; k++) {
+    const a = (fIdx * 2.39996) % (Math.PI * 2);
+    const org = developInto(
+      foragerVariants[fIdx % foragerVariants.length]!(world.config.cellRadius, FORAGER_INIT_E),
+      p.x + Math.cos(a) * CREATURE_OFFSET,
+      p.y + Math.sin(a) * CREATURE_OFFSET,
+      a,
+    );
+    if (firstForagerOrg < 0) firstForagerOrg = org;
+    fIdx++;
+  }
+  // one ambush predator per island (red) — latches onto a forager and drains it.
   developInto(
     buildPredatorGenome(world.config.cellRadius, PRED_INIT_E, -1.5),
-    world.config.worldWidth * (0.15 + (0.7 * ((k * 11) % 13)) / 13),
-    world.config.worldHeight * (0.15 + (0.7 * ((k * 5) % 13)) / 13),
-    (k * 1.7) % (Math.PI * 2),
+    p.x + CREATURE_OFFSET,
+    p.y + CREATURE_OFFSET,
+    1.0,
   );
 }
 
@@ -215,7 +314,7 @@ function createRenderer(): Renderer {
     return new Renderer(canvas, config.maxCells, config.cellRadius * 1.3);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    if (hud) hud.textContent = `Viewer needs WebGL2 — initialisation failed: ${msg}`;
+    if (hudBody) hudBody.textContent = `Viewer needs WebGL2 — initialisation failed: ${msg}`;
     throw err;
   }
 }
@@ -292,8 +391,27 @@ let showPhylo = false;
 const menagPanel = document.getElementById('menagerie') as HTMLElement;
 let showMenag = false;
 
-// Legend / "what am I seeing" overlay (toggled with `H`); shown by default.
+// Legend / "what am I seeing" overlay (toggled with `H`); hidden by default so the sim is
+// visible on first open. Swatch colours are applied from PALETTE (single source of truth).
 const legend = document.getElementById('legend');
+if (legend) {
+  const swatchMap: Record<string, string> = {
+    photo: PALETTE.photo,
+    digestive: PALETTE.digestive,
+    meat: PALETTE.meat,
+    motile: PALETTE.motile,
+    sensor: PALETTE.sensor,
+    neuron: PALETTE.neuron,
+    mover: PALETTE.mover,
+    predator: PALETTE.predator,
+  };
+  for (const [key, hex] of Object.entries(swatchMap)) {
+    const el = legend.querySelector<HTMLElement>(`[data-sw="${key}"]`);
+    if (el) el.style.background = hex;
+    const wedge = legend.querySelector<HTMLElement>(`[data-swedge="${key}"]`);
+    if (wedge) wedge.style.borderLeftColor = hex;
+  }
+}
 
 // Telemetry dashboard + inspect panel + live economy knobs.
 const dash = new TelemetryDashboard(document.getElementById('telemetry') as HTMLCanvasElement);
@@ -440,13 +558,23 @@ function drawScene(alpha: number): void {
 // so individual foragers are legible from the start instead of specks in a whole-world fit. The
 // wheel zooms out to the full ecosystem; resize preserves the user's current zoom.
 const DEFAULT_VIEW_SPAN = 520;
+// device pixel ratio (capped at 2) for crisp rendering on Retina; recomputed on resize.
+// camera.scale and canvas backing live in device px; pointer events are multiplied by dpr
+// to match (see the mousedown/mouseup/mousemove handlers).
+let dpr = 1;
 function fit(initial: boolean): void {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
+  const cssW = window.innerWidth;
+  const cssH = window.innerHeight;
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = Math.round(cssW * dpr);
+  canvas.height = Math.round(cssH * dpr);
+  canvas.style.width = `${cssW}px`;
+  canvas.style.height = `${cssH}px`;
   renderer.resize(canvas.width, canvas.height);
-  bondOverlay.resize(canvas.width, canvas.height);
-  rockOverlay.resize(canvas.width, canvas.height);
-  currentOverlay.resize(canvas.width, canvas.height);
+  // Canvas2D overlays take CSS px + dpr (they scale their own backing + line widths).
+  bondOverlay.resize(cssW, cssH, dpr);
+  rockOverlay.resize(cssW, cssH, dpr);
+  currentOverlay.resize(cssW, cssH, dpr);
   if (initial) camera.scale = Math.min(canvas.width, canvas.height) / DEFAULT_VIEW_SPAN;
 }
 window.addEventListener('resize', () => fit(false));
@@ -479,24 +607,26 @@ let downX = 0;
 let downY = 0;
 canvas.addEventListener('mousedown', (e) => {
   dragging = true;
-  lastX = e.clientX;
-  lastY = e.clientY;
-  downX = e.clientX;
-  downY = e.clientY;
+  lastX = e.clientX * dpr;
+  lastY = e.clientY * dpr;
+  downX = lastX;
+  downY = lastY;
 });
 window.addEventListener('mouseup', (e) => {
   if (dragging) {
-    const moved = Math.hypot(e.clientX - downX, e.clientY - downY);
-    if (moved < 4) {
+    const px = e.clientX * dpr;
+    const py = e.clientY * dpr;
+    const moved = Math.hypot(px - downX, py - downY);
+    if (moved < 4 * dpr) {
       // shift+click = drop a forager at the cursor (hand-of-god, §11); alt+click = autotroph.
       if (e.shiftKey || e.altKey) {
-        const wx = camera.x + (e.clientX - canvas.width / 2) / camera.scale;
-        const wy = camera.y + (e.clientY - canvas.height / 2) / camera.scale;
+        const wx = camera.x + (px - canvas.width / 2) / camera.scale;
+        const wy = camera.y + (py - canvas.height / 2) / camera.scale;
         if (e.altKey) developInto(buildAutotrophGenome(world.config.cellRadius), wx, wy, 0);
         else developInto(buildForagerGenome(world.config.cellRadius), wx, wy, Math.random() * 6.28);
       } else {
-        inspectAt(world, camera, e.clientX, e.clientY, canvas.width, canvas.height, inspectPanel);
-        const id = pickNearest(e.clientX, e.clientY);
+        inspectAt(world, camera, px, py, canvas.width, canvas.height, inspectPanel);
+        const id = pickNearest(px, py);
         if (id >= 0) {
           followId = id;
           followGen = f.generation[id]!;
@@ -508,10 +638,12 @@ window.addEventListener('mouseup', (e) => {
 });
 window.addEventListener('mousemove', (e) => {
   if (!dragging) return;
-  camera.x -= (e.clientX - lastX) / camera.scale;
-  camera.y -= (e.clientY - lastY) / camera.scale;
-  lastX = e.clientX;
-  lastY = e.clientY;
+  const px = e.clientX * dpr;
+  const py = e.clientY * dpr;
+  camera.x -= (px - lastX) / camera.scale;
+  camera.y -= (py - lastY) / camera.scale;
+  lastX = px;
+  lastY = py;
 });
 
 // Zoom with wheel.
@@ -620,7 +752,7 @@ let fps = 0;
 let lastFpsT = performance.now();
 
 function updateHud(): void {
-  if (!hud) return;
+  if (!hudBody) return;
   const m = world.metrics;
   const net = world.net;
   const lm = lightMultiplier(
@@ -630,16 +762,19 @@ function updateHud(): void {
     config.seasonLength,
     config.seasonDepth,
   );
-  hud.textContent =
-    `cells ${world.cells.aliveCount}  ·  tick ${world.tickCount}  ·  ${fps} fps  ·  ` +
-    `${speed.toFixed(2)}×${paused ? ' paused' : ''}  ·  zoom ${camera.scale.toFixed(2)}` +
-    `  ·  day ${(lm * 100).toFixed(0)}%\n` +
-    `photo ${m.photo}  dig ${m.digestive}  motile ${m.motile}  meat ${m.meat}` +
-    `   ·   ⌀energy ${m.meanEnergy.toFixed(0)}  ·  diversity ${m.diversity.toFixed(3)}\n` +
-    `evolve: geno-div ${m.genotypicDiversity.toFixed(3)}  ·  gen ${m.maxGeneration}  ·  ⌀genome ${m.meanGenomeSize.toFixed(1)} cells/org ${m.meanCellsPerOrganism.toFixed(1)}\n` +
-    `brain: ${net.liveNeuronCount} neurons · ${net.liveSynapseCount} synapses` +
-    `   ·   light ${showLight ? 'on' : 'off'}  smell ${showFood ? 'on' : 'off'}  bonds ${showBonds ? 'on' : 'off'}  rocks ${showRocks ? 'on' : 'off'}  temp ${showTemp ? 'on' : 'off'}  glow ${showGlow ? 'on' : 'off'}  toxin ${showToxin ? 'on' : 'off'}  curr-force ${currentForceOn ? 'on' : 'off'}${showCurrent ? '▸' : ''}` +
-    `${followId >= 0 ? `  ·  follow #${followId}` : ''}   ·   ${legend && !legend.classList.contains('hidden') ? 'H hide legend' : 'H legend'}`;
+  const layers =
+    `light ${showLight ? 'on' : 'off'} · smell ${showFood ? 'on' : 'off'} · bonds ${showBonds ? 'on' : 'off'} · ` +
+    `rocks ${showRocks ? 'on' : 'off'} · temp ${showTemp ? 'on' : 'off'} · glow ${showGlow ? 'on' : 'off'} · ` +
+    `toxin ${showToxin ? 'on' : 'off'} · curr-force ${currentForceOn ? 'on' : 'off'}` +
+    (showCurrent ? ' (arrow)' : '');
+  hudBody.textContent =
+    `cells ${world.cells.aliveCount} · tick ${world.tickCount} · ${fps} fps · ` +
+    `${speed.toFixed(2)}×${paused ? ' paused' : ''} · zoom ${(camera.scale / dpr).toFixed(2)} · ` +
+    `day ${(lm * 100).toFixed(0)}%${followId >= 0 ? ` · follow #${followId}` : ''}\n` +
+    `photo ${m.photo}  dig ${m.digestive}  motile ${m.motile}  meat ${m.meat}  ·  avg energy ${m.meanEnergy.toFixed(0)}  ·  diversity ${m.diversity.toFixed(3)}\n` +
+    `geno-div ${m.genotypicDiversity.toFixed(3)} · gen ${m.maxGeneration} · avg genome ${m.meanGenomeSize.toFixed(1)} · cells/org ${m.meanCellsPerOrganism.toFixed(1)}\n` +
+    `brain: ${net.liveNeuronCount} neurons · ${net.liveSynapseCount} synapses\n` +
+    `${layers}   ·   ${legend && !legend.classList.contains('hidden') ? 'H hide legend' : 'H legend'}`;
 }
 
 function loop(): void {

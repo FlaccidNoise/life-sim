@@ -74,6 +74,7 @@ describe('metabolism — photosynthesis', () => {
       cfg.photoDepletion,
       cfg.digestRate,
       cfg.digestEfficiency,
+      cfg.baseToughness,
       cfg.basalCost,
       cfg.meatDecay,
       0,
@@ -88,6 +89,10 @@ describe('metabolism — photosynthesis', () => {
       f.latchCell,
       noCC,
       0,
+      false,
+      0,
+      0,
+      Number.MAX_SAFE_INTEGER,
     );
 
     const area = 2 * 2;
@@ -133,6 +138,7 @@ describe('metabolism — digestion', () => {
       cfg.photoDepletion,
       cfg.digestRate,
       cfg.digestEfficiency,
+      cfg.baseToughness,
       cfg.basalCost,
       cfg.meatDecay,
       0,
@@ -147,6 +153,10 @@ describe('metabolism — digestion', () => {
       f.latchCell,
       noCC,
       0,
+      false,
+      0,
+      0,
+      Number.MAX_SAFE_INTEGER,
     );
 
     const area = 3 * 3;
@@ -185,6 +195,7 @@ describe('metabolism — digestion', () => {
       cfg.photoDepletion,
       cfg.digestRate,
       cfg.digestEfficiency,
+      cfg.baseToughness,
       cfg.basalCost,
       cfg.meatDecay,
       0,
@@ -199,6 +210,10 @@ describe('metabolism — digestion', () => {
       f.latchCell,
       noCC,
       0,
+      false,
+      0,
+      0,
+      Number.MAX_SAFE_INTEGER,
     );
     expect(f.energy[a]).toBeCloseTo(100 - cfg.basalCost * 9, 4);
   });
@@ -231,6 +246,7 @@ describe('metabolism — basal cost and meat decay', () => {
       cfg.photoDepletion,
       cfg.digestRate,
       cfg.digestEfficiency,
+      cfg.baseToughness,
       cfg.basalCost,
       cfg.meatDecay,
       0,
@@ -245,6 +261,10 @@ describe('metabolism — basal cost and meat decay', () => {
       f.latchCell,
       noCC,
       0,
+      false,
+      0,
+      0,
+      Number.MAX_SAFE_INTEGER,
     );
     expect(f.energy[m]).toBeCloseTo(20 - cfg.meatDecay, 4);
   });
@@ -275,6 +295,7 @@ describe('metabolism — basal cost and meat decay', () => {
       cfg.photoDepletion,
       cfg.digestRate,
       cfg.digestEfficiency,
+      cfg.baseToughness,
       cfg.basalCost,
       cfg.meatDecay,
       0,
@@ -289,6 +310,10 @@ describe('metabolism — basal cost and meat decay', () => {
       f.latchCell,
       noCC,
       0,
+      false,
+      0,
+      0,
+      Number.MAX_SAFE_INTEGER,
     );
     expect(f.energy[big]).toBeCloseTo(100 - cfg.basalCost * 16, 4);
   });
@@ -322,6 +347,7 @@ describe('metabolism — M3 movement cost & MOTILE digestion', () => {
       0,
       7,
       0.7,
+      1,
       0.01,
       0.5,
       0.02,
@@ -336,6 +362,10 @@ describe('metabolism — M3 movement cost & MOTILE digestion', () => {
       f.latchCell,
       noCC,
       0,
+      false,
+      0,
+      0,
+      Number.MAX_SAFE_INTEGER,
     );
     // energy = 100 − basal(0.01·4) − moveCost(0.02·3²) = 100 − 0.04 − 0.18
     expect(f.energy[i]).toBeCloseTo(100 - 0.04 - 0.18, 4);
@@ -374,6 +404,7 @@ describe('metabolism — M3 movement cost & MOTILE digestion', () => {
       0,
       7,
       0.7,
+      1,
       0.01,
       0.5,
       0.02,
@@ -388,6 +419,10 @@ describe('metabolism — M3 movement cost & MOTILE digestion', () => {
       f.latchCell,
       noCC,
       0,
+      false,
+      0,
+      0,
+      Number.MAX_SAFE_INTEGER,
     );
     const area = 9;
     // MOTILE extracts min(7,50)=7, keeps 0.7·7=4.9, pays basal 0.01·9, move 0.
@@ -425,6 +460,7 @@ describe('metabolism — M4 neuralCost', () => {
       0,
       7,
       0.7,
+      1,
       0.01,
       0.5,
       0.02,
@@ -439,6 +475,10 @@ describe('metabolism — M4 neuralCost', () => {
       f.latchCell,
       noCC,
       0,
+      false,
+      0,
+      0,
+      Number.MAX_SAFE_INTEGER,
     );
     // energy = 100 − basal(0.01·4) − neural(0.05) = 100 − 0.04 − 0.05
     expect(f.energy[i]).toBeCloseTo(100 - 0.04 - 0.05, 4);
@@ -470,6 +510,7 @@ describe('metabolism — M4 neuralCost', () => {
       0,
       7,
       0.7,
+      1,
       0.01,
       0.5,
       0.02,
@@ -484,6 +525,10 @@ describe('metabolism — M4 neuralCost', () => {
       f.latchCell,
       noCC,
       0,
+      false,
+      0,
+      0,
+      Number.MAX_SAFE_INTEGER,
     );
     // 100 − basal(0.04) − neural(0.05) − move(0.02·9=0.18)
     expect(f.energy[i]).toBeCloseTo(100 - 0.04 - 0.05 - 0.18, 4);
@@ -516,6 +561,7 @@ describe('metabolism — M4 neuralCost', () => {
       0,
       7,
       0.7,
+      1,
       0.01,
       0.5,
       0.02,
@@ -530,6 +576,10 @@ describe('metabolism — M4 neuralCost', () => {
       f.latchCell,
       noCC,
       0,
+      false,
+      0,
+      0,
+      Number.MAX_SAFE_INTEGER,
     );
     expect(f.energy[i]).toBeCloseTo(100 - 0.04, 4);
   });
@@ -573,6 +623,7 @@ describe('metabolism — M5 digestion-clustering bonus', () => {
       0,
       7,
       0.7,
+      1,
       0,
       0.5,
       0,
@@ -587,6 +638,10 @@ describe('metabolism — M5 digestion-clustering bonus', () => {
       f.latchCell,
       noCC,
       0,
+      false,
+      0,
+      0,
+      Number.MAX_SAFE_INTEGER,
     );
     expect(f.energy[eater]).toBeCloseTo(100 + 4.9 * 2, 4);
   });
@@ -623,6 +678,7 @@ describe('metabolism — M5 digestion-clustering bonus', () => {
       0,
       7,
       0.7,
+      1,
       0,
       0.5,
       0,
@@ -637,6 +693,10 @@ describe('metabolism — M5 digestion-clustering bonus', () => {
       f.latchCell,
       noCC,
       0,
+      false,
+      0,
+      0,
+      Number.MAX_SAFE_INTEGER,
     );
     expect(f.energy[eater]).toBeCloseTo(100 + 4.9, 4); // unchanged from the no-bonus path
   });
@@ -682,6 +742,7 @@ describe('metabolism — PREDATOR (ecology pass)', () => {
       0,
       7,
       0.7,
+      1,
       0,
       0.5,
       0,
@@ -696,6 +757,10 @@ describe('metabolism — PREDATOR (ecology pass)', () => {
       f.latchCell,
       noCC,
       0,
+      false,
+      0,
+      0,
+      Number.MAX_SAFE_INTEGER,
     );
     expect(f.energy[prey]).toBeCloseTo(200 - 40, 4); // prey cell drained
     expect(f.energy[p]).toBeCloseTo(100 + 40 * 0.7, 4); // predator keeps 70%
@@ -729,6 +794,7 @@ describe('metabolism — PREDATOR (ecology pass)', () => {
       0,
       7,
       0.7,
+      1,
       0,
       0.5,
       0,
@@ -743,6 +809,10 @@ describe('metabolism — PREDATOR (ecology pass)', () => {
       f.latchCell,
       noCC,
       0,
+      false,
+      0,
+      0,
+      Number.MAX_SAFE_INTEGER,
     );
     expect(f.energy[sibling]).toBe(200); // untouched — never eats own body
     expect(f.energy[p]).toBe(100);
@@ -777,6 +847,7 @@ describe('metabolism — PREDATOR (ecology pass)', () => {
         0,
         7,
         0.7,
+        1,
         0,
         0.5,
         0,
@@ -791,6 +862,10 @@ describe('metabolism — PREDATOR (ecology pass)', () => {
         f.latchCell,
         noCC,
         0,
+        false,
+        0,
+        0,
+        Number.MAX_SAFE_INTEGER,
       );
       expect(f.energy[other]).toBe(preyType === CellType.MEAT ? 200 - 0.5 : 200); // MEAT only loses meatDecay
       expect(f.energy[p]).toBe(100); // predator ate nothing
@@ -825,6 +900,7 @@ describe('metabolism — PREDATOR (ecology pass)', () => {
       0,
       7,
       0.7,
+      1,
       0,
       0.5,
       0,
@@ -839,6 +915,10 @@ describe('metabolism — PREDATOR (ecology pass)', () => {
       f.latchCell,
       noCC,
       0,
+      false,
+      0,
+      0,
+      Number.MAX_SAFE_INTEGER,
     );
     expect(f.energy[prey]).toBe(200); // untouched
     expect(f.energy[p]).toBe(100);
@@ -885,6 +965,7 @@ describe('metabolism — PREDATOR strike-reach', () => {
         0,
         7,
         0.7,
+        1,
         0,
         0.5,
         0,
@@ -899,6 +980,10 @@ describe('metabolism — PREDATOR strike-reach', () => {
         f.latchCell,
         noCC,
         0,
+        false,
+        0,
+        0,
+        Number.MAX_SAFE_INTEGER,
       );
       if (reach === 1) {
         expect(f.energy[prey]).toBe(200); // contact-only: distance-9 prey untouched

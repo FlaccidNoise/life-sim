@@ -9,6 +9,7 @@ import { type Camera } from './webgl-renderer';
  */
 export class CurrentOverlay {
   private readonly ctx: CanvasRenderingContext2D;
+  private dpr = 1;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d');
@@ -16,9 +17,12 @@ export class CurrentOverlay {
     this.ctx = ctx;
   }
 
-  resize(width: number, height: number): void {
-    this.canvas.width = width;
-    this.canvas.height = height;
+  resize(width: number, height: number, dpr = 1): void {
+    this.dpr = dpr;
+    this.canvas.width = Math.round(width * dpr);
+    this.canvas.height = Math.round(height * dpr);
+    this.canvas.style.width = `${width}px`;
+    this.canvas.style.height = `${height}px`;
   }
 
   render(world: World, camera: Camera, spacing = 96): void {
@@ -33,15 +37,17 @@ export class CurrentOverlay {
     const halfH = h / 2;
     const scale = camera.scale;
 
-    // World-space step that corresponds to ~`spacing` screen pixels.
-    const step = spacing / scale;
+    // World-space step that corresponds to ~`spacing` screen pixels. Scale by dpr so
+    // arrow density and stroke width stay visually constant on Retina.
+    const sp = spacing * this.dpr;
+    const step = sp / scale;
     // Top-left visible world corner.
     const startX = camera.x - halfW / scale;
     const startY = camera.y - halfH / scale;
-    const cols = Math.ceil(w / spacing) + 2;
-    const rows = Math.ceil(h / spacing) + 2;
+    const cols = Math.ceil(w / sp) + 2;
+    const rows = Math.ceil(h / sp) + 2;
 
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1.5 * this.dpr;
     ctx.strokeStyle = 'rgba(120, 200, 230, 0.55)';
     ctx.fillStyle = 'rgba(120, 200, 230, 0.7)';
     for (let r = 0; r < rows; r++) {
@@ -56,7 +62,7 @@ export class CurrentOverlay {
         const sx = (wx - camera.x) * scale + halfW;
         const sy = (wy - camera.y) * scale + halfH;
         // Arrow length scales with current magnitude (clamped), in screen px.
-        const len = Math.min(spacing * 0.45, mag * scale * 4 + 6);
+        const len = Math.min(sp * 0.45, mag * scale * 4 + 6 * this.dpr);
         const ex = sx + (vx / mag) * len;
         const ey = sy + (vy / mag) * len;
         ctx.beginPath();
@@ -65,7 +71,7 @@ export class CurrentOverlay {
         ctx.stroke();
         // Arrowhead.
         const ang = Math.atan2(vy, vx);
-        const ah = 4;
+        const ah = 4 * this.dpr;
         ctx.beginPath();
         ctx.moveTo(ex, ey);
         ctx.lineTo(ex - ah * Math.cos(ang - 0.4), ey - ah * Math.sin(ang - 0.4));

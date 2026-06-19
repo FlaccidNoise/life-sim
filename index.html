@@ -38,8 +38,12 @@
       }
 
       /* ── Shared panel ────────────────────────────────────────────────── */
+      /* z-index tiers keep left-column info panels above the legend regardless of
+         DOM order (#hall-of-fame/#phylogeny precede #legend in source). legend sits
+         above the canvas but below the info panels; controls/hud/telemetry on top. */
       .panel {
         position: fixed;
+        z-index: 2;
         font: 11px/1.5 var(--mono);
         color: var(--text);
         background: var(--panel);
@@ -49,6 +53,10 @@
         border-radius: var(--radius);
         box-shadow: var(--shadow);
       }
+      /* Info panels that share a column with the legend must rise above it. */
+      #hall-of-fame, #phylogeny, #menagerie, #genome, #brain { z-index: 3; }
+      /* Primary readouts on top so they never get occluded. */
+      #hud, #telemetry-wrap, #controls { z-index: 4; }
       .panel-title {
         color: var(--accent);
         font-size: 10px;
@@ -69,18 +77,26 @@
       #hud {
         top: var(--gap);
         left: var(--gap);
+        max-width: 460px;
         padding: 6px 10px;
-        white-space: pre;
         pointer-events: none;
+      }
+      #hud .panel-title { margin-bottom: 2px; }
+      #hud-body {
         color: var(--value);
+        white-space: pre;
+        font-size: 10.5px;
+        line-height: 1.45;
       }
 
       /* ── Telemetry (top-right charts) ────────────────────────────────── */
-      #telemetry {
+      #telemetry-wrap {
         top: var(--gap);
         right: var(--gap);
-        display: block;
+        padding: 6px 8px 4px;
       }
+      #telemetry-wrap .panel-title { margin: 0 2px 4px; }
+      #telemetry { display: block; }
 
       /* ── Inspect (bottom-left, one line) ─────────────────────────────── */
       #inspect {
@@ -90,16 +106,6 @@
         white-space: pre;
         pointer-events: none;
         color: var(--warn);
-      }
-
-      /* ── Brain inspector (bottom-left, above inspect — was over the sliders) */
-      #brain {
-        left: var(--gap);
-        bottom: 38px;
-        background: var(--panel-solid);
-        -webkit-backdrop-filter: var(--blur);
-        backdrop-filter: var(--blur);
-        transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1);
       }
 
       /* ── Legend / "what am I seeing" (toggle H) ──────────────────────── */
@@ -129,6 +135,9 @@
         background: transparent !important;
         border-top: 6px solid transparent;
         border-bottom: 6px solid transparent;
+        border-left-width: 11px;
+        border-left-style: solid;
+        border-left-color: transparent;
       }
       #legend b {
         color: var(--accent);
@@ -142,9 +151,10 @@
         visibility: hidden;
       }
 
-      /* ── Genome inspector (toggle G) — right side, under telemetry ───── */
+      /* ── Secondary info panels (hidden by default; positioned in CSS, not inline,
+         so they can respond to viewport size) ─────────────────────────── */
       #genome {
-        top: 256px;
+        top: 268px;
         right: var(--gap);
         max-width: 360px;
         max-height: 60vh;
@@ -152,9 +162,41 @@
         padding: 7px 10px;
         background: var(--panel-solid);
         white-space: pre;
-        font-family: var(--mono);
         pointer-events: none;
         color: var(--value);
+      }
+      #hall-of-fame {
+        top: 96px;
+        left: var(--gap);
+        max-height: 300px;
+        overflow: auto;
+        white-space: pre;
+        padding: 7px 10px;
+        pointer-events: none;
+      }
+      #phylogeny {
+        top: clamp(180px, 48vh, 420px);
+        left: var(--gap);
+        max-width: 360px;
+        max-height: 46vh;
+        overflow: auto;
+        white-space: pre;
+        padding: 7px 10px;
+      }
+      #menagerie {
+        top: var(--gap);
+        left: clamp(8px, 26vw, 340px);
+        max-width: 340px;
+        max-height: 40vh;
+        overflow: auto;
+        white-space: pre;
+        padding: 7px 10px;
+      }
+      #brain {
+        left: var(--gap);
+        bottom: calc(var(--gap) + 68px);
+        background: var(--panel-solid);
+        transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1);
       }
 
       /* ── Controls (bottom-right sliders) ─────────────────────────────── */
@@ -176,10 +218,19 @@
         border-radius: 4px;
       }
       .knob-section {
-        margin: 8px 0 3px;
+        margin: 10px 0 3px;
+        padding-top: 6px;
+        border-top: 1px solid var(--border);
+        color: var(--accent);
+        font-size: 9.5px;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
       }
       .knob-section:first-child {
         margin-top: 2px;
+        border-top: 0;
+        padding-top: 0;
       }
       .knob {
         display: block;
@@ -205,6 +256,14 @@
         margin: 2px 0 0;
         accent-color: var(--accent);
         cursor: pointer;
+      }
+      /* ── Narrow viewports: keep panels off the canvas edges and each other ── */
+      @media (max-width: 720px) {
+        #hud { max-width: calc(100vw - 2 * var(--gap)); }
+        #controls { width: 200px; max-height: 50vh; }
+        #menagerie { left: var(--gap); top: 96px; max-width: calc(100vw - 2 * var(--gap)); }
+        #phylogeny { top: 96px; max-width: calc(100vw - 2 * var(--gap)); }
+        #legend { width: calc(100vw - 2 * var(--gap)); }
       }
       /* ── Accessibility ───────────────────────────────────────────────── */
       input[type='range']:focus-visible {
@@ -241,14 +300,14 @@
       style="position: fixed; inset: 0; background: #000; pointer-events: none; opacity: 0"
       aria-hidden="true"
     ></div>
-    <div id="hud" class="panel" role="status" aria-label="simulation status"></div>
-    <canvas
-      id="telemetry"
-      class="panel"
-      width="280"
-      height="240"
-      aria-label="telemetry charts: population, mean energy, diversity"
-    ></canvas>
+    <div id="hud" class="panel" role="status" aria-label="simulation status">
+      <div class="panel-title">status</div>
+      <div id="hud-body"></div>
+    </div>
+    <div id="telemetry-wrap" class="panel" aria-label="telemetry charts: population, mean energy, diversity">
+      <div class="panel-title">telemetry</div>
+      <canvas id="telemetry" width="280" height="240"></canvas>
+    </div>
     <div id="inspect" class="panel" role="status" aria-label="inspected cell">
       click a cell to inspect
     </div>
@@ -268,78 +327,51 @@
     <div
       id="hall-of-fame"
       class="panel hidden"
-      style="
-        top: 100px;
-        left: var(--gap);
-        max-height: 300px;
-        overflow: auto;
-        white-space: pre;
-        padding: 7px 10px;
-        pointer-events: none;
-      "
       role="status"
       aria-label="hall of fame: largest live founding lineages"
     ></div>
     <div
       id="phylogeny"
       class="panel hidden"
-      style="
-        top: 420px;
-        left: var(--gap);
-        max-width: 360px;
-        max-height: 50vh;
-        overflow: auto;
-        white-space: pre;
-        padding: 7px 10px;
-      "
       role="status"
       aria-label="phylogeny: live lineage tree"
     ></div>
     <div
       id="menagerie"
       class="panel hidden"
-      style="
-        top: var(--gap);
-        left: 680px;
-        max-width: 340px;
-        max-height: 40vh;
-        overflow: auto;
-        white-space: pre;
-        padding: 7px 10px;
-      "
       role="status"
       aria-label="menagerie: live species board"
     ></div>
-    <aside id="legend" class="panel" aria-label="legend">
+    <aside id="legend" class="panel hidden" aria-label="legend">
       <div class="panel-title">life-sim — what you're seeing</div>
       <hr />
       <div class="row">
-        <span class="sw" style="background: #4dcc59"></span>PHOTO — plant; light → energy (base
+        <span class="sw" data-sw="photo"></span>PHOTO — plant; light → energy (base
         food)
       </div>
       <div class="row">
-        <span class="sw" style="background: #f27333"></span>DIGESTIVE — passive eater; eats
+        <span class="sw" data-sw="digestive"></span>DIGESTIVE — passive eater; eats
         plants/meat on contact
       </div>
       <div class="row">
-        <span class="sw" style="background: #8c8073"></span>MEAT — corpse; decaying food
+        <span class="sw" data-sw="meat"></span>MEAT — corpse; decaying food
       </div>
       <div class="row">
-        <span class="sw wedge" style="border-left: 11px solid #4dd9f2"></span>MOTILE — smells food,
+        <span class="sw wedge" data-swedge="motile"></span>MOTILE — smells food,
         swims up-gradient (reflex)
       </div>
       <div class="row">
-        <span class="sw" style="background: #d959d9"></span>SENSOR — critter's gradient sensor (M4)
+        <span class="sw" data-sw="sensor"></span>SENSOR — critter's gradient sensor (M4)
       </div>
       <div class="row">
-        <span class="sw" style="background: #738cf2"></span>NEURON — critter's brain (recurrent net)
+        <span class="sw" data-sw="neuron"></span>NEURON — critter's brain (recurrent net)
       </div>
       <div class="row">
-        <span class="sw wedge" style="border-left: 11px solid #f2d94d"></span>MOVER — critter body;
+        <span class="sw wedge" data-swedge="mover"></span>MOVER — critter body;
         driven by its neurons
       </div>
       <div class="row">
-        <span class="sw" style="background: #f22626"></span>PREDATOR — carnivore mouth; hunts &amp;
+        <span class="sw" data-sw="predator"></span>PREDATOR — carnivore mouth; hunts &amp;
         latches onto foragers
       </div>
       <div class="row">

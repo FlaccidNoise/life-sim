@@ -10,6 +10,7 @@ import { type Camera } from './webgl-renderer';
  */
 export class RockOverlay {
   private readonly ctx: CanvasRenderingContext2D;
+  private dpr = 1;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d');
@@ -17,9 +18,12 @@ export class RockOverlay {
     this.ctx = ctx;
   }
 
-  resize(width: number, height: number): void {
-    this.canvas.width = width;
-    this.canvas.height = height;
+  resize(width: number, height: number, dpr = 1): void {
+    this.dpr = dpr;
+    this.canvas.width = Math.round(width * dpr);
+    this.canvas.height = Math.round(height * dpr);
+    this.canvas.style.width = `${width}px`;
+    this.canvas.style.height = `${height}px`;
   }
 
   render(world: World, camera: Camera): void {
@@ -50,7 +54,7 @@ export class RockOverlay {
       ctx.fillStyle = 'rgba(90,90,100,0.85)';
       ctx.fill();
       ctx.strokeStyle = 'rgba(50,50,60,0.9)';
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = 1.5 * this.dpr;
       ctx.stroke();
     }
   }

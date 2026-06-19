@@ -35,6 +35,7 @@ describe('applyLatchTether', () => {
       4096,
       4096,
       1.0,
+      false,
     );
     // f = stiffness·(dist−rest)/dist · dx ; dx=+10 → predator pulled +x (toward prey), prey pulled −x.
     expect(s.forceX[0]!).toBeCloseTo(((1.0 * (10 - 6)) / 10) * 10, 5); // +4
@@ -59,6 +60,7 @@ describe('applyLatchTether', () => {
       4096,
       4096,
       1.0,
+      false,
     );
     expect(s.forceX[0]!).toBeCloseTo(0, 5);
     expect(s.forceX[1]!).toBeCloseTo(0, 5);
@@ -82,6 +84,7 @@ describe('applyLatchTether', () => {
       4096,
       4096,
       1.0,
+      false,
     );
     expect(s.forceX[0]!).toBe(0);
     expect(s.forceX[1]!).toBe(0);
@@ -105,6 +108,7 @@ describe('applyLatchTether', () => {
       4096,
       4096,
       1.0,
+      false,
     );
     expect(s.forceX[0]!).toBe(0);
     expect(s.forceX[1]!).toBe(0);
@@ -128,7 +132,59 @@ describe('applyLatchTether', () => {
       4096,
       4096,
       1.0,
+      false,
     );
     expect(s.forceX[0]!).toBe(0);
+  });
+
+  it('herbivore latch (grazePhoto) tethers to a PHOTO plant cell, predator latch does not', () => {
+    // A grazed plant cell is PHOTO (not flesh): the predator validity check would reject it, the
+    // herbivore one accepts it. Same geometry, only grazePhoto differs.
+    const photo = () => {
+      const s = setup(10);
+      s.cellType[0] = CellType.DIGESTIVE; // forager mouth
+      s.cellType[1] = CellType.PHOTO; // grazed plant cell
+      return s;
+    };
+    const sPred = photo();
+    applyLatchTether(
+      sPred.live,
+      2,
+      sPred.latchCell,
+      sPred.latchPrey,
+      sPred.cellType,
+      sPred.organismId,
+      sPred.radius,
+      sPred.posX,
+      sPred.posY,
+      sPred.forceX,
+      sPred.forceY,
+      4096,
+      4096,
+      1.0,
+      false, // predator validity: PHOTO is not flesh → no tether
+    );
+    expect(sPred.forceX[0]!).toBe(0);
+
+    const sGraze = photo();
+    applyLatchTether(
+      sGraze.live,
+      2,
+      sGraze.latchCell,
+      sGraze.latchPrey,
+      sGraze.cellType,
+      sGraze.organismId,
+      sGraze.radius,
+      sGraze.posX,
+      sGraze.posY,
+      sGraze.forceX,
+      sGraze.forceY,
+      4096,
+      4096,
+      1.0,
+      true, // herbivore validity: PHOTO accepted → spring toward the plant
+    );
+    expect(sGraze.forceX[0]!).toBeCloseTo(((1.0 * (10 - 6)) / 10) * 10, 5); // +4 toward the plant
+    expect(sGraze.forceX[1]!).toBeCloseTo(-sGraze.forceX[0]!, 5);
   });
 });

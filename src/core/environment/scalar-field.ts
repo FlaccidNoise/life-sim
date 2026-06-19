@@ -10,6 +10,8 @@
  * Determinism: the stencils are evaluated in a fixed row-major order with identical float
  * operations across all fields, so behaviour is byte-identical to the original per-field copies.
  */
+import { Rng, hashFloat3 } from '../math/rng';
+
 export class ScalarField {
   readonly cols: number;
   readonly rows: number;
@@ -192,5 +194,112 @@ export class ScalarField {
     const buf = this.a;
     this.gaussianSum(cx, cy, rad, amp, patchCount, buf, lo, hi);
     for (let i = 0; i < buf.length; i++) cap[i] = buf[i]!;
+  }
+
+  /**
+   * Like {@link seedPatches} but places the `patchCount` centres on a coarse JITTERED MACRO-GRID
+   * instead of pure-uniform draws, so the bumps spread evenly with dark gaps between them rather
+   * than clustering by chance (the merged-blob failure mode). Gaussian-bump + global-max
+   * normalisation like {@link seedPatches}, THEN a food-neutral rescale (below) so the spread layout
+   * carries the SAME total integrated light as the legacy clustered init for the same params — only
+   * the layout differs. Determinism: the only randomness is RNG-free `hashFloat3(seed, p, ·)` jitter and the
+   * loop is fixed-order, so two same-seed runs are byte-identical. Kept SEPARATE from seedPatches
+   * so every existing field's byte output stays untouched.
+   *
+   * The macro-grid is the squarest cols×rows covering `patchCount` cells; the first `patchCount`
+   * cells (row-major) get a bump at their cell centre plus ±`jitterFrac` of a macro-cell of jitter.
+   */
+  protected seedPatchesJittered(
+    seed: number,
+    cap: Float32Array,
+    patchCount: number,
+    patchRadius: number,
+    lo: number,
+    hi: number,
+    jitterFrac = 0.25,
+  ): void {
+    const { cols, rows } = this;
+    const buf = this.a;
+    buf.fill(0);
+    const sigma2 = 2 * patchRadius * patchRadius;
+    const macroCols = Math.ceil(Math.sqrt(patchCount));
+    const macroRows = Math.ceil(patchCount / macroCols);
+    const cellW = cols / macroCols;
+    const cellH = rows / macroRows;
+    for (let p = 0; p < patchCount; p++) {
+      const mc = p % macroCols;
+      const mr = (p / macroCols) | 0;
+      const jx = (hashFloat3(seed, p, 0) - 0.5) * 2 * jitterFrac;
+      const jy = (hashFloat3(seed, p, 1) - 0.5) * 2 * jitterFrac;
+      const pcx = (mc + 0.5 + jx) * cellW;
+      const pcy = (mr + 0.5 + jy) * cellH;
+      const amp = 0.5 + 0.5 * hashFloat3(seed, p, 2);
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          let dx = Math.abs(c - pcx);
+          if (dx > cols / 2) dx = cols - dx;
+          let dy = Math.abs(r - pcy);
+          if (dy > rows / 2) dy = rows - dy;
+          buf[r * cols + c]! += amp * Math.exp(-(dx * dx + dy * dy) / sigma2);
+        }
+      }
+    }
+    let max = 0;
+    for (const v of buf) if (v > max) max = v;
+    const range = hi - lo;
+    const scale = max > 0 ? range / max : 0;
+    // Food-neutrality: global-max normalisation lets each ISOLATED spread pocket keep near-full
+    // amplitude, whereas the legacy clustered init divides by a tall overlapping peak — so without a
+    // correction the spread layout would carry ~30% MORE total standing light (a food increase, which
+    // the sessile-plant demo explicitly forbids). Rescale so total integrated light equals the legacy
+    // clustered layout's for the same seed/params (a fresh Rng(seed) reproduces the legacy draws).
+    let spreadTotal = 0;
+    for (let i = 0; i < buf.length; i++) spreadTotal += buf[i]! * scale + lo;
+    const legacyTotal = this.clusteredTotal(seed, patchCount, patchRadius, lo, hi);
+    const foodScale = spreadTotal > 0 ? legacyTotal / spreadTotal : 1;
+    for (let i = 0; i < buf.length; i++) {
+      const v = (buf[i]! * scale + lo) * foodScale;
+      buf[i] = v;
+      cap[i] = v;
+    }
+  }
+
+  /**
+   * Total integrated light of the LEGACY clustered layout (random patch centres + global-max
+   * normalisation) for the given params — used by {@link seedPatchesJittered} to rescale the spread
+   * layout to the same food budget. Pure: a fresh Rng(seed) + a local buffer, no field side effects,
+   * so it reproduces the legacy init's total deterministically without perturbing any rng stream.
+   */
+  private clusteredTotal(
+    seed: number,
+    patchCount: number,
+    patchRadius: number,
+    lo: number,
+    hi: number,
+  ): number {
+    const { cols, rows } = this;
+    const tmp = new Float32Array(cols * rows);
+    const rng = new Rng(seed);
+    const sigma2 = 2 * patchRadius * patchRadius;
+    for (let p = 0; p < patchCount; p++) {
+      const pcx = rng.range(0, cols);
+      const pcy = rng.range(0, rows);
+      const amp = rng.range(0.5, 1);
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          let dx = Math.abs(c - pcx);
+          if (dx > cols / 2) dx = cols - dx;
+          let dy = Math.abs(r - pcy);
+          if (dy > rows / 2) dy = rows - dy;
+          tmp[r * cols + c]! += amp * Math.exp(-(dx * dx + dy * dy) / sigma2);
+        }
+      }
+    }
+    let max = 0;
+    for (const v of tmp) if (v > max) max = v;
+    const scale = max > 0 ? (hi - lo) / max : 0;
+    let total = 0;
+    for (let i = 0; i < tmp.length; i++) total += tmp[i]! * scale + lo;
+    return total;
   }
 }

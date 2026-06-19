@@ -45,10 +45,12 @@ describe('breakStrainedBonds', () => {
       splitter,
       f.posX,
       f.posY,
+      f.cellType,
       0.6,
       64,
       1024,
       1024,
+      false,
     );
     expect(broke).toBe(1);
     expect(bonds.isAlive(0)).toBe(false);
@@ -76,10 +78,12 @@ describe('breakStrainedBonds', () => {
       splitter,
       f.posX,
       f.posY,
+      f.cellType,
       0.6,
       64,
       1024,
       1024,
+      false,
     );
     expect(broke).toBe(0);
     expect(bonds.isAlive(0)).toBe(true);
@@ -109,10 +113,12 @@ describe('breakStrainedBonds', () => {
       splitter,
       f.posX,
       f.posY,
+      f.cellType,
       0.6,
       2,
       1024,
       1024,
+      false,
     );
     expect(broke).toBe(2); // capped at 2 this tick; the third persists for next tick
   });
