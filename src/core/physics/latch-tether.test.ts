@@ -187,4 +187,19 @@ describe('applyLatchTether', () => {
     expect(sGraze.forceX[0]!).toBeCloseTo(((1.0 * (10 - 6)) / 10) * 10, 5); // +4 toward the plant
     expect(sGraze.forceX[1]!).toBeCloseTo(-sGraze.forceX[0]!, 5);
   });
+
+  it('a stiffness above the symplectic-Euler ceiling drives the force toward divergence', () => {
+    // The bond gate documents k·dt² ≤ 2.5 (ceiling ~3). At k=8 a mutual spring on two free masses diverges.
+    // The latch tether has the same form, so an above-ceiling stiffness must show the instability HERE.
+    const s = setup(10); // dist 10, rest 6 → spring term 4
+    applyLatchTether(
+      s.live, 2, s.latchCell, s.latchPrey, s.cellType, s.organismId,
+      s.radius, s.posX, s.posY, s.forceX, s.forceY,
+      4096, 4096,
+      1e6, // far above any sane stiffness; well past the ceiling
+      false,
+    );
+    const f = s.forceX[0]!;
+    expect(!Number.isFinite(f) || Math.abs(f) > 1e3).toBe(true);
+  });
 });
