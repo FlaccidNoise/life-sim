@@ -2,8 +2,10 @@
  * Scaling benchmark: confirms per-tick cost tracks LIVE population, not buffer capacity.
  * After Phase A1 (CellStore.highWaterMark bounds rebuildLive), a big-capacity sparse world no longer
  * pays a full-capacity scan twice per tick.
- * After Phase A1b + A2 (bond highWaterMark + spatial-hash generation stamps), per-tick cost is
- * independent of world AREA at a fixed live population — the hash no longer clears every bucket.
+ * After Phase A1b + A2 (bond highWaterMark + spatial-hash generation stamps), the hash no longer
+ * clears every bucket (the O(area) counts.fill(0) memset is gone). Per-tick cost is ~area-independent
+ * at the live-count scale tested (up to 8192²); note the prefix-sum loop still scans all buckets, so
+ * a residual ~O(buckets) term remains at very large world areas.
  *
  * Run: pnpm tsx src/headless/scaling-bench.ts
  */
