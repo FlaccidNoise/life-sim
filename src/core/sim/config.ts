@@ -514,6 +514,20 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
   };
 }
 
+/**
+ * Decisive-steering movement preset (Phase 4 tuning). Derived headlessly via the feel-probe: a clear
+ * sense signal must produce a committed turn + real acceleration so pursuit/flight read as purposeful.
+ * Shipped as an OPT-IN Partial<Config> (NOT new defaults) so defaultConfig stays byte-identical — the
+ * reproducibility.test.ts baseline is unperturbed. The live demo (main.ts) and the golden/feel probes
+ * spread this; numbers are live knobs swept in the probe, not magic constants.
+ */
+export const decisiveMovementPreset: Partial<Config> = {
+  maxThrust: 10, // ~1.7× the default 6 → terminal speed ≈ 10 units/tick (damping 0.5)
+  turnScale: 0.5, // ~1.7× → up to ~0.5 rad/tick (~29°/tick): committed turns toward a target
+  thrustScale: 5, // sharper response to thrust-neuron activation (default 3)
+  thrustBias: 2.5, // slightly faster cruise so searching still roams
+};
+
 export function serializeConfig(config: Config): string {
   return JSON.stringify(config);
 }
