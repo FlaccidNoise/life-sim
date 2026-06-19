@@ -428,3 +428,32 @@ describe('sightVector — toroidal seam', () => {
     expect(f.senseY[eye]).toBeGreaterThan(0); // above-axis (canonical-first) wins
   });
 });
+
+describe('sightVector — toroidal-seam guard on the minimum 3×3 grid', () => {
+  it('does not double-count when 2R+1 exceeds the grid width', () => {
+    // world 48×48, cellSize 16 → exactly cols=rows=3 (the hash minimum). viewRange 30 → R=2,
+    // so a 5×5 window over a 3×3 grid: every column/row offset beyond ±1 must be skipped.
+    const store = new CellStore(8, false);
+    const f = store.fields;
+    const eye = store.alloc(); // 0
+    f.posX[eye] = 24;
+    f.posY[eye] = 24;
+    f.heading[eye] = 0; // center bucket, looking +x
+    f.cellType[eye] = CellType.SENSOR;
+    f.organismId[eye] = 1;
+    const food = store.alloc(); // 1 — 20 ahead in +x, in range (viewRange 30)
+    f.posX[food] = 44;
+    f.posY[food] = 24;
+    f.cellType[food] = CellType.PHOTO;
+    f.organismId[food] = 0;
+
+    const hash = new SpatialHash(48, 48, 16, store.capacity);
+    hash.build(Uint32Array.from([eye, food]), 2, f.posX, f.posY);
+
+    sightVector(eye, f, hash, new Uint8Array(8), SightTarget.FOOD, 30, Math.PI / 2, 48, 48);
+    // dist 20, viewRange 30 → proximity 1/3; +x. A double-scan would still pick the same winner
+    // by strict-<, but the guard makes the scan visit each bucket exactly once.
+    expect(f.senseX[eye]).toBeCloseTo(1 / 3, 5);
+    expect(f.senseY[eye]).toBeCloseTo(0, 5);
+  });
+});
