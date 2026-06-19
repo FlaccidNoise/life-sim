@@ -1,6 +1,6 @@
 import { type World } from '../core/sim/world';
 import { CellType } from '../core/cells/types';
-import { SenseSource } from '../core/cells/sense-source';
+import { SenseSource, SightTarget } from '../core/cells/sense-source';
 
 /** Single-letter tag per neural cell type, drawn inside each node. */
 const TYPE_TAG: Record<number, string> = {
@@ -8,6 +8,38 @@ const TYPE_TAG: Record<number, string> = {
   [CellType.NEURON]: 'N',
   [CellType.MOVER]: 'M',
 };
+
+/** Single sight-target letter: FOOD=F, PREY=Y (so it can't collide with Predator), PREDATOR=P. */
+const SIGHT_TARGET_TAG: Record<number, string> = {
+  [SightTarget.FOOD]: 'F',
+  [SightTarget.PREY]: 'Y',
+  [SightTarget.PREDATOR]: 'P',
+};
+
+/**
+ * Legibility label for a SENSOR cell, derived from its modality binding (Phase 5):
+ * Sm = smell, He = hearing, Si:{F|Y|P} = sight (food/prey/predator). 'S' if the cell
+ * has no live sensor binding. Read-only over core; reads net.sensorSource, NOT think.
+ */
+export function sensorLabel(
+  net: {
+    sensorCell: Uint32Array;
+    sensorSource: Uint8Array;
+    sensorSightTarget: Uint8Array;
+    sensorCount: number;
+  },
+  cell: number,
+): string {
+  for (let k = 0; k < net.sensorCount; k++) {
+    if (net.sensorCell[k] !== cell) continue;
+    const src = net.sensorSource[k]!;
+    if (src === SenseSource.HEARING) return 'He';
+    if (src === SenseSource.SIGHT)
+      return 'Si:' + (SIGHT_TARGET_TAG[net.sensorSightTarget[k]!] ?? '?');
+    return 'Sm'; // SMELL (default)
+  }
+  return 'S'; // no sensor binding on this cell
+}
 
 /**
  * §11 M4 deliverable — renders the neuron-cell network with LIVE activations.
@@ -95,14 +127,6 @@ export class BrainInspector {
       ctx.stroke();
     }
 
-    // Sensor-cell → modality letter (render-time reverse lookup; UI only, not the hot loop).
-    const senseTag = new Map<number, string>();
-    for (let k = 0; k < net.sensorCount; k++) {
-      const src = net.sensorSource[k]!;
-      const letter = src === SenseSource.HEARING ? 'H' : src === SenseSource.SIGHT ? 'V' : 'M'; // M=sMell
-      senseTag.set(net.sensorCell[k]!, letter);
-    }
-
     // Nodes (neurons): fill by activation, tag by cell type, value beneath.
     ctx.textAlign = 'center';
     for (let k = 0; k < net.liveNeuronCount; k++) {
@@ -128,7 +152,7 @@ export class BrainInspector {
       ctx.textBaseline = 'middle';
       const tag =
         f.cellType[i]! === CellType.SENSOR
-          ? (senseTag.get(i) ?? 'S')
+          ? sensorLabel(net, i)
           : (TYPE_TAG[f.cellType[i]!] ?? '?');
       ctx.fillText(tag, px, py + 0.5);
       // activation value beneath
@@ -144,7 +168,7 @@ export class BrainInspector {
     ctx.font = '8px ui-monospace, monospace';
     ctx.fillStyle = '#7d93a4';
     ctx.fillText(
-      'M smell  H hearing  V sight  ·  N neuron  M mover  ·  − blue / + orange',
+      'Sm smell  Si sight(F/Y/P)  He hear  N neuron  M mover   ·   − blue / + orange',
       10,
       h - 8,
     );
