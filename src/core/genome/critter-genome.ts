@@ -289,6 +289,88 @@ export function buildSightedForagerGenome(cellRadius = 6, initialEnergy = 100): 
 }
 
 /**
+ * Fleeing prey: the sighted forager (smell + FOOD-eye approach) PLUS a PREDATOR-eye pair and a
+ * HEARING pair, both wired INVERTED (FWD→thrust negative, LAT→turn negative) so the creature flees
+ * what it sees/hears as a hunter. Stays a herbivore (DIGESTIVE mouth → carnivore flag never set).
+ * Mutable founder genome under economic selection — no role label read by any kernel. DRY over
+ * buildSightedForagerGenome. 12 cells: sighted forager(0..7) + predator-eye FWD(8)/LAT(9)
+ * + hearing FWD(10)/LAT(11).
+ *
+ * BOND DEGREE (bondDegreeCap = 8): this is the most-sensored body, so the four new sensor spokes
+ * are RE-PARENTED off other body cells instead of the MOVER seed — the seed already carries 7
+ * bonds (5 forager spokes + 2 FOOD-eye spokes) and four more would breach the cap → instantiate
+ * rejects (-1). Spoking is behaviour-neutral (sense values are position+binding based), so the
+ * predator eyes spoke off the FOOD eyes (genes 6/7) and the ears spoke off the smell pair (genes
+ * 1/2); each braces to the turn/thrust neuron. Peak per-cell degree is the seed at 7 (< 8).
+ */
+export function buildFleeingPreyGenome(cellRadius = 6, initialEnergy = 100): Genome {
+  const g = buildSightedForagerGenome(cellRadius, initialEnergy);
+  const r = cellRadius;
+  const off = 3 * r;
+  const lat = off * 0.6;
+  const mkSensor = (channel: number, source: number, target: number): Gene => ({
+    innovation: 0,
+    cellType: CellType.SENSOR,
+    radius: r,
+    mass: 2,
+    initialEnergy,
+    bias: 0,
+    sensorChannel: channel,
+    glowGain: 0,
+    senseSource: source,
+    sightTarget: target,
+  });
+  g.genes.push(mkSensor(SensorChannel.FWD_GRAD, SenseSource.SIGHT, SightTarget.PREDATOR)); // 8
+  g.genes.push(mkSensor(SensorChannel.LAT_GRAD, SenseSource.SIGHT, SightTarget.PREDATOR)); // 9
+  g.genes.push(mkSensor(SensorChannel.FWD_GRAD, SenseSource.HEARING, SightTarget.FOOD)); // 10
+  g.genes.push(mkSensor(SensorChannel.LAT_GRAD, SenseSource.HEARING, SightTarget.FOOD)); // 11
+  // RE-PARENT off non-seed cells so no cell breaches bondDegreeCap (8): predator eyes spoke off
+  // the FOOD eyes (genes 6/7, degree 2), ears spoke off the smell pair (genes 1/2, degree 5).
+  g.divisionRules.push({
+    parentGene: 6,
+    childGene: 8,
+    angle: Math.atan2(-lat, off),
+    dist: lat,
+    stiffness: 1,
+    repeat: 1,
+  });
+  g.divisionRules.push({
+    parentGene: 7,
+    childGene: 9,
+    angle: Math.atan2(lat, off),
+    dist: lat,
+    stiffness: 1,
+    repeat: 1,
+  });
+  g.divisionRules.push({
+    parentGene: 1,
+    childGene: 10,
+    angle: Math.atan2(-lat, off),
+    dist: lat,
+    stiffness: 1,
+    repeat: 1,
+  });
+  g.divisionRules.push({
+    parentGene: 2,
+    childGene: 11,
+    angle: Math.atan2(lat, off),
+    dist: lat,
+    stiffness: 1,
+    repeat: 1,
+  });
+  g.bondRules.push({ geneA: 3, geneB: 8, stiffness: 1 }); // brace predator-eye FWD to turn neuron
+  g.bondRules.push({ geneA: 4, geneB: 9, stiffness: 1 }); // brace predator-eye LAT to thrust neuron
+  g.bondRules.push({ geneA: 3, geneB: 10, stiffness: 1 }); // brace ear FWD to turn neuron
+  g.bondRules.push({ geneA: 4, geneB: 11, stiffness: 1 }); // brace ear LAT to thrust neuron
+  // INVERTED steering → flee what reads as a predator (sight) or as motion nearby (hearing).
+  g.connectionRules.push({ preGene: 8, postGene: 4, weight: -1.5 }); // predator-eye FWD → thrust (brake/flip)
+  g.connectionRules.push({ preGene: 9, postGene: 3, weight: -1.5 }); // predator-eye LAT → turn (veer away)
+  g.connectionRules.push({ preGene: 10, postGene: 4, weight: -1.0 }); // hearing FWD → thrust (flee motion)
+  g.connectionRules.push({ preGene: 11, postGene: 3, weight: -1.0 }); // hearing LAT → turn
+  return g;
+}
+
+/**
  * A PREDATOR: the forager body plan with its leading mouth (gene 5) swapped DIGESTIVE→PREDATOR
  * (carnivore) AND an AMBUSH brain. At instantiate the PREDATOR mouth flags the organism carnivore
  * → its SENSORs route to the prey-scent field (it hunts foragers), it is excluded from prey-scent
