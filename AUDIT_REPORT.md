@@ -29,11 +29,15 @@ substreams 1=light/2=mutation/3=rocks/4=temp/5=current, no collisions), energy e
 toroidal handling correct, an env-ON reproducibility test exists.
 
 **Still open (recommended follow-ups, not yet applied):**
-- ARCH-003 — O(capacity)+O(area) per-tick scans → the scaling-foundation plan (`docs/superpowers/plans/2026-06-18-scaling-foundation.md`, Phase A).
-- SIMP-002 — `metabolize` now takes **23** positional args → bundle economy+predation into reused-scratch structs (mirroring the `env`/`reproParams` pattern); behavior-preserving but invasive — owner call.
-- CONF-002 — economy hand-coupled to `cellRadius` (area-normalize); CONF-003 — grid resolution not world-derived (a tradeoff to lock); CORR-004 — organism centroid is a non-toroidal mean (seam bug as worlds grow).
-- ENV-02 [LOW] — glow field freezes (stops decaying) when all emitters die mid-run, feeding stale lure to surviving GLOW sensors. **Behavior-changing bugfix** — gate `glow.step` on the glow-enabled config, not the runtime effector count (`world.ts`). Left for a reviewed fix since it alters glow-ON output.
+- ~~ARCH-003~~ — **DONE (2026-06-19, plans 001-005 merged to main).** Phase A1 (cell hwm) was already done; plans 005 added A1b (bond + organism high-water-marks bounding `rebuildLive` + the adulthood scan) and A2 (SpatialHash generation stamps replacing `counts.fill(0)`). Byte-identical; 593 tests green. Residual: the prefix-sum loop still scans all buckets (~1.3× growth over 16× area, not O(area)) — see `plans/005` follow-up.
+- ~~SIMP-002~~ — **DONE (plan 004).** `metabolize` reduced from 31 → 10 positional args via 4 named structs (`EconomyParams`/`PredationParams`/`GrazeParams`/`LatchArrays`) on reused-scratch World fields (zero hot-loop allocation). Byte-identical.
+- ~~CORR-002/TEST-001/TEST-002 (graze half)~~ — **DONE (plan 002).** A `reproducibility — graze-latch + sessile chain-plants + satiation ON` block pins the graze/chain/satiation hot path byte-identical with non-vacuity asserts. (The predation half was already covered by the prior cycle's block.)
+- ~~CONF-004~~ — **DONE (plan 003).** `predLatchStiffness`/`grazeLatchStiffness` now gated under `k·dt² ≤ 2.5` in `config.test.ts` (mirroring the bond gate) + a `latch-tether.test.ts` divergence test proves the guard is non-vacuous.
+- CONF-002 — economy hand-coupled to `cellRadius` (area-normalize); CONF-003 — grid resolution not world-derived (a tradeoff to lock); CORR-004 — organism centroid is a non-toroidal mean (seam bug as worlds grow). **Still open.**
+- ENV-02 [LOW] — glow field freezes (stops decaying) when all emitters die mid-run, feeding stale lure to surviving GLOW sensors. **Behavior-changing bugfix** — gate `glow.step` on the glow-enabled config, not the runtime effector count (`world.ts`). Left for a reviewed fix since it alters glow-ON output. **Still open.**
 - Minor: DC-1 (test-only `dayFraction`/`seasonFraction` exports), MAG-1 (rock `maxAttempts=50` magic number), ENV-04 (rock-collision grid-size constraint un-asserted), DUP-3 (grid-index idiom across 6 grid classes), DUP-4 (overlay shader scaffold).
+
+Plans for the above live in `plans/` (001-005, all DONE/merged). See `plans/README.md` for the index and the rejected-findings list.
 
 ## Overall Risk: LOW
 
