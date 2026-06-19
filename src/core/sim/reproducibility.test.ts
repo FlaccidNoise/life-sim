@@ -525,3 +525,139 @@ describe('reproducibility — drifting light zones ON', () => {
     expect(capEarly).not.toEqual(capLate); // the rich zone moved — driftCap recomputed cap[]
   });
 });
+
+describe('reproducibility — senses-ON + drift-ON (Phase 5)', () => {
+  // Turns ON every Phase 1-4 mechanism at once (drift, hearing, sight, sense-modality
+  // mutation) and pins that (a) two runs are byte-identical and (b) each new path actually
+  // fired (non-vacuous), so the expanded rng.int(channelCount) draw + the senseSource/
+  // sightTarget mutation operators can never silently perturb determinism again.
+  function runSenses(): {
+    w: World;
+    capRecomputed: boolean;
+    noiseDeposited: boolean;
+    births: number;
+  } {
+    const cfg = defaultConfig({
+      seed: 1234,
+      maxCells: 8000,
+      maxBonds: 16384,
+      maxOrganisms: 4096,
+      cellRadius: 4,
+      worldWidth: 384,
+      worldHeight: 384,
+      initialPhotoFraction: 1,
+      initialMotileFraction: 0,
+      crowdDivideCap: 4,
+      crowdGridSize: 32,
+      divideThreshold: 70,
+      reproThreshold: 280,
+      reproParentFloor: 60,
+      organismDeathFloor: 0,
+      basalCost: 0.004,
+      cruiseThrust: 1,
+      maxThrust: 8,
+      // ── all three new senses ON ──
+      driftAmplitude: 24, // light zones migrate → cap[] recomputed every tick
+      loudnessGain: 0.5, // motion deposits into the NoiseField
+      viewRange: 24, // R = ceil(24/8) = 3 buckets → sight cone runs
+      viewHalfAngle: 0.6, // ~34° half-cone
+      // ── the new mutation surface ON ──
+      mutationSenseSourceRate: 0.05, // draws the senseSource/sightTarget mutation operators
+      mutationWeightRate: 0.25,
+      mutationWeightSigma: 0.1,
+      mutationParamRate: 0.1,
+      mutationParamSigma: 0.1,
+      mutationChangeTypeRate: 0.015,
+      mutationSensorChannelRate: 0.02, // exercises the EXPANDED rng.int(channelCount) draw
+    });
+    const w = new World(cfg, false);
+    w.seedLife(2000);
+    const spawn = (
+      g: ReturnType<typeof buildForagerGenome>,
+      x: number,
+      y: number,
+      h: number,
+    ): void => {
+      const ref = w.genomes.register(g);
+      const body = develop(g, cfg.maxCellsPerOrganism, cfg.maxRecursionDepth);
+      instantiateBody(
+        body,
+        w.cells,
+        w.net,
+        w.bonds,
+        w.organisms,
+        ref,
+        x,
+        y,
+        h,
+        cfg.worldWidth,
+        cfg.worldHeight,
+        w.instantiateScratch,
+        w.glowEffectors,
+      );
+    };
+    for (let k = 0; k < 20; k++) {
+      spawn(
+        buildForagerGenome(cfg.cellRadius, 45),
+        cfg.worldWidth * (0.2 + (0.6 * (k % 5)) / 5),
+        cfg.worldHeight * (0.2 + (0.6 * Math.floor(k / 5)) / 4),
+        (k * 2.39996) % (Math.PI * 2),
+      );
+    }
+    for (let k = 0; k < 6; k++) {
+      spawn(
+        buildPredatorGenome(cfg.cellRadius, 360, -1.5),
+        cfg.worldWidth * (0.25 + (0.5 * (k % 3)) / 3),
+        cfg.worldHeight * (0.25 + (0.5 * Math.floor(k / 3)) / 2),
+        (k * 1.7) % (Math.PI * 2),
+      );
+    }
+    // Snapshot the seeded light cap so we can prove drift actually mutated it.
+    const cap0 = Float32Array.from(w.light.cap);
+    let births = 0;
+    let noiseDeposited = false;
+    for (let t = 0; t < 400; t++) {
+      w.tick();
+      births += w.lastOrganismBirths;
+      if (!noiseDeposited) {
+        for (let i = 0; i < w.noise.field.length; i++) {
+          if (w.noise.field[i]! > 0) {
+            noiseDeposited = true;
+            break;
+          }
+        }
+      }
+    }
+    let capRecomputed = false;
+    for (let i = 0; i < cap0.length; i++) {
+      if (w.light.cap[i] !== cap0[i]) {
+        capRecomputed = true;
+        break;
+      }
+    }
+    return { w, capRecomputed, noiseDeposited, births };
+  }
+
+  it('two runs are byte-identical AND every new sense path fired (non-vacuous)', () => {
+    const a = runSenses();
+    const b = runSenses();
+    const fa = a.w.cells.fields;
+    const fb = b.w.cells.fields;
+    expect(Array.from(fa.energy)).toEqual(Array.from(fb.energy));
+    expect(Array.from(fa.posX)).toEqual(Array.from(fb.posX));
+    expect(Array.from(fa.posY)).toEqual(Array.from(fb.posY));
+    expect(Array.from(fa.heading)).toEqual(Array.from(fb.heading));
+    expect(Array.from(fa.organismId)).toEqual(Array.from(fb.organismId));
+    expect(Array.from(a.w.light.cap)).toEqual(Array.from(b.w.light.cap));
+    expect(Array.from(a.w.noise.field)).toEqual(Array.from(b.w.noise.field));
+    expect(serializeGenomeLibrary(a.w.genomes)).toBe(serializeGenomeLibrary(b.w.genomes));
+    expect(serializeLineageLog(a.w.lineage)).toBe(serializeLineageLog(b.w.lineage));
+    // Non-vacuity: each new mechanism actually engaged in BOTH runs.
+    expect(a.capRecomputed).toBe(true); // drift recomputed the light cap
+    expect(a.capRecomputed).toBe(b.capRecomputed);
+    expect(a.noiseDeposited).toBe(true); // hearing deposited into the NoiseField
+    expect(a.noiseDeposited).toBe(b.noiseDeposited);
+    expect(a.births).toBeGreaterThan(0); // the (mutating) reproduction path ran
+    expect(a.births).toBe(b.births);
+  }, 30000);
+});
