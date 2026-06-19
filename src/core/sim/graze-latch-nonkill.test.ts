@@ -83,29 +83,13 @@ function runMetabolize(s: ReturnType<typeof mouthOnChainCell>, herbivoreLatch: b
     f,
     hash,
     lf,
-    cfg.photoGain,
-    cfg.photoDepletion,
-    cfg.digestRate,
-    cfg.digestEfficiency,
-    cfg.baseToughness,
-    0, // basalCost off → isolate the drain
-    cfg.meatDecay,
-    0, // moveCost off
-    0, // neuralCost off
-    noBonus,
-    0, // digestClusterBonus off
+    // basalCost/moveCost/neuralCost OFF to isolate the graze drain (only meatDecay + graze affect energy)
+    { photoGain: cfg.photoGain, photoDepletion: cfg.photoDepletion, digestRate: cfg.digestRate, digestEfficiency: cfg.digestEfficiency, baseToughness: cfg.baseToughness, basalCost: 0, meatDecay: cfg.meatDecay, moveCost: 0, neuralCost: 0, digestClusterBonus: 0 },
     noEnv,
-    0, // predDigestRate off
-    0,
-    1,
-    f.latchPrey,
-    f.latchCell,
-    noCC,
-    0, // predLatchRange off
-    herbivoreLatch,
-    cfg.grazeRate,
-    cfg.grazeLatchRange,
-    Number.MAX_SAFE_INTEGER,
+    // predation OFF: predDigestRate 0 (no drain), predReach 1 (contact only)
+    { predDigestRate: 0, predDigestEfficiency: 0, predReach: 1, predLatchRange: 0 },
+    { herbivoreLatch: herbivoreLatch, grazeRate: cfg.grazeRate, grazeLatchRange: cfg.grazeLatchRange, grazeSatiation: Number.MAX_SAFE_INTEGER },
+    { digestBonus: noBonus, latchPrey: f.latchPrey, latchCell: f.latchCell, organismCellCount: noCC },
   );
 }
 
@@ -218,29 +202,11 @@ function grazeAndSever(w: World): void {
     f,
     w.hash,
     w.light,
-    cfg.photoGain,
-    cfg.photoDepletion,
-    cfg.digestRate,
-    cfg.digestEfficiency,
-    cfg.baseToughness,
-    cfg.basalCost,
-    cfg.meatDecay,
-    cfg.moveCost,
-    cfg.neuralCost,
-    w.digestBonus,
-    cfg.digestClusterBonus,
-    noEnv, // env modulation off (this world disables temp/toxin/day-night) — World.env is private
-    cfg.predDigestRate,
-    cfg.predDigestEfficiency,
-    cfg.predReach,
-    f.latchPrey,
-    f.latchCell,
-    w.organisms.cellCount,
-    cfg.predLatchRange,
-    cfg.herbivoreLatch,
-    cfg.grazeRate,
-    cfg.grazeLatchRange,
-    Number.MAX_SAFE_INTEGER,
+    { photoGain: cfg.photoGain, photoDepletion: cfg.photoDepletion, digestRate: cfg.digestRate, digestEfficiency: cfg.digestEfficiency, baseToughness: cfg.baseToughness, basalCost: cfg.basalCost, meatDecay: cfg.meatDecay, moveCost: cfg.moveCost, neuralCost: cfg.neuralCost, digestClusterBonus: cfg.digestClusterBonus },
+    noEnv,
+    { predDigestRate: cfg.predDigestRate, predDigestEfficiency: cfg.predDigestEfficiency, predReach: cfg.predReach, predLatchRange: cfg.predLatchRange },
+    { herbivoreLatch: cfg.herbivoreLatch, grazeRate: cfg.grazeRate, grazeLatchRange: cfg.grazeLatchRange, grazeSatiation: Number.MAX_SAFE_INTEGER },
+    { digestBonus: w.digestBonus, latchPrey: f.latchPrey, latchCell: f.latchCell, organismCellCount: w.organisms.cellCount },
   );
   w.plants.severEatenChainCells(w.cells, w.bonds, live, n, cfg.meatEnergyOnDeath, false);
 }
