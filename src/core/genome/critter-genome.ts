@@ -225,6 +225,70 @@ export function buildForagerGenome(cellRadius = 6, initialEnergy = 100): Genome 
 }
 
 /**
+ * A forager that grows BOTH senses for food: the standard 6-cell forager (smell FWD/LAT pair
+ * wired to thrust/turn) PLUS a SIGHT eye organ — a (SIGHT, FWD_GRAD) + (SIGHT, LAT_GRAD) pair
+ * with sightTarget FOOD — wired into the SAME steering loop (FWD-eye→thrust, LAT-eye→turn). It
+ * smells long-range trails and sees nearby plants; when sight is OFF (viewRange 0) the eye pair
+ * reads a zero vector and the forager degenerates to a smell forager. Mutable founder genome,
+ * economically selected — no kernel reads a role label. DRY over buildForagerGenome.
+ * 8 cells: MOVER(0) + smell FWD(1)/LAT(2) + turn(3)/thrust(4) neurons + DIGESTIVE mouth(5)
+ * + eye FWD(6)/eye LAT(7).
+ */
+export function buildSightedForagerGenome(cellRadius = 6, initialEnergy = 100): Genome {
+  const g = buildForagerGenome(cellRadius, initialEnergy);
+  const r = cellRadius;
+  const off = 3 * r;
+  const lat = off * 0.6;
+  // gene 6: FWD-channel eye, sightTarget FOOD. Placed forward beside the smell sensors.
+  g.genes.push({
+    innovation: 0,
+    cellType: CellType.SENSOR,
+    radius: r,
+    mass: 2,
+    initialEnergy,
+    bias: 0,
+    sensorChannel: SensorChannel.FWD_GRAD,
+    glowGain: 0,
+    senseSource: SenseSource.SIGHT,
+    sightTarget: SightTarget.FOOD,
+  });
+  // gene 7: LAT-channel eye, sightTarget FOOD.
+  g.genes.push({
+    innovation: 0,
+    cellType: CellType.SENSOR,
+    radius: r,
+    mass: 2,
+    initialEnergy,
+    bias: 0,
+    sensorChannel: SensorChannel.LAT_GRAD,
+    glowGain: 0,
+    senseSource: SenseSource.SIGHT,
+    sightTarget: SightTarget.FOOD,
+  });
+  g.divisionRules.push({
+    parentGene: 0,
+    childGene: 6,
+    angle: Math.atan2(-lat * 0.5, off),
+    dist: Math.hypot(off, lat * 0.5),
+    stiffness: 1,
+    repeat: 1,
+  });
+  g.divisionRules.push({
+    parentGene: 0,
+    childGene: 7,
+    angle: Math.atan2(lat * 0.5, off),
+    dist: Math.hypot(off, lat * 0.5),
+    stiffness: 1,
+    repeat: 1,
+  });
+  g.bondRules.push({ geneA: 1, geneB: 6, stiffness: 1 }); // brace eye to smell FWD
+  g.bondRules.push({ geneA: 2, geneB: 7, stiffness: 1 }); // brace eye to smell LAT
+  g.connectionRules.push({ preGene: 6, postGene: 4, weight: 1.5 }); // FWD-eye → thrust
+  g.connectionRules.push({ preGene: 7, postGene: 3, weight: 1.5 }); // LAT-eye → turn
+  return g;
+}
+
+/**
  * A PREDATOR: the forager body plan with its leading mouth (gene 5) swapped DIGESTIVE→PREDATOR
  * (carnivore) AND an AMBUSH brain. At instantiate the PREDATOR mouth flags the organism carnivore
  * → its SENSORs route to the prey-scent field (it hunts foragers), it is excluded from prey-scent
