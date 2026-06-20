@@ -11,6 +11,8 @@ export interface KnobsHandlers {
   onLive(key: keyof Config, value: number): void;
   /** A seed-time knob changed — apply and reset the world. */
   onReset(key: keyof Config, value: number): void;
+  /** A live boolean toggle changed — mutate config in place (e.g. learning on/off). */
+  onToggle(key: keyof Config, value: boolean): void;
 }
 
 interface KnobSpec {
@@ -30,12 +32,26 @@ const SPECS: KnobSpec[] = [
   { key: 'basalCost', label: 'basal cost', min: 0, max: 2, step: 0.05, live: true },
   { key: 'reproThreshold', label: 'repro bar', min: 10, max: 150, step: 5, live: true },
   { key: 'mutationSigma', label: 'mutation σ', min: 0, max: 0.3, step: 0.005, live: true },
+  { key: 'learningRate', label: 'learn rate', min: 0, max: 0.2, step: 0.002, live: true },
+];
+
+/** Live boolean toggles (checkboxes), e.g. the Baldwin learning master switch. */
+const TOGGLES: { key: keyof Config; label: string }[] = [
+  { key: 'learningEnabled', label: 'learning on' },
 ];
 
 export class Knobs {
   constructor(root: HTMLElement, config: Config, h: KnobsHandlers) {
-    root.innerHTML = SPECS.map(
-      (s) => `
+    root.innerHTML =
+      TOGGLES.map(
+        (t) => `
+        <label class="knob toggle" data-key="${t.key}">
+          <input class="check" type="checkbox" ${config[t.key] ? 'checked' : ''} />
+          <span class="lbl">${t.label}</span>
+        </label>`,
+      ).join('') +
+      SPECS.map(
+        (s) => `
         <div class="knob" data-key="${s.key}">
           <div class="knob-head">
             <span class="lbl">${s.label}${s.live ? '' : ' *'}</span><span class="knob-val"></span>
@@ -43,7 +59,7 @@ export class Knobs {
           <input class="slider" type="range" min="${s.min}" max="${s.max}" step="${s.step}"
                  value="${config[s.key] as number}" />
         </div>`,
-    ).join('');
+      ).join('');
 
     for (const s of SPECS) {
       const wrap = root.querySelector<HTMLElement>(`[data-key="${s.key}"]`)!;
@@ -57,6 +73,12 @@ export class Knobs {
         if (s.live) h.onLive(s.key, v);
         else h.onReset(s.key, v);
       });
+    }
+
+    for (const t of TOGGLES) {
+      const wrap = root.querySelector<HTMLElement>(`[data-key="${t.key}"]`)!;
+      const check = wrap.querySelector<HTMLInputElement>('.check')!;
+      check.addEventListener('change', () => h.onToggle(t.key, check.checked));
     }
   }
 }

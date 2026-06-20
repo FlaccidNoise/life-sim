@@ -36,7 +36,15 @@ export class Inspector {
     }
     const speed = Math.hypot(store.vx[i]!, store.vy[i]!);
     const b = i * BRAIN_GENES;
-    const gene = (k: number): string => store.brain[b + k]!.toFixed(2);
+    // Baldwin learning is visible here: each weight shows the LEARNED runtime value with its GENOME
+    // (instinct) value in parens — watch them diverge over a life, then snap back together at birth.
+    // `drift` is the total |learned − instinct| across all weights: a single legible "how much has this
+    // creature learned" number that grows with age and resets to 0 in its offspring.
+    const wrow = (k: number): string =>
+      `${store.learnedBrain[b + k]!.toFixed(2)} (${store.brain[b + k]!.toFixed(2)})`;
+    let drift = 0;
+    for (let g = 0; g < BRAIN_GENES; g++)
+      drift += Math.abs(store.learnedBrain[b + g]! - store.brain[b + g]!);
     const rows: [string, string][] = [
       ['slot', `${i}`],
       ['age', `${store.age[i]!}`],
@@ -44,9 +52,11 @@ export class Inspector {
       ['speed', speed.toFixed(3)],
       ['hue', store.hue[i]!.toFixed(3)],
       ['sense', `${store.senseX[i]!.toFixed(2)}, ${store.senseY[i]!.toFixed(2)}`],
-      ['brain·latTurn', gene(Brain.LAT_TURN)],
-      ['brain·fwdThrust', gene(Brain.FWD_THRUST)],
-      ['brain·cruise', gene(Brain.THRUST_BIAS)],
+      ['reward', store.rewardEma[i]!.toFixed(3)],
+      ['learn drift', drift.toFixed(3)],
+      ['latTurn now(gene)', wrow(Brain.LAT_TURN)],
+      ['fwdThrust now(gene)', wrow(Brain.FWD_THRUST)],
+      ['cruise now(gene)', wrow(Brain.THRUST_BIAS)],
     ];
     this.root.innerHTML = rows
       .map(
