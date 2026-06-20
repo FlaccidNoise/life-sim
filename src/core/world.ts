@@ -1,32 +1,37 @@
 import { type Config } from './config';
 import { Rng } from './rng';
 import { OrganismStore } from './store';
+import { SpatialHash } from './spatial-hash';
+import { computeRepulsion, integrate } from './physics';
 import { Hasher } from './hash';
 
-/** Wrap a coordinate into [0, size) on the torus. */
-function wrap(v: number, size: number): number {
-  const m = v % size;
-  return m < 0 ? m + size : m;
-}
-
 /**
- * The simulation world — owns the config, the single RNG, and the organism store, and runs the tick.
+ * The simulation world — owns the config, the single RNG, the organism store, and the spatial hash,
+ * and runs the tick.
  *
- * PHASE 0 tick is intentionally minimal: constant-velocity drift + toroidal wrap + age. There is NO
- * RNG in step() (entropy is consumed only in seedWorld, at construction/reset), so a tick is a pure
- * function of state and the determinism contract holds. Later phases insert real stages into the
- * documented order: SENSE → THINK → ACT → MOVE → METABOLIZE → REPRO/DIE → FIELDS.
+ * PHASE 1 tick: build the spatial hash → soft repulsion (force pass) → symplectic-Euler integration
+ * (damping + stability clamp + toroidal wrap) → age. There is NO RNG in step() (entropy is consumed
+ * only in seedWorld, at construction/reset), so a tick is a pure function of state and the
+ * determinism contract holds. Later phases insert the remaining stages into the documented order:
+ * SENSE → THINK → ACT → MOVE → METABOLIZE → REPRO/DIE → FIELDS.
  */
 export class World {
   readonly config: Config;
   readonly rng: Rng;
   readonly store: OrganismStore;
+  readonly hash: SpatialHash;
   tick = 0;
 
   constructor(config: Config) {
     this.config = config;
     this.rng = new Rng(config.seed);
     this.store = new OrganismStore(config.maxOrganisms);
+    this.hash = new SpatialHash(
+      config.worldWidth,
+      config.worldHeight,
+      2 * config.cellRadius,
+      config.maxOrganisms,
+    );
     this.seedWorld();
   }
 
@@ -51,15 +56,22 @@ export class World {
 
   /** Advance one tick. Deterministic; ascending live-slot order; no RNG. */
   step(): void {
-    const { dt, worldWidth, worldHeight } = this.config;
+    const cfg = this.config;
     const s = this.store;
-    const { liveIndices, liveCount, x, y, vx, vy, age } = s;
-    for (let k = 0; k < liveCount; k++) {
-      const i = liveIndices[k]!;
-      x[i] = wrap(x[i]! + vx[i]! * dt, worldWidth);
-      y[i] = wrap(y[i]! + vy[i]! * dt, worldHeight);
-      age[i] = (age[i]! + 1) >>> 0;
-    }
+    s.rebuildLive();
+    this.hash.build(s);
+    computeRepulsion(s, this.hash, cfg.cellRadius, cfg.repulsion, cfg.worldWidth, cfg.worldHeight);
+    integrate(
+      s,
+      cfg.dt,
+      cfg.damping,
+      cfg.maxSpeed,
+      cfg.stabilityClamp,
+      cfg.worldWidth,
+      cfg.worldHeight,
+    );
+    const { liveIndices, liveCount, age } = s;
+    for (let k = 0; k < liveCount; k++) age[liveIndices[k]!] = (age[liveIndices[k]!]! + 1) >>> 0;
     this.tick++;
   }
 

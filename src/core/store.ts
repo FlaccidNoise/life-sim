@@ -19,6 +19,11 @@ export class OrganismStore {
   readonly heading: Float64Array;
   readonly energy: Float64Array;
 
+  // Transient per-tick force accumulator (zeroed each tick before force passes; not part of saved
+  // state, so it is NOT hashed — x/y/vx/vy already capture the dynamic state it produces).
+  readonly forceX: Float64Array;
+  readonly forceY: Float64Array;
+
   // Bookkeeping.
   readonly age: Uint32Array;
   readonly genId: Uint32Array;
@@ -39,6 +44,8 @@ export class OrganismStore {
     this.vy = new Float64Array(capacity);
     this.heading = new Float64Array(capacity);
     this.energy = new Float64Array(capacity);
+    this.forceX = new Float64Array(capacity);
+    this.forceY = new Float64Array(capacity);
     this.age = new Uint32Array(capacity);
     this.genId = new Uint32Array(capacity);
     this.alive = new Uint8Array(capacity);

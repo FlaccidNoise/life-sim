@@ -19,8 +19,23 @@ export interface Config {
   maxOrganisms: number;
   /** Organisms seeded at world creation. A live knob — crank it to preview a fuller world. */
   initialPopulation: number;
-  /** Phase-0 constant drift speed (world units/tick) so there is visible motion to watch. */
+  /** Initial speed (world units/tick) given to each seeded organism in a random direction. */
   driftSpeed: number;
+
+  // ── Phase 1: physics ───────────────────────────────────────────────────────────────────────────
+  /** Organism radius in world units. Collision cutoff = 2·cellRadius; also the spatial-hash cell size. */
+  cellRadius: number;
+  /** Soft-repulsion stiffness: force per unit of overlap when two organisms interpenetrate. */
+  repulsion: number;
+  /** Velocity retained per tick after drag, in (0, 1]. Lower = more viscous (motion bleeds off faster). */
+  damping: number;
+  /** Stability ceiling: max speed (world units/tick) after integration. Caps repulsion blow-ups. */
+  maxSpeed: number;
+  /**
+   * Off-switch for the stability clamp (the Phase-1 ablation knob). true = clamp speed to maxSpeed;
+   * false = no clamp, so a stiff repulsion can diverge — used to PROVE the clamp earns its keep.
+   */
+  stabilityClamp: boolean;
 }
 
 export function defaultConfig(overrides: Partial<Config> = {}): Config {
@@ -35,7 +50,14 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     // Phase 0 is a watchable skeleton; a modest crowd makes the instrument panel legible (motion,
     // the population series, click-to-inspect). Physics/economy arrive in later phases.
     initialPopulation: 200,
-    driftSpeed: 0.4,
+    driftSpeed: 1.5,
+    // Physics defaults: light drag so seeded motion is visibly sustained (organisms glide + wrap),
+    // soft repulsion that spreads crowding, a speed ceiling that bounds any repulsion spike.
+    cellRadius: 6,
+    repulsion: 2,
+    damping: 0.92,
+    maxSpeed: 6,
+    stabilityClamp: true,
     ...overrides,
   };
 }
