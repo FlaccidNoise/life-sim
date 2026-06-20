@@ -51,6 +51,7 @@ const inspector = new Inspector(el('inspector'));
 
 let running = false;
 let ticksPerFrame = 1;
+let showFood = true; // food heatmap overlay (toggle with 'f')
 let selected: { slot: number; gen: number } | null = null;
 
 const controls = new Controls(el('controls'), config.seed, {
@@ -114,6 +115,11 @@ canvas.addEventListener('click', (e) => {
 
 globalThis.addEventListener('resize', () => renderer.resize());
 
+// 'f' toggles the food heatmap overlay.
+globalThis.addEventListener('keydown', (e) => {
+  if (e.key === 'f' || e.key === 'F') showFood = !showFood;
+});
+
 // tps measurement (display only — never fed back into the sim).
 let lastT = performance.now();
 let lastTick = 0;
@@ -126,7 +132,7 @@ function frame(): void {
   if (running) {
     for (let i = 0; i < ticksPerFrame; i++) world.step();
   }
-  renderer.draw(world.store);
+  renderer.draw(world.store, world.food, showFood);
   inspector.render(world.store);
 
   const now = performance.now();
