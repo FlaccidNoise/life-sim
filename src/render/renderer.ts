@@ -1,17 +1,21 @@
 /**
- * WebGL2 point renderer. Draws each live organism as a round dot, mapping toroidal world coordinates
- * to the canvas. Deliberately minimal for Phase 0 (gl.POINTS, one draw call); it reads the SoA store
- * directly into a reused Float32 scratch buffer (no per-frame allocation). Rendering is one-way — it
- * never feeds back into the sim, so it can't affect determinism.
+ * WebGL2 point renderer. Draws each live organism as a round dot at its TRUE physical radius
+ * (cellRadius, in world units) under a UNIFORM letterboxed scale — so the square world is never
+ * stretched and visual contact lines up exactly with the collision cutoff (2·cellRadius). Reads the
+ * SoA store directly into a reused Float32 scratch buffer (no per-frame allocation). Rendering is
+ * one-way — it never feeds back into the sim, so it can't affect determinism.
  */
 import { type OrganismStore } from '../core/store';
 
 const VERT = `#version 300 es
 in vec2 a_pos;
-uniform vec2 u_world;
+uniform vec2 u_world;     // world dimensions (units)
+uniform vec2 u_canvas;    // drawing-buffer size (device px)
+uniform float u_scale;    // device px per world unit (uniform → no aspect distortion)
 uniform float u_pointSize;
 void main() {
-  vec2 clip = vec2(a_pos.x / u_world.x * 2.0 - 1.0, 1.0 - a_pos.y / u_world.y * 2.0);
+  vec2 px = (a_pos - u_world * 0.5) * u_scale + u_canvas * 0.5; // device px, origin top-left
+  vec2 clip = vec2(px.x / u_canvas.x * 2.0 - 1.0, 1.0 - px.y / u_canvas.y * 2.0);
   gl_Position = vec4(clip, 0.0, 1.0);
   gl_PointSize = u_pointSize;
 }`;
@@ -32,8 +36,7 @@ function compile(gl: WebGL2RenderingContext, type: number, src: string): WebGLSh
   gl.shaderSource(sh, src);
   gl.compileShader(sh);
   if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
-    const log = gl.getShaderInfoLog(sh);
-    throw new Error(`shader compile failed: ${log ?? '?'}`);
+    throw new Error(`shader compile failed: ${gl.getShaderInfoLog(sh) ?? '?'}`);
   }
   return sh;
 }
@@ -44,14 +47,16 @@ export class Renderer {
   private readonly buffer: WebGLBuffer;
   private readonly scratch: Float32Array;
   private readonly uWorld: WebGLUniformLocation;
+  private readonly uCanvas: WebGLUniformLocation;
+  private readonly uScale: WebGLUniformLocation;
   private readonly uPointSize: WebGLUniformLocation;
   private readonly uColor: WebGLUniformLocation;
-  private dpr = 1;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
     private readonly worldWidth: number,
     private readonly worldHeight: number,
+    private readonly cellRadius: number,
     capacity: number,
   ) {
     const gl = canvas.getContext('webgl2', { antialias: true, alpha: false });
@@ -79,6 +84,8 @@ export class Renderer {
       return loc;
     };
     this.uWorld = need('u_world');
+    this.uCanvas = need('u_canvas');
+    this.uScale = need('u_scale');
     this.uPointSize = need('u_pointSize');
     this.uColor = need('u_color');
 
@@ -93,7 +100,6 @@ export class Renderer {
   /** Match the drawing buffer to the canvas's CSS size × devicePixelRatio. */
   resize(): void {
     const dpr = globalThis.devicePixelRatio || 1;
-    this.dpr = dpr;
     const w = Math.max(1, Math.floor(this.canvas.clientWidth * dpr));
     const h = Math.max(1, Math.floor(this.canvas.clientHeight * dpr));
     if (this.canvas.width !== w || this.canvas.height !== h) {
@@ -101,6 +107,11 @@ export class Renderer {
       this.canvas.height = h;
     }
     this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+  }
+
+  /** Uniform device-px-per-world-unit scale (letterbox: the whole square world fits, undistorted). */
+  private scale(): number {
+    return Math.min(this.canvas.width / this.worldWidth, this.canvas.height / this.worldHeight);
   }
 
   draw(store: OrganismStore): void {
@@ -117,21 +128,30 @@ export class Renderer {
         s[k * 2] = x[i]!;
         s[k * 2 + 1] = y[i]!;
       }
+      const sc = this.scale();
       gl.useProgram(this.program);
       gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
       gl.bufferData(gl.ARRAY_BUFFER, s.subarray(0, n * 2), gl.DYNAMIC_DRAW);
       gl.uniform2f(this.uWorld, this.worldWidth, this.worldHeight);
-      gl.uniform1f(this.uPointSize, Math.max(3, 5 * this.dpr));
+      gl.uniform2f(this.uCanvas, this.canvas.width, this.canvas.height);
+      gl.uniform1f(this.uScale, sc);
+      // Drawn diameter = physical diameter (2·cellRadius) in device px → contact == collision cutoff.
+      gl.uniform1f(this.uPointSize, Math.max(2, 2 * this.cellRadius * sc));
       gl.uniform4f(this.uColor, 0.55, 0.85, 0.95, 1); // cyan accent
       gl.drawArrays(gl.POINTS, 0, n);
     }
   }
 
-  /** Convert a canvas-relative click (CSS px) to world coordinates (for the inspector pick). */
+  /** Convert a canvas-relative click (CSS px) to world coordinates, inverting the letterbox transform. */
   screenToWorld(clientX: number, clientY: number): { x: number; y: number } {
     const rect = this.canvas.getBoundingClientRect();
-    const fx = (clientX - rect.left) / rect.width;
-    const fy = (clientY - rect.top) / rect.height;
-    return { x: fx * this.worldWidth, y: fy * this.worldHeight };
+    const dpr = globalThis.devicePixelRatio || 1;
+    const px = (clientX - rect.left) * dpr;
+    const py = (clientY - rect.top) * dpr;
+    const sc = this.scale();
+    return {
+      x: (px - this.canvas.width / 2) / sc + this.worldWidth / 2,
+      y: (py - this.canvas.height / 2) / sc + this.worldHeight / 2,
+    };
   }
 }

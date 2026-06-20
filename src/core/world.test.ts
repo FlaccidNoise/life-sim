@@ -37,7 +37,7 @@ describe('World — Phase 0 determinism contract', () => {
     for (let t = 0; t < 1000; t++) w.step();
     // Pinned fingerprint — a change here means the deterministic trajectory moved. That must be a
     // deliberate, reviewed change, never an accident.
-    expect(w.stateHash()).toMatchInlineSnapshot(`"371a1819"`);
+    expect(w.stateHash()).toMatchInlineSnapshot(`"ad57ff2a"`);
   });
 
   it('positions stay within the toroidal bounds', () => {
@@ -71,6 +71,33 @@ describe('World — Phase 0 determinism contract', () => {
       // clamp ON ⇒ speed never exceeds maxSpeed (+tiny FP slack)
       expect(Math.hypot(s.vx[i]!, s.vy[i]!)).toBeLessThanOrEqual(cfg.maxSpeed + 1e-6);
     }
+  });
+
+  it('economy liveness: population sustains BOTH births and deaths without extinction (the gate)', () => {
+    // The anti-"0 births" check — the failure that killed the old engine. (CI uses a shorter run than
+    // the 50k headless gate, but it spans multiple boom-bust cycles.)
+    const cfg = defaultConfig({ seed: 1 });
+    const w = new World(cfg);
+    for (let t = 0; t < 8000; t++) w.step();
+    expect(w.totalBirths).toBeGreaterThan(0);
+    expect(w.totalDeaths).toBeGreaterThan(0);
+    expect(w.population).toBeGreaterThan(0); // not extinct
+    expect(w.population).toBeLessThan(cfg.maxOrganisms); // food-limited, not buffer-pegged
+  });
+
+  it('food-OFF ablation → extinction (proves food is the actual energy source)', () => {
+    // No regrowth and an empty field: organisms have nothing to eat → they starve out. If this did
+    // NOT go extinct, there would be a phantom energy source (a leak).
+    const w = new World(defaultConfig({ seed: 1, foodRegen: 0, foodInit: 0 }));
+    let extinct = false;
+    for (let t = 0; t < 2000; t++) {
+      w.step();
+      if (w.population === 0) {
+        extinct = true;
+        break;
+      }
+    }
+    expect(extinct).toBe(true);
   });
 
   it('stability clamp is non-vacuous: OFF + stiff repulsion exceeds the speed ceiling (ablation)', () => {

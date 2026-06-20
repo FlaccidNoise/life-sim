@@ -3,24 +3,31 @@ import { Rng } from './rng';
 import { OrganismStore } from './store';
 import { SpatialHash } from './spatial-hash';
 import { computeRepulsion, integrate } from './physics';
+import { FoodField } from './food-field';
+import { metabolize, cullDead, reproduce } from './economy';
 import { Hasher } from './hash';
 
 /**
  * The simulation world — owns the config, the single RNG, the organism store, and the spatial hash,
  * and runs the tick.
  *
- * PHASE 1 tick: build the spatial hash → soft repulsion (force pass) → symplectic-Euler integration
- * (damping + stability clamp + toroidal wrap) → age. There is NO RNG in step() (entropy is consumed
- * only in seedWorld, at construction/reset), so a tick is a pure function of state and the
- * determinism contract holds. Later phases insert the remaining stages into the documented order:
- * SENSE → THINK → ACT → MOVE → METABOLIZE → REPRO/DIE → FIELDS.
+ * PHASE 2 tick: MOVE (repulsion + integrate) → METABOLIZE (eat + costs + age) → REPRO/DIE → FIELDS
+ * (food regrow + diffuse). RNG is consumed only at reproduction (birth events, ascending order) and
+ * at seeding — never in the physics/metabolism hot loops — so a tick is a pure function of state and
+ * the determinism contract holds. SENSE → THINK → ACT slot in ahead of MOVE in later phases.
  */
 export class World {
   readonly config: Config;
   readonly rng: Rng;
   readonly store: OrganismStore;
   readonly hash: SpatialHash;
+  readonly food: FoodField;
   tick = 0;
+  /** Per-tick + cumulative vital rates (telemetry — drives the population graph and the gate). */
+  lastBirths = 0;
+  lastDeaths = 0;
+  totalBirths = 0;
+  totalDeaths = 0;
 
   constructor(config: Config) {
     this.config = config;
@@ -31,6 +38,14 @@ export class World {
       config.worldHeight,
       2 * config.cellRadius,
       config.maxOrganisms,
+    );
+    this.food = new FoodField(
+      config.worldWidth,
+      config.worldHeight,
+      config.foodCols,
+      config.foodRows,
+      config.foodCap,
+      config.foodInit,
     );
     this.seedWorld();
   }
@@ -49,15 +64,16 @@ export class World {
       s.vx[i] = Math.cos(angle) * driftSpeed;
       s.vy[i] = Math.sin(angle) * driftSpeed;
       s.heading[i] = angle;
-      s.energy[i] = 1;
+      s.energy[i] = this.config.birthEnergy;
     }
     s.rebuildLive();
   }
 
-  /** Advance one tick. Deterministic; ascending live-slot order; no RNG. */
+  /** Advance one tick. Deterministic; ascending live-slot order; RNG only at reproduction. */
   step(): void {
     const cfg = this.config;
     const s = this.store;
+    // MOVE
     s.rebuildLive();
     this.hash.build(s);
     computeRepulsion(s, this.hash, cfg.cellRadius, cfg.repulsion, cfg.worldWidth, cfg.worldHeight);
@@ -70,8 +86,24 @@ export class World {
       cfg.worldWidth,
       cfg.worldHeight,
     );
-    const { liveIndices, liveCount, age } = s;
-    for (let k = 0; k < liveCount; k++) age[liveIndices[k]!] = (age[liveIndices[k]!]! + 1) >>> 0;
+    // METABOLIZE → REPRO/DIE
+    metabolize(s, this.food, cfg.eatRate, cfg.basalCost, cfg.moveCost);
+    this.lastDeaths = cullDead(s);
+    this.lastBirths = reproduce(
+      s,
+      this.rng,
+      cfg.reproThreshold,
+      cfg.reproCost,
+      cfg.birthEnergy,
+      cfg.offspringOffset,
+      cfg.worldWidth,
+      cfg.worldHeight,
+    );
+    this.totalBirths += this.lastBirths;
+    this.totalDeaths += this.lastDeaths;
+    s.rebuildLive();
+    // FIELDS
+    this.food.step(cfg.foodRegen, cfg.foodDiffuse);
     this.tick++;
   }
 
@@ -79,7 +111,9 @@ export class World {
   reset(): void {
     this.rng.state = this.config.seed;
     this.store.clear();
+    this.food.reset(this.config.foodInit);
     this.tick = 0;
+    this.lastBirths = this.lastDeaths = this.totalBirths = this.totalDeaths = 0;
     this.seedWorld();
   }
 
@@ -106,6 +140,7 @@ export class World {
       h.u32(age[i]!);
       h.u32(genId[i]!);
     }
+    this.food.hashInto(h); // food is part of the sim state
     return h.hex();
   }
 }

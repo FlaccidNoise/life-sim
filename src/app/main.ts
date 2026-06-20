@@ -29,14 +29,23 @@ let world = new World(config);
 
 let renderer: Renderer;
 try {
-  renderer = new Renderer(canvas, config.worldWidth, config.worldHeight, config.maxOrganisms);
+  renderer = new Renderer(
+    canvas,
+    config.worldWidth,
+    config.worldHeight,
+    config.cellRadius,
+    config.maxOrganisms,
+  );
 } catch (err) {
   hudBody.textContent = `Renderer init failed: ${err instanceof Error ? err.message : String(err)}`;
   throw err;
 }
 
 const graph = new TimeSeriesGraph(el<HTMLCanvasElement>('graph'), [
-  { label: 'population', color: '#8ad9f2' },
+  { label: 'pop', color: '#8ad9f2' }, // cyan
+  { label: 'food', color: '#7fe0a0' }, // green
+  { label: 'births', color: '#e8d36b' }, // yellow
+  { label: 'deaths', color: '#e08a8a' }, // red
 ]);
 const inspector = new Inspector(el('inspector'));
 
@@ -62,8 +71,13 @@ const controls = new Controls(el('controls'), config.seed, {
 });
 
 new Knobs(el('knobs'), config, {
-  onChange: (patch) => {
-    config = { ...config, ...patch };
+  // Live knob: mutate the config the world already holds → effect next tick, no reset.
+  onLive: (key, value) => {
+    (config[key] as number) = value;
+  },
+  // Seed-time knob: apply and rebuild the world from the seed.
+  onReset: (key, value) => {
+    config = { ...config, [key]: value };
     rebuild();
   },
 });
@@ -72,6 +86,8 @@ function rebuild(): void {
   world = new World(config);
   selected = null;
   inspector.clear();
+  prevBirths = 0;
+  prevDeaths = 0;
 }
 
 // Click to inspect: pick the nearest live organism to the click point.
@@ -102,6 +118,9 @@ globalThis.addEventListener('resize', () => renderer.resize());
 let lastT = performance.now();
 let lastTick = 0;
 let tps = 0;
+// vital-rate deltas for the graph (births/deaths since the last frame).
+let prevBirths = 0;
+let prevDeaths = 0;
 
 function frame(): void {
   if (running) {
@@ -116,7 +135,11 @@ function frame(): void {
     lastT = now;
     lastTick = world.tick;
   }
-  graph.push(world.tick, [world.population]);
+  const dB = world.totalBirths - prevBirths;
+  const dD = world.totalDeaths - prevDeaths;
+  prevBirths = world.totalBirths;
+  prevDeaths = world.totalDeaths;
+  graph.push(world.tick, [world.population, world.food.total(), dB, dD]);
   graph.render();
   controls.setStatus(world.tick, tps, world.population, world.stateHash());
   // keep the selection panel honest if the dot was recycled
