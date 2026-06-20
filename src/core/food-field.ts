@@ -72,6 +72,23 @@ export class FoodField {
     return s;
   }
 
+  /** Per-cell carrying capacity K (for normalizing the render overlay). */
+  get capacity(): number {
+    return this.cap;
+  }
+
+  /**
+   * Write the grid into `out` (length cols·rows) as biomass/capacity scaled to 0..255, row-major
+   * (row 0 = world top). For the render heatmap — keeps the field's buffer private + core DOM-free.
+   */
+  fillTexture(out: Uint8Array): void {
+    const inv = this.cap > 0 ? 255 / this.cap : 0;
+    for (let i = 0; i < this.B.length; i++) {
+      const v = this.B[i]! * inv;
+      out[i] = v < 0 ? 0 : v > 255 ? 255 : v;
+    }
+  }
+
   /** Logistic regrowth + toroidal diffusion. `regen`=0 makes food inert (the ablation → extinction). */
   step(regen: number, diffuse: number): void {
     const { cols, rows, cap, B } = this;
