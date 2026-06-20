@@ -50,6 +50,12 @@ export interface Config {
   foodDiffuse: number;
   /** Initial fill as a fraction of foodCap, [0,1]. */
   foodInit: number;
+  /** Archipelago: number of Gaussian FERTILITY POCKETS. 0 = uniform full world (no pockets). */
+  foodPatchCount: number;
+  /** Pocket radius in food-grid cells. */
+  foodPatchRadius: number;
+  /** Fertility of the dead water between pockets, [0,1] (small → near-dead gaps that isolate pockets). */
+  foodBaseFertility: number;
   /** Max biomass an organism ingests per tick from its current cell (→ energy 1:1). */
   eatRate: number;
   /** Basal metabolic cost per tick (the starvation clock — high enough that not-eating kills). */
@@ -83,15 +89,15 @@ export interface Config {
 export function defaultConfig(overrides: Partial<Config> = {}): Config {
   return {
     seed: 1,
-    // One fixed moderate scale (rebuild decision): big enough for real ecology later, small enough
-    // to validate at full scale in real time on a laptop.
-    worldWidth: 1024,
-    worldHeight: 1024,
+    // The archipelago: a big 8192² world of fertility POCKETS (rich food islands) separated by
+    // near-dead water, so isolated communities form and can evolve down different tracks.
+    worldWidth: 8192,
+    worldHeight: 8192,
     dt: 1,
-    maxOrganisms: 4096,
-    // Phase 0 is a watchable skeleton; a modest crowd makes the instrument panel legible (motion,
-    // the population series, click-to-inspect). Physics/economy arrive in later phases.
-    initialPopulation: 200,
+    maxOrganisms: 32768,
+    // Seeded into the pockets (rejection-sampled onto fertile spots), spread across the islands.
+    // Modest count so the pockets aren't overgrazed at t0 (they're far smaller than a full world).
+    initialPopulation: 120,
     driftSpeed: 1.5,
     // Physics defaults: light drag so seeded motion is visibly sustained (organisms glide + wrap),
     // soft repulsion that spreads crowding, a speed ceiling that bounds any repulsion spike.
@@ -106,12 +112,15 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     // Economy (arithmetic per the spec §4.4): a fed organism nets ≈ +2/tick and reaches the repro bar
     // in a few ticks; an unfed one nets ≈ −0.6/tick and starves on a clock. Tuned headlessly so the
     // population sustains BOTH births and deaths (the Phase-2 anti-"0 births" gate).
-    foodCols: 128,
+    foodCols: 128, // 64-unit cells over the 8192 world
     foodRows: 128,
-    foodCap: 6,
-    foodRegen: 0.06,
+    foodCap: 10, // richer pockets so each island sustains a small breeding community
+    foodRegen: 0.12, // faster regrowth so pockets recover from grazing (isolated → must self-heal)
     foodDiffuse: 0.05,
-    foodInit: 0.5, // start half-full → less fuel for the first overshoot
+    foodInit: 1, // pockets start full (they're the only food; dead water is ~empty anyway)
+    foodPatchCount: 20, // ~20 island communities scattered across the archipelago
+    foodPatchRadius: 10, // ~640-unit pockets (10 cells × 64 units) — room for a community
+    foodBaseFertility: 0.02, // near-dead water between pockets → islands stay distinct
     eatRate: 2,
     basalCost: 0.4,
     moveCost: 0.01,
@@ -123,8 +132,8 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     offspringOffset: 8,
 
     // Steering + evolution. Founders seeded near a chemotaxis brain (genome.ts FOUNDER_BRAIN) with a
-    // spread; offspring mutate. cellRadius=6 → senseStep ≈ one food cell.
-    senseStep: 8,
+    // spread; offspring mutate. senseStep ≈ one food cell (64u) so the gradient reads across cells.
+    senseStep: 64,
     maxTurn: 0.35,
     maxThrust: 1,
     founderSigma: 0.3,
