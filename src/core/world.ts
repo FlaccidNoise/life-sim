@@ -50,19 +50,55 @@ export class World {
       config.foodCap,
       config.foodInit,
     );
+    this.setup();
+  }
+
+  /**
+   * Seed the food field + organisms. Called from the constructor AND reset() so the RNG is consumed
+   * identically both times (→ reset reproduces construction). Patches first (if any), then creatures.
+   */
+  private setup(): void {
+    const cfg = this.config;
+    if (cfg.foodPatchCount > 0) {
+      this.food.seedPatches(
+        cfg.foodPatchCount,
+        cfg.foodPatchRadius,
+        cfg.foodBaseFertility,
+        this.rng,
+      );
+    } else {
+      this.food.reset();
+    }
     this.seedWorld();
   }
 
-  /** Populate the initial organisms. The ONLY place Phase 0 consumes the RNG. */
+  /** Populate the initial organisms — rejection-sampled onto fertile spots (the pockets). */
   private seedWorld(): void {
     const { worldWidth, worldHeight, initialPopulation, driftSpeed, maxOrganisms } = this.config;
     const s = this.store;
     const n = Math.min(initialPopulation, maxOrganisms);
+    const fertileThreshold = 0.3 * this.food.capacity; // "in a pocket"
     for (let k = 0; k < n; k++) {
       const i = s.alloc();
       if (i < 0) break;
-      s.x[i] = this.rng.range(0, worldWidth);
-      s.y[i] = this.rng.range(0, worldHeight);
+      // Try a few random spots; take the first in a pocket (else the last tried) so founders start on
+      // food rather than starving in dead water.
+      let bx = 0;
+      let by = 0;
+      let best = -1;
+      for (let t = 0; t < 8; t++) {
+        const tx = this.rng.range(0, worldWidth);
+        const ty = this.rng.range(0, worldHeight);
+        const f = this.food.sampleAt(tx, ty);
+        if (f > best) {
+          best = f;
+          bx = tx;
+          by = ty;
+        }
+        if (f >= fertileThreshold) break;
+      }
+      s.x[i] = bx;
+      s.y[i] = by;
       const angle = this.rng.range(0, Math.PI * 2);
       s.vx[i] = Math.cos(angle) * driftSpeed;
       s.vy[i] = Math.sin(angle) * driftSpeed;
@@ -120,10 +156,9 @@ export class World {
   reset(): void {
     this.rng.state = this.config.seed;
     this.store.clear();
-    this.food.reset(this.config.foodInit);
     this.tick = 0;
     this.lastBirths = this.lastDeaths = this.totalBirths = this.totalDeaths = 0;
-    this.seedWorld();
+    this.setup();
   }
 
   get population(): number {

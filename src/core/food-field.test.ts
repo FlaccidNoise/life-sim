@@ -47,10 +47,37 @@ describe('FoodField', () => {
     expect(f.sampleAt(cx, cellW * 4 + cellW / 2)).toBeGreaterThan(0); // reseeded from neighbors
   });
 
-  it('reset refills to the initial fraction', () => {
-    const f = new FoodField(W, H, COLS, ROWS, K, 1);
+  it('reset refills to the initial biomass', () => {
+    const f = new FoodField(W, H, COLS, ROWS, K, 1); // initFraction 1, uniform fertility
     f.grazeAt(0, 0, K);
-    f.reset(1);
+    f.reset();
     expect(f.sampleAt(0, 0)).toBe(K);
+  });
+
+  it('seedPatches makes pockets rich and gaps near-dead', () => {
+    const f = new FoodField(256, 256, 64, 64, K, 1);
+    f.seedPatches(
+      3,
+      6,
+      0.02,
+      new (class {
+        private s = 5;
+        float(): number {
+          this.s = (this.s * 1103515245 + 12345) & 0x7fffffff;
+          return this.s / 0x7fffffff;
+        }
+      })(),
+    );
+    // some cell is rich (near K) and some cell is near-dead (≈ base·K)
+    let maxB = 0;
+    let minB = Infinity;
+    for (let y = 4; y < 256; y += 8)
+      for (let x = 4; x < 256; x += 8) {
+        const b = f.sampleAt(x, y);
+        if (b > maxB) maxB = b;
+        if (b < minB) minB = b;
+      }
+    expect(maxB).toBeGreaterThan(0.5 * K); // a pocket
+    expect(minB).toBeLessThan(0.1 * K); // dead water
   });
 });

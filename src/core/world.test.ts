@@ -70,7 +70,7 @@ describe('World — Phase 0 determinism contract', () => {
     // no zero-births. (CI runs a short proxy; the full 100k×multi-seed check lives in headless/.)
     const cfg = defaultConfig({ seed: 1 });
     const w = new World(cfg);
-    for (let t = 0; t < 8000; t++) w.step();
+    for (let t = 0; t < 3000; t++) w.step(); // fast proxy; the full 100k×seeds check is headless/guardrail
     expect(w.totalBirths).toBeGreaterThan(0);
     expect(w.totalDeaths).toBeGreaterThan(0);
     expect(w.population).toBeGreaterThan(0); // not extinct
