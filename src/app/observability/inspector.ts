@@ -24,7 +24,7 @@ export class Inspector {
     this.slot = -1;
   }
 
-  render(store: OrganismStore | null): void {
+  render(store: OrganismStore | null, reproThreshold = 0, satiatedThreshold = 0): void {
     if (!store || this.slot < 0) {
       this.root.innerHTML = `<div class="muted">click a dot to inspect</div>`;
       return;
@@ -45,14 +45,21 @@ export class Inspector {
     let drift = 0;
     for (let g = 0; g < BRAIN_GENES; g++)
       drift += Math.abs(store.learnedBrain[b + g]! - store.brain[b + g]!);
+    // Energy band → behavioral mode + the learning gate (0 in survival → 1 at satiation).
+    const e = store.energy[i]!;
+    const mode =
+      e >= satiatedThreshold ? 'SATIATED' : e >= reproThreshold ? 'REPRODUCTIVE' : 'SURVIVAL';
+    const span = satiatedThreshold - reproThreshold;
+    const gate = span > 0 ? Math.max(0, Math.min(1, (e - reproThreshold) / span)) : 0;
     const rows: [string, string][] = [
       ['slot', `${i}`],
       ['age', `${store.age[i]!}`],
-      ['energy', store.energy[i]!.toFixed(2)],
+      ['energy', e.toFixed(2)],
+      ['mode', mode],
       ['speed', speed.toFixed(3)],
       ['hue', store.hue[i]!.toFixed(3)],
       ['sense', `${store.senseX[i]!.toFixed(2)}, ${store.senseY[i]!.toFixed(2)}`],
-      ['reward', store.rewardEma[i]!.toFixed(3)],
+      ['learn gate', gate.toFixed(2)],
       ['learn drift', drift.toFixed(3)],
       ['latTurn now(gene)', wrow(Brain.LAT_TURN)],
       ['fwdThrust now(gene)', wrow(Brain.FWD_THRUST)],

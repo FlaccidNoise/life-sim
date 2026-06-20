@@ -18,10 +18,23 @@ describe('metabolize', () => {
     s.energy[i] = 5;
     s.rebuildLive();
     const food = new FoodField(W, H, 16, 16, 10, 1); // cell full (B=10)
-    metabolize(s, food, 2, 0.4, 0.01, 0.1); // eat 2, basal 0.4, no movement
+    metabolize(s, food, 2, 0.4, 0.01, 1000); // eat 2, basal 0.4, no movement; satiated bar far above
     expect(s.energy[i]).toBeCloseTo(5 + 2 - 0.4);
     expect(food.sampleAt(10, 10)).toBeCloseTo(8); // 2 grazed
     expect(s.age[i]!).toBe(1);
+  });
+
+  it('a satiated creature stops eating (leaves biomass for others)', () => {
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.x[i] = 10;
+    s.y[i] = 10;
+    s.energy[i] = 100; // at/above the satiated bar
+    s.rebuildLive();
+    const food = new FoodField(W, H, 16, 16, 10, 1); // cell full
+    metabolize(s, food, 2, 0.4, 0.01, 100); // satiated bar = 100
+    expect(food.sampleAt(10, 10)).toBeCloseTo(10); // nothing grazed — left for others
+    expect(s.energy[i]).toBeCloseTo(100 - 0.4); // still pays basal (so it decays back down)
   });
 
   it('charges movement cost ∝ speed²', () => {
@@ -34,7 +47,7 @@ describe('metabolize', () => {
     s.energy[i] = 50;
     s.rebuildLive();
     const food = new FoodField(W, H, 16, 16, 10, 0); // empty → no eat income
-    metabolize(s, food, 2, 0.4, 0.01, 0.1);
+    metabolize(s, food, 2, 0.4, 0.01, 1000);
     expect(s.energy[i]).toBeCloseTo(50 - 0.4 - 0.01 * 25);
   });
 });

@@ -22,18 +22,16 @@ export function metabolize(
   eatRate: number,
   basalCost: number,
   moveCost: number,
-  rewardAlpha: number,
+  satiatedThreshold: number,
 ): void {
-  const { liveIndices, liveCount, x, y, vx, vy, energy, age, rewardEma } = store;
+  const { liveIndices, liveCount, x, y, vx, vy, energy, age } = store;
   for (let k = 0; k < liveCount; k++) {
     const i = liveIndices[k]!;
-    const gained = food.grazeAt(x[i]!, y[i]!, eatRate);
+    // SATIATED creatures are "full" → they stop grazing, leaving the biomass in the cell for others.
+    const gained = energy[i]! >= satiatedThreshold ? 0 : food.grazeAt(x[i]!, y[i]!, eatRate);
     const speed2 = vx[i]! * vx[i]! + vy[i]! * vy[i]!;
-    const net = gained - basalCost - moveCost * speed2; // per-tick energy change = the reward signal
-    energy[i] = energy[i]! + net;
+    energy[i] = energy[i]! + gained - basalCost - moveCost * speed2;
     age[i] = (age[i]! + 1) >>> 0;
-    // EMA of net energy → the Baldwin reward (cheap, always tracked; learn() reads it when enabled).
-    rewardEma[i] = rewardEma[i]! + rewardAlpha * (net - rewardEma[i]!);
   }
 }
 
@@ -52,16 +50,17 @@ export function cullDead(store: OrganismStore): number {
 }
 
 /**
- * Asexual reproduction by energy split: an organism at/above reproThreshold spawns a child near it,
- * pays reproCost (birthEnergy to the child, the rest lost), and the child starts at birthEnergy. The
- * child INHERITS the parent's genome (brain weights + hue) with Gaussian mutation — the only source of
- * heritable variation, which is what makes behavior evolve. Children allocated this tick first act
- * next tick (they are not in the iterated snapshot). RNG is drawn in ascending order. Returns births.
+ * Asexual reproduction by energy split, "breed at the top": an organism that has climbed to the
+ * SATIATED threshold spawns a child near it, pays reproCost (birthEnergy to the child, the rest lost),
+ * which drops it back down into the reproductive band — so it must forage back up to breed again, and
+ * the climb-time naturally rate-limits breeding. The child INHERITS the parent's genome (brain weights
+ * + hue) with Gaussian mutation — the only source of heritable variation. Children allocated this tick
+ * first act next tick (not in the iterated snapshot). RNG is drawn in ascending order. Returns births.
  */
 export function reproduce(
   store: OrganismStore,
   rng: Rng,
-  reproThreshold: number,
+  satiatedThreshold: number,
   reproCost: number,
   birthEnergy: number,
   offspringOffset: number,
@@ -79,7 +78,7 @@ export function reproduce(
   for (let k = 0; k < n; k++) {
     const p = parents[k]!;
     if (!store.isAlive(p)) continue; // died in the cull this tick
-    if (energy[p]! < reproThreshold) continue;
+    if (energy[p]! < satiatedThreshold) continue; // breed only once full (the top of the climb)
     const child = store.alloc();
     if (child < 0) break; // store full — stop (population is buffer-capped)
     const angle = rng.range(0, Math.PI * 2);

@@ -83,29 +83,35 @@ export function steer(
 }
 
 /**
- * Reward-modulated Hebbian weight update (run after METABOLIZE, once each creature's reward is known):
- *   reward = clamp(rewardEma / rewardScale, −1, 1)
- *   w      = clamp( w·(1−decay) + lr·elig·reward, ±W )
- * The stability triad — bounded reward, multiplicative decay, hard clamp — keeps the runtime brain from
- * running away while still letting it drift toward whatever steering correlates with net energy gain.
+ * Energy-gated Hebbian consolidation (run after METABOLIZE, once this tick's energy is known):
+ *   gate = clamp( (energy − reproThreshold) / (satiated − reproThreshold), 0, 1 )   // 0=survival, 1=full
+ *   w    = clamp( genome + (w − genome)·(1−decay) + learningRate·gate·elig, ±W )
+ * Learning EMERGES from the creature's state, not a knob: a well-fed creature consolidates whatever it
+ * has recently been doing (the warm eligibility traces), strongest at satiation; a struggling creature
+ * (gate ≤ 0) is left untouched — its instinct is preserved for the fight to survive. The learned
+ * deviation decays back toward the genome instinct, so it never corrupts (or out-lives) the genome.
  */
 export function learn(
   store: OrganismStore,
   learningRate: number,
+  reproThreshold: number,
+  satiatedThreshold: number,
   weightDecay: number,
-  rewardScale: number,
   weightClamp: number,
 ): void {
-  const { liveIndices, liveCount, learnedBrain, elig, rewardEma } = store;
+  const { liveIndices, liveCount, energy, brain, learnedBrain, elig } = store;
+  const span = satiatedThreshold - reproThreshold;
   const keep = 1 - weightDecay;
   for (let k = 0; k < liveCount; k++) {
     const i = liveIndices[k]!;
-    let reward = rewardEma[i]! / rewardScale;
-    if (reward > 1) reward = 1;
-    else if (reward < -1) reward = -1;
+    let gate = (energy[i]! - reproThreshold) / span;
+    if (gate <= 0) continue; // survival mode → freeze the runtime brain (no spare capacity to learn)
+    if (gate > 1) gate = 1;
+    const rate = learningRate * gate; // peak when satiated
     const b = i * BRAIN_GENES;
     for (let g = 0; g < BRAIN_GENES; g++) {
-      let w = keep * learnedBrain[b + g]! + learningRate * elig[b + g]! * reward;
+      const w0 = brain[b + g]!; // genome instinct = the anchor the deviation relaxes toward
+      let w = w0 + (learnedBrain[b + g]! - w0) * keep + rate * elig[b + g]!;
       if (w > weightClamp) w = weightClamp;
       else if (w < -weightClamp) w = -weightClamp;
       learnedBrain[b + g] = w;
