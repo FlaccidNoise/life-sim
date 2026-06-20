@@ -65,19 +65,19 @@ export interface Config {
   /** Offspring placement offset from the parent, in world units. */
   offspringOffset: number;
 
-  // ── Phase 3: steering (chemotaxis toward food) ──────────────────────────────────────────────────
+  // ── Steering + evolution (per-creature heritable brain) ─────────────────────────────────────────
   /** Gradient sample half-step in world units (central difference of the food field). */
   senseStep: number;
-  /** Always-on forward thrust (cruise) — organisms are self-propelled even with no food signal. */
-  cruiseThrust: number;
-  /** Turn (rad/tick) per unit lateral food gradient. 0 = blind cruise (the chemotaxis ablation). */
-  turnGain: number;
-  /** Extra forward thrust per unit forward food gradient. 0 = blind cruise (the ablation). */
-  thrustGain: number;
-  /** Max heading change per tick (rad). */
+  /** Max heading change per tick (rad) — a physical limit on the brain's turn output. */
   maxTurn: number;
-  /** Thrust force ceiling. */
+  /** Thrust force ceiling — a physical limit on the brain's thrust output. */
   maxThrust: number;
+  /** Gaussian σ spread of founder brain weights around the seed brain (initial behavioral variation). */
+  founderSigma: number;
+  /** Gaussian σ of per-weight brain mutation at birth (the evolutionary step size; live knob). */
+  mutationSigma: number;
+  /** Gaussian σ of hue-gene drift at birth (how fast lineage colors diverge). */
+  hueMutationSigma: number;
 }
 
 export function defaultConfig(overrides: Partial<Config> = {}): Config {
@@ -122,14 +122,14 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     birthEnergy: 25,
     offspringOffset: 8,
 
-    // Steering — chemotaxis toward food. Tuned headlessly so chemotaxis-ON forages measurably better
-    // than blind cruise while the boom-bust stays alive. cellRadius=6 → senseStep ≈ one food cell.
+    // Steering + evolution. Founders seeded near a chemotaxis brain (genome.ts FOUNDER_BRAIN) with a
+    // spread; offspring mutate. cellRadius=6 → senseStep ≈ one food cell.
     senseStep: 8,
-    cruiseThrust: 0.3,
-    turnGain: 1.2,
-    thrustGain: 1.5,
     maxTurn: 0.35,
     maxThrust: 1,
+    founderSigma: 0.3,
+    mutationSigma: 0.05,
+    hueMutationSigma: 0.02,
     ...overrides,
   };
 }

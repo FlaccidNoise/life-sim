@@ -12,24 +12,31 @@ import { type FoodField } from '../core/food-field';
 
 const DOT_VERT = `#version 300 es
 in vec2 a_pos;
+in float a_hue;                 // genome hue gene [0,1) → per-creature color (visible heredity)
 uniform vec2 u_world;
 uniform vec2 u_canvas;
 uniform float u_scale;
 uniform float u_pointSize;
+out vec3 v_color;
+vec3 hsv2rgb(float h, float s, float v) {
+  vec3 p = abs(fract(vec3(h) + vec3(1.0, 2.0/3.0, 1.0/3.0)) * 6.0 - 3.0);
+  return v * mix(vec3(1.0), clamp(p - 1.0, 0.0, 1.0), s);
+}
 void main() {
   vec2 px = (a_pos - u_world * 0.5) * u_scale + u_canvas * 0.5;
   gl_Position = vec4(px.x / u_canvas.x * 2.0 - 1.0, 1.0 - px.y / u_canvas.y * 2.0, 0.0, 1.0);
   gl_PointSize = u_pointSize;
+  v_color = hsv2rgb(a_hue, 0.65, 1.0); // bright, slightly desaturated for the bioluminescent look
 }`;
 
 const DOT_FRAG = `#version 300 es
 precision mediump float;
-uniform vec4 u_color;
+in vec3 v_color;
 out vec4 outColor;
 void main() {
   vec2 d = gl_PointCoord - vec2(0.5);
   if (dot(d, d) > 0.25) discard;
-  outColor = u_color;
+  outColor = vec4(v_color, 1.0);
 }`;
 
 const FOOD_VERT = `#version 300 es
@@ -84,8 +91,11 @@ export class Renderer {
   // dots
   private readonly dotProgram: WebGLProgram;
   private readonly dotBuffer: WebGLBuffer;
+  private readonly hueBuffer: WebGLBuffer;
   private readonly dotScratch: Float32Array;
+  private readonly hueScratch: Float32Array;
   private readonly aPos: number;
+  private readonly aHue: number;
   // food overlay
   private readonly foodProgram: WebGLProgram;
   private readonly quadBuffer: WebGLBuffer;
@@ -108,16 +118,21 @@ export class Renderer {
     this.dotProgram = link(gl, DOT_VERT, DOT_FRAG);
     this.foodProgram = link(gl, FOOD_VERT, FOOD_FRAG);
     this.aPos = gl.getAttribLocation(this.dotProgram, 'a_pos');
+    this.aHue = gl.getAttribLocation(this.dotProgram, 'a_hue');
     this.aCorner = gl.getAttribLocation(this.foodProgram, 'a_corner');
 
     const dotBuffer = gl.createBuffer();
+    const hueBuffer = gl.createBuffer();
     const quadBuffer = gl.createBuffer();
     const foodTex = gl.createTexture();
-    if (!dotBuffer || !quadBuffer || !foodTex) throw new Error('GL resource alloc failed');
+    if (!dotBuffer || !hueBuffer || !quadBuffer || !foodTex)
+      throw new Error('GL resource alloc failed');
     this.dotBuffer = dotBuffer;
+    this.hueBuffer = hueBuffer;
     this.quadBuffer = quadBuffer;
     this.foodTex = foodTex;
     this.dotScratch = new Float32Array(capacity * 2);
+    this.hueScratch = new Float32Array(capacity);
 
     // Unit quad as a triangle strip: (0,0)(1,0)(0,1)(1,1).
     gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
@@ -208,23 +223,28 @@ export class Renderer {
     const n = store.liveCount;
     if (n > 0) {
       const s = this.dotScratch;
-      const { liveIndices, x, y } = store;
+      const hsc = this.hueScratch;
+      const { liveIndices, x, y, hue } = store;
       for (let k = 0; k < n; k++) {
         const i = liveIndices[k]!;
         s[k * 2] = x[i]!;
         s[k * 2 + 1] = y[i]!;
+        hsc[k] = hue[i]!;
       }
       gl.useProgram(this.dotProgram);
       gl.bindBuffer(gl.ARRAY_BUFFER, this.dotBuffer);
       gl.bufferData(gl.ARRAY_BUFFER, s.subarray(0, n * 2), gl.DYNAMIC_DRAW);
       gl.enableVertexAttribArray(this.aPos);
       gl.vertexAttribPointer(this.aPos, 2, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.hueBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, hsc.subarray(0, n), gl.DYNAMIC_DRAW);
+      gl.enableVertexAttribArray(this.aHue);
+      gl.vertexAttribPointer(this.aHue, 1, gl.FLOAT, false, 0, 0);
       this.setCommonUniforms(this.dotProgram, sc);
       gl.uniform1f(
         gl.getUniformLocation(this.dotProgram, 'u_pointSize'),
         Math.max(2, 2 * this.cellRadius * sc),
       );
-      gl.uniform4f(gl.getUniformLocation(this.dotProgram, 'u_color'), 0.6, 0.88, 0.97, 1); // cyan
       gl.drawArrays(gl.POINTS, 0, n);
     }
   }

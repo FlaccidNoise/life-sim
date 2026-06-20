@@ -6,6 +6,7 @@ import { computeRepulsion, integrate } from './physics';
 import { FoodField } from './food-field';
 import { senseFood } from './sense';
 import { steer } from './brain';
+import { seedGenome } from './genome';
 import { metabolize, cullDead, reproduce } from './economy';
 import { Hasher } from './hash';
 
@@ -67,6 +68,7 @@ export class World {
       s.vy[i] = Math.sin(angle) * driftSpeed;
       s.heading[i] = angle;
       s.energy[i] = this.config.birthEnergy;
+      seedGenome(s.brain, s.hue, i, this.rng, this.config.founderSigma);
     }
     s.rebuildLive();
   }
@@ -79,7 +81,7 @@ export class World {
     this.hash.build(s);
     // SENSE → THINK/ACT: perceive the food gradient, then steer (sets the thrust force).
     senseFood(s, this.food, cfg.senseStep, cfg.worldWidth, cfg.worldHeight);
-    steer(s, cfg.turnGain, cfg.thrustGain, cfg.cruiseThrust, cfg.maxTurn, cfg.maxThrust);
+    steer(s, cfg.maxTurn, cfg.maxThrust);
     // MOVE: repulsion adds onto the thrust force, then integrate.
     computeRepulsion(s, this.hash, cfg.cellRadius, cfg.repulsion, cfg.worldWidth, cfg.worldHeight);
     integrate(
@@ -101,6 +103,8 @@ export class World {
       cfg.reproCost,
       cfg.birthEnergy,
       cfg.offspringOffset,
+      cfg.mutationSigma,
+      cfg.hueMutationSigma,
       cfg.worldWidth,
       cfg.worldHeight,
     );

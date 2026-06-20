@@ -62,7 +62,7 @@ describe('reproduce', () => {
     s.energy[p] = 100;
     s.rebuildLive();
     const rng = new Rng(1);
-    const births = reproduce(s, rng, 60, 35, 25, 8, W, H);
+    const births = reproduce(s, rng, 60, 35, 25, 8, 0.05, 0.02, W, H);
     expect(births).toBe(1);
     expect(s.energy[p]).toBeCloseTo(100 - 35);
     s.rebuildLive();
@@ -76,7 +76,7 @@ describe('reproduce', () => {
     const p = s.alloc();
     s.energy[p] = 59;
     s.rebuildLive();
-    expect(reproduce(s, new Rng(1), 60, 35, 25, 8, W, H)).toBe(0);
+    expect(reproduce(s, new Rng(1), 60, 35, 25, 8, 0.05, 0.02, W, H)).toBe(0);
   });
 
   it('is deterministic given the seed (RNG consumed in order)', () => {
@@ -92,10 +92,10 @@ describe('reproduce', () => {
       return s;
     };
     const s1 = make();
-    reproduce(s1, new Rng(7), 60, 35, 25, 8, W, H);
+    reproduce(s1, new Rng(7), 60, 35, 25, 8, 0.05, 0.02, W, H);
     s1.rebuildLive();
     const s2 = make();
-    reproduce(s2, new Rng(7), 60, 35, 25, 8, W, H);
+    reproduce(s2, new Rng(7), 60, 35, 25, 8, 0.05, 0.02, W, H);
     s2.rebuildLive();
     for (let k = 0; k < s1.liveCount; k++) {
       const i = s1.liveIndices[k]!;
