@@ -5,6 +5,7 @@
  * silently inspect a different organism than the one you clicked.
  */
 import { type OrganismStore } from '../../core/store';
+import { Brain, BRAIN_GENES } from '../../core/genome';
 
 export class Inspector {
   private slot = -1;
@@ -34,17 +35,18 @@ export class Inspector {
       return;
     }
     const speed = Math.hypot(store.vx[i]!, store.vy[i]!);
+    const b = i * BRAIN_GENES;
+    const gene = (k: number): string => store.brain[b + k]!.toFixed(2);
     const rows: [string, string][] = [
       ['slot', `${i}`],
-      ['genId', `${store.genId[i]!}`],
       ['age', `${store.age[i]!}`],
-      ['x', store.x[i]!.toFixed(2)],
-      ['y', store.y[i]!.toFixed(2)],
-      ['vx', store.vx[i]!.toFixed(3)],
-      ['vy', store.vy[i]!.toFixed(3)],
+      ['energy', store.energy[i]!.toFixed(2)],
       ['speed', speed.toFixed(3)],
-      ['heading', store.heading[i]!.toFixed(3)],
-      ['energy', store.energy[i]!.toFixed(3)],
+      ['hue', store.hue[i]!.toFixed(3)],
+      ['sense', `${store.senseX[i]!.toFixed(2)}, ${store.senseY[i]!.toFixed(2)}`],
+      ['brain·latTurn', gene(Brain.LAT_TURN)],
+      ['brain·fwdThrust', gene(Brain.FWD_THRUST)],
+      ['brain·cruise', gene(Brain.THRUST_BIAS)],
     ];
     this.root.innerHTML = rows
       .map(

@@ -1,3 +1,5 @@
+import { BRAIN_GENES } from './genome';
+
 /**
  * Organism store — data-oriented SoA (structure-of-arrays). No per-entity objects: parallel typed
  * arrays indexed by slot, with a free-list + generational ids for safe slot recycling (a stale
@@ -29,6 +31,10 @@ export class OrganismStore {
   readonly senseX: Float64Array;
   readonly senseY: Float64Array;
 
+  // Genome (heritable, mutated at birth): the brain weights (BRAIN_GENES per slot) + the hue gene.
+  readonly brain: Float32Array;
+  readonly hue: Float32Array;
+
   // Bookkeeping.
   readonly age: Uint32Array;
   readonly genId: Uint32Array;
@@ -53,6 +59,8 @@ export class OrganismStore {
     this.forceY = new Float64Array(capacity);
     this.senseX = new Float64Array(capacity);
     this.senseY = new Float64Array(capacity);
+    this.brain = new Float32Array(capacity * BRAIN_GENES);
+    this.hue = new Float32Array(capacity);
     this.age = new Uint32Array(capacity);
     this.genId = new Uint32Array(capacity);
     this.alive = new Uint8Array(capacity);

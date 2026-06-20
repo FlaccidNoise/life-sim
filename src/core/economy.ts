@@ -10,6 +10,7 @@
 import { type OrganismStore } from './store';
 import { type FoodField } from './food-field';
 import { type Rng } from './rng';
+import { mutateGenome } from './genome';
 
 /**
  * Eat from the current food cell (capped by eatRate and local biomass), pay basal + movement cost,
@@ -48,10 +49,10 @@ export function cullDead(store: OrganismStore): number {
 
 /**
  * Asexual reproduction by energy split: an organism at/above reproThreshold spawns a child near it,
- * pays reproCost (birthEnergy to the child, the rest lost), and the child starts at birthEnergy. No
- * genome yet (Phase 5) — offspring are kinematic copies. Children allocated this tick first act next
- * tick (they are not in the iterated snapshot). RNG (placement angle) is drawn in ascending order.
- * Returns the birth count.
+ * pays reproCost (birthEnergy to the child, the rest lost), and the child starts at birthEnergy. The
+ * child INHERITS the parent's genome (brain weights + hue) with Gaussian mutation — the only source of
+ * heritable variation, which is what makes behavior evolve. Children allocated this tick first act
+ * next tick (they are not in the iterated snapshot). RNG is drawn in ascending order. Returns births.
  */
 export function reproduce(
   store: OrganismStore,
@@ -60,6 +61,8 @@ export function reproduce(
   reproCost: number,
   birthEnergy: number,
   offspringOffset: number,
+  mutationSigma: number,
+  hueMutationSigma: number,
   worldWidth: number,
   worldHeight: number,
 ): number {
@@ -89,6 +92,7 @@ export function reproduce(
     heading[child] = heading[p]!;
     energy[child] = birthEnergy;
     energy[p] = energy[p]! - reproCost;
+    mutateGenome(store.brain, store.hue, child, p, rng, mutationSigma, hueMutationSigma);
     births++;
   }
   return births;
