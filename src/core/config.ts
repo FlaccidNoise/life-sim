@@ -62,9 +62,15 @@ export interface Config {
   basalCost: number;
   /** Movement cost per tick = moveCost · speed² (makes fast blind search expensive → senses pay off). */
   moveCost: number;
-  /** Energy at/above which an organism reproduces (asexual split; genome added in Phase 5). */
+  /** Lower edge of the REPRODUCTIVE band: below this an organism is in SURVIVAL mode (forage only — no
+   *  breeding, no learning). Also where a parent lands after breeding. (Historical name: the "repro bar".) */
   reproThreshold: number;
-  /** Energy the parent spends to reproduce (birthEnergy goes to the child, the remainder is lost). */
+  /** SATIATED threshold: at/above this an organism is "full" → it stops eating (leaves biomass for
+   *  others), learns at its peak rate, and BREEDS ("breed at the top"), which drops it back into the
+   *  reproductive band. Must be > reproThreshold. */
+  satiatedThreshold: number;
+  /** Energy the parent spends to reproduce (birthEnergy goes to the child, the remainder is lost).
+   *  Tuned so breeding at `satiatedThreshold` lands the parent near `reproThreshold`. */
   reproCost: number;
   /** Starting energy of a seeded organism and of each offspring. */
   birthEnergy: number;
@@ -85,22 +91,20 @@ export interface Config {
   /** Gaussian σ of hue-gene drift at birth (how fast lineage colors diverge). */
   hueMutationSigma: number;
 
-  // ── Baldwin within-life learning (reward-modulated Hebbian + eligibility traces) ─────────────────
+  // ── Baldwin within-life learning (energy-gated Hebbian consolidation + eligibility traces) ────────
   /** Master off-switch for plasticity. false = the runtime brain never drifts from the genome (pure
    *  instinct) — the ablation that proves learning earns its keep without breaking the alive-guardrail. */
   learningEnabled: boolean;
-  /** Plasticity step size: Δw = learningRate · eligibility · reward. 0 = effectively off (live knob). */
+  /** PEAK plasticity step size (applied when fully satiated). The EFFECTIVE rate is energy-gated:
+   *  it ramps 0 (at reproThreshold) → learningRate (at satiatedThreshold), so a creature only
+   *  consolidates what it's doing when it's well-fed. NOT a live knob — learning emerges from energy. */
   learningRate: number;
   /** Eligibility-trace blend λ ∈ (0,1]: elig = (1−λ)·elig + λ·(pre·post). Lower = longer memory of
    *  which synapses were active, bridging the decision→reward delay. */
   eligLambda: number;
-  /** Per-tick multiplicative weight decay toward 0 (the stability leg: bounds runaway drift). */
+  /** Per-tick decay of the learned DEVIATION back toward the genome instinct (the stability leg:
+   *  without reinforcement the runtime brain relaxes to instinct; it never corrupts the genome). */
   weightDecay: number;
-  /** Reward normaliser: reward = clamp(rewardEma / rewardScale, −1, 1). Sets how much net energy counts
-   *  as "good". */
-  rewardScale: number;
-  /** EMA smoothing α ∈ (0,1] for the reward signal (net energy/tick). Higher = more reactive reward. */
-  rewardAlpha: number;
   /** Runtime-weight clamp ±W: learned weights are bounded to [−weightClamp, +weightClamp]. */
   weightClamp: number;
 }
@@ -145,8 +149,9 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     moveCost: 0.01,
     // Slow breeding (long generation vs the starvation clock) damps the boom-bust toward a sustained,
     // turning-over population instead of an overshoot-to-extinction. Tuned headlessly.
-    reproThreshold: 60,
-    reproCost: 35, // 25 to the child + 10 lost; parent drops to ≥25 and stays viable
+    reproThreshold: 60, // survival↔reproductive boundary; parent lands here after breeding
+    satiatedThreshold: 100, // breed-at-the-top trigger + eat-stop + peak learning
+    reproCost: 40, // breeding at 100 drops the parent to ~60 (25 to the child + 15 overhead)
     birthEnergy: 25,
     offspringOffset: 8,
 
@@ -159,14 +164,13 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     mutationSigma: 0.05,
     hueMutationSigma: 0.02,
 
-    // Baldwin learning ON by default. Small lr + decay + clamp keep drift bounded so a near-optimal
-    // instinct refines (and is visibly perturbed) without destabilising survival (the alive-guardrail).
+    // Baldwin learning ON by default. Energy-gated: a creature only consolidates its behavior when
+    // well-fed (peak at satiation). Decay-to-instinct + clamp keep drift bounded so it never
+    // destabilises survival (the alive-guardrail).
     learningEnabled: true,
     learningRate: 0.02,
     eligLambda: 0.2,
-    weightDecay: 0.001,
-    rewardScale: 2, // ≈ a fed creature's net (+2/tick) → reward saturates near +1 when foraging well
-    rewardAlpha: 0.1, // ~10-tick reward memory
+    weightDecay: 0.002,
     weightClamp: 4,
     ...overrides,
   };

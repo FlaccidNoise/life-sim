@@ -130,16 +130,23 @@ export class World {
       cfg.worldWidth,
       cfg.worldHeight,
     );
-    // METABOLIZE → LEARN → REPRO/DIE. Reward (net energy this tick) is known after metabolize, so the
-    // within-life weight update runs here, modulated by it (the eligibility traces were laid in steer).
-    metabolize(s, this.food, cfg.eatRate, cfg.basalCost, cfg.moveCost, cfg.rewardAlpha);
+    // METABOLIZE → LEARN → REPRO/DIE. Energy (the band the creature is in) is known after metabolize,
+    // so the energy-gated within-life consolidation runs here (eligibility traces were laid in steer).
+    metabolize(s, this.food, cfg.eatRate, cfg.basalCost, cfg.moveCost, cfg.satiatedThreshold);
     if (cfg.learningEnabled)
-      learn(s, cfg.learningRate, cfg.weightDecay, cfg.rewardScale, cfg.weightClamp);
+      learn(
+        s,
+        cfg.learningRate,
+        cfg.reproThreshold,
+        cfg.satiatedThreshold,
+        cfg.weightDecay,
+        cfg.weightClamp,
+      );
     this.lastDeaths = cullDead(s);
     this.lastBirths = reproduce(
       s,
       this.rng,
-      cfg.reproThreshold,
+      cfg.satiatedThreshold,
       cfg.reproCost,
       cfg.birthEnergy,
       cfg.offspringOffset,

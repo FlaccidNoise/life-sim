@@ -221,7 +221,7 @@ function frame(): void {
   }
   renderer.setCamera(camX, camY, zoom);
   renderer.draw(world.store, world.food, showFood, interp);
-  inspector.render(world.store);
+  inspector.render(world.store, config.reproThreshold, config.satiatedThreshold);
 
   const now = performance.now();
   if (now - lastT >= 500) {
