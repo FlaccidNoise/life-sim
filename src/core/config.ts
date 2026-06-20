@@ -36,6 +36,34 @@ export interface Config {
    * false = no clamp, so a stiff repulsion can diverge — used to PROVE the clamp earns its keep.
    */
   stabilityClamp: boolean;
+
+  // ── Phase 2: economy ─────────────────────────────────────────────────────────────────────────────
+  /** Food-field grid resolution (a coarse logistic biomass field, NOT individual entities). */
+  foodCols: number;
+  foodRows: number;
+  /** Per-cell biomass carrying capacity K. Eat income is drawn from the cell an organism sits in. */
+  foodCap: number;
+  /** Logistic regrowth rate r per tick: B += r·B·(1−B/K). 0 = food OFF (the ablation → extinction). */
+  foodRegen: number;
+  /** Inter-cell biomass diffusion per tick, [0,0.25]. Reseeds grazed-empty cells from neighbors so the
+   *  field has no permanent B=0 absorbing state (the producer-extinction fix). */
+  foodDiffuse: number;
+  /** Initial fill as a fraction of foodCap, [0,1]. */
+  foodInit: number;
+  /** Max biomass an organism ingests per tick from its current cell (→ energy 1:1). */
+  eatRate: number;
+  /** Basal metabolic cost per tick (the starvation clock — high enough that not-eating kills). */
+  basalCost: number;
+  /** Movement cost per tick = moveCost · speed² (makes fast blind search expensive → senses pay off). */
+  moveCost: number;
+  /** Energy at/above which an organism reproduces (asexual split; genome added in Phase 5). */
+  reproThreshold: number;
+  /** Energy the parent spends to reproduce (birthEnergy goes to the child, the remainder is lost). */
+  reproCost: number;
+  /** Starting energy of a seeded organism and of each offspring. */
+  birthEnergy: number;
+  /** Offspring placement offset from the parent, in world units. */
+  offspringOffset: number;
 }
 
 export function defaultConfig(overrides: Partial<Config> = {}): Config {
@@ -55,9 +83,30 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     // soft repulsion that spreads crowding, a speed ceiling that bounds any repulsion spike.
     cellRadius: 6,
     repulsion: 2,
-    damping: 0.92,
+    // Light drag so seeded velocity persists as a sustained drift — organisms keep sweeping the torus
+    // and grazing the food field (no brain/propulsion until Phase 3). Repulsion perturbs direction.
+    damping: 0.995,
     maxSpeed: 6,
     stabilityClamp: true,
+
+    // Economy (arithmetic per the spec §4.4): a fed organism nets ≈ +2/tick and reaches the repro bar
+    // in a few ticks; an unfed one nets ≈ −0.6/tick and starves on a clock. Tuned headlessly so the
+    // population sustains BOTH births and deaths (the Phase-2 anti-"0 births" gate).
+    foodCols: 128,
+    foodRows: 128,
+    foodCap: 6,
+    foodRegen: 0.06,
+    foodDiffuse: 0.05,
+    foodInit: 0.5, // start half-full → less fuel for the first overshoot
+    eatRate: 2,
+    basalCost: 0.4,
+    moveCost: 0.01,
+    // Slow breeding (long generation vs the starvation clock) damps the boom-bust toward a sustained,
+    // turning-over population instead of an overshoot-to-extinction. Tuned headlessly.
+    reproThreshold: 60,
+    reproCost: 35, // 25 to the child + 10 lost; parent drops to ≥25 and stays viable
+    birthEnergy: 25,
+    offspringOffset: 8,
     ...overrides,
   };
 }

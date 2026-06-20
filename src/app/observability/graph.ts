@@ -48,19 +48,20 @@ export class TimeSeriesGraph {
     ctx.fillStyle = 'rgba(120,170,210,0.06)';
     ctx.fillRect(0, 0, w, h);
 
-    let max = 1;
-    for (const hser of this.history) for (const v of hser) if (v > max) max = v;
-
     const n = this.ticks.length;
     if (n >= 2) {
       for (let si = 0; si < this.series.length; si++) {
         const hser = this.history[si]!;
+        // Per-series normalization — each line uses the full height scaled to its OWN running max, so
+        // a huge series (food) doesn't flatten a small one (population). Shapes/phase stay readable.
+        let smax = 1;
+        for (const v of hser) if (v > smax) smax = v;
         ctx.beginPath();
         ctx.strokeStyle = this.series[si]!.color;
         ctx.lineWidth = Math.max(1, dpr);
         for (let i = 0; i < hser.length; i++) {
           const px = (i / (this.maxPoints - 1)) * w;
-          const py = h - (hser[i]! / max) * (h - 4) - 2;
+          const py = h - (hser[i]! / smax) * (h - 4) - 2;
           if (i === 0) ctx.moveTo(px, py);
           else ctx.lineTo(px, py);
         }
@@ -68,15 +69,21 @@ export class TimeSeriesGraph {
       }
     }
 
-    // Labels: "label current / max".
+    // Labels: "label current (max seen)".
     ctx.font = `${Math.round(11 * dpr)}px ui-monospace, monospace`;
     ctx.textBaseline = 'top';
     let ly = 4 * dpr;
     for (let si = 0; si < this.series.length; si++) {
       const hser = this.history[si]!;
+      let smax = 0;
+      for (const v of hser) if (v > smax) smax = v;
       const cur = hser.length ? hser[hser.length - 1]! : 0;
       ctx.fillStyle = this.series[si]!.color;
-      ctx.fillText(`${this.series[si]!.label} ${cur}  (max ${Math.round(max)})`, 6 * dpr, ly);
+      ctx.fillText(
+        `${this.series[si]!.label} ${Math.round(cur)} (max ${Math.round(smax)})`,
+        6 * dpr,
+        ly,
+      );
       ly += 14 * dpr;
     }
   }
