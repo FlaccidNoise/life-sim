@@ -84,6 +84,25 @@ export interface Config {
   mutationSigma: number;
   /** Gaussian σ of hue-gene drift at birth (how fast lineage colors diverge). */
   hueMutationSigma: number;
+
+  // ── Baldwin within-life learning (reward-modulated Hebbian + eligibility traces) ─────────────────
+  /** Master off-switch for plasticity. false = the runtime brain never drifts from the genome (pure
+   *  instinct) — the ablation that proves learning earns its keep without breaking the alive-guardrail. */
+  learningEnabled: boolean;
+  /** Plasticity step size: Δw = learningRate · eligibility · reward. 0 = effectively off (live knob). */
+  learningRate: number;
+  /** Eligibility-trace blend λ ∈ (0,1]: elig = (1−λ)·elig + λ·(pre·post). Lower = longer memory of
+   *  which synapses were active, bridging the decision→reward delay. */
+  eligLambda: number;
+  /** Per-tick multiplicative weight decay toward 0 (the stability leg: bounds runaway drift). */
+  weightDecay: number;
+  /** Reward normaliser: reward = clamp(rewardEma / rewardScale, −1, 1). Sets how much net energy counts
+   *  as "good". */
+  rewardScale: number;
+  /** EMA smoothing α ∈ (0,1] for the reward signal (net energy/tick). Higher = more reactive reward. */
+  rewardAlpha: number;
+  /** Runtime-weight clamp ±W: learned weights are bounded to [−weightClamp, +weightClamp]. */
+  weightClamp: number;
 }
 
 export function defaultConfig(overrides: Partial<Config> = {}): Config {
@@ -139,6 +158,16 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     founderSigma: 0.3,
     mutationSigma: 0.05,
     hueMutationSigma: 0.02,
+
+    // Baldwin learning ON by default. Small lr + decay + clamp keep drift bounded so a near-optimal
+    // instinct refines (and is visibly perturbed) without destabilising survival (the alive-guardrail).
+    learningEnabled: true,
+    learningRate: 0.02,
+    eligLambda: 0.2,
+    weightDecay: 0.001,
+    rewardScale: 2, // ≈ a fed creature's net (+2/tick) → reward saturates near +1 when foraging well
+    rewardAlpha: 0.1, // ~10-tick reward memory
+    weightClamp: 4,
     ...overrides,
   };
 }

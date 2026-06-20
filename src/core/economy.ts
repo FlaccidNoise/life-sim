@@ -22,14 +22,18 @@ export function metabolize(
   eatRate: number,
   basalCost: number,
   moveCost: number,
+  rewardAlpha: number,
 ): void {
-  const { liveIndices, liveCount, x, y, vx, vy, energy, age } = store;
+  const { liveIndices, liveCount, x, y, vx, vy, energy, age, rewardEma } = store;
   for (let k = 0; k < liveCount; k++) {
     const i = liveIndices[k]!;
     const gained = food.grazeAt(x[i]!, y[i]!, eatRate);
     const speed2 = vx[i]! * vx[i]! + vy[i]! * vy[i]!;
-    energy[i] = energy[i]! + gained - basalCost - moveCost * speed2;
+    const net = gained - basalCost - moveCost * speed2; // per-tick energy change = the reward signal
+    energy[i] = energy[i]! + net;
     age[i] = (age[i]! + 1) >>> 0;
+    // EMA of net energy → the Baldwin reward (cheap, always tracked; learn() reads it when enabled).
+    rewardEma[i] = rewardEma[i]! + rewardAlpha * (net - rewardEma[i]!);
   }
 }
 
@@ -93,6 +97,9 @@ export function reproduce(
     energy[child] = birthEnergy;
     energy[p] = energy[p]! - reproCost;
     mutateGenome(store.brain, store.hue, child, p, rng, mutationSigma, hueMutationSigma);
+    // No-Lamarck: the child's runtime brain starts from its freshly-mutated GENOME, not the parent's
+    // learned weights. Learning never crosses the generation boundary.
+    store.resetLearned(child);
     births++;
   }
   return births;

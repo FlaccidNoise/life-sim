@@ -18,7 +18,7 @@ describe('metabolize', () => {
     s.energy[i] = 5;
     s.rebuildLive();
     const food = new FoodField(W, H, 16, 16, 10, 1); // cell full (B=10)
-    metabolize(s, food, 2, 0.4, 0.01); // eat 2, basal 0.4, no movement
+    metabolize(s, food, 2, 0.4, 0.01, 0.1); // eat 2, basal 0.4, no movement
     expect(s.energy[i]).toBeCloseTo(5 + 2 - 0.4);
     expect(food.sampleAt(10, 10)).toBeCloseTo(8); // 2 grazed
     expect(s.age[i]!).toBe(1);
@@ -34,7 +34,7 @@ describe('metabolize', () => {
     s.energy[i] = 50;
     s.rebuildLive();
     const food = new FoodField(W, H, 16, 16, 10, 0); // empty → no eat income
-    metabolize(s, food, 2, 0.4, 0.01);
+    metabolize(s, food, 2, 0.4, 0.01, 0.1);
     expect(s.energy[i]).toBeCloseTo(50 - 0.4 - 0.01 * 25);
   });
 });

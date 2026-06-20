@@ -85,6 +85,10 @@ new Knobs(el('knobs'), config, {
     config = { ...config, [key]: value };
     rebuild();
   },
+  // Live boolean toggle (e.g. learning on/off): mutate config in place → effect next tick, no reset.
+  onToggle: (key, value) => {
+    (config[key] as boolean) = value;
+  },
 });
 
 function rebuild(): void {

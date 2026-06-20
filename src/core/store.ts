@@ -35,6 +35,14 @@ export class OrganismStore {
   readonly brain: Float32Array;
   readonly hue: Float32Array;
 
+  // Within-life (Baldwin) learning state — RUNTIME, NOT heritable. learnedBrain is what steer() reads;
+  // it is reset to the genome `brain` at birth and drifts via reward-modulated Hebbian plasticity, so
+  // learning dies with the individual (no Lamarckian leak — children copy `brain`, never learnedBrain).
+  // Not hashed: derived, individual-lifetime-only state.
+  readonly learnedBrain: Float32Array; // BRAIN_GENES per slot
+  readonly elig: Float32Array; // BRAIN_GENES per slot — eligibility traces (pre·post, decayed)
+  readonly rewardEma: Float64Array; // EMA of net energy/tick → the reward signal
+
   // Bookkeeping.
   readonly age: Uint32Array;
   readonly genId: Uint32Array;
@@ -61,6 +69,9 @@ export class OrganismStore {
     this.senseY = new Float64Array(capacity);
     this.brain = new Float32Array(capacity * BRAIN_GENES);
     this.hue = new Float32Array(capacity);
+    this.learnedBrain = new Float32Array(capacity * BRAIN_GENES);
+    this.elig = new Float32Array(capacity * BRAIN_GENES);
+    this.rewardEma = new Float64Array(capacity);
     this.age = new Uint32Array(capacity);
     this.genId = new Uint32Array(capacity);
     this.alive = new Uint8Array(capacity);
@@ -91,6 +102,20 @@ export class OrganismStore {
     this.genId[slot] = (this.genId[slot]! + 1) >>> 0;
     this.age[slot] = 0;
     return slot;
+  }
+
+  /**
+   * Reset a slot's within-life learning state: copy its genome `brain` into the runtime `learnedBrain`
+   * and zero the eligibility traces + reward EMA. Called at birth (after the genome is written) and at
+   * seeding, so every individual starts learning from its inherited instinct — the no-Lamarck rule.
+   */
+  resetLearned(slot: number): void {
+    const b = slot * BRAIN_GENES;
+    for (let g = 0; g < BRAIN_GENES; g++) {
+      this.learnedBrain[b + g] = this.brain[b + g]!;
+      this.elig[b + g] = 0;
+    }
+    this.rewardEma[slot] = 0;
   }
 
   /** Free a slot (no-op if already free). */

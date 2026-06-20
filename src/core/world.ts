@@ -5,7 +5,7 @@ import { SpatialHash } from './spatial-hash';
 import { computeRepulsion, integrate } from './physics';
 import { FoodField } from './food-field';
 import { senseFood } from './sense';
-import { steer } from './brain';
+import { steer, learn } from './brain';
 import { seedGenome } from './genome';
 import { metabolize, cullDead, reproduce } from './economy';
 import { Hasher } from './hash';
@@ -105,6 +105,7 @@ export class World {
       s.heading[i] = angle;
       s.energy[i] = this.config.birthEnergy;
       seedGenome(s.brain, s.hue, i, this.rng, this.config.founderSigma);
+      s.resetLearned(i); // runtime brain starts at the founder's instinct
     }
     s.rebuildLive();
   }
@@ -117,7 +118,7 @@ export class World {
     this.hash.build(s);
     // SENSE → THINK/ACT: perceive the food gradient, then steer (sets the thrust force).
     senseFood(s, this.food, cfg.senseStep, cfg.worldWidth, cfg.worldHeight);
-    steer(s, cfg.maxTurn, cfg.maxThrust);
+    steer(s, cfg.maxTurn, cfg.maxThrust, cfg.learningEnabled, cfg.eligLambda);
     // MOVE: repulsion adds onto the thrust force, then integrate.
     computeRepulsion(s, this.hash, cfg.cellRadius, cfg.repulsion, cfg.worldWidth, cfg.worldHeight);
     integrate(
@@ -129,8 +130,11 @@ export class World {
       cfg.worldWidth,
       cfg.worldHeight,
     );
-    // METABOLIZE → REPRO/DIE
-    metabolize(s, this.food, cfg.eatRate, cfg.basalCost, cfg.moveCost);
+    // METABOLIZE → LEARN → REPRO/DIE. Reward (net energy this tick) is known after metabolize, so the
+    // within-life weight update runs here, modulated by it (the eligibility traces were laid in steer).
+    metabolize(s, this.food, cfg.eatRate, cfg.basalCost, cfg.moveCost, cfg.rewardAlpha);
+    if (cfg.learningEnabled)
+      learn(s, cfg.learningRate, cfg.weightDecay, cfg.rewardScale, cfg.weightClamp);
     this.lastDeaths = cullDead(s);
     this.lastBirths = reproduce(
       s,
