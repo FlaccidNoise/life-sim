@@ -4,6 +4,8 @@ import { OrganismStore } from './store';
 import { SpatialHash } from './spatial-hash';
 import { computeRepulsion, integrate } from './physics';
 import { FoodField } from './food-field';
+import { senseFood } from './sense';
+import { steer } from './brain';
 import { metabolize, cullDead, reproduce } from './economy';
 import { Hasher } from './hash';
 
@@ -11,10 +13,10 @@ import { Hasher } from './hash';
  * The simulation world — owns the config, the single RNG, the organism store, and the spatial hash,
  * and runs the tick.
  *
- * PHASE 2 tick: MOVE (repulsion + integrate) → METABOLIZE (eat + costs + age) → REPRO/DIE → FIELDS
- * (food regrow + diffuse). RNG is consumed only at reproduction (birth events, ascending order) and
- * at seeding — never in the physics/metabolism hot loops — so a tick is a pure function of state and
- * the determinism contract holds. SENSE → THINK → ACT slot in ahead of MOVE in later phases.
+ * PHASE 3 tick: SENSE (food gradient) → THINK/ACT (steer: turn + thrust toward food) → MOVE
+ * (repulsion + integrate) → METABOLIZE (eat + costs + age) → REPRO/DIE → FIELDS (food regrow +
+ * diffuse). RNG is consumed only at reproduction (birth events, ascending order) and at seeding —
+ * never in the hot loops — so a tick is a pure function of state and the determinism contract holds.
  */
 export class World {
   readonly config: Config;
@@ -73,9 +75,12 @@ export class World {
   step(): void {
     const cfg = this.config;
     const s = this.store;
-    // MOVE
     s.rebuildLive();
     this.hash.build(s);
+    // SENSE → THINK/ACT: perceive the food gradient, then steer (sets the thrust force).
+    senseFood(s, this.food, cfg.senseStep, cfg.worldWidth, cfg.worldHeight);
+    steer(s, cfg.turnGain, cfg.thrustGain, cfg.cruiseThrust, cfg.maxTurn, cfg.maxThrust);
+    // MOVE: repulsion adds onto the thrust force, then integrate.
     computeRepulsion(s, this.hash, cfg.cellRadius, cfg.repulsion, cfg.worldWidth, cfg.worldHeight);
     integrate(
       s,

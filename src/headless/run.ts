@@ -8,8 +8,9 @@ import { runHeadless } from './harness';
 
 const ticks = Number(process.argv[2] ?? 5000);
 const seed = Number(process.argv[3] ?? 1);
+const blind = process.argv[4] === 'blind'; // chemotaxis OFF (the steering ablation): blind cruise
 
-const config = defaultConfig({ seed });
+const config = defaultConfig(blind ? { seed, turnGain: 0, thrustGain: 0 } : { seed });
 const r = runHeadless(config, ticks);
 
 console.log(`=== headless run: ${ticks} ticks, seed ${seed} (world ${config.worldWidth}²) ===`);
