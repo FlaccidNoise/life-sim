@@ -63,6 +63,16 @@ void main() {
   outColor = vec4(col, 1.0);
 }`;
 
+/** Lerp a→b by alpha on a torus of `size`, taking the short way around the seam. */
+function lerpWrap(a: number, b: number, alpha: number, size: number): number {
+  let d = b - a;
+  if (d > size * 0.5) d -= size;
+  else if (d < -size * 0.5) d += size;
+  let v = a + d * alpha;
+  v %= size;
+  return v < 0 ? v + size : v;
+}
+
 function compile(gl: WebGL2RenderingContext, type: number, src: string): WebGLShader {
   const sh = gl.createShader(type);
   if (!sh) throw new Error('createShader failed');
@@ -171,7 +181,24 @@ export class Renderer {
     gl.uniform1f(gl.getUniformLocation(program, 'u_scale'), sc);
   }
 
-  draw(store: OrganismStore, food: FoodField | null, showFood: boolean): void {
+  /**
+   * Draw a frame. `interp` (optional) smooths motion between sim ticks: positions are lerped from the
+   * previous tick's snapshot toward the current state by `alpha ∈ [0,1]` — so even at fractional sim
+   * speeds (0.125×…) movement is fluid, not a teleport per tick. Wrap-aware so toroidal crossings
+   * don't streak across the screen. Only creatures alive in both snapshots (matching genId) are
+   * interpolated; the rest snap to current.
+   */
+  draw(
+    store: OrganismStore,
+    food: FoodField | null,
+    showFood: boolean,
+    interp?: {
+      prevX: Float64Array;
+      prevY: Float64Array;
+      prevGen: Uint32Array;
+      alpha: number;
+    } | null,
+  ): void {
     const gl = this.gl;
     const sc = this.scale();
     gl.clearColor(0.04, 0.055, 0.08, 1); // --bg (also fills the letterbox margins)
@@ -224,11 +251,21 @@ export class Renderer {
     if (n > 0) {
       const s = this.dotScratch;
       const hsc = this.hueScratch;
-      const { liveIndices, x, y, hue } = store;
+      const { liveIndices, x, y, hue, genId } = store;
+      const useInterp = interp != null && interp.alpha < 1;
+      const a = useInterp ? interp.alpha : 0;
+      const ww = this.worldWidth;
+      const wh = this.worldHeight;
       for (let k = 0; k < n; k++) {
         const i = liveIndices[k]!;
-        s[k * 2] = x[i]!;
-        s[k * 2 + 1] = y[i]!;
+        let px = x[i]!;
+        let py = y[i]!;
+        if (useInterp && interp.prevGen[i] === genId[i]!) {
+          px = lerpWrap(interp.prevX[i]!, px, a, ww);
+          py = lerpWrap(interp.prevY[i]!, py, a, wh);
+        }
+        s[k * 2] = px;
+        s[k * 2 + 1] = py;
         hsc[k] = hue[i]!;
       }
       gl.useProgram(this.dotProgram);

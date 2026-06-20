@@ -50,7 +50,7 @@ const graph = new TimeSeriesGraph(el<HTMLCanvasElement>('graph'), [
 const inspector = new Inspector(el('inspector'));
 
 let running = false;
-let ticksPerFrame = 1;
+let speed = 1; // sim ticks per animation frame; <1 = slow-mo (interpolated for fluid motion)
 let showFood = true; // food heatmap overlay (toggle with 'f')
 let selected: { slot: number; gen: number } | null = null;
 
@@ -67,7 +67,7 @@ const controls = new Controls(el('controls'), config.seed, {
     rebuild();
   },
   onSpeed: (n: number) => {
-    ticksPerFrame = n;
+    speed = n;
   },
 });
 
@@ -128,11 +128,49 @@ let tps = 0;
 let prevBirths = 0;
 let prevDeaths = 0;
 
-function frame(): void {
-  if (running) {
-    for (let i = 0; i < ticksPerFrame; i++) world.step();
+// Render interpolation state: a snapshot of positions BEFORE the most recent step, so the renderer
+// can lerp toward the current state for fluid motion at fractional speeds. Sized to capacity.
+const prevX = new Float64Array(config.maxOrganisms);
+const prevY = new Float64Array(config.maxOrganisms);
+const prevGen = new Uint32Array(config.maxOrganisms);
+let acc = 0; // fractional-tick accumulator (slow-mo)
+const STEP_CAP = 256; // max steps/frame at high speed (avoids spiral-of-death)
+
+function snapshotPrev(): void {
+  const s = world.store;
+  const { liveIndices, liveCount, x, y, genId } = s;
+  for (let k = 0; k < liveCount; k++) {
+    const i = liveIndices[k]!;
+    prevX[i] = x[i]!;
+    prevY[i] = y[i]!;
+    prevGen[i] = genId[i]!;
   }
-  renderer.draw(world.store, world.food, showFood);
+}
+
+function frame(): void {
+  let interp: {
+    prevX: Float64Array;
+    prevY: Float64Array;
+    prevGen: Uint32Array;
+    alpha: number;
+  } | null = null;
+  if (running) {
+    if (speed < 1) {
+      // Slow-mo: advance a fraction of a tick per frame; interpolate between ticks for fluid motion.
+      acc += speed;
+      if (acc >= 1) {
+        snapshotPrev();
+        world.step();
+        acc -= 1;
+      }
+      interp = { prevX, prevY, prevGen, alpha: acc };
+    } else {
+      const steps = Math.min(STEP_CAP, Math.round(speed));
+      for (let i = 0; i < steps; i++) world.step();
+      acc = 0;
+    }
+  }
+  renderer.draw(world.store, world.food, showFood, interp);
   inspector.render(world.store);
 
   const now = performance.now();

@@ -27,7 +27,10 @@ export class Controls {
         <input data-act="seed" class="num" type="number" value="${initialSeed}" />
         <label class="lbl">speed</label>
         <select data-act="speed" class="num">
-          <option value="1">1×</option>
+          <option value="0.125">0.125×</option>
+          <option value="0.25">0.25×</option>
+          <option value="0.5">0.5×</option>
+          <option value="1" selected>1×</option>
           <option value="4">4×</option>
           <option value="16">16×</option>
           <option value="64">64×</option>
