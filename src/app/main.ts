@@ -53,6 +53,10 @@ let running = false;
 let speed = 1; // sim ticks per animation frame; <1 = slow-mo (interpolated for fluid motion)
 let showFood = true; // food heatmap overlay (toggle with 'f')
 let selected: { slot: number; gen: number } | null = null;
+// Camera: centre in world units + zoom (1 = whole world fits). Scroll to zoom, drag to pan.
+let camX = config.worldWidth / 2;
+let camY = config.worldHeight / 2;
+let zoom = 1;
 
 const controls = new Controls(el('controls'), config.seed, {
   onPlayToggle: () => {
@@ -91,9 +95,9 @@ function rebuild(): void {
   prevDeaths = 0;
 }
 
-// Click to inspect: pick the nearest live organism to the click point.
-canvas.addEventListener('click', (e) => {
-  const p = renderer.screenToWorld(e.clientX, e.clientY);
+// Inspect: pick the nearest live organism to a screen point.
+function selectAt(clientX: number, clientY: number): void {
+  const p = renderer.screenToWorld(clientX, clientY);
   const s = world.store;
   let best = -1;
   let bestD = Infinity;
@@ -111,6 +115,47 @@ canvas.addEventListener('click', (e) => {
     selected = { slot: best, gen: s.genId[best]! };
     inspector.select(best, selected.gen);
   }
+}
+
+// Scroll to zoom, around the cursor (the world point under the cursor stays put).
+canvas.addEventListener(
+  'wheel',
+  (e) => {
+    e.preventDefault();
+    const before = renderer.screenToWorld(e.clientX, e.clientY);
+    const newZoom = Math.min(64, Math.max(1, zoom * Math.exp(-e.deltaY * 0.0015)));
+    const k = zoom / newZoom;
+    camX = before.x - (before.x - camX) * k;
+    camY = before.y - (before.y - camY) * k;
+    zoom = newZoom;
+  },
+  { passive: false },
+);
+
+// Drag to pan; a press that barely moves is a click → inspect.
+let dragging = false;
+let lastX = 0;
+let lastY = 0;
+let dragDist = 0;
+canvas.addEventListener('mousedown', (e) => {
+  dragging = true;
+  dragDist = 0;
+  lastX = e.clientX;
+  lastY = e.clientY;
+});
+globalThis.addEventListener('mousemove', (e) => {
+  if (!dragging) return;
+  dragDist += Math.abs(e.clientX - lastX) + Math.abs(e.clientY - lastY);
+  const a = renderer.screenToWorld(lastX, lastY);
+  const b = renderer.screenToWorld(e.clientX, e.clientY);
+  camX -= b.x - a.x; // grab-and-drag: the world follows the cursor
+  camY -= b.y - a.y;
+  lastX = e.clientX;
+  lastY = e.clientY;
+});
+globalThis.addEventListener('mouseup', (e) => {
+  if (dragging && dragDist < 5) selectAt(e.clientX, e.clientY); // negligible movement → a click
+  dragging = false;
 });
 
 globalThis.addEventListener('resize', () => renderer.resize());
@@ -170,6 +215,7 @@ function frame(): void {
       acc = 0;
     }
   }
+  renderer.setCamera(camX, camY, zoom);
   renderer.draw(world.store, world.food, showFood, interp);
   inspector.render(world.store);
 

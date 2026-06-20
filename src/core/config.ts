@@ -96,8 +96,8 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     dt: 1,
     maxOrganisms: 32768,
     // Seeded into the pockets (rejection-sampled onto fertile spots), spread across the islands.
-    // Modest count so the pockets aren't overgrazed at t0 (they're far smaller than a full world).
-    initialPopulation: 120,
+    // Modest count so the small pockets aren't overgrazed at t0.
+    initialPopulation: 90,
     driftSpeed: 1.5,
     // Physics defaults: light drag so seeded motion is visibly sustained (organisms glide + wrap),
     // soft repulsion that spreads crowding, a speed ceiling that bounds any repulsion spike.
@@ -114,13 +114,13 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     // population sustains BOTH births and deaths (the Phase-2 anti-"0 births" gate).
     foodCols: 128, // 64-unit cells over the 8192 world
     foodRows: 128,
-    foodCap: 10, // richer pockets so each island sustains a small breeding community
-    foodRegen: 0.12, // faster regrowth so pockets recover from grazing (isolated → must self-heal)
-    foodDiffuse: 0.05,
-    foodInit: 1, // pockets start full (they're the only food; dead water is ~empty anyway)
-    foodPatchCount: 20, // ~20 island communities scattered across the archipelago
-    foodPatchRadius: 10, // ~640-unit pockets (10 cells × 64 units) — room for a community
-    foodBaseFertility: 0.02, // near-dead water between pockets → islands stay distinct
+    foodCap: 14, // rich pockets so a SMALL island still sustains a breeding community
+    foodRegen: 0.15, // fast regrowth → small pockets recover from grazing (isolated → must self-heal)
+    foodDiffuse: 0.03, // low so pockets don't bleed into the gaps (islands stay distinct)
+    foodInit: 1, // pockets start full
+    foodPatchCount: 14, // distinct island communities scattered across the archipelago
+    foodPatchRadius: 5, // ~320-unit pockets (5 cells × 64 units) — small + separate, not merged
+    foodBaseFertility: 0, // truly dead water between pockets → real isolation, distinct islands
     eatRate: 2,
     basalCost: 0.4,
     moveCost: 0.01,

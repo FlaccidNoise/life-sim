@@ -13,9 +13,9 @@ import { type FoodField } from '../core/food-field';
 const DOT_VERT = `#version 300 es
 in vec2 a_pos;
 in float a_hue;                 // genome hue gene [0,1) → per-creature color (visible heredity)
-uniform vec2 u_world;
+uniform vec2 u_cam;             // camera centre in world units (pan)
 uniform vec2 u_canvas;
-uniform float u_scale;
+uniform float u_scale;          // device px per world unit (base fit × zoom)
 uniform float u_pointSize;
 out vec3 v_color;
 vec3 hsv2rgb(float h, float s, float v) {
@@ -23,7 +23,7 @@ vec3 hsv2rgb(float h, float s, float v) {
   return v * mix(vec3(1.0), clamp(p - 1.0, 0.0, 1.0), s);
 }
 void main() {
-  vec2 px = (a_pos - u_world * 0.5) * u_scale + u_canvas * 0.5;
+  vec2 px = (a_pos - u_cam) * u_scale + u_canvas * 0.5;
   gl_Position = vec4(px.x / u_canvas.x * 2.0 - 1.0, 1.0 - px.y / u_canvas.y * 2.0, 0.0, 1.0);
   gl_PointSize = u_pointSize;
   v_color = hsv2rgb(a_hue, 0.65, 1.0); // bright, slightly desaturated for the bioluminescent look
@@ -41,13 +41,14 @@ void main() {
 
 const FOOD_VERT = `#version 300 es
 in vec2 a_corner; // [0,1]²
-uniform vec2 u_world;
+uniform vec2 u_world;  // world dimensions (place the quad corners)
+uniform vec2 u_cam;    // camera centre (pan)
 uniform vec2 u_canvas;
-uniform float u_scale;
+uniform float u_scale; // base fit × zoom
 out vec2 v_uv;
 void main() {
   vec2 worldPos = a_corner * u_world;
-  vec2 px = (worldPos - u_world * 0.5) * u_scale + u_canvas * 0.5;
+  vec2 px = (worldPos - u_cam) * u_scale + u_canvas * 0.5;
   gl_Position = vec4(px.x / u_canvas.x * 2.0 - 1.0, 1.0 - px.y / u_canvas.y * 2.0, 0.0, 1.0);
   v_uv = a_corner;
 }`;
@@ -113,6 +114,10 @@ export class Renderer {
   private readonly foodTex: WebGLTexture;
   private foodTexData: Uint8Array = new Uint8Array(0);
   private foodTexInit = false;
+  // Camera: centre in world units + zoom (1 = whole world fits the viewport). Set via setCamera().
+  private camX: number;
+  private camY: number;
+  private zoom = 1;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -121,6 +126,8 @@ export class Renderer {
     private readonly cellRadius: number,
     capacity: number,
   ) {
+    this.camX = worldWidth / 2;
+    this.camY = worldHeight / 2;
     const gl = canvas.getContext('webgl2', { antialias: true, alpha: false });
     if (!gl) throw new Error('WebGL2 is required but unavailable in this browser');
     this.gl = gl;
@@ -169,14 +176,33 @@ export class Renderer {
     this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
   }
 
-  /** Uniform device-px-per-world-unit scale (letterbox: the whole square world fits, undistorted). */
-  private scale(): number {
+  /** Base fit: device-px-per-world-unit at zoom 1 (whole world fits the viewport, undistorted). */
+  private baseScale(): number {
     return Math.min(this.canvas.width / this.worldWidth, this.canvas.height / this.worldHeight);
+  }
+
+  /** Effective px-per-world-unit including zoom. */
+  private effScale(): number {
+    return this.baseScale() * this.zoom;
+  }
+
+  /** Set the camera (centre in world units, zoom factor). Clamped to a sane zoom range. */
+  setCamera(x: number, y: number, zoom: number): void {
+    this.camX = x;
+    this.camY = y;
+    this.zoom = zoom < 1 ? 1 : zoom > 64 ? 64 : zoom; // ≥1 (don't zoom out past the whole world)
+  }
+
+  get camera(): { x: number; y: number; zoom: number } {
+    return { x: this.camX, y: this.camY, zoom: this.zoom };
   }
 
   private setCommonUniforms(program: WebGLProgram, sc: number): void {
     const gl = this.gl;
+    // u_world is only declared in the food shader; getUniformLocation returns null on the dot program
+    // and gl.uniform* on null is a silent no-op.
     gl.uniform2f(gl.getUniformLocation(program, 'u_world'), this.worldWidth, this.worldHeight);
+    gl.uniform2f(gl.getUniformLocation(program, 'u_cam'), this.camX, this.camY);
     gl.uniform2f(gl.getUniformLocation(program, 'u_canvas'), this.canvas.width, this.canvas.height);
     gl.uniform1f(gl.getUniformLocation(program, 'u_scale'), sc);
   }
@@ -200,8 +226,8 @@ export class Renderer {
     } | null,
   ): void {
     const gl = this.gl;
-    const sc = this.scale();
-    gl.clearColor(0.04, 0.055, 0.08, 1); // --bg (also fills the letterbox margins)
+    const sc = this.effScale();
+    gl.clearColor(0.04, 0.055, 0.08, 1); // --bg (also fills the off-world margins)
     gl.clear(gl.COLOR_BUFFER_BIT);
 
     // ── Food heatmap (under the dots) ──
@@ -286,16 +312,16 @@ export class Renderer {
     }
   }
 
-  /** Convert a canvas-relative click (CSS px) to world coordinates, inverting the letterbox transform. */
+  /** Convert a canvas-relative point (CSS px) to world coordinates, inverting the camera transform. */
   screenToWorld(clientX: number, clientY: number): { x: number; y: number } {
     const rect = this.canvas.getBoundingClientRect();
     const dpr = globalThis.devicePixelRatio || 1;
     const px = (clientX - rect.left) * dpr;
     const py = (clientY - rect.top) * dpr;
-    const sc = this.scale();
+    const sc = this.effScale();
     return {
-      x: (px - this.canvas.width / 2) / sc + this.worldWidth / 2,
-      y: (py - this.canvas.height / 2) / sc + this.worldHeight / 2,
+      x: (px - this.canvas.width / 2) / sc + this.camX,
+      y: (py - this.canvas.height / 2) / sc + this.camY,
     };
   }
 }
