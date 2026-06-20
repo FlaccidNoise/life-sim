@@ -64,6 +64,20 @@ export interface Config {
   birthEnergy: number;
   /** Offspring placement offset from the parent, in world units. */
   offspringOffset: number;
+
+  // ── Phase 3: steering (chemotaxis toward food) ──────────────────────────────────────────────────
+  /** Gradient sample half-step in world units (central difference of the food field). */
+  senseStep: number;
+  /** Always-on forward thrust (cruise) — organisms are self-propelled even with no food signal. */
+  cruiseThrust: number;
+  /** Turn (rad/tick) per unit lateral food gradient. 0 = blind cruise (the chemotaxis ablation). */
+  turnGain: number;
+  /** Extra forward thrust per unit forward food gradient. 0 = blind cruise (the ablation). */
+  thrustGain: number;
+  /** Max heading change per tick (rad). */
+  maxTurn: number;
+  /** Thrust force ceiling. */
+  maxThrust: number;
 }
 
 export function defaultConfig(overrides: Partial<Config> = {}): Config {
@@ -83,9 +97,9 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     // soft repulsion that spreads crowding, a speed ceiling that bounds any repulsion spike.
     cellRadius: 6,
     repulsion: 2,
-    // Light drag so seeded velocity persists as a sustained drift — organisms keep sweeping the torus
-    // and grazing the food field (no brain/propulsion until Phase 3). Repulsion perturbs direction.
-    damping: 0.995,
+    // Moderate drag now that organisms are self-propelled (Phase 3): thrust sets terminal speed
+    // (v* ≈ thrust·d/(1−d)) so the brain controls movement, instead of relying on ballistic drift.
+    damping: 0.9,
     maxSpeed: 6,
     stabilityClamp: true,
 
@@ -107,6 +121,15 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     reproCost: 35, // 25 to the child + 10 lost; parent drops to ≥25 and stays viable
     birthEnergy: 25,
     offspringOffset: 8,
+
+    // Steering — chemotaxis toward food. Tuned headlessly so chemotaxis-ON forages measurably better
+    // than blind cruise while the boom-bust stays alive. cellRadius=6 → senseStep ≈ one food cell.
+    senseStep: 8,
+    cruiseThrust: 0.3,
+    turnGain: 1.2,
+    thrustGain: 1.5,
+    maxTurn: 0.35,
+    maxThrust: 1,
     ...overrides,
   };
 }

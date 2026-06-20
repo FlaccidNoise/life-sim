@@ -24,6 +24,11 @@ export class OrganismStore {
   readonly forceX: Float64Array;
   readonly forceY: Float64Array;
 
+  // Transient per-tick sensed food gradient (world frame), recomputed each tick from positions+food.
+  // Not hashed (derived). Surfaced in the inspector so you can see what an organism perceives.
+  readonly senseX: Float64Array;
+  readonly senseY: Float64Array;
+
   // Bookkeeping.
   readonly age: Uint32Array;
   readonly genId: Uint32Array;
@@ -46,6 +51,8 @@ export class OrganismStore {
     this.energy = new Float64Array(capacity);
     this.forceX = new Float64Array(capacity);
     this.forceY = new Float64Array(capacity);
+    this.senseX = new Float64Array(capacity);
+    this.senseY = new Float64Array(capacity);
     this.age = new Uint32Array(capacity);
     this.genId = new Uint32Array(capacity);
     this.alive = new Uint8Array(capacity);

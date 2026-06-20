@@ -15,8 +15,8 @@ function wrapDelta(d: number, size: number): number {
 
 /**
  * Soft repulsion: each organism is pushed away from neighbors it overlaps (center distance <
- * 2·cellRadius), force = repulsion · overlap along the separation axis. Accumulates into the store's
- * transient force buffer (assumed zeroed by the caller). Toroidal-correct via wrapDelta.
+ * 2·cellRadius), force = repulsion · overlap along the separation axis. ACCUMULATES (+=) into the
+ * force buffer on top of whatever the steering thrust already set. Toroidal-correct via wrapDelta.
  */
 export function computeRepulsion(
   store: OrganismStore,
@@ -59,8 +59,8 @@ export function computeRepulsion(
         }
       }
     }
-    forceX[i] = fx;
-    forceY[i] = fy;
+    forceX[i] = forceX[i]! + fx;
+    forceY[i] = forceY[i]! + fy;
   }
 }
 
