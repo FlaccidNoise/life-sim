@@ -6,7 +6,14 @@
  */
 import { type OrganismStore } from '../../core/store';
 import { type Config } from '../../core/config';
-import { Brain, BRAIN_GENES, ScalarGene, SCALAR_GENE_COUNT, geneUpkeep } from '../../core/genome';
+import {
+  Brain,
+  BRAIN_GENES,
+  ScalarGene,
+  SCALAR_GENE_COUNT,
+  MIN_BAND,
+  geneUpkeep,
+} from '../../core/genome';
 
 export class Inspector {
   private slot = -1;
@@ -30,7 +37,6 @@ export class Inspector {
       this.root.innerHTML = `<div class="muted">click a dot to inspect</div>`;
       return;
     }
-    const { reproThreshold, satiatedThreshold } = cfg;
     const i = this.slot;
     if (!store.isAlive(i, this.gen)) {
       this.root.innerHTML = `<div class="muted">selected #${i} — gone (slot recycled)</div>`;
@@ -47,15 +53,16 @@ export class Inspector {
     let drift = 0;
     for (let g = 0; g < BRAIN_GENES; g++)
       drift += Math.abs(store.learnedBrain[b + g]! - store.brain[b + g]!);
-    // Energy band → behavioral mode + the learning gate (0 in survival → 1 at satiation).
-    const e = store.energy[i]!;
-    const mode =
-      e >= satiatedThreshold ? 'SATIATED' : e >= reproThreshold ? 'REPRODUCTIVE' : 'SURVIVAL';
-    const span = satiatedThreshold - reproThreshold;
-    const gate = span > 0 ? Math.max(0, Math.min(1, (e - reproThreshold) / span)) : 0;
     // Evolvable scalar genes (per-creature, heritable) + the basal upkeep they cost this creature.
     const sg = i * SCALAR_GENE_COUNT;
     const g = (k: number): string => store.scalarGenes[sg + k]!.toFixed(2);
+    // Energy band → behavioral mode + the learning gate, using this creature's OWN life-history bars.
+    const e = store.energy[i]!;
+    const repro = store.scalarGenes[sg + ScalarGene.REPRO_THRESHOLD]!;
+    let satiated = store.scalarGenes[sg + ScalarGene.SATIATED_THRESHOLD]!;
+    if (satiated < repro + MIN_BAND) satiated = repro + MIN_BAND;
+    const mode = e >= satiated ? 'SATIATED' : e >= repro ? 'REPRODUCTIVE' : 'SURVIVAL';
+    const gate = Math.max(0, Math.min(1, (e - repro) / (satiated - repro)));
     const rows: [string, string][] = [
       ['slot', `${i}`],
       ['age', `${store.age[i]!}`],
@@ -70,6 +77,9 @@ export class Inspector {
       ['gene·maxTurn', g(ScalarGene.MAX_TURN)],
       ['gene·maxThrust', g(ScalarGene.MAX_THRUST)],
       ['gene·metabEff', g(ScalarGene.METAB_EFF)],
+      ['gene·reproBar', g(ScalarGene.REPRO_THRESHOLD)],
+      ['gene·satiated', g(ScalarGene.SATIATED_THRESHOLD)],
+      ['gene·birthEnergy', g(ScalarGene.BIRTH_ENERGY)],
       ['gene upkeep', geneUpkeep(store.scalarGenes, i, cfg).toFixed(3)],
       ['learn gate', gate.toFixed(2)],
       ['learn drift', drift.toFixed(3)],

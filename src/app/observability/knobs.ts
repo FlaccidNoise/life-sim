@@ -29,10 +29,9 @@ const SPECS: KnobSpec[] = [
   { key: 'driftSpeed', label: 'drift speed', min: 0, max: 3, step: 0.1, live: false },
   { key: 'foodRegen', label: 'food regen', min: 0, max: 0.2, step: 0.005, live: true },
   { key: 'basalCost', label: 'basal cost', min: 0, max: 2, step: 0.05, live: true },
-  { key: 'reproThreshold', label: 'repro bar', min: 10, max: 150, step: 5, live: true },
-  { key: 'satiatedThreshold', label: 'satiated', min: 20, max: 250, step: 5, live: true },
+  { key: 'reproOverhead', label: 'repro overhead', min: 0, max: 40, step: 1, live: true },
   { key: 'mutationSigma', label: 'mutation σ', min: 0, max: 0.3, step: 0.005, live: true },
-  // Gene CENTERS (seed-time): the founder value + cost baseline for each evolvable scalar gene.
+  // Gene CENTERS (seed-time): the founder value for each evolvable scalar gene.
   { key: 'maxSpeed', label: 'gene· max speed', min: 1, max: 15, step: 0.5, live: false },
   { key: 'eatRate', label: 'gene· eat rate', min: 0.2, max: 6, step: 0.1, live: false },
   { key: 'senseStep', label: 'gene· sense range', min: 8, max: 200, step: 4, live: false },
@@ -47,6 +46,9 @@ const SPECS: KnobSpec[] = [
     step: 0.05,
     live: false,
   },
+  { key: 'reproThreshold', label: 'gene· repro bar', min: 20, max: 120, step: 5, live: false },
+  { key: 'satiatedThreshold', label: 'gene· satiated', min: 40, max: 220, step: 5, live: false },
+  { key: 'birthEnergy', label: 'gene· birth energy', min: 8, max: 90, step: 1, live: false },
   // Selection-pressure levers (live): basal upkeep per unit of each gene above its center.
   { key: 'maxSpeedCost', label: 'cost· speed', min: 0, max: 0.5, step: 0.01, live: true },
   { key: 'eatRateCost', label: 'cost· eat', min: 0, max: 1, step: 0.01, live: true },

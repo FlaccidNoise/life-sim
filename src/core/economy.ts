@@ -17,6 +17,7 @@ import {
   geneUpkeep,
   ScalarGene,
   SCALAR_GENE_COUNT,
+  MIN_BAND,
 } from './genome';
 
 /**
@@ -28,14 +29,18 @@ import {
  */
 export function metabolize(store: OrganismStore, food: FoodField, cfg: Config): void {
   const { liveIndices, liveCount, x, y, vx, vy, energy, age, scalarGenes } = store;
-  const { basalCost, moveCost, satiatedThreshold } = cfg;
+  const { basalCost, moveCost } = cfg;
   for (let k = 0; k < liveCount; k++) {
     const i = liveIndices[k]!;
     const sg = i * SCALAR_GENE_COUNT;
     const eatRate = scalarGenes[sg + ScalarGene.EAT_RATE]!;
     const efficiency = scalarGenes[sg + ScalarGene.METAB_EFF]!;
+    // SATIATED at the creature's OWN satiated bar (gene), kept above its repro bar by MIN_BAND.
+    const repro = scalarGenes[sg + ScalarGene.REPRO_THRESHOLD]!;
+    let satiated = scalarGenes[sg + ScalarGene.SATIATED_THRESHOLD]!;
+    if (satiated < repro + MIN_BAND) satiated = repro + MIN_BAND;
     // SATIATED creatures are "full" → they stop grazing, leaving the biomass in the cell for others.
-    const gained = energy[i]! >= satiatedThreshold ? 0 : food.grazeAt(x[i]!, y[i]!, eatRate);
+    const gained = energy[i]! >= satiated ? 0 : food.grazeAt(x[i]!, y[i]!, eatRate);
     const speed2 = vx[i]! * vx[i]! + vy[i]! * vy[i]!;
     const upkeep = basalCost * efficiency + geneUpkeep(scalarGenes, i, cfg);
     energy[i] = energy[i]! + gained - upkeep - moveCost * speed2;
@@ -58,26 +63,31 @@ export function cullDead(store: OrganismStore): number {
 }
 
 /**
- * Asexual reproduction by energy split, "breed at the top": an organism that has climbed to the
- * SATIATED threshold spawns a child near it, pays reproCost (birthEnergy to the child, the rest lost),
- * which drops it back down into the reproductive band — so it must forage back up to breed again, and
- * the climb-time naturally rate-limits breeding. The child INHERITS the parent's genome (brain weights
- * + hue) with Gaussian mutation — the only source of heritable variation. Children allocated this tick
- * first act next tick (not in the iterated snapshot). RNG is drawn in ascending order. Returns births.
+ * Asexual reproduction, "breed at the top": an organism that has climbed to ITS OWN satiated bar (a
+ * life-history gene) spawns a child near it, provisions the child up to the child's BIRTH_ENERGY gene
+ * (capped by what the parent can spare), and pays that provisioning + reproOverhead — which drops it
+ * back into its reproductive band, so it must forage up again (climb-time rate-limits breeding). Energy
+ * is conserved (provisioning moves parent→child; only reproOverhead is lost). The child INHERITS the
+ * parent's genome with Gaussian mutation. Children allocated this tick first act next tick. RNG drawn
+ * in ascending order. Returns births. r/K strategies emerge from the satiated + birthEnergy genes.
  */
 export function reproduce(store: OrganismStore, rng: Rng, cfg: Config): number {
-  const { satiatedThreshold, reproCost, birthEnergy, offspringOffset, worldWidth, worldHeight } =
-    cfg;
+  const { reproOverhead, offspringOffset, worldWidth, worldHeight } = cfg;
   // Snapshot the parents up front: alloc() mutates liveIndices' backing only via rebuildLive (not
   // here), but children land in freed slots — iterating a fixed count avoids touching them anyway.
   const parents = store.liveIndices;
   const n = store.liveCount;
-  const { x, y, vx, vy, heading, energy } = store;
+  const { x, y, vx, vy, heading, energy, scalarGenes } = store;
   let births = 0;
   for (let k = 0; k < n; k++) {
     const p = parents[k]!;
     if (!store.isAlive(p)) continue; // died in the cull this tick
-    if (energy[p]! < satiatedThreshold) continue; // breed only once full (the top of the climb)
+    // Breed at the parent's OWN satiated bar (gene), kept above its repro bar by MIN_BAND.
+    const pb = p * SCALAR_GENE_COUNT;
+    const pRepro = scalarGenes[pb + ScalarGene.REPRO_THRESHOLD]!;
+    let pSat = scalarGenes[pb + ScalarGene.SATIATED_THRESHOLD]!;
+    if (pSat < pRepro + MIN_BAND) pSat = pRepro + MIN_BAND;
+    if (energy[p]! < pSat) continue; // not full yet → keep foraging
     const child = store.alloc();
     if (child < 0) break; // store full — stop (population is buffer-capped)
     const angle = rng.range(0, Math.PI * 2);
@@ -92,15 +102,19 @@ export function reproduce(store: OrganismStore, rng: Rng, cfg: Config): number {
     vx[child] = vx[p]!;
     vy[child] = vy[p]!;
     heading[child] = heading[p]!;
-    energy[child] = birthEnergy;
-    energy[p] = energy[p]! - reproCost;
-    // Inherit the genome with mutation (the only source of heritable variation): brain weights + hue,
-    // then the scalar genes. RNG drawn in a fixed order per child → deterministic.
+    // Inherit the genome with mutation FIRST (brain + hue, then scalar genes) so the child's
+    // BIRTH_ENERGY gene is known before we provision it. RNG drawn in a fixed order per child.
     mutateGenome(store.brain, store.hue, child, p, rng, cfg.mutationSigma, cfg.hueMutationSigma);
     mutateScalarGenes(store.scalarGenes, child, p, rng, cfg);
     // No-Lamarck: the child's runtime brain starts from its freshly-mutated GENOME, not the parent's
     // learned weights. Learning never crosses the generation boundary.
     store.resetLearned(child);
+    // Provision the child up to its BIRTH_ENERGY gene, capped by the parent's spare energy (energy-
+    // conserving; parent stays ≥ 0 since pSat > reproOverhead).
+    const childBirth = scalarGenes[child * SCALAR_GENE_COUNT + ScalarGene.BIRTH_ENERGY]!;
+    const childEnergy = Math.min(childBirth, energy[p]! - reproOverhead);
+    energy[child] = childEnergy;
+    energy[p] = energy[p]! - childEnergy - reproOverhead;
     births++;
   }
   return births;

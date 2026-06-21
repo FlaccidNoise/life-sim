@@ -6,7 +6,7 @@ import { computeRepulsion, integrate } from './physics';
 import { FoodField } from './food-field';
 import { senseFood } from './sense';
 import { steer, learn } from './brain';
-import { seedGenome, seedScalarGenes } from './genome';
+import { seedGenome, seedScalarGenes, ScalarGene, SCALAR_GENE_COUNT } from './genome';
 import { metabolize, cullDead, reproduce } from './economy';
 import { Hasher } from './hash';
 
@@ -103,9 +103,10 @@ export class World {
       s.vx[i] = Math.cos(angle) * driftSpeed;
       s.vy[i] = Math.sin(angle) * driftSpeed;
       s.heading[i] = angle;
-      s.energy[i] = this.config.birthEnergy;
       seedGenome(s.brain, s.hue, i, this.rng, this.config.founderSigma);
-      seedScalarGenes(s.scalarGenes, i, this.rng, this.config); // maxSpeed/eatRate/sense/size/turn/thrust/eff
+      seedScalarGenes(s.scalarGenes, i, this.rng, this.config); // incl. the life-history genes
+      // Founder starts at its own (seeded) BIRTH_ENERGY gene — consistent with how offspring are provisioned.
+      s.energy[i] = s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.BIRTH_ENERGY]!;
       s.resetLearned(i); // runtime brain starts at the founder's instinct
     }
     s.rebuildLive();
@@ -127,15 +128,7 @@ export class World {
     // METABOLIZE → LEARN → REPRO/DIE. Energy (the band the creature is in) is known after metabolize,
     // so the energy-gated within-life consolidation runs here (eligibility traces were laid in steer).
     metabolize(s, this.food, cfg);
-    if (cfg.learningEnabled)
-      learn(
-        s,
-        cfg.learningRate,
-        cfg.reproThreshold,
-        cfg.satiatedThreshold,
-        cfg.weightDecay,
-        cfg.weightClamp,
-      );
+    if (cfg.learningEnabled) learn(s, cfg.learningRate, cfg.weightDecay, cfg.weightClamp);
     this.lastDeaths = cullDead(s);
     this.lastBirths = reproduce(s, this.rng, cfg);
     this.totalBirths += this.lastBirths;

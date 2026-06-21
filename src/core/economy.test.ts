@@ -117,41 +117,57 @@ describe('cullDead', () => {
   });
 });
 
-describe('reproduce (breed at the satiated top)', () => {
+describe('reproduce (breed at the per-creature satiated bar)', () => {
+  // mutation OFF so the child's inherited birthEnergy gene equals the parent's exactly (testable math);
+  // repro bar 40 < satiated 60 so the band is ordered; reproOverhead 15.
   const cfg = defaultConfig({
+    reproThreshold: 40,
     satiatedThreshold: 60,
-    reproCost: 35,
     birthEnergy: 25,
+    reproOverhead: 15,
+    mutationSigma: 0,
+    hueMutationSigma: 0,
     offspringOffset: 8,
     worldWidth: W,
     worldHeight: H,
   });
 
-  it('splits energy: parent pays reproCost, child starts at birthEnergy', () => {
+  it('provisions the child to its birthEnergy gene; parent pays that + reproOverhead', () => {
     const s = new OrganismStore(4);
     const p = s.alloc();
     s.x[p] = 50;
     s.y[p] = 50;
     s.energy[p] = 100;
+    genes(s, p, cfg); // parent genes at centers (satiated 60, birthEnergy 25)
     s.rebuildLive();
     const births = reproduce(s, new Rng(1), cfg);
     expect(births).toBe(1);
-    expect(s.energy[p]).toBeCloseTo(100 - 35);
+    expect(s.energy[p]).toBeCloseTo(100 - 25 - 15); // paid childBirthEnergy(25) + reproOverhead(15)
     s.rebuildLive();
     expect(s.liveCount).toBe(2);
     const child = s.liveIndices[1]!;
-    expect(s.energy[child]!).toBe(25);
+    expect(s.energy[child]!).toBeCloseTo(25); // provisioned to its birthEnergy gene
   });
 
-  it('does not reproduce below the satiated threshold', () => {
+  it('does not reproduce below the per-creature satiated bar', () => {
     const s = new OrganismStore(4);
     const p = s.alloc();
-    s.energy[p] = 59; // < satiatedThreshold 60
+    s.energy[p] = 59; // < satiated gene 60
+    genes(s, p, cfg);
     s.rebuildLive();
     expect(reproduce(s, new Rng(1), cfg)).toBe(0);
   });
 
   it('is deterministic given the seed (position AND inherited scalar genes)', () => {
+    // mutation ON here so the gene-mutation path is exercised and must still be byte-deterministic.
+    const detCfg = defaultConfig({
+      reproThreshold: 40,
+      satiatedThreshold: 60,
+      reproOverhead: 15,
+      offspringOffset: 8,
+      worldWidth: W,
+      worldHeight: H,
+    });
     const make = (): OrganismStore => {
       const s = new OrganismStore(8);
       for (let k = 0; k < 3; k++) {
@@ -160,16 +176,16 @@ describe('reproduce (breed at the satiated top)', () => {
         s.y[p] = 50;
         s.energy[p] = 100;
         // Non-trivial parent genes so the mutateScalarGenes path is actually exercised (not parent=0).
-        genes(s, p, cfg, { [ScalarGene.MAX_SPEED]: 7 + k, [ScalarGene.EAT_RATE]: 2 + k * 0.3 });
+        genes(s, p, detCfg, { [ScalarGene.MAX_SPEED]: 7 + k, [ScalarGene.EAT_RATE]: 2 + k * 0.3 });
       }
       s.rebuildLive();
       return s;
     };
     const s1 = make();
-    reproduce(s1, new Rng(7), cfg);
+    reproduce(s1, new Rng(7), detCfg);
     s1.rebuildLive();
     const s2 = make();
-    reproduce(s2, new Rng(7), cfg);
+    reproduce(s2, new Rng(7), detCfg);
     s2.rebuildLive();
     for (let k = 0; k < s1.liveCount; k++) {
       const i = s1.liveIndices[k]!;
