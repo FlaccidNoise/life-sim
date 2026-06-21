@@ -48,8 +48,13 @@ export const ScalarGene = {
   // Trophic genes: where you sit on the herbivore↔carnivore axis and how hard you bite.
   DIET: 10, // 0 = pure grazer (graze ×(1−diet)) … 1 = pure hunter (bite drain ×diet); evolvable role
   DAMAGE: 11, // bite strength — energy drained per hunt tick (× diet); costed, so predators evolve teeth
+  // Vision genes: each creature SEES nearby creatures (appeal-signed sight vector → brain). All costed
+  // (sight is metabolically expensive) so predators/prey evolve different eyes — there are no free eyes.
+  VISION_RANGE: 12, // how far it can see other creatures (world units)
+  VISION_FOV: 13, // half-angle of the vision cone (rad): narrow tunnel ahead ↔ wide all-around
+  VISION_ACUITY: 14, // sight clarity — multiplies the strength of the sight signal into the brain
 } as const;
-export const SCALAR_GENE_COUNT = 12;
+export const SCALAR_GENE_COUNT = 15;
 
 /** Minimum reproductive-band width: satiated is read as max(satiatedGene, reproGene + this) so the two
  *  life-history bars can mutate independently without inverting (which would break the learn gate). */
@@ -69,7 +74,10 @@ interface ScalarGeneSpec {
     | 'satiatedThreshold'
     | 'birthEnergy'
     | 'diet'
-    | 'damage';
+    | 'damage'
+    | 'visionRange'
+    | 'visionFov'
+    | 'visionAcuity';
   /** Config key for the per-unit-above-center basal cost coeff, or null for a non-upkeep gene. */
   costKey:
     | 'maxSpeedCost'
@@ -78,6 +86,9 @@ interface ScalarGeneSpec {
     | 'maxTurnCost'
     | 'maxThrustCost'
     | 'damageCost'
+    | 'visionRangeCost'
+    | 'visionFovCost'
+    | 'visionAcuityCost'
     | null;
   /** Hard clamp range the gene value is kept within (at seed and at every mutation). */
   min: number;
@@ -106,6 +117,11 @@ export const SCALAR_GENE_SPECS: readonly ScalarGeneSpec[] = [
   // fraction ~0.9) in world.seedWorld, not around the center. DAMAGE is costed (teeth cost upkeep).
   { centerKey: 'diet', costKey: null, min: 0, max: 1 },
   { centerKey: 'damage', costKey: 'damageCost', min: 0, max: 20 },
+  // Vision genes — ALL costed (no free eyes). Range capped at ~2 hash cells (24u) so the sight scan
+  // stays bounded; FOV is a half-angle [~6°, 180°]; acuity scales the signal strength.
+  { centerKey: 'visionRange', costKey: 'visionRangeCost', min: 0, max: 24 },
+  { centerKey: 'visionFov', costKey: 'visionFovCost', min: 0.1, max: 3.14159 },
+  { centerKey: 'visionAcuity', costKey: 'visionAcuityCost', min: 0, max: 3 },
 ];
 
 function clampTo(v: number, min: number, max: number): number {
@@ -162,7 +178,10 @@ export function geneUpkeep(genes: Float32Array, slot: number, cfg: Config): numb
   return cost;
 }
 
-/** Brain weight layout (index into the per-creature brain block). */
+/** Brain weight layout (index into the per-creature brain block). Two sensory gradients in the heading
+ *  frame drive turn + thrust: the FOOD gradient (chemotaxis) and the SIGHT vector (appeal-signed pull
+ *  toward edible creatures / away from threats). Sight weights seed at 0 so vision starts neutral and
+ *  evolves — a predator evolves a positive sight response (chase), prey evolve one too (flee). */
 export const Brain = {
   LAT_TURN: 0, // lateral food gradient → turn
   FWD_TURN: 1, // forward food gradient → turn
@@ -170,13 +189,17 @@ export const Brain = {
   FWD_THRUST: 3, // forward → thrust (climb the gradient)
   TURN_BIAS: 4,
   THRUST_BIAS: 5, // baseline cruise
+  SIGHT_LAT_TURN: 6, // lateral sight vector → turn
+  SIGHT_FWD_TURN: 7, // forward sight vector → turn
+  SIGHT_LAT_THRUST: 8, // lateral sight → thrust
+  SIGHT_FWD_THRUST: 9, // forward sight → thrust (chase prey / flee predators)
 } as const;
-export const BRAIN_GENES = 6;
+export const BRAIN_GENES = 10;
 
 /** Founder brain ≈ the hand-tuned chemotaxis controller (turn toward lateral food, thrust up-gradient,
- *  gentle cruise). Founders are seeded near this + noise, so the population forages from tick 0 and
- *  evolution refines + diversifies it (rather than starting blind and risking early extinction). */
-const FOUNDER_BRAIN: readonly number[] = [1.2, 0, 0, 1.5, 0, 0.3];
+ *  gentle cruise) + NEUTRAL sight (the four sight weights start at 0 — vision is unused until evolution
+ *  finds it pays). Founders seed near this + noise so the population forages from tick 0. */
+const FOUNDER_BRAIN: readonly number[] = [1.2, 0, 0, 1.5, 0, 0.3, 0, 0, 0, 0];
 
 /** Seed a founder's genome: founder brain + Gaussian spread, random hue (lineage colors diverge). */
 export function seedGenome(

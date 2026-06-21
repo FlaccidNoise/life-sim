@@ -119,6 +119,20 @@ export interface Config {
   /** Bite reach in world units: a predator drains the nearest creature within this radius. */
   biteRange: number;
 
+  // ── Vision genes (founder centers + costs; sight is metabolically expensive — no free eyes) ────────
+  /** VISION_RANGE gene center — how far a creature sees other creatures (world units). */
+  visionRange: number;
+  /** VISION_FOV gene center — half-angle of the vision cone (radians). */
+  visionFov: number;
+  /** VISION_ACUITY gene center — sight clarity (signal-strength multiplier into the brain). */
+  visionAcuity: number;
+  /** Basal upkeep per unit of VISION_RANGE above its center (seeing farther costs more). */
+  visionRangeCost: number;
+  /** Basal upkeep per radian of VISION_FOV above its center (wider all-around vision costs more). */
+  visionFovCost: number;
+  /** Basal upkeep per unit of VISION_ACUITY above its center (sharper vision costs more). */
+  visionAcuityCost: number;
+
   /** Gaussian σ spread of founder brain weights around the seed brain (initial behavioral variation). */
   founderSigma: number;
   /** Gaussian σ of per-weight brain mutation at birth (the evolutionary step size; live knob). */
@@ -211,6 +225,14 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     damageCost: 0.05, // upkeep per damage above center
     predatorFraction: 0.15,
     biteRange: 12,
+    // Vision. Founders seed with modest eyes (range ~14, ~57° half-cone, acuity 1); all costed so
+    // predators evolve long focused sight and prey evolve wide all-around sight, each paying for it.
+    visionRange: 14,
+    visionFov: 1.0,
+    visionAcuity: 1,
+    visionRangeCost: 0.02,
+    visionFovCost: 0.15,
+    visionAcuityCost: 0.2,
     // NB pre-sight, predators hunt by PROXIMITY only — the encounter rate is too low for hunting to
     // pay, so the predator trait does not persist yet (it needs the sight slice to actively target
     // prey). The mechanic + genes + color are in place; sight activates it.
