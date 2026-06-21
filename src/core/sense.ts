@@ -62,11 +62,18 @@ export function senseFood(
  * the brain just steers along this vector (its sight weights evolve how strongly). Scans a fixed 5×5
  * hash neighborhood (±2 cells ≈ the 24u range cap); ascending order; toroidal-correct.
  */
+/** Hard cap on the sight-scan half-width in hash cells, so a runaway vision gene can't make the scan
+ *  unbounded. 24 cells ≈ 288u reach at the default cell size — generous for the long-sight experiment. */
+const MAX_VISION_CELLS = 24;
+
 export function senseCreatures(store: OrganismStore, hash: SpatialHash, cfg: Config): void {
   const { liveIndices, liveCount, x, y, heading, sightX, sightY, scalarGenes } = store;
   const { cols, rows, bucketStart, sorted } = hash;
   const ww = cfg.worldWidth;
   const wh = cfg.worldHeight;
+  const cellW = ww / cols;
+  const cellH = wh / rows;
+  const cellSize = Math.min(cellW, cellH);
   for (let k = 0; k < liveCount; k++) {
     const i = liveIndices[k]!;
     const sg = i * SCALAR_GENE_COUNT;
@@ -84,11 +91,16 @@ export function senseCreatures(store: OrganismStore, hash: SpatialHash, cfg: Con
     const hy = Math.sin(heading[i]!);
     const cx = hash.colOf(xi);
     const cy = hash.rowOf(yi);
+    // Scan a neighborhood sized to THIS creature's vision range (so big eyes see far, small eyes cheap).
+    // Capped both by MAX_VISION_CELLS and by half the grid, so the toroidal scan never wraps onto itself
+    // and double-counts. A 0-range creature was already skipped above.
+    const halfGrid = Math.floor((Math.min(cols, rows) - 1) / 2);
+    const cr = Math.min(MAX_VISION_CELLS, halfGrid, Math.max(1, Math.ceil(range / cellSize)));
     let sx = 0;
     let sy = 0;
-    for (let dyc = -2; dyc <= 2; dyc++) {
+    for (let dyc = -cr; dyc <= cr; dyc++) {
       const by = (cy + dyc + rows) % rows;
-      for (let dxc = -2; dxc <= 2; dxc++) {
+      for (let dxc = -cr; dxc <= cr; dxc++) {
         const bx = (cx + dxc + cols) % cols;
         const bkt = by * cols + bx;
         const end = bucketStart[bkt + 1]!;
