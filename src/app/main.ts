@@ -16,6 +16,7 @@ import { Controls } from './observability/controls';
 import { Knobs } from './observability/knobs';
 import { Inspector } from './observability/inspector';
 import { BrainView } from './observability/brain-view';
+import { Distributions } from './observability/distributions';
 import { TimeSeriesGraph } from './observability/graph';
 
 function el<T extends HTMLElement>(id: string): T {
@@ -46,6 +47,7 @@ const graph = new TimeSeriesGraph(el<HTMLCanvasElement>('graph'), [
 ]);
 const inspector = new Inspector(el('inspector'));
 const brainView = new BrainView(el<HTMLCanvasElement>('brain'));
+const distributions = new Distributions(el<HTMLCanvasElement>('dist'));
 
 let running = false;
 let speed = 1; // sim ticks per animation frame; <1 = slow-mo (interpolated for fluid motion)
@@ -246,6 +248,7 @@ function frame(): void {
   prevDeaths = world.totalDeaths;
   graph.push(world.tick, [world.population, world.food.total(), dB, dD]);
   graph.render();
+  distributions.render(world.store);
   controls.setStatus(world.tick, tps, world.population, world.stateHash());
   // keep the selection panel honest if the dot was recycled
   if (selected && !world.store.isAlive(selected.slot, selected.gen)) {
