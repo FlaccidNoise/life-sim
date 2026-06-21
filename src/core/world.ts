@@ -114,6 +114,7 @@ export class World {
       s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.DIET] = isPredator ? 0.7 : 0;
       // Founder starts at its own (seeded) BIRTH_ENERGY gene — consistent with how offspring are provisioned.
       s.energy[i] = s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.BIRTH_ENERGY]!;
+      s.prevEnergy[i] = s.energy[i]!; // first-tick learning reward = 0 (no spurious jump)
       s.resetLearned(i); // runtime brain starts at the founder's instinct
     }
     s.rebuildLive();
@@ -140,7 +141,8 @@ export class World {
     // METABOLIZE → LEARN → REPRO/DIE. Energy (the band the creature is in) is known after metabolize,
     // so the energy-gated within-life consolidation runs here (eligibility traces were laid in steer).
     metabolize(s, this.food, cfg);
-    if (cfg.learningEnabled) learn(s, cfg.learningRate, cfg.weightDecay, cfg.maxLearnDeviation);
+    if (cfg.learningEnabled)
+      learn(s, cfg.learningRate, cfg.weightDecay, cfg.maxLearnDeviation, cfg.learnRewardClamp);
     this.lastDeaths = cullDead(s);
     this.lastBirths = reproduce(s, this.rng, cfg);
     this.totalBirths += this.lastBirths;

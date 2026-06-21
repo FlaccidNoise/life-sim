@@ -121,73 +121,53 @@ describe('steer (per-creature brain)', () => {
   });
 });
 
-describe('Baldwin within-life learning (energy-gated)', () => {
-  // learn(store, learningRate, weightDecay, maxLearnDeviation) — the repro/satiated bars are per-creature
-  // from the genes (setBrain seeds REPRO=60 / SAT=100 below).
-  const REPRO = 60;
-  const SAT = 100;
+describe('Baldwin within-life learning (reward-modulated)', () => {
+  // learn(store, learningRate, weightDecay, maxLearnDeviation, rewardClamp). reward = energy − prevEnergy.
 
-  it('a well-fed (satiated) creature reinforces recently-active synapses; genome stays fixed', () => {
+  it('a reward (energy GAIN) reinforces recently-active synapses; genome stays fixed', () => {
     const s = new OrganismStore(4);
     const i = s.alloc();
     s.heading[i] = 0;
     s.senseX[i] = 1; // forward gradient → FWD_THRUST synapse active (pre·post > 0)
     setBrain(s, i, { FWD_THRUST: 1.0 });
-    s.energy[i] = SAT; // satiated → learn gate = 1
+    s.prevEnergy[i] = 50;
+    s.energy[i] = 60; // reward +10 (clamped to +5)
     s.rebuildLive();
     steer(s, true, 0.5); // lay eligibility
-    learn(s, 0.2, 0.0, 4);
+    learn(s, 0.2, 0.0, 4, 5);
     const b = i * BRAIN_GENES;
-    expect(s.learnedBrain[b + Brain.FWD_THRUST]!).toBeGreaterThan(1.0); // consolidated
+    expect(s.learnedBrain[b + Brain.FWD_THRUST]!).toBeGreaterThan(1.0); // reinforced
     expect(s.brain[b + Brain.FWD_THRUST]!).toBe(1.0); // genome (instinct) unchanged
   });
 
-  it('a creature in SURVIVAL mode does not learn (gate ≤ 0 freezes the runtime brain)', () => {
+  it('a penalty (energy LOSS) weakens the recently-active synapses', () => {
     const s = new OrganismStore(4);
     const i = s.alloc();
     s.heading[i] = 0;
-    s.senseX[i] = 1;
+    s.senseX[i] = 1; // same active synapse as above…
     setBrain(s, i, { FWD_THRUST: 1.0 });
-    s.energy[i] = REPRO - 10; // below the repro bar → survival → gate 0
+    s.prevEnergy[i] = 60;
+    s.energy[i] = 50; // reward −10 → the behavior gets UNlearned
     s.rebuildLive();
-    steer(s, true, 0.5); // eligibility is warm…
-    learn(s, 0.2, 0.0, 4); // …but it must be ignored
-    const b = i * BRAIN_GENES;
-    expect(s.learnedBrain[b + Brain.FWD_THRUST]!).toBe(1.0); // untouched
+    steer(s, true, 0.5);
+    learn(s, 0.2, 0.0, 4, 5);
+    expect(s.learnedBrain[i * BRAIN_GENES + Brain.FWD_THRUST]!).toBeLessThan(1.0); // weakened below instinct
   });
 
-  it('the learn gate ramps with energy (more drift higher in the band)', () => {
-    const drift = (energy: number): number => {
-      const s = new OrganismStore(4);
-      const i = s.alloc();
-      s.heading[i] = 0;
-      s.senseX[i] = 1;
-      setBrain(s, i, { FWD_THRUST: 1.0 });
-      s.energy[i] = energy;
-      s.rebuildLive();
-      steer(s, true, 0.5);
-      learn(s, 0.2, 0.0, 4);
-      return s.learnedBrain[i * BRAIN_GENES + Brain.FWD_THRUST]! - 1.0;
-    };
-    expect(drift(SAT)).toBeGreaterThan(drift(80)); // satiated learns more than mid-band
-    expect(drift(80)).toBeGreaterThan(drift(REPRO + 1)); // mid-band more than just above the bar
-  });
-
-  it('decay relaxes the learned deviation back toward the genome instinct', () => {
+  it('zero reward leaves only the decay term (relaxes deviation toward instinct)', () => {
     const s = new OrganismStore(4);
     const i = s.alloc();
     s.heading[i] = 0;
-    s.senseX[i] = 0; // no gradient → no new eligibility, isolate the decay term
+    s.senseX[i] = 0; // no new eligibility either
     setBrain(s, i, { FWD_THRUST: 1.0 }); // genome instinct = 1.0
-    s.energy[i] = SAT; // gate = 1 so decay is active
+    s.prevEnergy[i] = 100;
+    s.energy[i] = 100; // reward = 0
     s.rebuildLive();
     const b = i * BRAIN_GENES;
     s.learnedBrain[b + Brain.FWD_THRUST] = 2.0; // a learned deviation away from instinct
-    learn(s, 0.2, 0.1, 4); // decay 0.1
+    learn(s, 0.2, 0.1, 4, 5); // decay 0.1
     const w = s.learnedBrain[b + Brain.FWD_THRUST]!;
-    expect(w).toBeLessThan(2.0); // relaxed toward…
-    expect(w).toBeGreaterThan(1.0); // …but not past the instinct anchor
-    expect(w).toBeCloseTo(1.0 + 1.0 * 0.9); // genome + deviation·(1−decay)
+    expect(w).toBeCloseTo(1.0 + 1.0 * 0.9); // genome + deviation·(1−decay), no reward term
   });
 
   it('bounds the learned DEVIATION from instinct to ±maxLearnDeviation', () => {
@@ -196,14 +176,15 @@ describe('Baldwin within-life learning (energy-gated)', () => {
     s.heading[i] = 0;
     s.senseX[i] = 1;
     setBrain(s, i, { FWD_THRUST: 1.0 }); // genome instinct = 1.0
-    s.energy[i] = SAT;
     s.rebuildLive();
-    for (let t = 0; t < 200; t++) {
-      steer(s, true, 0.5);
-      learn(s, 1.0, 0.0, 0.5); // hard reinforcement, deviation bound 0.5
-    }
     const b = i * BRAIN_GENES;
-    // The learned weight can't run off to a saturated controller: it stays within ±0.5 of instinct.
+    for (let t = 0; t < 200; t++) {
+      s.prevEnergy[i] = 50;
+      s.energy[i] = 60; // sustained reward each tick (learn() resets prevEnergy, so re-set it)
+      steer(s, true, 0.5);
+      learn(s, 1.0, 0.0, 0.5, 5); // hard reinforcement, deviation bound 0.5
+    }
+    // Can't run off to a saturated controller: it stays within ±0.5 of instinct.
     expect(s.learnedBrain[b + Brain.FWD_THRUST]!).toBeLessThanOrEqual(1.5 + 1e-9);
     expect(s.learnedBrain[b + Brain.FWD_THRUST]!).toBeGreaterThan(1.0); // it did consolidate, just bounded
   });
@@ -214,12 +195,13 @@ describe('Baldwin within-life learning (energy-gated)', () => {
     s.heading[i] = 0;
     s.senseX[i] = 1; // strong constant input → big motor output → bias eligibility accumulates
     setBrain(s, i, { FWD_THRUST: 1.0, TURN_BIAS: 0.2, THRUST_BIAS: 0.3 });
-    s.energy[i] = SAT;
     s.rebuildLive();
     const b = i * BRAIN_GENES;
     for (let t = 0; t < 200; t++) {
+      s.prevEnergy[i] = 50;
+      s.energy[i] = 60;
       steer(s, true, 0.5);
-      learn(s, 1.0, 0.0, 0.5);
+      learn(s, 1.0, 0.0, 0.5, 5);
     }
     // Biases stay at instinct no matter how hard/long we reinforce (Float32-exact equality to the seed).
     expect(s.learnedBrain[b + Brain.TURN_BIAS]!).toBe(s.brain[b + Brain.TURN_BIAS]!);
@@ -232,33 +214,15 @@ describe('Baldwin within-life learning (energy-gated)', () => {
     s.heading[i] = 0;
     s.senseX[i] = 1;
     setBrain(s, i, { FWD_THRUST: 1.0 });
-    s.energy[i] = SAT;
+    s.prevEnergy[i] = 50;
+    s.energy[i] = 60;
     s.rebuildLive();
     steer(s, true, 0.5);
-    learn(s, 0.2, 0.0, 4);
+    learn(s, 0.2, 0.0, 4, 5);
     const b = i * BRAIN_GENES;
     expect(s.learnedBrain[b + Brain.FWD_THRUST]!).not.toBeCloseTo(1.0); // it drifted
     s.resetLearned(i); // simulate the child's birth-time reset
     expect(s.learnedBrain[b + Brain.FWD_THRUST]!).toBe(1.0); // snapped back to the genome
     expect(s.elig[b + Brain.FWD_THRUST]!).toBe(0); // traces cleared
-  });
-
-  it('the MIN_BAND guard keeps the learn gate finite when satiated gene ≤ repro gene', () => {
-    // If the two bars invert (satiated == repro), the un-guarded gate denominator is 0 → NaN weights
-    // that propagate forever. The guard reads satiated as max(satiatedGene, reproGene+MIN_BAND).
-    const s = new OrganismStore(4);
-    const i = s.alloc();
-    s.heading[i] = 0;
-    s.senseX[i] = 0; // no gradient → elig stays 0; an un-guarded Inf·0 would be NaN
-    setBrain(s, i, { FWD_THRUST: 1.0 });
-    s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.REPRO_THRESHOLD] = 60;
-    s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.SATIATED_THRESHOLD] = 60; // inverted/zero band
-    s.energy[i] = 70; // above the repro bar
-    s.rebuildLive();
-    steer(s, true, 0.5);
-    learn(s, 0.2, 0.0, 4);
-    const b = i * BRAIN_GENES;
-    for (let g = 0; g < BRAIN_GENES; g++)
-      expect(Number.isFinite(s.learnedBrain[b + g]!)).toBe(true);
   });
 });

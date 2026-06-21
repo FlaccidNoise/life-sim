@@ -37,10 +37,15 @@ function wrapDelta(d: number, size: number): number {
  * (chemotaxis still pulls predators toward food-rich, prey-dense pockets); sight comes in a later slice.
  */
 export function hunt(store: OrganismStore, hash: SpatialHash, cfg: Config): void {
-  const { biteRange, worldWidth, worldHeight, cannibalism } = cfg;
+  const { biteRange, worldWidth, worldHeight, cannibalism, predationGain } = cfg;
   const { liveIndices, liveCount, x, y, energy, scalarGenes } = store;
   const { cols, rows, bucketStart, sorted } = hash;
   const range2 = biteRange * biteRange;
+  // Scan a hash neighborhood that actually covers biteRange (was a fixed 3×3 = ±1 cell, so any bite
+  // reach beyond one cell was invisible). Capped by half the grid so the toroidal scan can't self-overlap.
+  const cellSize = Math.min(worldWidth / cols, worldHeight / rows);
+  const halfGrid = Math.floor((Math.min(cols, rows) - 1) / 2);
+  const br = Math.min(halfGrid, Math.max(1, Math.ceil(biteRange / cellSize)));
   for (let k = 0; k < liveCount; k++) {
     const i = liveIndices[k]!;
     const sg = i * SCALAR_GENE_COUNT;
@@ -50,13 +55,13 @@ export function hunt(store: OrganismStore, hash: SpatialHash, cfg: Config): void
     const yi = y[i]!;
     const cx = hash.colOf(xi);
     const cy = hash.rowOf(yi);
-    // Find the nearest EDIBLE live creature within bite range (toroidal 3×3 scan). With cannibalism off,
-    // "edible" excludes same-or-higher-diet peers — a predator eats prey (lower diet), not its guild.
+    // Find the nearest EDIBLE live creature within bite range. With cannibalism off, "edible" excludes
+    // same-or-higher-diet peers — a predator eats prey (lower diet), not its guild.
     let best = -1;
     let bestD = range2;
-    for (let dy = -1; dy <= 1; dy++) {
+    for (let dy = -br; dy <= br; dy++) {
       const by = (cy + dy + rows) % rows;
-      for (let dx = -1; dx <= 1; dx++) {
+      for (let dx = -br; dx <= br; dx++) {
         const bx = (cx + dx + cols) % cols;
         const b = by * cols + bx;
         const end = bucketStart[b + 1]!;
@@ -79,7 +84,10 @@ export function hunt(store: OrganismStore, hash: SpatialHash, cfg: Config): void
     const drain = Math.min(scalarGenes[sg + ScalarGene.DAMAGE]! * diet, energy[best]!);
     if (drain <= 0) continue; // toothless, or prey already drained to nothing this tick
     energy[best] = energy[best]! - drain;
-    energy[i] = energy[i]! + drain;
+    // Meat is concentrated energy: the predator absorbs the drain × predationGain. With gain > 1 this
+    // deliberately CREATES energy (not strictly conserved) so hunting is a big payoff vs. grazing — the
+    // incentive to seek prey instead of sitting on the food field.
+    energy[i] = energy[i]! + drain * predationGain;
   }
 }
 
@@ -103,9 +111,11 @@ export function metabolize(store: OrganismStore, food: FoodField, cfg: Config): 
     const repro = scalarGenes[sg + ScalarGene.REPRO_THRESHOLD]!;
     let satiated = scalarGenes[sg + ScalarGene.SATIATED_THRESHOLD]!;
     if (satiated < repro + MIN_BAND) satiated = repro + MIN_BAND;
-    // SATIATED creatures are "full" → they stop grazing, leaving the biomass for others. Carnivores
-    // (high diet) graze proportionally less biomass (and a pure hunter removes none).
-    const gained = energy[i]! >= satiated ? 0 : food.grazeAt(x[i]!, y[i]!, eatRate * (1 - diet));
+    // SATIATED creatures are "full" → they stop grazing. Plant income falls off as (1−diet)^herbivoryExp,
+    // so carnivores get less from the green field and lean on hunting — but exp=1 keeps a real fallback so
+    // predators survive the sparse stretches between kills (a pure herbivore is unaffected at any exp).
+    const herbivory = (1 - diet) ** cfg.herbivoryExp;
+    const gained = energy[i]! >= satiated ? 0 : food.grazeAt(x[i]!, y[i]!, eatRate * herbivory);
     const speed2 = vx[i]! * vx[i]! + vy[i]! * vy[i]!;
     const upkeep = basalCost * efficiency + geneUpkeep(scalarGenes, i, cfg);
     energy[i] = energy[i]! + gained - upkeep - moveCost * speed2;
@@ -179,6 +189,7 @@ export function reproduce(store: OrganismStore, rng: Rng, cfg: Config): number {
     const childBirth = scalarGenes[child * SCALAR_GENE_COUNT + ScalarGene.BIRTH_ENERGY]!;
     const childEnergy = Math.min(childBirth, energy[p]! - reproOverhead);
     energy[child] = childEnergy;
+    store.prevEnergy[child] = childEnergy; // first-tick learning reward = 0 for the newborn
     energy[p] = energy[p]! - childEnergy - reproOverhead;
     births++;
   }

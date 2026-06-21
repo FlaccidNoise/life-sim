@@ -14,7 +14,7 @@
  * learning keeps discovering, since selection favors genomes that start closer to it).
  */
 import { type OrganismStore } from './store';
-import { Brain, BRAIN_GENES, ScalarGene, SCALAR_GENE_COUNT, MIN_BAND } from './genome';
+import { Brain, BRAIN_GENES, ScalarGene, SCALAR_GENE_COUNT } from './genome';
 
 /**
  * Run each creature's runtime brain: food gradient (heading frame) → turn + thrust. Turns the heading
@@ -96,44 +96,41 @@ export function steer(store: OrganismStore, learn: boolean, eligLambda: number):
 }
 
 /**
- * Energy-gated Hebbian consolidation (run after METABOLIZE, once this tick's energy is known):
- *   gate = clamp( (energy − reproThreshold) / (satiated − reproThreshold), 0, 1 )   // 0=survival, 1=full
- *   w    = clamp( genome + (w − genome)·(1−decay) + learningRate·gate·elig, ±W )
- * Learning EMERGES from the creature's state, not a knob: a well-fed creature consolidates whatever it
- * has recently been doing (the warm eligibility traces), strongest at satiation; a struggling creature
- * (gate ≤ 0) is left untouched — its instinct is preserved for the fight to survive. The learned
- * deviation decays back toward the genome instinct, so it never corrupts (or out-lives) the genome.
+ * Reward-modulated Hebbian consolidation (run after METABOLIZE, once this tick's energy is known) — a
+ * 3-factor rule (pre × post × reward):
+ *   reward = clamp( energy − prevEnergy, ±rewardClamp )          // this tick's NET energy change
+ *   dev    = clamp( (w − genome)·(1−decay) + learningRate·reward·elig, ±maxDev )
+ *   w      = genome + dev
+ * The reward is the actual outcome: behavior that EARNED energy (foraging that fed, a hunt that landed)
+ * is reinforced; behavior during a LOSS is weakened (you unlearn what was starving you). This is what
+ * makes learning a real "gets smarter within life" signal rather than just reinforcing whatever you were
+ * already doing. Two stability legs keep it honest: biases are excluded (their constant input makes
+ * Hebbian a positive-feedback spin runaway), and the learned DEVIATION from the heritable instinct is
+ * bounded, so learning refines instinct and dies with the individual (children copy the genome).
  */
 export function learn(
   store: OrganismStore,
   learningRate: number,
   weightDecay: number,
   maxLearnDeviation: number,
+  rewardClamp: number,
 ): void {
-  const { liveIndices, liveCount, energy, brain, learnedBrain, elig, scalarGenes } = store;
+  const { liveIndices, liveCount, energy, prevEnergy, brain, learnedBrain, elig } = store;
   const keep = 1 - weightDecay;
   for (let k = 0; k < liveCount; k++) {
     const i = liveIndices[k]!;
-    // The gate spans the creature's OWN reproductive band (its life-history genes).
-    const sg = i * SCALAR_GENE_COUNT;
-    const repro = scalarGenes[sg + ScalarGene.REPRO_THRESHOLD]!;
-    let satiated = scalarGenes[sg + ScalarGene.SATIATED_THRESHOLD]!;
-    if (satiated < repro + MIN_BAND) satiated = repro + MIN_BAND;
-    let gate = (energy[i]! - repro) / (satiated - repro);
-    if (gate <= 0) continue; // survival mode → freeze the runtime brain (no spare capacity to learn)
-    if (gate > 1) gate = 1;
-    const rate = learningRate * gate; // peak when satiated
+    let reward = energy[i]! - prevEnergy[i]!; // net Δenergy this tick (food + predation − costs)
+    prevEnergy[i] = energy[i]!; // baseline for next tick's reward
+    if (reward > rewardClamp) reward = rewardClamp;
+    else if (reward < -rewardClamp) reward = -rewardClamp;
     const b = i * BRAIN_GENES;
     for (let g = 0; g < BRAIN_GENES; g++) {
       // Biases are NOT plastic: their input is the constant 1, so Hebbian pre·post just accumulates the
       // motor output's own sign → a positive-feedback runaway that saturates turn/thrust (= spinning in
-      // place). Sensorimotor synapses self-correct (their input vanishes as the creature aligns), so only
-      // those learn. Biases stay at the heritable instinct (resetLearned seeded them = genome).
+      // place). Sensorimotor synapses self-correct (their input vanishes as the creature aligns).
       if (g === Brain.TURN_BIAS || g === Brain.THRUST_BIAS) continue;
       const w0 = brain[b + g]!; // genome instinct = the anchor the deviation relaxes toward
-      // Bound the DEVIATION from instinct (not the absolute weight): learning refines instinct, it can't
-      // run off to a saturated controller.
-      let dev = (learnedBrain[b + g]! - w0) * keep + rate * elig[b + g]!;
+      let dev = (learnedBrain[b + g]! - w0) * keep + learningRate * reward * elig[b + g]!;
       if (dev > maxLearnDeviation) dev = maxLearnDeviation;
       else if (dev < -maxLearnDeviation) dev = -maxLearnDeviation;
       learnedBrain[b + g] = w0 + dev;

@@ -129,9 +129,9 @@ describe('hunt (predation)', () => {
     genes(s, prey, cfg, { [ScalarGene.DIET]: 0 });
     s.rebuildLive();
     hunt(s, mkHash(s), cfg);
-    // drain = min(damage(5)·diet(1), preyEnergy) = 5, moved prey→predator (conserved)
+    // drain = min(damage(5)·diet(1), preyEnergy) = 5; prey loses the drain, predator absorbs drain×gain.
     expect(s.energy[prey]).toBeCloseTo(25);
-    expect(s.energy[pred]).toBeCloseTo(25);
+    expect(s.energy[pred]).toBeCloseTo(20 + 5 * cfg.predationGain);
   });
 
   it('a pure grazer (diet 0) does not hunt', () => {
@@ -167,7 +167,7 @@ describe('hunt (predation)', () => {
     s.rebuildLive();
     hunt(s, mkHash(s), cfg);
     expect(s.energy[prey]).toBeCloseTo(0); // drained to 0 (capped) → dies next cull
-    expect(s.energy[pred]).toBeCloseTo(13); // gained only the 3 that existed
+    expect(s.energy[pred]).toBeCloseTo(10 + 3 * cfg.predationGain); // gained the 3 that existed × gain
   });
 
   it('with cannibalism OFF, a predator spares a same-or-higher-diet peer but still eats prey', () => {

@@ -129,15 +129,20 @@ function run(label: string, overrides: Partial<Config>): { label: string; m: Met
   return { label, m: measure(world) };
 }
 
-// Concentration sweep: smaller, RICHER pockets (higher foodCap compensates the smaller area) to pack
-// creatures together — watch maxBucket (local crowding = real encounters) while keeping predators alive.
+// Ablations of the NEW defaults (sight weights + reward learning + predation economy + tuning): each
+// case flips one lever back so we can see its individual effect on predators / vision / liveness.
+// Facultative-predator search: a plant fallback (low herbivoryExp) so predators survive sparse stretches,
+// + a modest hunting bonus + moderate bite. Want predators present but not dominant, herbivores the
+// majority, pop well below the 32768 cap.
+// CONSERVATION (gain1): verify predators viable AND no runaway-to-cap, incl. the seed5/initPop600 case
+// that pegged the cap under gain1.5. Want pred>0 on s1 cases and pop ≪ 32768 on the s5 cases.
 const CASES: { label: string; o: Partial<Config> }[] = [
-  { label: 'baseline (14 r5 cap14)', o: {} },
-  { label: 'tight (14 r3 cap40)', o: { foodPatchRadius: 3, foodCap: 40 } },
-  { label: 'tight-many (30 r3 cap28)', o: { foodPatchCount: 30, foodPatchRadius: 3, foodCap: 28 } },
-  { label: 'tiny-rich (24 r2 cap60)', o: { foodPatchCount: 24, foodPatchRadius: 2, foodCap: 60 } },
-  { label: 'tiny-many (40 r2 cap50)', o: { foodPatchCount: 40, foodPatchRadius: 2, foodCap: 50 } },
-  { label: 'pinpoint (24 r1 cap120)', o: { foodPatchCount: 24, foodPatchRadius: 1, foodCap: 120 } },
+  { label: 'defaults s1', o: {} },
+  { label: 'defaults s5 ip600', o: { seed: 5, initialPopulation: 600 } },
+  { label: 'exp1 s1', o: { herbivoryExp: 1 } },
+  { label: 'exp1 bite24 s1', o: { herbivoryExp: 1, biteRange: 24 } },
+  { label: 'exp1 s5 ip600', o: { herbivoryExp: 1, seed: 5, initialPopulation: 600 } },
+  { label: 'bite24 s1', o: { biteRange: 24 } },
 ];
 
 console.log(`=== density + ablation probe: ${ticks} ticks, seed ${seed}, world 8192² ===\n`);

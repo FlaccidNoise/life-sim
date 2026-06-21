@@ -198,9 +198,13 @@ export const Brain = {
 export const BRAIN_GENES = 10;
 
 /** Founder brain ≈ the hand-tuned chemotaxis controller (turn toward lateral food, thrust up-gradient,
- *  gentle cruise) + NEUTRAL sight (the four sight weights start at 0 — vision is unused until evolution
- *  finds it pays). Founders seed near this + noise so the population forages from tick 0. */
-const FOUNDER_BRAIN: readonly number[] = [1.2, 0, 0, 1.5, 0, 0.3, 0, 0, 0, 0];
+ *  gentle cruise) + ACTIVE sight: turn toward & thrust along the appeal-signed sight vector. Because that
+ *  vector already points TOWARD prey (predators) and AWAY from threats (prey), one pair of positive
+ *  weights gives chase AND flee from birth — so vision drives behavior immediately instead of waiting
+ *  for the sight weights to evolve up from 0. Founders seed near this + noise. Layout order = Brain enum:
+ *  [LAT_TURN, FWD_TURN, LAT_THRUST, FWD_THRUST, TURN_BIAS, THRUST_BIAS,
+ *   SIGHT_LAT_TURN, SIGHT_FWD_TURN, SIGHT_LAT_THRUST, SIGHT_FWD_THRUST]. */
+const FOUNDER_BRAIN: readonly number[] = [1.2, 0, 0, 1.5, 0, 0.3, 1.0, 0, 0, 1.2];
 
 /** Seed a founder's genome: founder brain + Gaussian spread, random hue (lineage colors diverge). */
 export function seedGenome(
