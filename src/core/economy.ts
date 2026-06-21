@@ -30,14 +30,14 @@ function wrapDelta(d: number, size: number): number {
 }
 
 /**
- * PREDATION — each creature with DIET > 0 bites the nearest OTHER creature within `biteRange`, draining
- * `DAMAGE · diet` energy from it (capped by the prey's energy) straight into the predator. Energy is
- * conserved (it moves prey→predator); prey driven to ≤ 0 die in the next cull. Ascending slot order +
- * the prev-built spatial hash, so it's deterministic. No prey-sensing yet — hunting is by proximity
- * (chemotaxis still pulls predators toward food-rich, prey-dense pockets); sight comes in a later slice.
+ * PREDATION — each creature with DIET > 0 bites the nearest EDIBLE creature within `biteRange`, draining
+ * `DAMAGE · diet` energy (capped by prey energy), absorbed × predationGain. "Edible" requires the prey be
+ * smaller by `huntSizeRatio` (big-eats-small — body size is a refuge + a weapon) and, with cannibalism
+ * off, less carnivorous than the hunter. Prey driven to ≤ 0 die in the next cull. Ascending slot order +
+ * the prev-built hash (scan radius sized to biteRange), so it's deterministic.
  */
 export function hunt(store: OrganismStore, hash: SpatialHash, cfg: Config): void {
-  const { biteRange, worldWidth, worldHeight, cannibalism, predationGain } = cfg;
+  const { biteRange, worldWidth, worldHeight, cannibalism, predationGain, huntSizeRatio } = cfg;
   const { liveIndices, liveCount, x, y, energy, scalarGenes } = store;
   const { cols, rows, bucketStart, sorted } = hash;
   const range2 = biteRange * biteRange;
@@ -51,6 +51,8 @@ export function hunt(store: OrganismStore, hash: SpatialHash, cfg: Config): void
     const sg = i * SCALAR_GENE_COUNT;
     const diet = scalarGenes[sg + ScalarGene.DIET]!;
     if (diet <= 0) continue; // pure grazer — never hunts
+    const sizeI = scalarGenes[sg + ScalarGene.SIZE]!;
+    const maxPreySize = sizeI / huntSizeRatio; // can only bite prey this small or smaller
     const xi = x[i]!;
     const yi = y[i]!;
     const cx = hash.colOf(xi);
@@ -68,8 +70,9 @@ export function hunt(store: OrganismStore, hash: SpatialHash, cfg: Config): void
         for (let idx = bucketStart[b]!; idx < end; idx++) {
           const j = sorted[idx]!;
           if (j === i) continue;
-          if (!cannibalism && scalarGenes[j * SCALAR_GENE_COUNT + ScalarGene.DIET]! >= diet)
-            continue;
+          const jg = j * SCALAR_GENE_COUNT;
+          if (scalarGenes[jg + ScalarGene.SIZE]! > maxPreySize) continue; // too big to eat (size refuge)
+          if (!cannibalism && scalarGenes[jg + ScalarGene.DIET]! >= diet) continue;
           const ddx = wrapDelta(xi - x[j]!, worldWidth);
           const ddy = wrapDelta(yi - y[j]!, worldHeight);
           const d2 = ddx * ddx + ddy * ddy;

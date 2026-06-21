@@ -125,8 +125,8 @@ describe('hunt (predation)', () => {
     s.x[prey] = 54;
     s.y[prey] = 50; // 4 units away, within biteRange 12
     s.energy[prey] = 30;
-    genes(s, pred, cfg, { [ScalarGene.DIET]: 1, [ScalarGene.DAMAGE]: 5 });
-    genes(s, prey, cfg, { [ScalarGene.DIET]: 0 });
+    genes(s, pred, cfg, { [ScalarGene.DIET]: 1, [ScalarGene.DAMAGE]: 5, [ScalarGene.SIZE]: 10 });
+    genes(s, prey, cfg, { [ScalarGene.DIET]: 0, [ScalarGene.SIZE]: 5 }); // small enough to eat
     s.rebuildLive();
     hunt(s, mkHash(s), cfg);
     // drain = min(damage(5)·diet(1), preyEnergy) = 5; prey loses the drain, predator absorbs drain×gain.
@@ -162,8 +162,8 @@ describe('hunt (predation)', () => {
     s.x[prey] = 52;
     s.y[prey] = 50;
     s.energy[prey] = 3; // only 3 to give
-    genes(s, pred, cfg, { [ScalarGene.DIET]: 1, [ScalarGene.DAMAGE]: 20 });
-    genes(s, prey, cfg, { [ScalarGene.DIET]: 0 });
+    genes(s, pred, cfg, { [ScalarGene.DIET]: 1, [ScalarGene.DAMAGE]: 20, [ScalarGene.SIZE]: 10 });
+    genes(s, prey, cfg, { [ScalarGene.DIET]: 0, [ScalarGene.SIZE]: 5 });
     s.rebuildLive();
     hunt(s, mkHash(s), cfg);
     expect(s.energy[prey]).toBeCloseTo(0); // drained to 0 (capped) → dies next cull
@@ -187,9 +187,14 @@ describe('hunt (predation)', () => {
     s.x[prey] = 56;
     s.y[prey] = 50; // within biteRange 12
     s.energy[prey] = 30;
-    genes(s, hunter, cfg, { [ScalarGene.DIET]: 0.9, [ScalarGene.DAMAGE]: 5 });
-    genes(s, peer, cfg, { [ScalarGene.DIET]: 0.9, [ScalarGene.DAMAGE]: 0 }); // toothless → can't drain back
-    genes(s, prey, cfg, { [ScalarGene.DIET]: 0 });
+    genes(s, hunter, cfg, {
+      [ScalarGene.DIET]: 0.9,
+      [ScalarGene.DAMAGE]: 5,
+      [ScalarGene.SIZE]: 10,
+    });
+    // peer is small enough to eat (size) → only the DIET gate can spare it. toothless so it can't bite back.
+    genes(s, peer, cfg, { [ScalarGene.DIET]: 0.9, [ScalarGene.DAMAGE]: 0, [ScalarGene.SIZE]: 5 });
+    genes(s, prey, cfg, { [ScalarGene.DIET]: 0, [ScalarGene.SIZE]: 5 });
     s.rebuildLive();
     hunt(s, mkHash(s), noCannibal);
     expect(s.energy[peer]).toBe(30); // peer spared despite being nearest
@@ -206,11 +211,41 @@ describe('hunt (predation)', () => {
     s.x[peer] = 52;
     s.y[peer] = 50;
     s.energy[peer] = 30;
-    genes(s, hunter, cfg, { [ScalarGene.DIET]: 0.9, [ScalarGene.DAMAGE]: 5 });
-    genes(s, peer, cfg, { [ScalarGene.DIET]: 0.9, [ScalarGene.DAMAGE]: 0 }); // toothless → can't drain back
+    genes(s, hunter, cfg, {
+      [ScalarGene.DIET]: 0.9,
+      [ScalarGene.DAMAGE]: 5,
+      [ScalarGene.SIZE]: 10,
+    });
+    genes(s, peer, cfg, { [ScalarGene.DIET]: 0.9, [ScalarGene.DAMAGE]: 0, [ScalarGene.SIZE]: 5 }); // small → eatable
     s.rebuildLive();
     hunt(s, mkHash(s), cfg); // cannibalism true
     expect(s.energy[peer]).toBeCloseTo(30 - 5 * 0.9); // peer drained
+  });
+
+  it('big-eats-small: a predator cannot bite prey that is not enough smaller (size refuge)', () => {
+    const mk = (predSize: number, preySize: number): number => {
+      const s = new OrganismStore(4);
+      const pred = s.alloc();
+      const prey = s.alloc();
+      s.x[pred] = 50;
+      s.y[pred] = 50;
+      s.energy[pred] = 20;
+      s.x[prey] = 54;
+      s.y[prey] = 50;
+      s.energy[prey] = 30;
+      genes(s, pred, cfg, {
+        [ScalarGene.DIET]: 1,
+        [ScalarGene.DAMAGE]: 5,
+        [ScalarGene.SIZE]: predSize,
+      });
+      genes(s, prey, cfg, { [ScalarGene.DIET]: 0, [ScalarGene.SIZE]: preySize });
+      s.rebuildLive();
+      hunt(s, mkHash(s), cfg); // huntSizeRatio 1.15
+      return s.energy[prey];
+    };
+    expect(mk(10, 5)).toBeCloseTo(25); // 10 ≥ 5×1.15 → eaten (lost 5)
+    expect(mk(6, 6)).toBe(30); // same size → size refuge, untouched
+    expect(mk(5, 6)).toBe(30); // smaller predator → can't eat a bigger creature
   });
 
   it('no creature in bite range → no drain', () => {

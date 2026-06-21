@@ -156,9 +156,10 @@ export function buildOverlaySegments(
   // ── bite ring (to scale) + line to the prey it's about to bite — predators only (diet > 0) ──
   if (diet > 0) {
     ring(x, y, cfg.biteRange, 28, C_BITE);
-    // Replicate hunt's target pick: nearest OTHER live creature within biteRange (brute over live —
-    // once per frame for one creature, so O(n) is fine even at demo scale).
-    const { liveIndices, liveCount, x: xs, y: ys } = store;
+    // Replicate hunt's target pick: nearest EDIBLE creature within biteRange (small enough by
+    // huntSizeRatio, and not a guild peer when cannibalism is off). O(n) over live — fine for one creature.
+    const { liveIndices, liveCount, x: xs, y: ys, scalarGenes } = store;
+    const maxPreySize = size / cfg.huntSizeRatio;
     let best = -1;
     let bestD = cfg.biteRange * cfg.biteRange;
     let tdx = 0;
@@ -166,6 +167,9 @@ export function buildOverlaySegments(
     for (let k = 0; k < liveCount; k++) {
       const j = liveIndices[k]!;
       if (j === slot) continue;
+      const jg = j * SCALAR_GENE_COUNT;
+      if (scalarGenes[jg + ScalarGene.SIZE]! > maxPreySize) continue; // size refuge
+      if (!cfg.cannibalism && scalarGenes[jg + ScalarGene.DIET]! >= diet) continue;
       const ddx = wrapDelta(xs[j]! - x, cfg.worldWidth);
       const ddy = wrapDelta(ys[j]! - y, cfg.worldHeight);
       const d2 = ddx * ddx + ddy * ddy;

@@ -107,6 +107,9 @@ export interface Config {
   maxTurnCost: number;
   /** Basal upkeep per unit of maxThrust gene above its center (more push costs more). */
   maxThrustCost: number;
+  /** Basal upkeep per unit of SIZE gene above its center — now that size confers a predation refuge +
+   *  bigger bite, it earns a cost (a big body is expensive to run), so size is a tradeoff not free drift. */
+  sizeCost: number;
 
   // ── Trophic / predation ──────────────────────────────────────────────────────────────────────────
   /** DIET gene center — ONLY the mutation-step reference (founders are seeded bimodally, not here). */
@@ -119,6 +122,10 @@ export interface Config {
   predatorFraction: number;
   /** Bite reach in world units: a predator drains the nearest creature within this radius. */
   biteRange: number;
+  /** Big-eats-small gate: a predator can only bite prey at least this many times SMALLER than itself
+   *  (its size ≥ prey size × this). >1 makes body size a real predation axis — big bodies are a refuge
+   *  from small hunters, so a size-structured food web (small prey ↔ mid hunters ↔ big apex) can form. */
+  huntSizeRatio: number;
   /** Predation energy multiplier: a predator absorbs (drain × this) from a bite. >1 makes meat a big
    *  payoff vs grazing (deliberately not energy-conserving) — the incentive to hunt instead of sit.
    *  NB: too high is an energy printer → runaway to the population cap; keep modest. */
@@ -239,6 +246,8 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     senseRangeCost: 0.004,
     maxTurnCost: 0.4,
     maxThrustCost: 0.2,
+    sizeCost: 0.025, // upkeep per size unit above center — low enough to keep BOTH big & small viable
+    // (probe: 0.02→best size+trophic diversity, 0.04→predators too scarce); bounds the size arms race
     // Trophic / predation. ~15% of founders start as hunters (diet≈0.9); damage above its center costs
     // upkeep so predators evolve teeth at a price; bite reach ≈ 2·cellRadius (the collision cutoff).
     diet: 0.5,
@@ -246,6 +255,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     damageCost: 0.05, // upkeep per damage above center
     predatorFraction: 0.15,
     biteRange: 16, // reach to land a sight-guided kill (hunt now scans a neighborhood sized to this)
+    huntSizeRatio: 1.15, // must be ≥15% bigger than prey to eat it → size is a refuge + a weapon
     predationGain: 1, // ENERGY-CONSERVING (a bite moves energy prey→predator, never creates it) → no
     // runaway-to-cap; the "huge energy from hunting" comes from the big per-bite drain (damage), not gain
     herbivoryExp: 1.2, // predators keep a plant fallback but lean on hunting (1 = linear, full fallback)

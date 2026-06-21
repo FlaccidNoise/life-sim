@@ -25,6 +25,8 @@ interface Metrics {
   visRange: number;
   visAcuity: number;
   diet: number;
+  sizeMean: number;
+  sizeSd: number;
   occPct: number;
   maxBucket: number;
   turnSatPct: number;
@@ -46,6 +48,8 @@ function measure(world: World): Metrics {
       visRange: 0,
       visAcuity: 0,
       diet: 0,
+      sizeMean: 0,
+      sizeSd: 0,
       occPct: 0,
       maxBucket: 0,
       turnSatPct: 0,
@@ -60,6 +64,8 @@ function measure(world: World): Metrics {
   let vr = 0;
   let va = 0;
   let dietSum = 0;
+  let sizeSum = 0;
+  const sizes: number[] = [];
   let turnSat = 0;
   let thrustSat = 0;
   let driftSum = 0;
@@ -72,6 +78,9 @@ function measure(world: World): Metrics {
     else herb++;
     vr += scalarGenes[sg + ScalarGene.VISION_RANGE]!;
     va += scalarGenes[sg + ScalarGene.VISION_ACUITY]!;
+    const szv = scalarGenes[sg + ScalarGene.SIZE]!;
+    sizeSum += szv;
+    sizes.push(szv);
     // Recompute the brain's motor output to test saturation (steer()'s math).
     const h = heading[i]!;
     const dx = Math.cos(h);
@@ -112,6 +121,8 @@ function measure(world: World): Metrics {
     visRange: vr / liveCount,
     visAcuity: va / liveCount,
     diet: dietSum / liveCount,
+    sizeMean: sizeSum / liveCount,
+    sizeSd: Math.sqrt(sizes.reduce((a, v) => a + (v - sizeSum / liveCount) ** 2, 0) / liveCount),
     occPct: (100 * hs.occupied) / hs.buckets,
     maxBucket: hs.maxBucket,
     turnSatPct: (100 * turnSat) / liveCount,
@@ -134,21 +145,21 @@ function run(label: string, overrides: Partial<Config>): { label: string; m: Met
 // Facultative-predator search: a plant fallback (low herbivoryExp) so predators survive sparse stretches,
 // + a modest hunting bonus + moderate bite. Want predators present but not dominant, herbivores the
 // majority, pop well below the 32768 cap.
-// CONSERVATION (gain1): verify predators viable AND no runaway-to-cap, incl. the seed5/initPop600 case
-// that pegged the cap under gain1.5. Want pred>0 on s1 cases and pop ≪ 32768 on the s5 cases.
+// SIZE-PREDATION: does big-eats-small restore trophic + size diversity (herb>0, high sizeSd) and stay
+// alive across seeds? Test the new defaults on several seeds + huntSizeRatio / sizeCost variants.
 const CASES: { label: string; o: Partial<Config> }[] = [
   { label: 'defaults s1', o: {} },
-  { label: 'defaults s5 ip600', o: { seed: 5, initialPopulation: 600 } },
-  { label: 'exp1 s1', o: { herbivoryExp: 1 } },
-  { label: 'exp1 bite24 s1', o: { herbivoryExp: 1, biteRange: 24 } },
-  { label: 'exp1 s5 ip600', o: { herbivoryExp: 1, seed: 5, initialPopulation: 600 } },
-  { label: 'bite24 s1', o: { biteRange: 24 } },
+  { label: 'defaults s2', o: { seed: 2 } },
+  { label: 'defaults s5', o: { seed: 5 } },
+  { label: 'ratio1.3 s1', o: { huntSizeRatio: 1.3 } },
+  { label: 'sizeCost0.08 s1', o: { sizeCost: 0.08 } },
+  { label: 'sizeCost0.02 s1', o: { sizeCost: 0.02 } },
 ];
 
 console.log(`=== density + ablation probe: ${ticks} ticks, seed ${seed}, world 8192² ===\n`);
 const header =
   'case'.padEnd(28) +
-  ['pop', 'herb', 'pred', 'visR', 'visA', 'diet', 'occ%', 'maxBk', 'turnSat%', 'thrSat%', 'drift']
+  ['pop', 'herb', 'pred', 'size', 'szSd', 'diet', 'visR', 'occ%', 'maxBk', 'turnSat%', 'drift']
     .map((h) => h.padStart(9))
     .join('');
 console.log(header);
@@ -161,13 +172,13 @@ for (const c of CASES) {
       `${m.pop}`,
       `${m.herb}`,
       `${m.pred}`,
-      m.visRange.toFixed(1),
-      m.visAcuity.toFixed(2),
+      m.sizeMean.toFixed(1),
+      m.sizeSd.toFixed(1),
       m.diet.toFixed(2),
+      m.visRange.toFixed(0),
       m.occPct.toFixed(2),
       `${m.maxBucket}`,
       m.turnSatPct.toFixed(0),
-      m.thrustSatPct.toFixed(0),
       m.drift.toFixed(1),
     ]
       .map((v) => v.padStart(9))
