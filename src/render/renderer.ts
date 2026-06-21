@@ -72,6 +72,26 @@ void main() {
   outColor = vec4(col, 1.0);
 }`;
 
+// Debug overlay lines: a flat [x, y, r, g, b] vertex stream drawn as gl.LINES, sharing the camera.
+const LINE_VERT = `#version 300 es
+in vec2 a_pos;
+in vec3 a_col;
+uniform vec2 u_cam;
+uniform vec2 u_canvas;
+uniform float u_scale;
+out vec3 v_col;
+void main() {
+  vec2 px = (a_pos - u_cam) * u_scale + u_canvas * 0.5;
+  gl_Position = vec4(px.x / u_canvas.x * 2.0 - 1.0, 1.0 - px.y / u_canvas.y * 2.0, 0.0, 1.0);
+  v_col = a_col;
+}`;
+
+const LINE_FRAG = `#version 300 es
+precision mediump float;
+in vec3 v_col;
+out vec4 outColor;
+void main() { outColor = vec4(v_col, 1.0); }`;
+
 /** Lerp a→b by alpha on a torus of `size`, taking the short way around the seam. */
 function lerpWrap(a: number, b: number, alpha: number, size: number): number {
   let d = b - a;
@@ -121,6 +141,11 @@ export class Renderer {
   private readonly aHue: number;
   private readonly aSize: number;
   private readonly aDiet: number;
+  // debug overlay lines
+  private readonly lineProgram: WebGLProgram;
+  private readonly lineBuffer: WebGLBuffer;
+  private readonly aLinePos: number;
+  private readonly aLineCol: number;
   // food overlay
   private readonly foodProgram: WebGLProgram;
   private readonly quadBuffer: WebGLBuffer;
@@ -147,25 +172,38 @@ export class Renderer {
 
     this.dotProgram = link(gl, DOT_VERT, DOT_FRAG);
     this.foodProgram = link(gl, FOOD_VERT, FOOD_FRAG);
+    this.lineProgram = link(gl, LINE_VERT, LINE_FRAG);
     this.aPos = gl.getAttribLocation(this.dotProgram, 'a_pos');
     this.aHue = gl.getAttribLocation(this.dotProgram, 'a_hue');
     this.aSize = gl.getAttribLocation(this.dotProgram, 'a_size');
     this.aDiet = gl.getAttribLocation(this.dotProgram, 'a_diet');
     this.aCorner = gl.getAttribLocation(this.foodProgram, 'a_corner');
+    this.aLinePos = gl.getAttribLocation(this.lineProgram, 'a_pos');
+    this.aLineCol = gl.getAttribLocation(this.lineProgram, 'a_col');
 
     const dotBuffer = gl.createBuffer();
     const hueBuffer = gl.createBuffer();
     const sizeBuffer = gl.createBuffer();
     const dietBuffer = gl.createBuffer();
     const quadBuffer = gl.createBuffer();
+    const lineBuffer = gl.createBuffer();
     const foodTex = gl.createTexture();
-    if (!dotBuffer || !hueBuffer || !sizeBuffer || !dietBuffer || !quadBuffer || !foodTex)
+    if (
+      !dotBuffer ||
+      !hueBuffer ||
+      !sizeBuffer ||
+      !dietBuffer ||
+      !quadBuffer ||
+      !lineBuffer ||
+      !foodTex
+    )
       throw new Error('GL resource alloc failed');
     this.dotBuffer = dotBuffer;
     this.hueBuffer = hueBuffer;
     this.sizeBuffer = sizeBuffer;
     this.dietBuffer = dietBuffer;
     this.quadBuffer = quadBuffer;
+    this.lineBuffer = lineBuffer;
     this.foodTex = foodTex;
     this.dotScratch = new Float32Array(capacity * 2);
     this.hueScratch = new Float32Array(capacity);
@@ -341,6 +379,26 @@ export class Renderer {
       this.setCommonUniforms(this.dotProgram, sc);
       gl.drawArrays(gl.POINTS, 0, n);
     }
+  }
+
+  /**
+   * Draw debug overlay lines: a flat [x, y, r, g, b] vertex stream (world coords) rendered as gl.LINES
+   * under the SAME camera as the dots. Call AFTER draw() so the overlay sits on top. `vertexCount` is
+   * the number of vertices to draw from the front of `data` (must be even — gl.LINES pairs them).
+   */
+  drawLines(data: Float32Array, vertexCount: number): void {
+    if (vertexCount < 2) return;
+    const gl = this.gl;
+    gl.useProgram(this.lineProgram);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.lineBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, data.subarray(0, vertexCount * 5), gl.DYNAMIC_DRAW);
+    const stride = 5 * 4; // 5 floats per vertex
+    gl.enableVertexAttribArray(this.aLinePos);
+    gl.vertexAttribPointer(this.aLinePos, 2, gl.FLOAT, false, stride, 0);
+    gl.enableVertexAttribArray(this.aLineCol);
+    gl.vertexAttribPointer(this.aLineCol, 3, gl.FLOAT, false, stride, 2 * 4);
+    this.setCommonUniforms(this.lineProgram, this.effScale());
+    gl.drawArrays(gl.LINES, 0, vertexCount);
   }
 
   /** Convert a canvas-relative point (CSS px) to world coordinates, inverting the camera transform. */
