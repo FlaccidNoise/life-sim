@@ -87,12 +87,13 @@ export interface Config {
   maxThrust: number;
 
   // ── Evolvable scalar genes (per-creature, heritable, mutated at birth) ───────────────────────────
-  // The genes are maxSpeed, eatRate, senseStep (sense range), cellRadius (size), maxTurn, maxThrust,
-  // and metabolicEfficiency. The config value of each is the FOUNDER CENTER + the cost baseline;
+  // 15 scalar genes (see genome.ScalarGene). Each config value is the FOUNDER CENTER + cost baseline;
   // founders seed around it (± founderSigma·center) and offspring mutate (± mutationSigma·center).
-  // Six of them are "more-is-costly" genes: a value ABOVE its center adds basal upkeep (geneUpkeep),
-  // weighted by the coeffs below. metabolicEfficiency is different — a multiplicative tradeoff (see
-  // its center below) — so it has no upkeep coeff.
+  // NINE are "more-is-costly" (value ABOVE center adds basal upkeep via geneUpkeep, weighted by the cost
+  // coeffs below): maxSpeed, eatRate, senseStep, maxTurn, maxThrust, damage, visionRange, visionFov,
+  // visionAcuity. The rest are costKey null: metabolicEfficiency (its cost is the multiplicative
+  // basal×e tradeoff), the three life-history genes + diet (cost is the strategy/graze↔hunt tradeoff),
+  // and size (no benefit yet → costed when big-eats-small lands).
   /** Metabolic-efficiency gene CENTER (=1). A self-balancing tradeoff: basal cost ×= e and thrust ×= e,
    *  so a thrifty (low-e) metabolism is cheap to run but weak; a costly (high-e) one is strong. */
   metabolicEfficiency: number;

@@ -120,4 +120,15 @@ describe('scalar genes (evolvable per-creature traits)', () => {
     g[ScalarGene.METAB_EFF] = cfg.metabolicEfficiency + 0.4; // exempt — must NOT add upkeep
     expect(geneUpkeep(g, 0, cfg)).toBeCloseTo(3 * cfg.maxSpeedCost + 2 * cfg.eatRateCost);
   });
+
+  it('charges upkeep for the vision genes (no free eyes — the every-gene-costed principle)', () => {
+    const g = new Float32Array(4 * SCALAR_GENE_COUNT);
+    for (let gi = 0; gi < SCALAR_GENE_COUNT; gi++) g[gi] = cfg[SCALAR_GENE_SPECS[gi]!.centerKey];
+    g[ScalarGene.VISION_RANGE] = cfg.visionRange + 5;
+    g[ScalarGene.VISION_FOV] = cfg.visionFov + 0.4;
+    g[ScalarGene.VISION_ACUITY] = cfg.visionAcuity + 1;
+    expect(geneUpkeep(g, 0, cfg)).toBeCloseTo(
+      5 * cfg.visionRangeCost + 0.4 * cfg.visionFovCost + 1 * cfg.visionAcuityCost,
+    );
+  });
 });
