@@ -11,6 +11,7 @@ import { World } from '../core/world';
 import { defaultConfig, type Config } from '../core/config';
 import { scanHealth } from '../core/health';
 import { Renderer } from '../render/renderer';
+import { buildOverlaySegments } from '../render/overlay';
 import { Controls } from './observability/controls';
 import { Knobs } from './observability/knobs';
 import { Inspector } from './observability/inspector';
@@ -47,7 +48,10 @@ const inspector = new Inspector(el('inspector'));
 let running = false;
 let speed = 1; // sim ticks per animation frame; <1 = slow-mo (interpolated for fluid motion)
 let showFood = true; // food heatmap overlay (toggle with 'f')
+let showOverlay = true; // per-creature debug overlay on the selection (toggle with 'o')
 let selected: { slot: number; gen: number } | null = null;
+// Scratch for the selected creature's overlay line vertices ([x,y,r,g,b] per vertex; gl.LINES).
+const overlayScratch = new Float32Array(2048);
 // Camera: centre in world units + zoom (1 = whole world fits). Scroll to zoom, drag to pan.
 let camX = config.worldWidth / 2;
 let camY = config.worldHeight / 2;
@@ -159,9 +163,10 @@ globalThis.addEventListener('mouseup', (e) => {
 
 globalThis.addEventListener('resize', () => renderer.resize());
 
-// 'f' toggles the food heatmap overlay.
+// 'f' toggles the food heatmap overlay; 'o' toggles the per-creature debug overlay.
 globalThis.addEventListener('keydown', (e) => {
   if (e.key === 'f' || e.key === 'F') showFood = !showFood;
+  if (e.key === 'o' || e.key === 'O') showOverlay = !showOverlay;
 });
 
 // tps measurement (display only — never fed back into the sim).
@@ -216,6 +221,12 @@ function frame(): void {
   }
   renderer.setCamera(camX, camY, zoom);
   renderer.draw(world.store, world.food, showFood, interp);
+  // Per-creature debug overlay on the live selection (drawn on top; reads true current state, so at
+  // slow-mo it sits at the un-interpolated position — a non-issue at speed ≥ 1).
+  if (showOverlay && selected && world.store.isAlive(selected.slot, selected.gen)) {
+    const vc = buildOverlaySegments(world.store, selected.slot, config, overlayScratch);
+    renderer.drawLines(overlayScratch, vc);
+  }
   inspector.render(world.store, config);
 
   const now = performance.now();
