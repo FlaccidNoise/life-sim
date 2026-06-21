@@ -80,6 +80,8 @@ export class Inspector {
       ['gene·reproBar', g(ScalarGene.REPRO_THRESHOLD)],
       ['gene·satiated', g(ScalarGene.SATIATED_THRESHOLD)],
       ['gene·birthEnergy', g(ScalarGene.BIRTH_ENERGY)],
+      ['gene·diet', g(ScalarGene.DIET)], // 0 herbivore (green) … 1 predator (red)
+      ['gene·damage', g(ScalarGene.DAMAGE)],
       ['gene upkeep', geneUpkeep(store.scalarGenes, i, cfg).toFixed(3)],
       ['learn gate', gate.toFixed(2)],
       ['learn drift', drift.toFixed(3)],

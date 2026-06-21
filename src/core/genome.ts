@@ -45,8 +45,11 @@ export const ScalarGene = {
   REPRO_THRESHOLD: 7, // survival↔reproductive boundary (the learn-gate floor; where you land post-breed)
   SATIATED_THRESHOLD: 8, // "full" bar: stop eating + breed-at-the-top + peak learning
   BIRTH_ENERGY: 9, // energy each offspring is provisioned with (parent pays this + reproOverhead)
+  // Trophic genes: where you sit on the herbivore↔carnivore axis and how hard you bite.
+  DIET: 10, // 0 = pure grazer (graze ×(1−diet)) … 1 = pure hunter (bite drain ×diet); evolvable role
+  DAMAGE: 11, // bite strength — energy drained per hunt tick (× diet); costed, so predators evolve teeth
 } as const;
-export const SCALAR_GENE_COUNT = 10;
+export const SCALAR_GENE_COUNT = 12;
 
 /** Minimum reproductive-band width: satiated is read as max(satiatedGene, reproGene + this) so the two
  *  life-history bars can mutate independently without inverting (which would break the learn gate). */
@@ -64,7 +67,9 @@ interface ScalarGeneSpec {
     | 'metabolicEfficiency'
     | 'reproThreshold'
     | 'satiatedThreshold'
-    | 'birthEnergy';
+    | 'birthEnergy'
+    | 'diet'
+    | 'damage';
   /** Config key for the per-unit-above-center basal cost coeff, or null for a non-upkeep gene. */
   costKey:
     | 'maxSpeedCost'
@@ -72,6 +77,7 @@ interface ScalarGeneSpec {
     | 'senseRangeCost'
     | 'maxTurnCost'
     | 'maxThrustCost'
+    | 'damageCost'
     | null;
   /** Hard clamp range the gene value is kept within (at seed and at every mutation). */
   min: number;
@@ -95,6 +101,11 @@ export const SCALAR_GENE_SPECS: readonly ScalarGeneSpec[] = [
   { centerKey: 'reproThreshold', costKey: null, min: 20, max: 120 },
   { centerKey: 'satiatedThreshold', costKey: null, min: 40, max: 220 },
   { centerKey: 'birthEnergy', costKey: null, min: 8, max: 90 },
+  // Trophic genes. DIET costKey null (its cost is the graze↔hunt income tradeoff); its center (0.5) is
+  // only the mutation-step reference — founders are seeded BIMODALLY (herbivores ~0 + a predator
+  // fraction ~0.9) in world.seedWorld, not around the center. DAMAGE is costed (teeth cost upkeep).
+  { centerKey: 'diet', costKey: null, min: 0, max: 1 },
+  { centerKey: 'damage', costKey: 'damageCost', min: 0, max: 20 },
 ];
 
 function clampTo(v: number, min: number, max: number): number {

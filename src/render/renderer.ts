@@ -16,6 +16,7 @@ const DOT_VERT = `#version 300 es
 in vec2 a_pos;
 in float a_hue;                 // genome hue gene [0,1) → per-creature SHADE within the role's color band
 in float a_size;                // per-creature point size in device px (from the size gene)
+in float a_diet;                // diet gene [0,1] → trophic-role hue: 0 green (herbivore) … 1 red (predator)
 uniform vec2 u_cam;             // camera centre in world units (pan)
 uniform vec2 u_canvas;
 uniform float u_scale;          // device px per world unit (base fit × zoom)
@@ -28,13 +29,12 @@ void main() {
   vec2 px = (a_pos - u_cam) * u_scale + u_canvas * 0.5;
   gl_Position = vec4(px.x / u_canvas.x * 2.0 - 1.0, 1.0 - px.y / u_canvas.y * 2.0, 0.0, 1.0);
   gl_PointSize = a_size;
-  // Color encodes TROPHIC ROLE: herbivores = greens. The hue gene no longer rides the whole wheel —
-  // it now picks a SHADE (dark↔light) within the role's band, so a lineage's mutations read as
-  // slightly-varied greens. When diet/predation lands, base hue will lerp green→red by the diet gene
-  // (one line: mix(0.34, 0.0, a_diet)); the shade variation stays the same.
-  float baseHue = 0.34;                  // green (herbivore band)
-  float shade = 0.5 + 0.5 * a_hue;       // [0.5,1.0] brightness → dark green ↔ light green
-  v_color = hsv2rgb(baseHue, 0.72, shade);
+  // Color encodes TROPHIC ROLE: base hue lerps green (herbivore) → red (predator) by the diet gene.
+  // The hue gene picks a SHADE (dark↔light) within that band, so a lineage's mutations read as
+  // slightly-varied shades of its role color.
+  float baseHue = mix(0.34, 0.0, clamp(a_diet, 0.0, 1.0)); // 0.34 green … 0.0 red
+  float shade = 0.5 + 0.5 * a_hue;                          // [0.5,1.0] brightness → dark ↔ light
+  v_color = hsv2rgb(baseHue, 0.78, shade);
 }`;
 
 const DOT_FRAG = `#version 300 es
@@ -112,12 +112,15 @@ export class Renderer {
   private readonly dotBuffer: WebGLBuffer;
   private readonly hueBuffer: WebGLBuffer;
   private readonly sizeBuffer: WebGLBuffer;
+  private readonly dietBuffer: WebGLBuffer;
   private readonly dotScratch: Float32Array;
   private readonly hueScratch: Float32Array;
   private readonly sizeScratch: Float32Array;
+  private readonly dietScratch: Float32Array;
   private readonly aPos: number;
   private readonly aHue: number;
   private readonly aSize: number;
+  private readonly aDiet: number;
   // food overlay
   private readonly foodProgram: WebGLProgram;
   private readonly quadBuffer: WebGLBuffer;
@@ -147,23 +150,27 @@ export class Renderer {
     this.aPos = gl.getAttribLocation(this.dotProgram, 'a_pos');
     this.aHue = gl.getAttribLocation(this.dotProgram, 'a_hue');
     this.aSize = gl.getAttribLocation(this.dotProgram, 'a_size');
+    this.aDiet = gl.getAttribLocation(this.dotProgram, 'a_diet');
     this.aCorner = gl.getAttribLocation(this.foodProgram, 'a_corner');
 
     const dotBuffer = gl.createBuffer();
     const hueBuffer = gl.createBuffer();
     const sizeBuffer = gl.createBuffer();
+    const dietBuffer = gl.createBuffer();
     const quadBuffer = gl.createBuffer();
     const foodTex = gl.createTexture();
-    if (!dotBuffer || !hueBuffer || !sizeBuffer || !quadBuffer || !foodTex)
+    if (!dotBuffer || !hueBuffer || !sizeBuffer || !dietBuffer || !quadBuffer || !foodTex)
       throw new Error('GL resource alloc failed');
     this.dotBuffer = dotBuffer;
     this.hueBuffer = hueBuffer;
     this.sizeBuffer = sizeBuffer;
+    this.dietBuffer = dietBuffer;
     this.quadBuffer = quadBuffer;
     this.foodTex = foodTex;
     this.dotScratch = new Float32Array(capacity * 2);
     this.hueScratch = new Float32Array(capacity);
     this.sizeScratch = new Float32Array(capacity);
+    this.dietScratch = new Float32Array(capacity);
 
     // Unit quad as a triangle strip: (0,0)(1,0)(0,1)(1,1).
     gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
@@ -292,6 +299,7 @@ export class Renderer {
       const s = this.dotScratch;
       const hsc = this.hueScratch;
       const zsc = this.sizeScratch;
+      const dsc = this.dietScratch;
       const { liveIndices, x, y, hue, genId, scalarGenes } = store;
       const useInterp = interp != null && interp.alpha < 1;
       const a = useInterp ? interp.alpha : 0;
@@ -311,6 +319,7 @@ export class Renderer {
         // Per-creature dot diameter = 2·(size gene) in world units → device px (≥2 so it stays visible).
         const size = scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.SIZE]!;
         zsc[k] = Math.max(2, 2 * size * sc);
+        dsc[k] = scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.DIET]!; // green→red trophic hue
       }
       gl.useProgram(this.dotProgram);
       gl.bindBuffer(gl.ARRAY_BUFFER, this.dotBuffer);
@@ -325,6 +334,10 @@ export class Renderer {
       gl.bufferData(gl.ARRAY_BUFFER, zsc.subarray(0, n), gl.DYNAMIC_DRAW);
       gl.enableVertexAttribArray(this.aSize);
       gl.vertexAttribPointer(this.aSize, 1, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.dietBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, dsc.subarray(0, n), gl.DYNAMIC_DRAW);
+      gl.enableVertexAttribArray(this.aDiet);
+      gl.vertexAttribPointer(this.aDiet, 1, gl.FLOAT, false, 0, 0);
       this.setCommonUniforms(this.dotProgram, sc);
       gl.drawArrays(gl.POINTS, 0, n);
     }

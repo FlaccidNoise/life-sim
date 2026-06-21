@@ -6,7 +6,7 @@
  */
 import { World } from '../core/world';
 import { type Config } from '../core/config';
-import { SCALAR_GENE_COUNT } from '../core/genome';
+import { SCALAR_GENE_COUNT, ScalarGene } from '../core/genome';
 
 export interface SamplePoint {
   tick: number;
@@ -15,6 +15,7 @@ export interface SamplePoint {
   deaths: number; // cumulative
   food: number; // total standing biomass
   geneMeans: number[]; // population-mean of each scalar gene (watch selection move them)
+  predators: number; // count of creatures with diet ≥ 0.5 (the hunter side of the trophic split)
 }
 
 /** Population means of every scalar gene (all 0 when extinct). */
@@ -28,6 +29,16 @@ function geneMeans(world: World): number[] {
   }
   for (let g = 0; g < SCALAR_GENE_COUNT; g++) means[g]! /= liveCount;
   return means;
+}
+
+/** Count creatures on the hunter side of the trophic split (diet ≥ 0.5). */
+function predatorCount(world: World): number {
+  const { liveIndices, liveCount, scalarGenes } = world.store;
+  let n = 0;
+  for (let k = 0; k < liveCount; k++) {
+    if (scalarGenes[liveIndices[k]! * SCALAR_GENE_COUNT + ScalarGene.DIET]! >= 0.5) n++;
+  }
+  return n;
 }
 
 export interface RunResult {
@@ -55,6 +66,7 @@ export function runHeadless(config: Config, ticks: number, sampleEvery = 500): R
         deaths: world.totalDeaths,
         food: Math.round(world.food.total()),
         geneMeans: geneMeans(world),
+        predators: predatorCount(world),
       });
     }
   }

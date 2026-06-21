@@ -49,12 +49,18 @@ const SPECS: KnobSpec[] = [
   { key: 'reproThreshold', label: 'gene· repro bar', min: 20, max: 120, step: 5, live: false },
   { key: 'satiatedThreshold', label: 'gene· satiated', min: 40, max: 220, step: 5, live: false },
   { key: 'birthEnergy', label: 'gene· birth energy', min: 8, max: 90, step: 1, live: false },
+  { key: 'damage', label: 'gene· damage', min: 0, max: 20, step: 0.5, live: false },
+  // Trophic / predation knobs.
+  { key: 'predatorFraction', label: 'predator frac', min: 0, max: 0.6, step: 0.05, live: false },
+  // Capped at the spatial-hash cell size (2·cellRadius=12): the 3×3 scan can't reach further.
+  { key: 'biteRange', label: 'bite range', min: 0, max: 12, step: 1, live: true },
   // Selection-pressure levers (live): basal upkeep per unit of each gene above its center.
   { key: 'maxSpeedCost', label: 'cost· speed', min: 0, max: 0.5, step: 0.01, live: true },
   { key: 'eatRateCost', label: 'cost· eat', min: 0, max: 1, step: 0.01, live: true },
   { key: 'senseRangeCost', label: 'cost· sense', min: 0, max: 0.05, step: 0.001, live: true },
   { key: 'maxTurnCost', label: 'cost· turn', min: 0, max: 2, step: 0.05, live: true },
   { key: 'maxThrustCost', label: 'cost· thrust', min: 0, max: 1, step: 0.02, live: true },
+  { key: 'damageCost', label: 'cost· damage', min: 0, max: 0.5, step: 0.01, live: true },
 ];
 
 /** Live boolean toggles (checkboxes), e.g. the Baldwin learning master switch. */
