@@ -90,6 +90,9 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
   return { inputs, turnRaw, thrustRaw, turn, thrust, drift };
 }
 
+// Edge thickness maps |weight| → [0,1] against this reference (weights are O(1–2)); purely cosmetic.
+const EDGE_WEIGHT_SCALE = 2;
+
 const POS = (r: number, g: number, bl: number, a: number): string => `rgba(${r},${g},${bl},${a})`;
 
 export class BrainView {
@@ -158,7 +161,7 @@ export class BrainView {
       weight: number,
       act: number,
     ): void => {
-      const mag = Math.min(1, Math.abs(weight) / cfg.weightClamp);
+      const mag = Math.min(1, Math.abs(weight) / EDGE_WEIGHT_SCALE);
       const alpha = 0.18 + 0.82 * Math.min(1, Math.abs(act) / maxAct);
       ctx.lineWidth = Math.max(0.5 * dpr, mag * 4 * dpr);
       ctx.strokeStyle = weight >= 0 ? POS(120, 200, 240, alpha) : POS(240, 150, 90, alpha); // cyan + / orange −

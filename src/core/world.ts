@@ -140,7 +140,7 @@ export class World {
     // METABOLIZE → LEARN → REPRO/DIE. Energy (the band the creature is in) is known after metabolize,
     // so the energy-gated within-life consolidation runs here (eligibility traces were laid in steer).
     metabolize(s, this.food, cfg);
-    if (cfg.learningEnabled) learn(s, cfg.learningRate, cfg.weightDecay, cfg.weightClamp);
+    if (cfg.learningEnabled) learn(s, cfg.learningRate, cfg.weightDecay, cfg.maxLearnDeviation);
     this.lastDeaths = cullDead(s);
     this.lastBirths = reproduce(s, this.rng, cfg);
     this.totalBirths += this.lastBirths;
