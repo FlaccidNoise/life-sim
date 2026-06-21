@@ -17,6 +17,7 @@ import { Knobs } from './observability/knobs';
 import { Inspector } from './observability/inspector';
 import { BrainView } from './observability/brain-view';
 import { Distributions } from './observability/distributions';
+import { FollowRecorder } from './observability/follow-recorder';
 import { TimeSeriesGraph } from './observability/graph';
 
 function el<T extends HTMLElement>(id: string): T {
@@ -48,6 +49,7 @@ const graph = new TimeSeriesGraph(el<HTMLCanvasElement>('graph'), [
 const inspector = new Inspector(el('inspector'));
 const brainView = new BrainView(el<HTMLCanvasElement>('brain'));
 const distributions = new Distributions(el<HTMLCanvasElement>('dist'));
+const recorder = new FollowRecorder();
 
 let running = false;
 let speed = 1; // sim ticks per animation frame; <1 = slow-mo (interpolated for fluid motion)
@@ -68,6 +70,7 @@ const controls = new Controls(el('controls'), config.seed, {
   },
   onStep: () => {
     world.step();
+    recorder.record(world.store, config, world.tick);
   },
   onReset: (seed: number) => {
     config = { ...config, seed };
@@ -76,7 +79,20 @@ const controls = new Controls(el('controls'), config.seed, {
   onSpeed: (n: number) => {
     speed = n;
   },
+  onDumpCsv: () => downloadFollowCsv(),
 });
+
+// Save the followed creature's per-tick recording as a CSV file (user-initiated via the ⤓ csv button).
+function downloadFollowCsv(): void {
+  if (recorder.count === 0) return;
+  const blob = new Blob([recorder.toCsv()], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `follow-${recorder.followedSlot}-${world.tick}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 new Knobs(el('knobs'), config, {
   // Live knob: mutate the config the world already holds → effect next tick, no reset.
@@ -94,11 +110,15 @@ new Knobs(el('knobs'), config, {
   },
 });
 
+controls.setFollow(-1, 0, false); // show the 'l = follow' hint before the first play
+
 function rebuild(): void {
   world = new World(config);
   selected = null;
   inspector.clear();
   brainView.clear();
+  recorder.clear();
+  controls.setFollow(-1, 0, false);
   prevBirths = 0;
   prevDeaths = 0;
 }
@@ -169,10 +189,18 @@ globalThis.addEventListener('mouseup', (e) => {
 
 globalThis.addEventListener('resize', () => renderer.resize());
 
-// 'f' toggles the food heatmap overlay; 'o' toggles the per-creature debug overlay.
+// 'f' food heatmap · 'o' creature overlay · 'l' lock follow-cam + record the selected creature.
 globalThis.addEventListener('keydown', (e) => {
   if (e.key === 'f' || e.key === 'F') showFood = !showFood;
   if (e.key === 'o' || e.key === 'O') showOverlay = !showOverlay;
+  if (e.key === 'l' || e.key === 'L') {
+    if (recorder.following) {
+      recorder.clear();
+      controls.setFollow(-1, 0, false);
+    } else if (selected) {
+      recorder.follow(selected.slot, selected.gen);
+    }
+  }
 });
 
 // tps measurement (display only — never fed back into the sim).
@@ -221,13 +249,17 @@ function frame(): void {
       if (acc >= 1) {
         snapshotPrev();
         world.step();
+        recorder.record(world.store, config, world.tick);
         stepped = 1;
         acc -= 1;
       }
       interp = { prevX, prevY, prevGen, alpha: acc };
     } else {
       const steps = Math.min(STEP_CAP, Math.round(speed));
-      for (let i = 0; i < steps; i++) world.step();
+      for (let i = 0; i < steps; i++) {
+        world.step();
+        recorder.record(world.store, config, world.tick); // per-TICK dump, even at high speed
+      }
       stepped = steps;
       acc = 0;
     }
@@ -236,6 +268,13 @@ function frame(): void {
       stepMsEma = stepMsEma === 0 ? perTick : stepMsEma * 0.9 + perTick * 0.1;
       lastStepsPerFrame = stepped;
     }
+  }
+  // Follow-cam: while the followed INDIVIDUAL is alive, center the camera on it (genId-checked, so a
+  // recycled slot doesn't hijack the camera). On its death the camera releases but the recording is
+  // kept — you can still dump the dead creature's full life as CSV. Zoom is untouched (scroll still works).
+  if (recorder.isFollowedAlive(world.store)) {
+    camX = world.store.x[recorder.followedSlot]!;
+    camY = world.store.y[recorder.followedSlot]!;
   }
   renderer.setCamera(camX, camY, zoom);
   renderer.draw(world.store, world.food, showFood, interp);
@@ -255,6 +294,11 @@ function frame(): void {
     lastTick = world.tick;
     // Perf line updated on the same cadence (hash.stats() scans every bucket — too costly per frame).
     controls.setPerf(stepMsEma, lastStepsPerFrame, world.hash.stats());
+    controls.setFollow(
+      recorder.following ? recorder.followedSlot : -1,
+      recorder.count,
+      recorder.isFollowedAlive(world.store),
+    );
   }
   const dB = world.totalBirths - prevBirths;
   const dD = world.totalDeaths - prevDeaths;
@@ -284,4 +328,6 @@ requestAnimationFrame(frame);
   },
   // Invariant scan from the console: `sim.health()` → NaN/oob/energy/gene violations + summary stats.
   health: (maxViolations?: number) => scanHealth(world, maxViolations),
+  // The followed creature's recording as CSV text (for the console; the ⤓ csv button downloads it).
+  followCsv: () => recorder.toCsv(),
 };

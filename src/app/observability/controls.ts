@@ -8,6 +8,7 @@ export interface ControlsHandlers {
   onStep(): void;
   onReset(seed: number): void;
   onSpeed(ticksPerFrame: number): void;
+  onDumpCsv(): void;
 }
 
 export class Controls {
@@ -15,6 +16,7 @@ export class Controls {
   private readonly playBtn: HTMLButtonElement;
   private readonly status: HTMLElement;
   private readonly perf: HTMLElement;
+  private readonly follow: HTMLElement;
 
   constructor(root: HTMLElement, initialSeed: number, h: ControlsHandlers) {
     root.innerHTML = `
@@ -22,6 +24,7 @@ export class Controls {
         <button data-act="play" class="btn">▶ play</button>
         <button data-act="step" class="btn">⏭ step</button>
         <button data-act="reset" class="btn">↺ reset</button>
+        <button data-act="dump" class="btn" title="download the followed creature's per-tick CSV">⤓ csv</button>
       </div>
       <div class="ctl-row">
         <label class="lbl">seed</label>
@@ -38,7 +41,8 @@ export class Controls {
         </select>
       </div>
       <div data-act="status" class="status muted"></div>
-      <div data-act="perf" class="status muted"></div>`;
+      <div data-act="perf" class="status muted"></div>
+      <div data-act="follow" class="status muted"></div>`;
 
     const q = <T extends HTMLElement>(sel: string): T => {
       const e = root.querySelector<T>(sel);
@@ -49,6 +53,7 @@ export class Controls {
     this.seedInput = q<HTMLInputElement>('[data-act="seed"]');
     this.status = q('[data-act="status"]');
     this.perf = q('[data-act="perf"]');
+    this.follow = q('[data-act="follow"]');
 
     this.playBtn.addEventListener('click', () => h.onPlayToggle());
     q<HTMLButtonElement>('[data-act="step"]').addEventListener('click', () => h.onStep());
@@ -58,6 +63,7 @@ export class Controls {
     q<HTMLSelectElement>('[data-act="speed"]').addEventListener('change', (e) =>
       h.onSpeed(Number((e.target as HTMLSelectElement).value)),
     );
+    q<HTMLButtonElement>('[data-act="dump"]').addEventListener('click', () => h.onDumpCsv());
   }
 
   get seed(): number {
@@ -82,5 +88,15 @@ export class Controls {
     this.perf.textContent =
       `${msPerTick.toFixed(2)} ms/tick · ${stepsPerFrame}/frame · ` +
       `hash ${hash.occupied}/${hash.buckets} (${occPct}%) · max bucket ${hash.maxBucket}`;
+  }
+
+  /** Follow-cam status line: which creature is locked, alive/dead, + how many ticks were recorded. */
+  setFollow(slot: number, ticks: number, alive: boolean): void {
+    this.follow.textContent =
+      slot < 0
+        ? `'l' = follow + record selected`
+        : alive
+          ? `🔒 following #${slot} · ${ticks} ticks recorded`
+          : `† #${slot} died · ${ticks} ticks recorded (⤓ csv, or 'l' to release)`;
   }
 }
