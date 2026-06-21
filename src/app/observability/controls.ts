@@ -14,6 +14,7 @@ export class Controls {
   private readonly seedInput: HTMLInputElement;
   private readonly playBtn: HTMLButtonElement;
   private readonly status: HTMLElement;
+  private readonly perf: HTMLElement;
 
   constructor(root: HTMLElement, initialSeed: number, h: ControlsHandlers) {
     root.innerHTML = `
@@ -36,7 +37,8 @@ export class Controls {
           <option value="64">64×</option>
         </select>
       </div>
-      <div data-act="status" class="status muted"></div>`;
+      <div data-act="status" class="status muted"></div>
+      <div data-act="perf" class="status muted"></div>`;
 
     const q = <T extends HTMLElement>(sel: string): T => {
       const e = root.querySelector<T>(sel);
@@ -46,6 +48,7 @@ export class Controls {
     this.playBtn = q<HTMLButtonElement>('[data-act="play"]');
     this.seedInput = q<HTMLInputElement>('[data-act="seed"]');
     this.status = q('[data-act="status"]');
+    this.perf = q('[data-act="perf"]');
 
     this.playBtn.addEventListener('click', () => h.onPlayToggle());
     q<HTMLButtonElement>('[data-act="step"]').addEventListener('click', () => h.onStep());
@@ -67,5 +70,17 @@ export class Controls {
 
   setStatus(tick: number, tps: number, population: number, hash: string): void {
     this.status.textContent = `tick ${tick} · ${tps.toFixed(0)} tps · pop ${population} · #${hash}`;
+  }
+
+  /** Performance readout: cost per tick + the hash occupancy that drives neighbor-scan cost. */
+  setPerf(
+    msPerTick: number,
+    stepsPerFrame: number,
+    hash: { occupied: number; buckets: number; maxBucket: number },
+  ): void {
+    const occPct = ((100 * hash.occupied) / hash.buckets).toFixed(1);
+    this.perf.textContent =
+      `${msPerTick.toFixed(2)} ms/tick · ${stepsPerFrame}/frame · ` +
+      `hash ${hash.occupied}/${hash.buckets} (${occPct}%) · max bucket ${hash.maxBucket}`;
   }
 }

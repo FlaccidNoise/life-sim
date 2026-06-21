@@ -73,6 +73,27 @@ describe('SpatialHash', () => {
     expect(hashNeighbors(hash, store, b).has(a)).toBe(true);
   });
 
+  it('reports occupancy stats matching the built population', () => {
+    const store = new OrganismStore(16);
+    // 3 creatures in one cell, 1 in another → 2 occupied buckets, maxBucket 3.
+    for (let k = 0; k < 3; k++) {
+      const i = store.alloc();
+      store.x[i] = 10 + k;
+      store.y[i] = 10;
+    }
+    const far = store.alloc();
+    store.x[far] = 200;
+    store.y[far] = 200;
+    store.rebuildLive();
+    const hash = new SpatialHash(W, H, CUTOFF, 16);
+    hash.build(store);
+    const st = hash.stats();
+    expect(st.buckets).toBe(Math.floor(W / CUTOFF) * Math.floor(H / CUTOFF));
+    expect(st.occupied).toBe(2);
+    expect(st.maxBucket).toBe(3);
+    expect(st.meanOccupied).toBeCloseTo(2, 6); // (3 + 1) / 2 occupied buckets
+  });
+
   it('iterates neighbors in deterministic ascending-slot order within a cell', () => {
     const store = new OrganismStore(8);
     for (let k = 0; k < 5; k++) {
