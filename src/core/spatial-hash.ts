@@ -73,6 +73,28 @@ export class SpatialHash {
   }
 
   /**
+   * Occupancy stats for the perf readout (read-only over the current build). `occupied`/`buckets` is
+   * how sparse the grid is; `maxBucket` is the worst-case neighbor-scan clump (the cost driver — a fat
+   * bucket means an expensive 3×3 scan), and `meanOccupied` the typical occupied-cell load.
+   */
+  stats(): { buckets: number; occupied: number; maxBucket: number; meanOccupied: number } {
+    const { bucketStart } = this;
+    const nb = this.cols * this.rows;
+    let occupied = 0;
+    let maxBucket = 0;
+    let total = 0;
+    for (let b = 0; b < nb; b++) {
+      const n = bucketStart[b + 1]! - bucketStart[b]!;
+      if (n > 0) {
+        occupied++;
+        total += n;
+        if (n > maxBucket) maxBucket = n;
+      }
+    }
+    return { buckets: nb, occupied, maxBucket, meanOccupied: occupied ? total / occupied : 0 };
+  }
+
+  /**
    * Invoke `fn(j)` for every slot in the 3×3 toroidal neighborhood of world point (x, y), in
    * deterministic (ascending bucket, ascending slot) order. The caller filters self / distance.
    */

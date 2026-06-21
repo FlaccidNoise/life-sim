@@ -179,6 +179,9 @@ globalThis.addEventListener('keydown', (e) => {
 let lastT = performance.now();
 let lastTick = 0;
 let tps = 0;
+// perf: EMA of wall-clock cost per sim tick + the steps taken last frame (display only).
+let stepMsEma = 0;
+let lastStepsPerFrame = 0;
 // vital-rate deltas for the graph (births/deaths since the last frame).
 let prevBirths = 0;
 let prevDeaths = 0;
@@ -210,19 +213,28 @@ function frame(): void {
     alpha: number;
   } | null = null;
   if (running) {
+    const t0 = performance.now();
+    let stepped = 0;
     if (speed < 1) {
       // Slow-mo: advance a fraction of a tick per frame; interpolate between ticks for fluid motion.
       acc += speed;
       if (acc >= 1) {
         snapshotPrev();
         world.step();
+        stepped = 1;
         acc -= 1;
       }
       interp = { prevX, prevY, prevGen, alpha: acc };
     } else {
       const steps = Math.min(STEP_CAP, Math.round(speed));
       for (let i = 0; i < steps; i++) world.step();
+      stepped = steps;
       acc = 0;
+    }
+    if (stepped > 0) {
+      const perTick = (performance.now() - t0) / stepped;
+      stepMsEma = stepMsEma === 0 ? perTick : stepMsEma * 0.9 + perTick * 0.1;
+      lastStepsPerFrame = stepped;
     }
   }
   renderer.setCamera(camX, camY, zoom);
@@ -241,6 +253,8 @@ function frame(): void {
     tps = ((world.tick - lastTick) * 1000) / (now - lastT);
     lastT = now;
     lastTick = world.tick;
+    // Perf line updated on the same cadence (hash.stats() scans every bucket — too costly per frame).
+    controls.setPerf(stepMsEma, lastStepsPerFrame, world.hash.stats());
   }
   const dB = world.totalBirths - prevBirths;
   const dD = world.totalDeaths - prevDeaths;
