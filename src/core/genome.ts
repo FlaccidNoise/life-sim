@@ -21,7 +21,7 @@ import { type Config } from './config';
  *   - MAX_SPEED   → per-creature speed ceiling (physics.integrate)
  *   - EAT_RATE    → per-creature ingestion rate (economy.metabolize)
  *   - SENSE_RANGE → gradient sample half-step / smell range (sense.senseFood)
- *   - SIZE        → render radius (renderer) — a FREE cosmetic gene for now (no sim benefit yet)
+ *   - SIZE        → body size: render radius + the big-eats-small predation gate (economy.hunt); costed
  *   - MAX_TURN    → per-creature turn ceiling (brain.steer)
  *   - MAX_THRUST  → per-creature thrust ceiling (brain.steer)
  *   - METAB_EFF   → metabolic efficiency, a TRADEOFF: basal ×= e and thrust ×= e (cheap+weak ↔ costly+strong)
@@ -85,6 +85,7 @@ interface ScalarGeneSpec {
     | 'senseRangeCost'
     | 'maxTurnCost'
     | 'maxThrustCost'
+    | 'sizeCost'
     | 'damageCost'
     | 'visionRangeCost'
     | 'visionFovCost'
@@ -96,15 +97,15 @@ interface ScalarGeneSpec {
 }
 
 // Order MUST match the ScalarGene enum (index = gene id).
-// SIZE is currently a FREE cosmetic gene (costKey null): it drives only render radius + display, with
-// no simulation benefit yet, so charging upkeep would just be a vanity tax that selection shrinks. It
-// will be re-costed once it confers a physical advantage (per-creature collision / big-eats-small) in
-// the predation slice. METAB_EFF is also costKey null — its cost is the multiplicative basal×e instead.
+// SIZE is now PHYSICAL: it gates predation (big-eats-small, see economy.hunt) so a big body is a refuge
+// from small hunters + a bigger bite — therefore it's costed (sizeCost upkeep), making size a real
+// tradeoff (safe-but-expensive ↔ small-cheap-fecund). METAB_EFF stays costKey null — its cost is the
+// multiplicative basal×e instead.
 export const SCALAR_GENE_SPECS: readonly ScalarGeneSpec[] = [
   { centerKey: 'maxSpeed', costKey: 'maxSpeedCost', min: 1, max: 20 },
   { centerKey: 'eatRate', costKey: 'eatRateCost', min: 0.2, max: 8 },
   { centerKey: 'senseStep', costKey: 'senseRangeCost', min: 8, max: 256 },
-  { centerKey: 'cellRadius', costKey: null, min: 2, max: 16 },
+  { centerKey: 'cellRadius', costKey: 'sizeCost', min: 2, max: 16 }, // SIZE: now physical (refuge + bite), so costed
   { centerKey: 'maxTurn', costKey: 'maxTurnCost', min: 0.05, max: 1.2 },
   { centerKey: 'maxThrust', costKey: 'maxThrustCost', min: 0.1, max: 4 },
   { centerKey: 'metabolicEfficiency', costKey: null, min: 0.5, max: 1.5 },

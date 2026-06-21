@@ -70,7 +70,7 @@ describe('buildOverlaySegments', () => {
   });
 
   it('a predator draws a line to a prey within bite range', () => {
-    const s = oneCreature(256, 256, { [ScalarGene.DIET]: 0.9 });
+    const s = oneCreature(256, 256, { [ScalarGene.DIET]: 0.9, [ScalarGene.SIZE]: 5 }); // big enough to eat size-1 prey
     // Add a prey just inside biteRange.
     const j = s.alloc();
     s.x[j] = 256 + cfg.biteRange * 0.5;
