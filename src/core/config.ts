@@ -119,6 +119,14 @@ export interface Config {
   predatorFraction: number;
   /** Bite reach in world units: a predator drains the nearest creature within this radius. */
   biteRange: number;
+  /** Predation energy multiplier: a predator absorbs (drain × this) from a bite. >1 makes meat a big
+   *  payoff vs grazing (deliberately not energy-conserving) — the incentive to hunt instead of sit.
+   *  NB: too high is an energy printer → runaway to the population cap; keep modest. */
+  predationGain: number;
+  /** Exponent on the herbivory falloff: plant income ∝ (1−diet)^this. 1 = linear (predators keep a real
+   *  plant fallback → FACULTATIVE, viable at low density); higher pushes toward OBLIGATE predation (which
+   *  starves at this world's sparse encounter rate). */
+  herbivoryExp: number;
   /** Cannibalism switch (ablation knob). true = a predator bites the nearest creature of ANY kind
    *  (current behavior). false = it only bites creatures meaningfully LOWER on the diet axis than
    *  itself (prey, not peers) — so similar-diet "guild-mates" are spared, preventing predator-on-
@@ -150,10 +158,13 @@ export interface Config {
   /** Master off-switch for plasticity. false = the runtime brain never drifts from the genome (pure
    *  instinct) — the ablation that proves learning earns its keep without breaking the alive-guardrail. */
   learningEnabled: boolean;
-  /** PEAK plasticity step size (applied when fully satiated). The EFFECTIVE rate is energy-gated:
-   *  it ramps 0 (at reproThreshold) → learningRate (at satiatedThreshold), so a creature only
-   *  consolidates what it's doing when it's well-fed. NOT a live knob — learning emerges from energy. */
+  /** Plasticity step size for the reward-modulated update: Δw = learningRate · reward · eligibility,
+   *  where reward = this tick's net energy change. Behavior that EARNED energy (foraging that fed,
+   *  hunting that landed) is reinforced; behavior during a loss is weakened. */
   learningRate: number;
+  /** Clamp on the learning reward (|Δenergy|) so a single big event (e.g. a fat predation tick) can't
+   *  produce a runaway weight jump. */
+  learnRewardClamp: number;
   /** Eligibility-trace blend λ ∈ (0,1]: elig = (1−λ)·elig + λ·(pre·post). Lower = longer memory of
    *  which synapses were active, bridging the decision→reward delay. */
   eligLambda: number;
@@ -196,14 +207,15 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     foodCols: 128, // 64-unit cells over the 8192 world
     foodRows: 128,
     foodCap: 14, // rich pockets so a SMALL island still sustains a breeding community
-    foodRegen: 0.15, // fast regrowth → small pockets recover from grazing (isolated → must self-heal)
+    foodRegen: 0.07, // slower regrowth → grazed cells stay bare longer, so creatures must MOVE to fresh
+    // food instead of camping one spot (the incentive to explore; tuned headlessly to stay alive)
     foodDiffuse: 0.03, // low so pockets don't bleed into the gaps (islands stay distinct)
     foodInit: 1, // pockets start full
     foodPatchCount: 14, // distinct island communities scattered across the archipelago
     foodPatchRadius: 5, // ~320-unit pockets (5 cells × 64 units) — small + separate, not merged
     foodBaseFertility: 0, // truly dead water between pockets → real isolation, distinct islands
     eatRate: 2,
-    basalCost: 0.3, // lowered a touch so creatures live a bit longer → occasional cross-gap drift/breeding
+    basalCost: 0.2, // lower starvation clock → creatures last longer before dying (owner-requested feel)
     moveCost: 0.01,
     // Slow breeding (long generation vs the starvation clock) damps the boom-bust toward a sustained,
     // turning-over population instead of an overshoot-to-extinction. Tuned headlessly.
@@ -230,10 +242,13 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     // Trophic / predation. ~15% of founders start as hunters (diet≈0.9); damage above its center costs
     // upkeep so predators evolve teeth at a price; bite reach ≈ 2·cellRadius (the collision cutoff).
     diet: 0.5,
-    damage: 8, // bite-strength center (founders carry it; predators use it ×diet)
+    damage: 12, // bite-strength center: a kill drains a big chunk (lucrative hunting, energy-CONSERVING)
     damageCost: 0.05, // upkeep per damage above center
     predatorFraction: 0.15,
-    biteRange: 12,
+    biteRange: 16, // reach to land a sight-guided kill (hunt now scans a neighborhood sized to this)
+    predationGain: 1, // ENERGY-CONSERVING (a bite moves energy prey→predator, never creates it) → no
+    // runaway-to-cap; the "huge energy from hunting" comes from the big per-bite drain (damage), not gain
+    herbivoryExp: 1.2, // predators keep a plant fallback but lean on hunting (1 = linear, full fallback)
     cannibalism: true, // current behavior (bite anyone nearest); flip off to spare same-diet peers
     // Vision. Founders seed with modest eyes (range ~14, ~57° half-cone, acuity 1); all costed so
     // predators evolve long focused sight and prey evolve wide all-around sight, each paying for it.
@@ -255,6 +270,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     // destabilises survival (the alive-guardrail).
     learningEnabled: true,
     learningRate: 0.02,
+    learnRewardClamp: 3,
     eligLambda: 0.2,
     weightDecay: 0.002,
     maxLearnDeviation: 0.5,

@@ -48,6 +48,9 @@ export class OrganismStore {
   // Not hashed: derived, individual-lifetime-only state.
   readonly learnedBrain: Float32Array; // BRAIN_GENES per slot
   readonly elig: Float32Array; // BRAIN_GENES per slot — eligibility traces (pre·post, decayed)
+  // Energy at the end of the previous tick, per slot — the baseline for the learning REWARD (Δenergy =
+  // energy − prevEnergy). Runtime/derived (not hashed). Set at birth/seed so a newborn's first reward is 0.
+  readonly prevEnergy: Float64Array;
 
   // Bookkeeping.
   readonly age: Uint32Array;
@@ -80,6 +83,7 @@ export class OrganismStore {
     this.scalarGenes = new Float32Array(capacity * SCALAR_GENE_COUNT);
     this.learnedBrain = new Float32Array(capacity * BRAIN_GENES);
     this.elig = new Float32Array(capacity * BRAIN_GENES);
+    this.prevEnergy = new Float64Array(capacity);
     this.age = new Uint32Array(capacity);
     this.genId = new Uint32Array(capacity);
     this.alive = new Uint8Array(capacity);
