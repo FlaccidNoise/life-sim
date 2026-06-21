@@ -7,7 +7,7 @@ import { FoodField } from './food-field';
 import { senseFood } from './sense';
 import { steer, learn } from './brain';
 import { seedGenome, seedScalarGenes, ScalarGene, SCALAR_GENE_COUNT } from './genome';
-import { metabolize, cullDead, reproduce } from './economy';
+import { metabolize, hunt, cullDead, reproduce } from './economy';
 import { Hasher } from './hash';
 
 /**
@@ -104,7 +104,14 @@ export class World {
       s.vy[i] = Math.sin(angle) * driftSpeed;
       s.heading[i] = angle;
       seedGenome(s.brain, s.hue, i, this.rng, this.config.founderSigma);
-      seedScalarGenes(s.scalarGenes, i, this.rng, this.config); // incl. the life-history genes
+      seedScalarGenes(s.scalarGenes, i, this.rng, this.config); // incl. life-history + trophic genes
+      // Bimodal DIET seed: the first predatorFraction of founders are hunters (diet 0.9), rest grazers
+      // (diet 0). This expresses the predator niche from t0 (it won't bootstrap from an all-grazer start).
+      const isPredator = k < this.config.predatorFraction * n;
+      // Seed predators as OMNIVORES (diet 0.6): they survive on plants through the sparse early phase
+      // AND hunt opportunistically, so the trait isn't wiped before prey density builds (without
+      // prey-sensing a pure hunter starves first). Diet then evolves up where hunting pays.
+      s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.DIET] = isPredator ? 0.7 : 0;
       // Founder starts at its own (seeded) BIRTH_ENERGY gene — consistent with how offspring are provisioned.
       s.energy[i] = s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.BIRTH_ENERGY]!;
       s.resetLearned(i); // runtime brain starts at the founder's instinct
@@ -125,6 +132,10 @@ export class World {
     // MOVE: repulsion adds onto the thrust force, then integrate (per-creature maxSpeed gene).
     computeRepulsion(s, this.hash, cfg.cellRadius, cfg.repulsion, cfg.worldWidth, cfg.worldHeight);
     integrate(s, cfg.dt, cfg.damping, cfg.stabilityClamp, cfg.worldWidth, cfg.worldHeight);
+    // HUNT: predators (diet>0) bite nearby creatures. Rebuild the hash at post-MOVE positions first so
+    // bites use where creatures actually are this tick.
+    this.hash.build(s);
+    hunt(s, this.hash, cfg);
     // METABOLIZE → LEARN → REPRO/DIE. Energy (the band the creature is in) is known after metabolize,
     // so the energy-gated within-life consolidation runs here (eligibility traces were laid in steer).
     metabolize(s, this.food, cfg);

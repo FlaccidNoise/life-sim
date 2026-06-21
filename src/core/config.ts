@@ -107,6 +107,18 @@ export interface Config {
   /** Basal upkeep per unit of maxThrust gene above its center (more push costs more). */
   maxThrustCost: number;
 
+  // ── Trophic / predation ──────────────────────────────────────────────────────────────────────────
+  /** DIET gene center — ONLY the mutation-step reference (founders are seeded bimodally, not here). */
+  diet: number;
+  /** DAMAGE gene center — bite-strength founder center + the upkeep baseline (teeth above this cost). */
+  damage: number;
+  /** Basal upkeep per unit of DAMAGE gene above its center (stronger teeth cost more to maintain). */
+  damageCost: number;
+  /** Fraction of FOUNDERS seeded as predators (diet ≈ 0.9) so the hunter niche is expressed from t0. */
+  predatorFraction: number;
+  /** Bite reach in world units: a predator drains the nearest creature within this radius. */
+  biteRange: number;
+
   /** Gaussian σ spread of founder brain weights around the seed brain (initial behavioral variation). */
   founderSigma: number;
   /** Gaussian σ of per-weight brain mutation at birth (the evolutionary step size; live knob). */
@@ -168,7 +180,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     foodPatchRadius: 5, // ~320-unit pockets (5 cells × 64 units) — small + separate, not merged
     foodBaseFertility: 0, // truly dead water between pockets → real isolation, distinct islands
     eatRate: 2,
-    basalCost: 0.4,
+    basalCost: 0.3, // lowered a touch so creatures live a bit longer → occasional cross-gap drift/breeding
     moveCost: 0.01,
     // Slow breeding (long generation vs the starvation clock) damps the boom-bust toward a sustained,
     // turning-over population instead of an overshoot-to-extinction. Tuned headlessly.
@@ -192,6 +204,16 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     senseRangeCost: 0.004,
     maxTurnCost: 0.4,
     maxThrustCost: 0.2,
+    // Trophic / predation. ~15% of founders start as hunters (diet≈0.9); damage above its center costs
+    // upkeep so predators evolve teeth at a price; bite reach ≈ 2·cellRadius (the collision cutoff).
+    diet: 0.5,
+    damage: 8, // bite-strength center (founders carry it; predators use it ×diet)
+    damageCost: 0.05, // upkeep per damage above center
+    predatorFraction: 0.15,
+    biteRange: 12,
+    // NB pre-sight, predators hunt by PROXIMITY only — the encounter rate is too low for hunting to
+    // pay, so the predator trait does not persist yet (it needs the sight slice to actively target
+    // prey). The mechanic + genes + color are in place; sight activates it.
     founderSigma: 0.3,
     mutationSigma: 0.05,
     hueMutationSigma: 0.02,

@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { OrganismStore } from './store';
 import { FoodField } from './food-field';
+import { SpatialHash } from './spatial-hash';
 import { Rng } from './rng';
 import { defaultConfig, type Config } from './config';
-import { metabolize, cullDead, reproduce } from './economy';
+import { metabolize, hunt, cullDead, reproduce } from './economy';
 import { ScalarGene, SCALAR_GENE_COUNT, SCALAR_GENE_SPECS, MIN_BAND } from './genome';
 
 const W = 128;
@@ -20,6 +21,9 @@ function genes(
   const base = slot * SCALAR_GENE_COUNT;
   for (let g = 0; g < SCALAR_GENE_COUNT; g++)
     s.scalarGenes[base + g] = cfg[SCALAR_GENE_SPECS[g]!.centerKey];
+  // diet's center (0.5) is only a mutation reference, not a sensible default → make test creatures
+  // herbivores (diet 0, full graze) unless a test overrides it.
+  s.scalarGenes[base + ScalarGene.DIET] = 0;
   for (const [idx, v] of Object.entries(overrides)) s.scalarGenes[base + Number(idx)] = v;
 }
 
@@ -100,6 +104,88 @@ describe('metabolize', () => {
     const food = new FoodField(W, H, 16, 16, 10, 0); // empty
     metabolize(s, food, cfg);
     expect(s.energy[i]).toBeCloseTo(50 - 0.4 * 0.5); // basal halved, no gene upkeep
+  });
+});
+
+describe('hunt (predation)', () => {
+  const cfg = defaultConfig({ biteRange: 12, damage: 5, worldWidth: W, worldHeight: H });
+  const mkHash = (s: OrganismStore): SpatialHash => {
+    const h = new SpatialHash(W, H, 12, 8); // cell = biteRange
+    h.build(s);
+    return h;
+  };
+
+  it('a predator drains energy from the nearest creature into itself', () => {
+    const s = new OrganismStore(4);
+    const pred = s.alloc();
+    const prey = s.alloc();
+    s.x[pred] = 50;
+    s.y[pred] = 50;
+    s.energy[pred] = 20;
+    s.x[prey] = 54;
+    s.y[prey] = 50; // 4 units away, within biteRange 12
+    s.energy[prey] = 30;
+    genes(s, pred, cfg, { [ScalarGene.DIET]: 1, [ScalarGene.DAMAGE]: 5 });
+    genes(s, prey, cfg, { [ScalarGene.DIET]: 0 });
+    s.rebuildLive();
+    hunt(s, mkHash(s), cfg);
+    // drain = min(damage(5)·diet(1), preyEnergy) = 5, moved prey→predator (conserved)
+    expect(s.energy[prey]).toBeCloseTo(25);
+    expect(s.energy[pred]).toBeCloseTo(25);
+  });
+
+  it('a pure grazer (diet 0) does not hunt', () => {
+    const s = new OrganismStore(4);
+    const a = s.alloc();
+    const b = s.alloc();
+    s.x[a] = 50;
+    s.y[a] = 50;
+    s.energy[a] = 20;
+    s.x[b] = 54;
+    s.y[b] = 50;
+    s.energy[b] = 30;
+    genes(s, a, cfg, { [ScalarGene.DIET]: 0 });
+    genes(s, b, cfg, { [ScalarGene.DIET]: 0 });
+    s.rebuildLive();
+    hunt(s, mkHash(s), cfg);
+    expect(s.energy[a]).toBe(20);
+    expect(s.energy[b]).toBe(30);
+  });
+
+  it('drain is capped at the prey’s energy (no over-draining / no free energy)', () => {
+    const s = new OrganismStore(4);
+    const pred = s.alloc();
+    const prey = s.alloc();
+    s.x[pred] = 50;
+    s.y[pred] = 50;
+    s.energy[pred] = 10;
+    s.x[prey] = 52;
+    s.y[prey] = 50;
+    s.energy[prey] = 3; // only 3 to give
+    genes(s, pred, cfg, { [ScalarGene.DIET]: 1, [ScalarGene.DAMAGE]: 20 });
+    genes(s, prey, cfg, { [ScalarGene.DIET]: 0 });
+    s.rebuildLive();
+    hunt(s, mkHash(s), cfg);
+    expect(s.energy[prey]).toBeCloseTo(0); // drained to 0 (capped) → dies next cull
+    expect(s.energy[pred]).toBeCloseTo(13); // gained only the 3 that existed
+  });
+
+  it('no creature in bite range → no drain', () => {
+    const s = new OrganismStore(4);
+    const pred = s.alloc();
+    const prey = s.alloc();
+    s.x[pred] = 50;
+    s.y[pred] = 50;
+    s.energy[pred] = 20;
+    s.x[prey] = 90;
+    s.y[prey] = 90; // far beyond biteRange
+    s.energy[prey] = 30;
+    genes(s, pred, cfg, { [ScalarGene.DIET]: 1, [ScalarGene.DAMAGE]: 5 });
+    genes(s, prey, cfg, { [ScalarGene.DIET]: 0 });
+    s.rebuildLive();
+    hunt(s, mkHash(s), cfg);
+    expect(s.energy[pred]).toBe(20);
+    expect(s.energy[prey]).toBe(30);
   });
 });
 

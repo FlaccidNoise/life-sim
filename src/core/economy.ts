@@ -9,6 +9,7 @@
  */
 import { type OrganismStore } from './store';
 import { type FoodField } from './food-field';
+import { type SpatialHash } from './spatial-hash';
 import { type Rng } from './rng';
 import { type Config } from './config';
 import {
@@ -19,6 +20,65 @@ import {
   SCALAR_GENE_COUNT,
   MIN_BAND,
 } from './genome';
+
+/** Shortest signed delta a→b on a torus of the given size (|result| ≤ size/2). */
+function wrapDelta(d: number, size: number): number {
+  const h = size * 0.5;
+  if (d > h) return d - size;
+  if (d < -h) return d + size;
+  return d;
+}
+
+/**
+ * PREDATION — each creature with DIET > 0 bites the nearest OTHER creature within `biteRange`, draining
+ * `DAMAGE · diet` energy from it (capped by the prey's energy) straight into the predator. Energy is
+ * conserved (it moves prey→predator); prey driven to ≤ 0 die in the next cull. Ascending slot order +
+ * the prev-built spatial hash, so it's deterministic. No prey-sensing yet — hunting is by proximity
+ * (chemotaxis still pulls predators toward food-rich, prey-dense pockets); sight comes in a later slice.
+ */
+export function hunt(store: OrganismStore, hash: SpatialHash, cfg: Config): void {
+  const { biteRange, worldWidth, worldHeight } = cfg;
+  const { liveIndices, liveCount, x, y, energy, scalarGenes } = store;
+  const { cols, rows, bucketStart, sorted } = hash;
+  const range2 = biteRange * biteRange;
+  for (let k = 0; k < liveCount; k++) {
+    const i = liveIndices[k]!;
+    const sg = i * SCALAR_GENE_COUNT;
+    const diet = scalarGenes[sg + ScalarGene.DIET]!;
+    if (diet <= 0) continue; // pure grazer — never hunts
+    const xi = x[i]!;
+    const yi = y[i]!;
+    const cx = hash.colOf(xi);
+    const cy = hash.rowOf(yi);
+    // Find the nearest other live creature within bite range (toroidal 3×3 scan).
+    let best = -1;
+    let bestD = range2;
+    for (let dy = -1; dy <= 1; dy++) {
+      const by = (cy + dy + rows) % rows;
+      for (let dx = -1; dx <= 1; dx++) {
+        const bx = (cx + dx + cols) % cols;
+        const b = by * cols + bx;
+        const end = bucketStart[b + 1]!;
+        for (let idx = bucketStart[b]!; idx < end; idx++) {
+          const j = sorted[idx]!;
+          if (j === i) continue;
+          const ddx = wrapDelta(xi - x[j]!, worldWidth);
+          const ddy = wrapDelta(yi - y[j]!, worldHeight);
+          const d2 = ddx * ddx + ddy * ddy;
+          if (d2 < bestD) {
+            bestD = d2;
+            best = j;
+          }
+        }
+      }
+    }
+    if (best < 0) continue; // nothing in reach
+    const drain = Math.min(scalarGenes[sg + ScalarGene.DAMAGE]! * diet, energy[best]!);
+    if (drain <= 0) continue; // toothless, or prey already drained to nothing this tick
+    energy[best] = energy[best]! - drain;
+    energy[i] = energy[i]! + drain;
+  }
+}
 
 /**
  * Eat from the current food cell (capped by the creature's EAT_RATE gene and local biomass), pay basal
@@ -35,12 +95,14 @@ export function metabolize(store: OrganismStore, food: FoodField, cfg: Config): 
     const sg = i * SCALAR_GENE_COUNT;
     const eatRate = scalarGenes[sg + ScalarGene.EAT_RATE]!;
     const efficiency = scalarGenes[sg + ScalarGene.METAB_EFF]!;
+    const diet = scalarGenes[sg + ScalarGene.DIET]!; // 0 grazer … 1 hunter; graze income ×(1−diet)
     // SATIATED at the creature's OWN satiated bar (gene), kept above its repro bar by MIN_BAND.
     const repro = scalarGenes[sg + ScalarGene.REPRO_THRESHOLD]!;
     let satiated = scalarGenes[sg + ScalarGene.SATIATED_THRESHOLD]!;
     if (satiated < repro + MIN_BAND) satiated = repro + MIN_BAND;
-    // SATIATED creatures are "full" → they stop grazing, leaving the biomass in the cell for others.
-    const gained = energy[i]! >= satiated ? 0 : food.grazeAt(x[i]!, y[i]!, eatRate);
+    // SATIATED creatures are "full" → they stop grazing, leaving the biomass for others. Carnivores
+    // (high diet) graze proportionally less biomass (and a pure hunter removes none).
+    const gained = energy[i]! >= satiated ? 0 : food.grazeAt(x[i]!, y[i]!, eatRate * (1 - diet));
     const speed2 = vx[i]! * vx[i]! + vy[i]! * vy[i]!;
     const upkeep = basalCost * efficiency + geneUpkeep(scalarGenes, i, cfg);
     energy[i] = energy[i]! + gained - upkeep - moveCost * speed2;
