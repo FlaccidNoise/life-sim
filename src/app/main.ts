@@ -15,6 +15,7 @@ import { buildOverlaySegments } from '../render/overlay';
 import { Controls } from './observability/controls';
 import { Knobs } from './observability/knobs';
 import { Inspector } from './observability/inspector';
+import { BrainView } from './observability/brain-view';
 import { TimeSeriesGraph } from './observability/graph';
 
 function el<T extends HTMLElement>(id: string): T {
@@ -44,6 +45,7 @@ const graph = new TimeSeriesGraph(el<HTMLCanvasElement>('graph'), [
   { label: 'deaths', color: '#e08a8a' }, // red
 ]);
 const inspector = new Inspector(el('inspector'));
+const brainView = new BrainView(el<HTMLCanvasElement>('brain'));
 
 let running = false;
 let speed = 1; // sim ticks per animation frame; <1 = slow-mo (interpolated for fluid motion)
@@ -94,6 +96,7 @@ function rebuild(): void {
   world = new World(config);
   selected = null;
   inspector.clear();
+  brainView.clear();
   prevBirths = 0;
   prevDeaths = 0;
 }
@@ -117,6 +120,7 @@ function selectAt(clientX: number, clientY: number): void {
   if (best >= 0) {
     selected = { slot: best, gen: s.genId[best]! };
     inspector.select(best, selected.gen);
+    brainView.select(best, selected.gen);
   }
 }
 
@@ -228,6 +232,7 @@ function frame(): void {
     renderer.drawLines(overlayScratch, vc);
   }
   inspector.render(world.store, config);
+  brainView.render(world.store, config);
 
   const now = performance.now();
   if (now - lastT >= 500) {
@@ -243,7 +248,10 @@ function frame(): void {
   graph.render();
   controls.setStatus(world.tick, tps, world.population, world.stateHash());
   // keep the selection panel honest if the dot was recycled
-  if (selected && !world.store.isAlive(selected.slot, selected.gen)) inspector.clear();
+  if (selected && !world.store.isAlive(selected.slot, selected.gen)) {
+    inspector.clear();
+    brainView.clear();
+  }
 
   requestAnimationFrame(frame);
 }
