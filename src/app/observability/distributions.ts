@@ -49,7 +49,7 @@ const FIELDS: readonly FieldSpec[] = [
   { label: 'diet', bins: 14, accessor: gene(ScalarGene.DIET), min: 0, max: 1, dietColored: true },
   { label: 'energy', bins: 16, accessor: (s, i) => s.energy[i]!, min: 0, max: NaN },
   { label: 'age', bins: 16, accessor: (s, i) => s.age[i]!, min: 0, max: NaN },
-  { label: 'visionRange', bins: 12, accessor: gene(ScalarGene.VISION_RANGE), min: 0, max: 24 },
+  { label: 'visionRange', bins: 12, accessor: gene(ScalarGene.VISION_RANGE), min: 0, max: 256 },
   { label: 'maxSpeed', bins: 12, accessor: gene(ScalarGene.MAX_SPEED), min: 1, max: 20 },
 ];
 
