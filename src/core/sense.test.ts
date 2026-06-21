@@ -101,6 +101,7 @@ describe('senseCreatures (sight)', () => {
     setVision(s, 0, { range: 24, fov: 0.3, acuity: 1, diet: 1 }); // narrow cone, prey behind
     senseCreatures(s, hashOf(s), cfg);
     expect(s.sightX[0]!).toBe(0);
+    expect(s.sightY[0]!).toBe(0); // no leak on either axis
   });
 
   it('a blind creature (acuity 0) sees nothing', () => {
@@ -108,5 +109,16 @@ describe('senseCreatures (sight)', () => {
     setVision(s, 0, { range: 24, fov: 1.5, acuity: 0, diet: 1 });
     senseCreatures(s, hashOf(s), cfg);
     expect(s.sightX[0]!).toBe(0);
+  });
+
+  it('two creatures at the same position give finite, zero sight (div-by-zero guard)', () => {
+    const s = pair(1, 0);
+    s.x[1] = s.x[0]!; // co-locate the prey on the predator → d === 0
+    s.y[1] = s.y[0]!;
+    senseCreatures(s, hashOf(s), cfg);
+    expect(Number.isFinite(s.sightX[0]!)).toBe(true);
+    expect(Number.isFinite(s.sightY[0]!)).toBe(true);
+    expect(s.sightX[0]!).toBe(0); // the d===0 contributor is skipped, not NaN
+    expect(s.sightY[0]!).toBe(0);
   });
 });
