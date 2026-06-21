@@ -14,25 +14,26 @@
  * learning keeps discovering, since selection favors genomes that start closer to it).
  */
 import { type OrganismStore } from './store';
-import { Brain, BRAIN_GENES } from './genome';
+import { Brain, BRAIN_GENES, ScalarGene, SCALAR_GENE_COUNT } from './genome';
 
 /**
  * Run each creature's runtime brain: food gradient (heading frame) → turn + thrust. Turns the heading
- * and SETS the force buffer (repulsion += on top afterward). When `learn` is true, also accumulates the
+ * and SETS the force buffer (repulsion += on top afterward). Turn + thrust are clamped to this
+ * creature's OWN evolved MAX_TURN / MAX_THRUST genes, and the resulting force is scaled by its
+ * metabolic-efficiency gene (thrifty bodies push weaker). When `learn` is true, also accumulates the
  * per-synapse eligibility trace (pre·post, blended by `eligLambda`) for the later weight update — the
  * trace bridges the gap between a steering decision and the energy reward it earns ticks later.
  */
-export function steer(
-  store: OrganismStore,
-  maxTurn: number,
-  maxThrust: number,
-  learn: boolean,
-  eligLambda: number,
-): void {
+export function steer(store: OrganismStore, learn: boolean, eligLambda: number): void {
   const { liveIndices, liveCount, heading, senseX, senseY, forceX, forceY, learnedBrain, elig } =
     store;
+  const genes = store.scalarGenes;
   for (let k = 0; k < liveCount; k++) {
     const i = liveIndices[k]!;
+    const sg = i * SCALAR_GENE_COUNT;
+    const maxTurn = genes[sg + ScalarGene.MAX_TURN]!;
+    const maxThrust = genes[sg + ScalarGene.MAX_THRUST]!;
+    const efficiency = genes[sg + ScalarGene.METAB_EFF]!;
     const h = heading[i]!;
     const dx = Math.cos(h);
     const dy = Math.sin(h);
@@ -57,6 +58,7 @@ export function steer(
       learnedBrain[b + Brain.THRUST_BIAS]!;
     if (thrust < 0) thrust = 0;
     else if (thrust > maxThrust) thrust = maxThrust;
+    thrust *= efficiency; // metabolic-efficiency tradeoff: thrifty (low-e) bodies produce less push
     forceX[i] = thrust * Math.cos(nh);
     forceY[i] = thrust * Math.sin(nh);
 

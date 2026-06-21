@@ -2,24 +2,41 @@ import { describe, it, expect } from 'vitest';
 import { OrganismStore } from './store';
 import { FoodField } from './food-field';
 import { Rng } from './rng';
+import { defaultConfig, type Config } from './config';
 import { metabolize, cullDead, reproduce } from './economy';
+import { ScalarGene, SCALAR_GENE_COUNT, SCALAR_GENE_SPECS } from './genome';
 
 const W = 128;
 const H = 128;
 
+/** Seed a slot's scalar genes at their config centers (→ zero gene-upkeep, efficiency 1), then apply
+ *  per-gene overrides keyed by ScalarGene index. Lets a test isolate one gene's economic effect. */
+function genes(
+  s: OrganismStore,
+  slot: number,
+  cfg: Config,
+  overrides: Record<number, number> = {},
+): void {
+  const base = slot * SCALAR_GENE_COUNT;
+  for (let g = 0; g < SCALAR_GENE_COUNT; g++)
+    s.scalarGenes[base + g] = cfg[SCALAR_GENE_SPECS[g]!.centerKey];
+  for (const [idx, v] of Object.entries(overrides)) s.scalarGenes[base + Number(idx)] = v;
+}
+
 describe('metabolize', () => {
-  it('eats from the current food cell and pays basal + movement cost', () => {
+  const cfg = defaultConfig({ basalCost: 0.4, moveCost: 0.01, satiatedThreshold: 1000 });
+
+  it('eats from the current food cell (eatRate gene) and pays basal + movement cost', () => {
     const s = new OrganismStore(4);
     const i = s.alloc();
     s.x[i] = 10;
     s.y[i] = 10;
-    s.vx[i] = 0;
-    s.vy[i] = 0;
     s.energy[i] = 5;
+    genes(s, i, cfg, { [ScalarGene.EAT_RATE]: 2 });
     s.rebuildLive();
     const food = new FoodField(W, H, 16, 16, 10, 1); // cell full (B=10)
-    metabolize(s, food, 2, 0.4, 0.01, 1000); // eat 2, basal 0.4, no movement; satiated bar far above
-    expect(s.energy[i]).toBeCloseTo(5 + 2 - 0.4);
+    metabolize(s, food, cfg);
+    expect(s.energy[i]).toBeCloseTo(5 + 2 - 0.4); // eat 2, basal 0.4·eff(1), no movement, no gene cost
     expect(food.sampleAt(10, 10)).toBeCloseTo(8); // 2 grazed
     expect(s.age[i]!).toBe(1);
   });
@@ -29,12 +46,14 @@ describe('metabolize', () => {
     const i = s.alloc();
     s.x[i] = 10;
     s.y[i] = 10;
-    s.energy[i] = 100; // at/above the satiated bar
+    s.energy[i] = 100;
+    const cfgSat = defaultConfig({ basalCost: 0.4, moveCost: 0.01, satiatedThreshold: 100 });
+    genes(s, i, cfgSat, { [ScalarGene.EAT_RATE]: 2 });
     s.rebuildLive();
-    const food = new FoodField(W, H, 16, 16, 10, 1); // cell full
-    metabolize(s, food, 2, 0.4, 0.01, 100); // satiated bar = 100
-    expect(food.sampleAt(10, 10)).toBeCloseTo(10); // nothing grazed — left for others
-    expect(s.energy[i]).toBeCloseTo(100 - 0.4); // still pays basal (so it decays back down)
+    const food = new FoodField(W, H, 16, 16, 10, 1);
+    metabolize(s, food, cfgSat);
+    expect(food.sampleAt(10, 10)).toBeCloseTo(10); // nothing grazed
+    expect(s.energy[i]).toBeCloseTo(100 - 0.4); // still pays basal
   });
 
   it('charges movement cost ∝ speed²', () => {
@@ -45,10 +64,42 @@ describe('metabolize', () => {
     s.vx[i] = 3;
     s.vy[i] = 4; // speed² = 25
     s.energy[i] = 50;
+    genes(s, i, cfg, { [ScalarGene.EAT_RATE]: 2 });
     s.rebuildLive();
     const food = new FoodField(W, H, 16, 16, 10, 0); // empty → no eat income
-    metabolize(s, food, 2, 0.4, 0.01, 1000);
+    metabolize(s, food, cfg);
     expect(s.energy[i]).toBeCloseTo(50 - 0.4 - 0.01 * 25);
+  });
+
+  it('charges extra basal upkeep for costed genes above their center (the selection cost)', () => {
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.x[i] = 10;
+    s.y[i] = 10;
+    s.energy[i] = 50;
+    // maxSpeed +4 above center, eatRate +2 above center; everything else at center.
+    genes(s, i, cfg, {
+      [ScalarGene.MAX_SPEED]: cfg.maxSpeed + 4,
+      [ScalarGene.EAT_RATE]: cfg.eatRate + 2,
+    });
+    s.rebuildLive();
+    const food = new FoodField(W, H, 16, 16, 10, 0); // empty → isolate the costs
+    metabolize(s, food, cfg);
+    // upkeep = basal(0.4)·eff(1) + 4·maxSpeedCost(0.05) + 2·eatRateCost(0.15) = 0.4 + 0.2 + 0.3 = 0.9
+    expect(s.energy[i]).toBeCloseTo(50 - 0.9);
+  });
+
+  it('metabolic efficiency scales the basal cost (thrifty bodies are cheap)', () => {
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.x[i] = 10;
+    s.y[i] = 10;
+    s.energy[i] = 50;
+    genes(s, i, cfg, { [ScalarGene.METAB_EFF]: 0.5 }); // half-efficiency metabolism
+    s.rebuildLive();
+    const food = new FoodField(W, H, 16, 16, 10, 0); // empty
+    metabolize(s, food, cfg);
+    expect(s.energy[i]).toBeCloseTo(50 - 0.4 * 0.5); // basal halved, no gene upkeep
   });
 });
 
@@ -66,7 +117,16 @@ describe('cullDead', () => {
   });
 });
 
-describe('reproduce', () => {
+describe('reproduce (breed at the satiated top)', () => {
+  const cfg = defaultConfig({
+    satiatedThreshold: 60,
+    reproCost: 35,
+    birthEnergy: 25,
+    offspringOffset: 8,
+    worldWidth: W,
+    worldHeight: H,
+  });
+
   it('splits energy: parent pays reproCost, child starts at birthEnergy', () => {
     const s = new OrganismStore(4);
     const p = s.alloc();
@@ -74,8 +134,7 @@ describe('reproduce', () => {
     s.y[p] = 50;
     s.energy[p] = 100;
     s.rebuildLive();
-    const rng = new Rng(1);
-    const births = reproduce(s, rng, 60, 35, 25, 8, 0.05, 0.02, W, H);
+    const births = reproduce(s, new Rng(1), cfg);
     expect(births).toBe(1);
     expect(s.energy[p]).toBeCloseTo(100 - 35);
     s.rebuildLive();
@@ -84,15 +143,15 @@ describe('reproduce', () => {
     expect(s.energy[child]!).toBe(25);
   });
 
-  it('does not reproduce below the threshold', () => {
+  it('does not reproduce below the satiated threshold', () => {
     const s = new OrganismStore(4);
     const p = s.alloc();
-    s.energy[p] = 59;
+    s.energy[p] = 59; // < satiatedThreshold 60
     s.rebuildLive();
-    expect(reproduce(s, new Rng(1), 60, 35, 25, 8, 0.05, 0.02, W, H)).toBe(0);
+    expect(reproduce(s, new Rng(1), cfg)).toBe(0);
   });
 
-  it('is deterministic given the seed (RNG consumed in order)', () => {
+  it('is deterministic given the seed (position AND inherited scalar genes)', () => {
     const make = (): OrganismStore => {
       const s = new OrganismStore(8);
       for (let k = 0; k < 3; k++) {
@@ -100,20 +159,28 @@ describe('reproduce', () => {
         s.x[p] = 50;
         s.y[p] = 50;
         s.energy[p] = 100;
+        // Non-trivial parent genes so the mutateScalarGenes path is actually exercised (not parent=0).
+        genes(s, p, cfg, { [ScalarGene.MAX_SPEED]: 7 + k, [ScalarGene.EAT_RATE]: 2 + k * 0.3 });
       }
       s.rebuildLive();
       return s;
     };
     const s1 = make();
-    reproduce(s1, new Rng(7), 60, 35, 25, 8, 0.05, 0.02, W, H);
+    reproduce(s1, new Rng(7), cfg);
     s1.rebuildLive();
     const s2 = make();
-    reproduce(s2, new Rng(7), 60, 35, 25, 8, 0.05, 0.02, W, H);
+    reproduce(s2, new Rng(7), cfg);
     s2.rebuildLive();
     for (let k = 0; k < s1.liveCount; k++) {
       const i = s1.liveIndices[k]!;
       expect(s2.x[i]!).toBe(s1.x[i]!);
       expect(s2.y[i]!).toBe(s1.y[i]!);
+      // every inherited scalar gene must match byte-for-byte (mutation is deterministic)
+      for (let g = 0; g < SCALAR_GENE_COUNT; g++) {
+        expect(s2.scalarGenes[i * SCALAR_GENE_COUNT + g]!).toBe(
+          s1.scalarGenes[i * SCALAR_GENE_COUNT + g]!,
+        );
+      }
     }
   });
 });

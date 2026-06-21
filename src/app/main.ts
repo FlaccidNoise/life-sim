@@ -29,13 +29,7 @@ let world = new World(config);
 
 let renderer: Renderer;
 try {
-  renderer = new Renderer(
-    canvas,
-    config.worldWidth,
-    config.worldHeight,
-    config.cellRadius,
-    config.maxOrganisms,
-  );
+  renderer = new Renderer(canvas, config.worldWidth, config.worldHeight, config.maxOrganisms);
 } catch (err) {
   hudBody.textContent = `Renderer init failed: ${err instanceof Error ? err.message : String(err)}`;
   throw err;
@@ -221,7 +215,7 @@ function frame(): void {
   }
   renderer.setCamera(camX, camY, zoom);
   renderer.draw(world.store, world.food, showFood, interp);
-  inspector.render(world.store, config.reproThreshold, config.satiatedThreshold);
+  inspector.render(world.store, config);
 
   const now = performance.now();
   if (now - lastT >= 500) {

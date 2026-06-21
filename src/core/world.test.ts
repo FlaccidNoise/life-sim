@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { World } from './world';
 import { defaultConfig } from './config';
+import { ScalarGene, SCALAR_GENE_COUNT } from './genome';
 
 describe('World — Phase 0 determinism contract', () => {
   it('same (config, seed) → byte-identical hash after N ticks', () => {
@@ -60,8 +61,9 @@ describe('World — Phase 0 determinism contract', () => {
       const i = s.liveIndices[k]!;
       expect(Number.isFinite(s.x[i]!)).toBe(true);
       expect(Number.isFinite(s.vx[i]!)).toBe(true);
-      // clamp ON ⇒ speed never exceeds maxSpeed (+tiny FP slack)
-      expect(Math.hypot(s.vx[i]!, s.vy[i]!)).toBeLessThanOrEqual(cfg.maxSpeed + 1e-6);
+      // clamp ON ⇒ speed never exceeds this creature's OWN evolved maxSpeed gene (+tiny FP slack)
+      const maxSpeed = s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.MAX_SPEED]!;
+      expect(Math.hypot(s.vx[i]!, s.vy[i]!)).toBeLessThanOrEqual(maxSpeed + 1e-6);
     }
   });
 

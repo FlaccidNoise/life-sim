@@ -4,6 +4,7 @@
  */
 import { type OrganismStore } from './store';
 import { type SpatialHash } from './spatial-hash';
+import { ScalarGene, SCALAR_GENE_COUNT } from './genome';
 
 /** Shortest signed delta a→b on a torus of the given size (|result| ≤ size/2). */
 function wrapDelta(d: number, size: number): number {
@@ -65,27 +66,28 @@ export function computeRepulsion(
 }
 
 /**
- * Symplectic-Euler integration: v ← (v + force·dt)·damping, optionally clamped to maxSpeed (the
- * stability ceiling), then x ← wrap(x + v·dt). Mass is unit in Phase 1. Ascending live-slot order.
+ * Symplectic-Euler integration: v ← (v + force·dt)·damping, optionally clamped to each creature's OWN
+ * maxSpeed GENE (its evolved speed ceiling), then x ← wrap(x + v·dt). Mass is unit in Phase 1.
+ * Ascending live-slot order. The per-creature ceiling is bounded by the gene's clamp range, so it still
+ * caps repulsion blow-ups (stability) while letting a fast lineage outrun a slow one.
  */
 export function integrate(
   store: OrganismStore,
   dt: number,
   damping: number,
-  maxSpeed: number,
   stabilityClamp: boolean,
   worldWidth: number,
   worldHeight: number,
 ): void {
-  const { liveIndices, liveCount, x, y, vx, vy, forceX, forceY } = store;
-  const max2 = maxSpeed * maxSpeed;
+  const { liveIndices, liveCount, x, y, vx, vy, forceX, forceY, scalarGenes } = store;
   for (let k = 0; k < liveCount; k++) {
     const i = liveIndices[k]!;
     let nvx = (vx[i]! + forceX[i]! * dt) * damping;
     let nvy = (vy[i]! + forceY[i]! * dt) * damping;
     if (stabilityClamp) {
+      const maxSpeed = scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.MAX_SPEED]!;
       const s2 = nvx * nvx + nvy * nvy;
-      if (s2 > max2) {
+      if (s2 > maxSpeed * maxSpeed) {
         const scale = maxSpeed / Math.sqrt(s2);
         nvx *= scale;
         nvy *= scale;

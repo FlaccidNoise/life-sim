@@ -2,21 +2,23 @@
  * WebGL2 renderer. Two layers under a UNIFORM letterboxed scale (square world never stretched):
  *   1. the FOOD FIELD as a green heatmap (a texture quad over the world rect) — so you can SEE where
  *      biomass is rich vs. grazed-out, the spatial half of the boom-bust;
- *   2. the ORGANISMS as round dots at their TRUE physical radius (cellRadius) — so visual contact
- *      lines up with the collision cutoff (2·cellRadius).
+ *   2. the ORGANISMS as round dots at their per-creature SIZE gene radius (so size evolution is
+ *      visible). NB: collision still uses the global cellRadius, so visual size and the collision
+ *      cutoff are intentionally decoupled until size becomes physical (the predation slice).
  * Allocation-free per frame (reused scratch buffers). Rendering is one-way — never feeds the sim, so
  * it can't affect determinism.
  */
 import { type OrganismStore } from '../core/store';
 import { type FoodField } from '../core/food-field';
+import { ScalarGene, SCALAR_GENE_COUNT } from '../core/genome';
 
 const DOT_VERT = `#version 300 es
 in vec2 a_pos;
-in float a_hue;                 // genome hue gene [0,1) → per-creature color (visible heredity)
+in float a_hue;                 // genome hue gene [0,1) → per-creature SHADE within the role's color band
+in float a_size;                // per-creature point size in device px (from the size gene)
 uniform vec2 u_cam;             // camera centre in world units (pan)
 uniform vec2 u_canvas;
 uniform float u_scale;          // device px per world unit (base fit × zoom)
-uniform float u_pointSize;
 out vec3 v_color;
 vec3 hsv2rgb(float h, float s, float v) {
   vec3 p = abs(fract(vec3(h) + vec3(1.0, 2.0/3.0, 1.0/3.0)) * 6.0 - 3.0);
@@ -25,8 +27,14 @@ vec3 hsv2rgb(float h, float s, float v) {
 void main() {
   vec2 px = (a_pos - u_cam) * u_scale + u_canvas * 0.5;
   gl_Position = vec4(px.x / u_canvas.x * 2.0 - 1.0, 1.0 - px.y / u_canvas.y * 2.0, 0.0, 1.0);
-  gl_PointSize = u_pointSize;
-  v_color = hsv2rgb(a_hue, 0.65, 1.0); // bright, slightly desaturated for the bioluminescent look
+  gl_PointSize = a_size;
+  // Color encodes TROPHIC ROLE: herbivores = greens. The hue gene no longer rides the whole wheel —
+  // it now picks a SHADE (dark↔light) within the role's band, so a lineage's mutations read as
+  // slightly-varied greens. When diet/predation lands, base hue will lerp green→red by the diet gene
+  // (one line: mix(0.34, 0.0, a_diet)); the shade variation stays the same.
+  float baseHue = 0.34;                  // green (herbivore band)
+  float shade = 0.5 + 0.5 * a_hue;       // [0.5,1.0] brightness → dark green ↔ light green
+  v_color = hsv2rgb(baseHue, 0.72, shade);
 }`;
 
 const DOT_FRAG = `#version 300 es
@@ -103,10 +111,13 @@ export class Renderer {
   private readonly dotProgram: WebGLProgram;
   private readonly dotBuffer: WebGLBuffer;
   private readonly hueBuffer: WebGLBuffer;
+  private readonly sizeBuffer: WebGLBuffer;
   private readonly dotScratch: Float32Array;
   private readonly hueScratch: Float32Array;
+  private readonly sizeScratch: Float32Array;
   private readonly aPos: number;
   private readonly aHue: number;
+  private readonly aSize: number;
   // food overlay
   private readonly foodProgram: WebGLProgram;
   private readonly quadBuffer: WebGLBuffer;
@@ -123,7 +134,6 @@ export class Renderer {
     private readonly canvas: HTMLCanvasElement,
     private readonly worldWidth: number,
     private readonly worldHeight: number,
-    private readonly cellRadius: number,
     capacity: number,
   ) {
     this.camX = worldWidth / 2;
@@ -136,20 +146,24 @@ export class Renderer {
     this.foodProgram = link(gl, FOOD_VERT, FOOD_FRAG);
     this.aPos = gl.getAttribLocation(this.dotProgram, 'a_pos');
     this.aHue = gl.getAttribLocation(this.dotProgram, 'a_hue');
+    this.aSize = gl.getAttribLocation(this.dotProgram, 'a_size');
     this.aCorner = gl.getAttribLocation(this.foodProgram, 'a_corner');
 
     const dotBuffer = gl.createBuffer();
     const hueBuffer = gl.createBuffer();
+    const sizeBuffer = gl.createBuffer();
     const quadBuffer = gl.createBuffer();
     const foodTex = gl.createTexture();
-    if (!dotBuffer || !hueBuffer || !quadBuffer || !foodTex)
+    if (!dotBuffer || !hueBuffer || !sizeBuffer || !quadBuffer || !foodTex)
       throw new Error('GL resource alloc failed');
     this.dotBuffer = dotBuffer;
     this.hueBuffer = hueBuffer;
+    this.sizeBuffer = sizeBuffer;
     this.quadBuffer = quadBuffer;
     this.foodTex = foodTex;
     this.dotScratch = new Float32Array(capacity * 2);
     this.hueScratch = new Float32Array(capacity);
+    this.sizeScratch = new Float32Array(capacity);
 
     // Unit quad as a triangle strip: (0,0)(1,0)(0,1)(1,1).
     gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
@@ -277,7 +291,8 @@ export class Renderer {
     if (n > 0) {
       const s = this.dotScratch;
       const hsc = this.hueScratch;
-      const { liveIndices, x, y, hue, genId } = store;
+      const zsc = this.sizeScratch;
+      const { liveIndices, x, y, hue, genId, scalarGenes } = store;
       const useInterp = interp != null && interp.alpha < 1;
       const a = useInterp ? interp.alpha : 0;
       const ww = this.worldWidth;
@@ -293,6 +308,9 @@ export class Renderer {
         s[k * 2] = px;
         s[k * 2 + 1] = py;
         hsc[k] = hue[i]!;
+        // Per-creature dot diameter = 2·(size gene) in world units → device px (≥2 so it stays visible).
+        const size = scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.SIZE]!;
+        zsc[k] = Math.max(2, 2 * size * sc);
       }
       gl.useProgram(this.dotProgram);
       gl.bindBuffer(gl.ARRAY_BUFFER, this.dotBuffer);
@@ -303,11 +321,11 @@ export class Renderer {
       gl.bufferData(gl.ARRAY_BUFFER, hsc.subarray(0, n), gl.DYNAMIC_DRAW);
       gl.enableVertexAttribArray(this.aHue);
       gl.vertexAttribPointer(this.aHue, 1, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.sizeBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, zsc.subarray(0, n), gl.DYNAMIC_DRAW);
+      gl.enableVertexAttribArray(this.aSize);
+      gl.vertexAttribPointer(this.aSize, 1, gl.FLOAT, false, 0, 0);
       this.setCommonUniforms(this.dotProgram, sc);
-      gl.uniform1f(
-        gl.getUniformLocation(this.dotProgram, 'u_pointSize'),
-        Math.max(2, 2 * this.cellRadius * sc),
-      );
       gl.drawArrays(gl.POINTS, 0, n);
     }
   }

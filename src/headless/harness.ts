@@ -6,6 +6,7 @@
  */
 import { World } from '../core/world';
 import { type Config } from '../core/config';
+import { SCALAR_GENE_COUNT } from '../core/genome';
 
 export interface SamplePoint {
   tick: number;
@@ -13,6 +14,20 @@ export interface SamplePoint {
   births: number; // cumulative
   deaths: number; // cumulative
   food: number; // total standing biomass
+  geneMeans: number[]; // population-mean of each scalar gene (watch selection move them)
+}
+
+/** Population means of every scalar gene (all 0 when extinct). */
+function geneMeans(world: World): number[] {
+  const { liveIndices, liveCount, scalarGenes } = world.store;
+  const means = new Array<number>(SCALAR_GENE_COUNT).fill(0);
+  if (liveCount === 0) return means;
+  for (let k = 0; k < liveCount; k++) {
+    const base = liveIndices[k]! * SCALAR_GENE_COUNT;
+    for (let g = 0; g < SCALAR_GENE_COUNT; g++) means[g]! += scalarGenes[base + g]!;
+  }
+  for (let g = 0; g < SCALAR_GENE_COUNT; g++) means[g]! /= liveCount;
+  return means;
 }
 
 export interface RunResult {
@@ -39,6 +54,7 @@ export function runHeadless(config: Config, ticks: number, sampleEvery = 500): R
         births: world.totalBirths,
         deaths: world.totalDeaths,
         food: Math.round(world.food.total()),
+        geneMeans: geneMeans(world),
       });
     }
   }

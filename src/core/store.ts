@@ -1,4 +1,4 @@
-import { BRAIN_GENES } from './genome';
+import { BRAIN_GENES, SCALAR_GENE_COUNT } from './genome';
 
 /**
  * Organism store — data-oriented SoA (structure-of-arrays). No per-entity objects: parallel typed
@@ -31,9 +31,11 @@ export class OrganismStore {
   readonly senseX: Float64Array;
   readonly senseY: Float64Array;
 
-  // Genome (heritable, mutated at birth): the brain weights (BRAIN_GENES per slot) + the hue gene.
+  // Genome (heritable, mutated at birth): the brain weights (BRAIN_GENES per slot) + the hue gene
+  // + the scalar genes (SCALAR_GENE_COUNT per slot — see genome.ScalarGene).
   readonly brain: Float32Array;
   readonly hue: Float32Array;
+  readonly scalarGenes: Float32Array; // SCALAR_GENE_COUNT per slot
 
   // Within-life (Baldwin) learning state — RUNTIME, NOT heritable. learnedBrain is what steer() reads;
   // it is reset to the genome `brain` at birth and drifts via energy-gated Hebbian consolidation, so
@@ -68,6 +70,7 @@ export class OrganismStore {
     this.senseY = new Float64Array(capacity);
     this.brain = new Float32Array(capacity * BRAIN_GENES);
     this.hue = new Float32Array(capacity);
+    this.scalarGenes = new Float32Array(capacity * SCALAR_GENE_COUNT);
     this.learnedBrain = new Float32Array(capacity * BRAIN_GENES);
     this.elig = new Float32Array(capacity * BRAIN_GENES);
     this.age = new Uint32Array(capacity);

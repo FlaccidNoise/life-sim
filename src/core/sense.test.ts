@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { OrganismStore } from './store';
 import { FoodField } from './food-field';
 import { senseFood } from './sense';
+import { ScalarGene, SCALAR_GENE_COUNT } from './genome';
 
 const W = 256;
 const H = 256;
@@ -30,8 +31,9 @@ describe('senseFood', () => {
     const i = s.alloc();
     s.x[i] = W / 2;
     s.y[i] = H / 2;
+    s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.SENSE_RANGE] = W / COLS; // sample one cell apart
     s.rebuildLive();
-    senseFood(s, f, W / COLS, W, H);
+    senseFood(s, f, W, H);
     expect(s.senseX[i]!).toBeGreaterThan(0); // points toward +x (more food)
     expect(Math.abs(s.senseY[i]!)).toBeLessThan(Math.abs(s.senseX[i]!)); // ~no y component
   });
