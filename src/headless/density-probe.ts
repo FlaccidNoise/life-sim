@@ -129,14 +129,15 @@ function run(label: string, overrides: Partial<Config>): { label: string; m: Met
   return { label, m: measure(world) };
 }
 
+// Concentration sweep: smaller, RICHER pockets (higher foodCap compensates the smaller area) to pack
+// creatures together — watch maxBucket (local crowding = real encounters) while keeping predators alive.
 const CASES: { label: string; o: Partial<Config> }[] = [
-  { label: 'baseline (14 pockets r5)', o: {} },
-  { label: 'closer (40 pockets r5)', o: { foodPatchCount: 40 } },
-  { label: 'spread (6 pockets r5)', o: { foodPatchCount: 6 } },
-  { label: 'bigger (14 pockets r9)', o: { foodPatchCount: 14, foodPatchRadius: 9 } },
-  { label: 'many-small (50 pockets r3)', o: { foodPatchCount: 50, foodPatchRadius: 3 } },
-  { label: 'baseline + learning OFF', o: { learningEnabled: false } },
-  { label: 'baseline + cannibalism OFF', o: { cannibalism: false } },
+  { label: 'baseline (14 r5 cap14)', o: {} },
+  { label: 'tight (14 r3 cap40)', o: { foodPatchRadius: 3, foodCap: 40 } },
+  { label: 'tight-many (30 r3 cap28)', o: { foodPatchCount: 30, foodPatchRadius: 3, foodCap: 28 } },
+  { label: 'tiny-rich (24 r2 cap60)', o: { foodPatchCount: 24, foodPatchRadius: 2, foodCap: 60 } },
+  { label: 'tiny-many (40 r2 cap50)', o: { foodPatchCount: 40, foodPatchRadius: 2, foodCap: 50 } },
+  { label: 'pinpoint (24 r1 cap120)', o: { foodPatchCount: 24, foodPatchRadius: 1, foodCap: 120 } },
 ];
 
 console.log(`=== density + ablation probe: ${ticks} ticks, seed ${seed}, world 8192² ===\n`);

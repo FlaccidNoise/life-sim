@@ -237,10 +237,10 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     cannibalism: true, // current behavior (bite anyone nearest); flip off to spare same-diet peers
     // Vision. Founders seed with modest eyes (range ~14, ~57° half-cone, acuity 1); all costed so
     // predators evolve long focused sight and prey evolve wide all-around sight, each paying for it.
-    visionRange: 14,
+    visionRange: 140, // long-sight experiment: ~10× the old 14 so creatures see across the sparse world
     visionFov: 1.0,
     visionAcuity: 1,
-    visionRangeCost: 0.02,
+    visionRangeCost: 0.002, // lowered 10× so the now-large range isn't instantly taxed away by upkeep
     visionFovCost: 0.15,
     visionAcuityCost: 0.2,
     // NB pre-sight, predators hunt by PROXIMITY only — the encounter rate is too low for hunting to

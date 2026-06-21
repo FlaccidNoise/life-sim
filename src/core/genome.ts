@@ -117,9 +117,10 @@ export const SCALAR_GENE_SPECS: readonly ScalarGeneSpec[] = [
   // fraction ~0.9) in world.seedWorld, not around the center. DAMAGE is costed (teeth cost upkeep).
   { centerKey: 'diet', costKey: null, min: 0, max: 1 },
   { centerKey: 'damage', costKey: 'damageCost', min: 0, max: 20 },
-  // Vision genes — ALL costed (no free eyes). Range capped at ~2 hash cells (24u) so the sight scan
-  // stays bounded; FOV is a half-angle [~6°, 180°]; acuity scales the signal strength.
-  { centerKey: 'visionRange', costKey: 'visionRangeCost', min: 0, max: 24 },
+  // Vision genes — ALL costed (no free eyes). Range cap raised to 256u (~21 hash cells) for the
+  // long-sight experiment: the sight scan radius now DERIVES from each creature's range (sense.ts), so
+  // big eyes see far (and cost more cells to scan). FOV is a half-angle [~6°, 180°]; acuity scales signal.
+  { centerKey: 'visionRange', costKey: 'visionRangeCost', min: 0, max: 256 },
   { centerKey: 'visionFov', costKey: 'visionFovCost', min: 0.1, max: 3.14159 },
   { centerKey: 'visionAcuity', costKey: 'visionAcuityCost', min: 0, max: 3 },
 ];
