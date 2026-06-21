@@ -108,7 +108,8 @@ describe('steer (per-creature brain)', () => {
 });
 
 describe('Baldwin within-life learning (energy-gated)', () => {
-  // learn(store, learningRate, reproThreshold, satiatedThreshold, weightDecay, weightClamp)
+  // learn(store, learningRate, weightDecay, weightClamp) — the repro/satiated bars are read per-creature
+  // from the genes (setBrain seeds REPRO=60 / SAT=100 below).
   const REPRO = 60;
   const SAT = 100;
 
@@ -206,5 +207,24 @@ describe('Baldwin within-life learning (energy-gated)', () => {
     s.resetLearned(i); // simulate the child's birth-time reset
     expect(s.learnedBrain[b + Brain.FWD_THRUST]!).toBe(1.0); // snapped back to the genome
     expect(s.elig[b + Brain.FWD_THRUST]!).toBe(0); // traces cleared
+  });
+
+  it('the MIN_BAND guard keeps the learn gate finite when satiated gene ≤ repro gene', () => {
+    // If the two bars invert (satiated == repro), the un-guarded gate denominator is 0 → NaN weights
+    // that propagate forever. The guard reads satiated as max(satiatedGene, reproGene+MIN_BAND).
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.heading[i] = 0;
+    s.senseX[i] = 0; // no gradient → elig stays 0; an un-guarded Inf·0 would be NaN
+    setBrain(s, i, { FWD_THRUST: 1.0 });
+    s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.REPRO_THRESHOLD] = 60;
+    s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.SATIATED_THRESHOLD] = 60; // inverted/zero band
+    s.energy[i] = 70; // above the repro bar
+    s.rebuildLive();
+    steer(s, true, 0.5);
+    learn(s, 0.2, 0.0, 4);
+    const b = i * BRAIN_GENES;
+    for (let g = 0; g < BRAIN_GENES; g++)
+      expect(Number.isFinite(s.learnedBrain[b + g]!)).toBe(true);
   });
 });
