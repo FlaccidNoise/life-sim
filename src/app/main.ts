@@ -58,6 +58,30 @@ let showOverlay = true; // per-creature debug overlay on the selection (toggle w
 let selected: { slot: number; gen: number } | null = null;
 // Scratch for the selected creature's overlay line vertices ([x,y,r,g,b] per vertex; gl.LINES).
 const overlayScratch = new Float32Array(2048);
+// Path trail of the FOLLOWED creature: recent positions drawn as a fading polyline, so spin-in-place
+// (a tight loop) reads instantly different from foraging (a directed path). Captured per tick.
+const TRAIL_LEN = 400;
+const trailX: number[] = [];
+const trailY: number[] = [];
+const trailScratch = new Float32Array(TRAIL_LEN * 2 * 5);
+function pushTrail(x: number, y: number): void {
+  trailX.push(x);
+  trailY.push(y);
+  if (trailX.length > TRAIL_LEN) {
+    trailX.shift();
+    trailY.shift();
+  }
+}
+function clearTrail(): void {
+  trailX.length = 0;
+  trailY.length = 0;
+}
+// Advance the per-tick follow recording + trail together (called once per sim tick).
+function followTick(): void {
+  recorder.record(world.store, config, world.tick);
+  if (recorder.isFollowedAlive(world.store))
+    pushTrail(world.store.x[recorder.followedSlot]!, world.store.y[recorder.followedSlot]!);
+}
 // Camera: centre in world units + zoom (1 = whole world fits). Scroll to zoom, drag to pan.
 let camX = config.worldWidth / 2;
 let camY = config.worldHeight / 2;
@@ -70,7 +94,7 @@ const controls = new Controls(el('controls'), config.seed, {
   },
   onStep: () => {
     world.step();
-    recorder.record(world.store, config, world.tick);
+    followTick();
   },
   onReset: (seed: number) => {
     config = { ...config, seed };
@@ -118,6 +142,7 @@ function rebuild(): void {
   inspector.clear();
   brainView.clear();
   recorder.clear();
+  clearTrail();
   controls.setFollow(-1, 0, false);
   prevBirths = 0;
   prevDeaths = 0;
@@ -196,9 +221,11 @@ globalThis.addEventListener('keydown', (e) => {
   if (e.key === 'l' || e.key === 'L') {
     if (recorder.following) {
       recorder.clear();
+      clearTrail();
       controls.setFollow(-1, 0, false);
     } else if (selected) {
       recorder.follow(selected.slot, selected.gen);
+      clearTrail();
     }
   }
 });
@@ -249,7 +276,7 @@ function frame(): void {
       if (acc >= 1) {
         snapshotPrev();
         world.step();
-        recorder.record(world.store, config, world.tick);
+        followTick();
         stepped = 1;
         acc -= 1;
       }
@@ -258,7 +285,7 @@ function frame(): void {
       const steps = Math.min(STEP_CAP, Math.round(speed));
       for (let i = 0; i < steps; i++) {
         world.step();
-        recorder.record(world.store, config, world.tick); // per-TICK dump, even at high speed
+        followTick(); // per-TICK dump + trail, even at high speed
       }
       stepped = steps;
       acc = 0;
@@ -278,6 +305,33 @@ function frame(): void {
   }
   renderer.setCamera(camX, camY, zoom);
   renderer.draw(world.store, world.food, showFood, interp);
+  // Path trail of the followed creature (fading old→new; seam-crossing segments skipped so toroidal
+  // wraps don't streak). A tight loop = spinning in place; a directed line = foraging.
+  if (showOverlay && recorder.following && trailX.length > 1) {
+    const ww = config.worldWidth;
+    const wh = config.worldHeight;
+    let v = 0;
+    for (let k = 0; k < trailX.length - 1; k++) {
+      const ax = trailX[k]!;
+      const ay = trailY[k]!;
+      const bx = trailX[k + 1]!;
+      const by = trailY[k + 1]!;
+      if (Math.abs(bx - ax) > ww * 0.5 || Math.abs(by - ay) > wh * 0.5) continue; // seam crossing
+      const br = 0.15 + 0.85 * (k / (trailX.length - 1)); // fade oldest→newest
+      for (const [px, py] of [
+        [ax, ay],
+        [bx, by],
+      ] as const) {
+        trailScratch[v * 5] = px;
+        trailScratch[v * 5 + 1] = py;
+        trailScratch[v * 5 + 2] = 0.4 * br;
+        trailScratch[v * 5 + 3] = 0.85 * br;
+        trailScratch[v * 5 + 4] = 0.95 * br;
+        v++;
+      }
+    }
+    renderer.drawLines(trailScratch, v);
+  }
   // Per-creature debug overlay on the live selection (drawn on top; reads true current state, so at
   // slow-mo it sits at the un-interpolated position — a non-issue at speed ≥ 1).
   if (showOverlay && selected && world.store.isAlive(selected.slot, selected.gen)) {
