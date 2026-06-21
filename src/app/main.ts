@@ -9,6 +9,7 @@
  */
 import { World } from '../core/world';
 import { defaultConfig, type Config } from '../core/config';
+import { scanHealth } from '../core/health';
 import { Renderer } from '../render/renderer';
 import { Controls } from './observability/controls';
 import { Knobs } from './observability/knobs';
@@ -245,4 +246,6 @@ requestAnimationFrame(frame);
   get config() {
     return config;
   },
+  // Invariant scan from the console: `sim.health()` → NaN/oob/energy/gene violations + summary stats.
+  health: (maxViolations?: number) => scanHealth(world, maxViolations),
 };
