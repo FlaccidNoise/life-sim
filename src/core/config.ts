@@ -160,8 +160,11 @@ export interface Config {
   /** Per-tick decay of the learned DEVIATION back toward the genome instinct (the stability leg:
    *  without reinforcement the runtime brain relaxes to instinct; it never corrupts the genome). */
   weightDecay: number;
-  /** Runtime-weight clamp ±W: learned weights are bounded to [−weightClamp, +weightClamp]. */
-  weightClamp: number;
+  /** Max learned DEVIATION from instinct per weight: |learnedBrain − genome| ≤ this. Bounding the
+   *  deviation (not the absolute weight) keeps the runtime brain a small refinement of the heritable
+   *  instinct — it can't run off to a saturated controller. The bias synapses are excluded from
+   *  plasticity entirely (their constant input makes Hebbian learning a positive-feedback runaway). */
+  maxLearnDeviation: number;
 }
 
 export function defaultConfig(overrides: Partial<Config> = {}): Config {
@@ -254,7 +257,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     learningRate: 0.02,
     eligLambda: 0.2,
     weightDecay: 0.002,
-    weightClamp: 4,
+    maxLearnDeviation: 0.5,
     ...overrides,
   };
 }

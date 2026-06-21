@@ -122,7 +122,7 @@ describe('steer (per-creature brain)', () => {
 });
 
 describe('Baldwin within-life learning (energy-gated)', () => {
-  // learn(store, learningRate, weightDecay, weightClamp) — the repro/satiated bars are read per-creature
+  // learn(store, learningRate, weightDecay, maxLearnDeviation) — the repro/satiated bars are per-creature
   // from the genes (setBrain seeds REPRO=60 / SAT=100 below).
   const REPRO = 60;
   const SAT = 100;
@@ -190,20 +190,40 @@ describe('Baldwin within-life learning (energy-gated)', () => {
     expect(w).toBeCloseTo(1.0 + 1.0 * 0.9); // genome + deviation·(1−decay)
   });
 
-  it('clamps learned weights to ±weightClamp', () => {
+  it('bounds the learned DEVIATION from instinct to ±maxLearnDeviation', () => {
     const s = new OrganismStore(4);
     const i = s.alloc();
     s.heading[i] = 0;
     s.senseX[i] = 1;
-    setBrain(s, i, { FWD_THRUST: 1.0 });
+    setBrain(s, i, { FWD_THRUST: 1.0 }); // genome instinct = 1.0
     s.energy[i] = SAT;
     s.rebuildLive();
     for (let t = 0; t < 200; t++) {
       steer(s, true, 0.5);
-      learn(s, 1.0, 0.0, 1.5); // hard reinforcement, clamp 1.5
+      learn(s, 1.0, 0.0, 0.5); // hard reinforcement, deviation bound 0.5
     }
     const b = i * BRAIN_GENES;
-    expect(s.learnedBrain[b + Brain.FWD_THRUST]!).toBeLessThanOrEqual(1.5);
+    // The learned weight can't run off to a saturated controller: it stays within ±0.5 of instinct.
+    expect(s.learnedBrain[b + Brain.FWD_THRUST]!).toBeLessThanOrEqual(1.5 + 1e-9);
+    expect(s.learnedBrain[b + Brain.FWD_THRUST]!).toBeGreaterThan(1.0); // it did consolidate, just bounded
+  });
+
+  it('does NOT make the bias synapses plastic (the spin runaway is removed)', () => {
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.heading[i] = 0;
+    s.senseX[i] = 1; // strong constant input → big motor output → bias eligibility accumulates
+    setBrain(s, i, { FWD_THRUST: 1.0, TURN_BIAS: 0.2, THRUST_BIAS: 0.3 });
+    s.energy[i] = SAT;
+    s.rebuildLive();
+    const b = i * BRAIN_GENES;
+    for (let t = 0; t < 200; t++) {
+      steer(s, true, 0.5);
+      learn(s, 1.0, 0.0, 0.5);
+    }
+    // Biases stay at instinct no matter how hard/long we reinforce (Float32-exact equality to the seed).
+    expect(s.learnedBrain[b + Brain.TURN_BIAS]!).toBe(s.brain[b + Brain.TURN_BIAS]!);
+    expect(s.learnedBrain[b + Brain.THRUST_BIAS]!).toBe(s.brain[b + Brain.THRUST_BIAS]!);
   });
 
   it('resetLearned restores the runtime brain to the genome (no Lamarck across birth)', () => {

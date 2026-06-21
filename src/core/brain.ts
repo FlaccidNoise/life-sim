@@ -108,7 +108,7 @@ export function learn(
   store: OrganismStore,
   learningRate: number,
   weightDecay: number,
-  weightClamp: number,
+  maxLearnDeviation: number,
 ): void {
   const { liveIndices, liveCount, energy, brain, learnedBrain, elig, scalarGenes } = store;
   const keep = 1 - weightDecay;
@@ -125,11 +125,18 @@ export function learn(
     const rate = learningRate * gate; // peak when satiated
     const b = i * BRAIN_GENES;
     for (let g = 0; g < BRAIN_GENES; g++) {
+      // Biases are NOT plastic: their input is the constant 1, so Hebbian pre·post just accumulates the
+      // motor output's own sign → a positive-feedback runaway that saturates turn/thrust (= spinning in
+      // place). Sensorimotor synapses self-correct (their input vanishes as the creature aligns), so only
+      // those learn. Biases stay at the heritable instinct (resetLearned seeded them = genome).
+      if (g === Brain.TURN_BIAS || g === Brain.THRUST_BIAS) continue;
       const w0 = brain[b + g]!; // genome instinct = the anchor the deviation relaxes toward
-      let w = w0 + (learnedBrain[b + g]! - w0) * keep + rate * elig[b + g]!;
-      if (w > weightClamp) w = weightClamp;
-      else if (w < -weightClamp) w = -weightClamp;
-      learnedBrain[b + g] = w;
+      // Bound the DEVIATION from instinct (not the absolute weight): learning refines instinct, it can't
+      // run off to a saturated controller.
+      let dev = (learnedBrain[b + g]! - w0) * keep + rate * elig[b + g]!;
+      if (dev > maxLearnDeviation) dev = maxLearnDeviation;
+      else if (dev < -maxLearnDeviation) dev = -maxLearnDeviation;
+      learnedBrain[b + g] = w0 + dev;
     }
   }
 }
