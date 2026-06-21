@@ -1,0 +1,227 @@
+/**
+ * Brain view — a live node-link diagram of a selected creature's controller, so you can WATCH it think.
+ * The brain is a single-layer LINEAR map (genome.ts / brain.ts): five sensory inputs in the heading
+ * frame — forward & lateral food gradient, forward & lateral sight, and a constant bias — fan out to
+ * two motor outputs (turn, thrust) through ten weights. This panel draws the inputs (lit by their live
+ * value), the weighted edges (sign = color, |weight| = thickness, live activity = brightness), and the
+ * resulting outputs, updating every frame.
+ *
+ * computeBrainState() recomputes the inputs/outputs with the SAME math as steer(); a test pins it to an
+ * actual steer() run so the picture can never drift from what the sim really does. BrainView only draws.
+ */
+import { type OrganismStore } from '../../core/store';
+import { type Config } from '../../core/config';
+import { Brain, BRAIN_GENES, ScalarGene, SCALAR_GENE_COUNT } from '../../core/genome';
+
+export interface BrainInputNode {
+  label: string;
+  value: number; // live sensory value (heading frame)
+  turnW: number; // learned weight → turn
+  thrustW: number; // learned weight → thrust
+  turnInst: number; // genome instinct weight → turn
+  thrustInst: number; // genome instinct weight → thrust
+}
+
+export interface BrainState {
+  inputs: BrainInputNode[]; // 5, fixed order: food fwd, food lat, sight fwd, sight lat, bias
+  turnRaw: number; // pre-clamp network sum → turn
+  thrustRaw: number; // pre-clamp network sum → thrust
+  turn: number; // applied turn (clamped to ±maxTurn gene)
+  thrust: number; // applied thrust (clamped [0,maxThrust], ×metabolic efficiency)
+  drift: number; // Σ|learned − instinct| over all 10 weights (within-life learning so far)
+}
+
+/** Recompute one creature's brain I/O with steer()'s exact math (read-only). */
+export function computeBrainState(store: OrganismStore, cfg: Config, slot: number): BrainState {
+  const sg = slot * SCALAR_GENE_COUNT;
+  const b = slot * BRAIN_GENES;
+  const lb = store.learnedBrain;
+  const ib = store.brain;
+  const h = store.heading[slot]!;
+  const dx = Math.cos(h);
+  const dy = Math.sin(h);
+  const gx = store.senseX[slot]!;
+  const gy = store.senseY[slot]!;
+  const fwd = gx * dx + gy * dy;
+  const lat = -gx * dy + gy * dx;
+  const vx = store.sightX[slot]!;
+  const vy = store.sightY[slot]!;
+  const sFwd = vx * dx + vy * dy;
+  const sLat = -vx * dy + vy * dx;
+
+  const node = (label: string, value: number, turnG: number, thrustG: number): BrainInputNode => ({
+    label,
+    value,
+    turnW: lb[b + turnG]!,
+    thrustW: lb[b + thrustG]!,
+    turnInst: ib[b + turnG]!,
+    thrustInst: ib[b + thrustG]!,
+  });
+
+  const inputs: BrainInputNode[] = [
+    node('food fwd', fwd, Brain.FWD_TURN, Brain.FWD_THRUST),
+    node('food lat', lat, Brain.LAT_TURN, Brain.LAT_THRUST),
+    node('sight fwd', sFwd, Brain.SIGHT_FWD_TURN, Brain.SIGHT_FWD_THRUST),
+    node('sight lat', sLat, Brain.SIGHT_LAT_TURN, Brain.SIGHT_LAT_THRUST),
+    node('bias', 1, Brain.TURN_BIAS, Brain.THRUST_BIAS),
+  ];
+
+  let turnRaw = 0;
+  let thrustRaw = 0;
+  for (const n of inputs) {
+    turnRaw += n.value * n.turnW;
+    thrustRaw += n.value * n.thrustW;
+  }
+
+  const maxTurn = store.scalarGenes[sg + ScalarGene.MAX_TURN]!;
+  const maxThrust = store.scalarGenes[sg + ScalarGene.MAX_THRUST]!;
+  const eff = store.scalarGenes[sg + ScalarGene.METAB_EFF]!;
+  let turn = turnRaw;
+  if (turn > maxTurn) turn = maxTurn;
+  else if (turn < -maxTurn) turn = -maxTurn;
+  let thrust = thrustRaw;
+  if (thrust < 0) thrust = 0;
+  else if (thrust > maxThrust) thrust = maxThrust;
+  thrust *= eff;
+
+  let drift = 0;
+  for (let g = 0; g < BRAIN_GENES; g++) drift += Math.abs(lb[b + g]! - ib[b + g]!);
+
+  return { inputs, turnRaw, thrustRaw, turn, thrust, drift };
+}
+
+const POS = (r: number, g: number, bl: number, a: number): string => `rgba(${r},${g},${bl},${a})`;
+
+export class BrainView {
+  private readonly ctx: CanvasRenderingContext2D;
+  private slot = -1;
+  private gen = 0;
+
+  constructor(private readonly canvas: HTMLCanvasElement) {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('2D canvas context unavailable for the brain view');
+    this.ctx = ctx;
+  }
+
+  select(slot: number, gen: number): void {
+    this.slot = slot;
+    this.gen = gen;
+  }
+
+  clear(): void {
+    this.slot = -1;
+  }
+
+  render(store: OrganismStore | null, cfg: Config | null): void {
+    const dpr = globalThis.devicePixelRatio || 1;
+    const w = Math.max(1, Math.floor(this.canvas.clientWidth * dpr));
+    const h = Math.max(1, Math.floor(this.canvas.clientHeight * dpr));
+    if (this.canvas.width !== w || this.canvas.height !== h) {
+      this.canvas.width = w;
+      this.canvas.height = h;
+    }
+    const ctx = this.ctx;
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = 'rgba(120,170,210,0.06)';
+    ctx.fillRect(0, 0, w, h);
+
+    if (!store || !cfg || this.slot < 0 || !store.isAlive(this.slot, this.gen)) {
+      ctx.fillStyle = 'rgba(140,160,180,0.6)';
+      ctx.font = `${Math.round(11 * dpr)}px ui-monospace, monospace`;
+      ctx.textBaseline = 'middle';
+      ctx.textAlign = 'center';
+      ctx.fillText('click a dot to watch its brain', w / 2, h / 2);
+      ctx.textAlign = 'left';
+      return;
+    }
+
+    const st = computeBrainState(store, cfg, this.slot);
+    const inX = 0.3 * w;
+    const outX = 0.74 * w;
+    const top = 26 * dpr;
+    const bot = h - 12 * dpr;
+    const inN = st.inputs.length;
+    const inY = (i: number): number => top + ((bot - top) * i) / (inN - 1);
+    const outY = (o: number): number => top + ((bot - top) * (o === 0 ? 1 : 2)) / 3;
+    const nodeR = 5 * dpr;
+
+    // Normalize edge activity so the most-active synapse this frame reads full-bright.
+    let maxAct = 1e-6;
+    for (const n of st.inputs) {
+      maxAct = Math.max(maxAct, Math.abs(n.value * n.turnW), Math.abs(n.value * n.thrustW));
+    }
+    const edge = (
+      ix: number,
+      iy: number,
+      ox: number,
+      oy: number,
+      weight: number,
+      act: number,
+    ): void => {
+      const mag = Math.min(1, Math.abs(weight) / cfg.weightClamp);
+      const alpha = 0.18 + 0.82 * Math.min(1, Math.abs(act) / maxAct);
+      ctx.lineWidth = Math.max(0.5 * dpr, mag * 4 * dpr);
+      ctx.strokeStyle = weight >= 0 ? POS(120, 200, 240, alpha) : POS(240, 150, 90, alpha); // cyan + / orange −
+      ctx.beginPath();
+      ctx.moveTo(ix, iy);
+      ctx.lineTo(ox, oy);
+      ctx.stroke();
+    };
+
+    // Edges (behind nodes): each input → both outputs.
+    for (let i = 0; i < inN; i++) {
+      const n = st.inputs[i]!;
+      const iy = inY(i);
+      edge(inX, iy, outX, outY(0), n.turnW, n.value * n.turnW);
+      edge(inX, iy, outX, outY(1), n.thrustW, n.value * n.thrustW);
+    }
+
+    ctx.font = `${Math.round(10 * dpr)}px ui-monospace, monospace`;
+    ctx.textBaseline = 'middle';
+
+    // Input nodes: fill by sign/strength of the live value; label on the left, value on the node.
+    for (let i = 0; i < inN; i++) {
+      const n = st.inputs[i]!;
+      const iy = inY(i);
+      const v = Math.tanh(n.value); // squash for fill intensity (values span orders of magnitude)
+      ctx.fillStyle =
+        n.value >= 0
+          ? POS(120, 200, 240, 0.25 + 0.6 * Math.abs(v))
+          : POS(240, 150, 90, 0.25 + 0.6 * Math.abs(v));
+      ctx.beginPath();
+      ctx.arc(inX, iy, nodeR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(180,200,220,0.85)';
+      ctx.textAlign = 'right';
+      ctx.fillText(n.label, inX - nodeR - 4 * dpr, iy);
+    }
+
+    // Output nodes.
+    const drawOut = (o: number, label: string, value: number): void => {
+      const oy = outY(o);
+      const v = Math.tanh(value);
+      ctx.fillStyle =
+        value >= 0
+          ? POS(140, 230, 170, 0.3 + 0.6 * Math.abs(v))
+          : POS(240, 150, 90, 0.3 + 0.6 * Math.abs(v));
+      ctx.beginPath();
+      ctx.arc(outX, oy, nodeR * 1.3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(200,220,235,0.9)';
+      ctx.textAlign = 'left';
+      ctx.fillText(`${label} ${value.toFixed(2)}`, outX + nodeR + 5 * dpr, oy);
+    };
+    drawOut(0, 'turn', st.turn);
+    drawOut(1, 'thrust', st.thrust);
+
+    // Header: raw outputs + learning drift.
+    ctx.fillStyle = 'rgba(150,170,190,0.8)';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText(
+      `turn ${st.turnRaw.toFixed(2)}→${st.turn.toFixed(2)}  thrust ${st.thrustRaw.toFixed(2)}→${st.thrust.toFixed(2)}  drift ${st.drift.toFixed(2)}`,
+      6 * dpr,
+      6 * dpr,
+    );
+  }
+}
