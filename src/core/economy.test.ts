@@ -170,6 +170,49 @@ describe('hunt (predation)', () => {
     expect(s.energy[pred]).toBeCloseTo(13); // gained only the 3 that existed
   });
 
+  it('with cannibalism OFF, a predator spares a same-or-higher-diet peer but still eats prey', () => {
+    const noCannibal = { ...cfg, cannibalism: false };
+    // Two predators side by side + a herbivore prey just past the peer. The hunter must skip the peer
+    // (same diet) and bite the prey instead — no predator-on-predator drain.
+    const s = new OrganismStore(4);
+    const hunter = s.alloc();
+    const peer = s.alloc();
+    const prey = s.alloc();
+    s.x[hunter] = 50;
+    s.y[hunter] = 50;
+    s.energy[hunter] = 20;
+    s.x[peer] = 52; // nearer than the prey
+    s.y[peer] = 50;
+    s.energy[peer] = 30;
+    s.x[prey] = 56;
+    s.y[prey] = 50; // within biteRange 12
+    s.energy[prey] = 30;
+    genes(s, hunter, cfg, { [ScalarGene.DIET]: 0.9, [ScalarGene.DAMAGE]: 5 });
+    genes(s, peer, cfg, { [ScalarGene.DIET]: 0.9, [ScalarGene.DAMAGE]: 0 }); // toothless → can't drain back
+    genes(s, prey, cfg, { [ScalarGene.DIET]: 0 });
+    s.rebuildLive();
+    hunt(s, mkHash(s), noCannibal);
+    expect(s.energy[peer]).toBe(30); // peer spared despite being nearest
+    expect(s.energy[prey]).toBeCloseTo(30 - 5 * 0.9); // prey eaten instead
+  });
+
+  it('with cannibalism ON (default), the predator bites the nearest peer', () => {
+    const s = new OrganismStore(4);
+    const hunter = s.alloc();
+    const peer = s.alloc();
+    s.x[hunter] = 50;
+    s.y[hunter] = 50;
+    s.energy[hunter] = 20;
+    s.x[peer] = 52;
+    s.y[peer] = 50;
+    s.energy[peer] = 30;
+    genes(s, hunter, cfg, { [ScalarGene.DIET]: 0.9, [ScalarGene.DAMAGE]: 5 });
+    genes(s, peer, cfg, { [ScalarGene.DIET]: 0.9, [ScalarGene.DAMAGE]: 0 }); // toothless → can't drain back
+    s.rebuildLive();
+    hunt(s, mkHash(s), cfg); // cannibalism true
+    expect(s.energy[peer]).toBeCloseTo(30 - 5 * 0.9); // peer drained
+  });
+
   it('no creature in bite range → no drain', () => {
     const s = new OrganismStore(4);
     const pred = s.alloc();

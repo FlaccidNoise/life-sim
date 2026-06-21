@@ -37,7 +37,7 @@ function wrapDelta(d: number, size: number): number {
  * (chemotaxis still pulls predators toward food-rich, prey-dense pockets); sight comes in a later slice.
  */
 export function hunt(store: OrganismStore, hash: SpatialHash, cfg: Config): void {
-  const { biteRange, worldWidth, worldHeight } = cfg;
+  const { biteRange, worldWidth, worldHeight, cannibalism } = cfg;
   const { liveIndices, liveCount, x, y, energy, scalarGenes } = store;
   const { cols, rows, bucketStart, sorted } = hash;
   const range2 = biteRange * biteRange;
@@ -50,7 +50,8 @@ export function hunt(store: OrganismStore, hash: SpatialHash, cfg: Config): void
     const yi = y[i]!;
     const cx = hash.colOf(xi);
     const cy = hash.rowOf(yi);
-    // Find the nearest other live creature within bite range (toroidal 3×3 scan).
+    // Find the nearest EDIBLE live creature within bite range (toroidal 3×3 scan). With cannibalism off,
+    // "edible" excludes same-or-higher-diet peers — a predator eats prey (lower diet), not its guild.
     let best = -1;
     let bestD = range2;
     for (let dy = -1; dy <= 1; dy++) {
@@ -62,6 +63,8 @@ export function hunt(store: OrganismStore, hash: SpatialHash, cfg: Config): void
         for (let idx = bucketStart[b]!; idx < end; idx++) {
           const j = sorted[idx]!;
           if (j === i) continue;
+          if (!cannibalism && scalarGenes[j * SCALAR_GENE_COUNT + ScalarGene.DIET]! >= diet)
+            continue;
           const ddx = wrapDelta(xi - x[j]!, worldWidth);
           const ddy = wrapDelta(yi - y[j]!, worldHeight);
           const d2 = ddx * ddx + ddy * ddy;

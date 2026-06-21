@@ -119,6 +119,11 @@ export interface Config {
   predatorFraction: number;
   /** Bite reach in world units: a predator drains the nearest creature within this radius. */
   biteRange: number;
+  /** Cannibalism switch (ablation knob). true = a predator bites the nearest creature of ANY kind
+   *  (current behavior). false = it only bites creatures meaningfully LOWER on the diet axis than
+   *  itself (prey, not peers) — so similar-diet "guild-mates" are spared, preventing predator-on-
+   *  predator drain. Kinship here is the diet gap (the same signal sight uses), not genetic lineage. */
+  cannibalism: boolean;
 
   // ── Vision genes (founder centers + costs; sight is metabolically expensive — no free eyes) ────────
   /** VISION_RANGE gene center — how far a creature sees other creatures (world units). */
@@ -226,6 +231,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     damageCost: 0.05, // upkeep per damage above center
     predatorFraction: 0.15,
     biteRange: 12,
+    cannibalism: true, // current behavior (bite anyone nearest); flip off to spare same-diet peers
     // Vision. Founders seed with modest eyes (range ~14, ~57° half-cone, acuity 1); all costed so
     // predators evolve long focused sight and prey evolve wide all-around sight, each paying for it.
     visionRange: 14,
