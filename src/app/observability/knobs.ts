@@ -50,6 +50,9 @@ const SPECS: KnobSpec[] = [
   { key: 'satiatedThreshold', label: 'gene· satiated', min: 40, max: 220, step: 5, live: false },
   { key: 'birthEnergy', label: 'gene· birth energy', min: 8, max: 90, step: 1, live: false },
   { key: 'damage', label: 'gene· damage', min: 0, max: 20, step: 0.5, live: false },
+  { key: 'visionRange', label: 'gene· vis range', min: 0, max: 24, step: 1, live: false },
+  { key: 'visionFov', label: 'gene· vis FOV', min: 0.1, max: 3.14, step: 0.05, live: false },
+  { key: 'visionAcuity', label: 'gene· vis acuity', min: 0, max: 3, step: 0.1, live: false },
   // Trophic / predation knobs.
   { key: 'predatorFraction', label: 'predator frac', min: 0, max: 0.6, step: 0.05, live: false },
   // Capped at the spatial-hash cell size (2·cellRadius=12): the 3×3 scan can't reach further.
@@ -61,6 +64,9 @@ const SPECS: KnobSpec[] = [
   { key: 'maxTurnCost', label: 'cost· turn', min: 0, max: 2, step: 0.05, live: true },
   { key: 'maxThrustCost', label: 'cost· thrust', min: 0, max: 1, step: 0.02, live: true },
   { key: 'damageCost', label: 'cost· damage', min: 0, max: 0.5, step: 0.01, live: true },
+  { key: 'visionRangeCost', label: 'cost· vis range', min: 0, max: 0.2, step: 0.005, live: true },
+  { key: 'visionFovCost', label: 'cost· vis FOV', min: 0, max: 1, step: 0.01, live: true },
+  { key: 'visionAcuityCost', label: 'cost· vis acuity', min: 0, max: 1, step: 0.02, live: true },
 ];
 
 /** Live boolean toggles (checkboxes), e.g. the Baldwin learning master switch. */

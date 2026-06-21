@@ -31,6 +31,11 @@ export class OrganismStore {
   readonly senseX: Float64Array;
   readonly senseY: Float64Array;
 
+  // Transient per-tick SIGHT vector (world frame): appeal-signed pull toward edible creatures / away
+  // from threats, within the creature's vision cone+range. Recomputed each tick; not hashed (derived).
+  readonly sightX: Float64Array;
+  readonly sightY: Float64Array;
+
   // Genome (heritable, mutated at birth): the brain weights (BRAIN_GENES per slot) + the hue gene
   // + the scalar genes (SCALAR_GENE_COUNT per slot — see genome.ScalarGene).
   readonly brain: Float32Array;
@@ -68,6 +73,8 @@ export class OrganismStore {
     this.forceY = new Float64Array(capacity);
     this.senseX = new Float64Array(capacity);
     this.senseY = new Float64Array(capacity);
+    this.sightX = new Float64Array(capacity);
+    this.sightY = new Float64Array(capacity);
     this.brain = new Float32Array(capacity * BRAIN_GENES);
     this.hue = new Float32Array(capacity);
     this.scalarGenes = new Float32Array(capacity * SCALAR_GENE_COUNT);

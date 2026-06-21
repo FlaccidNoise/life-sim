@@ -25,8 +25,8 @@ import { Brain, BRAIN_GENES, ScalarGene, SCALAR_GENE_COUNT, MIN_BAND } from './g
  * trace bridges the gap between a steering decision and the energy reward it earns ticks later.
  */
 export function steer(store: OrganismStore, learn: boolean, eligLambda: number): void {
-  const { liveIndices, liveCount, heading, senseX, senseY, forceX, forceY, learnedBrain, elig } =
-    store;
+  const { liveIndices, liveCount, heading, senseX, senseY, sightX, sightY, forceX, forceY } = store;
+  const { learnedBrain, elig } = store;
   const genes = store.scalarGenes;
   for (let k = 0; k < liveCount; k++) {
     const i = liveIndices[k]!;
@@ -41,21 +41,33 @@ export function steer(store: OrganismStore, learn: boolean, eligLambda: number):
     const gy = senseY[i]!;
     const fwd = gx * dx + gy * dy; // food gradient ahead
     const lat = -gx * dy + gy * dx; // food gradient to the left
+    const vx = sightX[i]!;
+    const vy = sightY[i]!;
+    const sFwd = vx * dx + vy * dy; // sight vector ahead (appeal-signed)
+    const sLat = -vx * dy + vy * dx; // sight vector to the left
 
     const b = i * BRAIN_GENES;
-    let turn =
+    // Turn/thrust = food-gradient response + sight response (both in the heading frame).
+    const turnRaw =
       learnedBrain[b + Brain.LAT_TURN]! * lat +
       learnedBrain[b + Brain.FWD_TURN]! * fwd +
+      learnedBrain[b + Brain.SIGHT_LAT_TURN]! * sLat +
+      learnedBrain[b + Brain.SIGHT_FWD_TURN]! * sFwd +
       learnedBrain[b + Brain.TURN_BIAS]!;
+    const thrustRaw =
+      learnedBrain[b + Brain.LAT_THRUST]! * lat +
+      learnedBrain[b + Brain.FWD_THRUST]! * fwd +
+      learnedBrain[b + Brain.SIGHT_LAT_THRUST]! * sLat +
+      learnedBrain[b + Brain.SIGHT_FWD_THRUST]! * sFwd +
+      learnedBrain[b + Brain.THRUST_BIAS]!;
+
+    let turn = turnRaw;
     if (turn > maxTurn) turn = maxTurn;
     else if (turn < -maxTurn) turn = -maxTurn;
     const nh = h + turn;
     heading[i] = nh;
 
-    let thrust =
-      learnedBrain[b + Brain.LAT_THRUST]! * lat +
-      learnedBrain[b + Brain.FWD_THRUST]! * fwd +
-      learnedBrain[b + Brain.THRUST_BIAS]!;
+    let thrust = thrustRaw;
     if (thrust < 0) thrust = 0;
     else if (thrust > maxThrust) thrust = maxThrust;
     thrust *= efficiency; // metabolic-efficiency tradeoff: thrifty (low-e) bodies produce less push
@@ -63,23 +75,22 @@ export function steer(store: OrganismStore, learn: boolean, eligLambda: number):
     forceY[i] = thrust * Math.sin(nh);
 
     if (!learn) continue;
-    // Eligibility trace per synapse = pre·post (decayed). pre is the synapse's input (lat, fwd, or the
-    // bias' constant 1); post is its motor output (turn for the turn weights, thrust for the thrust
-    // weights). post is the PRE-clamp value so a saturated motor still earns credit.
-    const turnRaw =
-      learnedBrain[b + Brain.LAT_TURN]! * lat +
-      learnedBrain[b + Brain.FWD_TURN]! * fwd +
-      learnedBrain[b + Brain.TURN_BIAS]!;
-    const thrustRaw =
-      learnedBrain[b + Brain.LAT_THRUST]! * lat +
-      learnedBrain[b + Brain.FWD_THRUST]! * fwd +
-      learnedBrain[b + Brain.THRUST_BIAS]!;
+    // Eligibility trace per synapse = pre·post (decayed). pre is the synapse's input (lat/fwd food,
+    // sLat/sFwd sight, or the bias' constant 1); post is its PRE-clamp motor output.
     const keep = 1 - eligLambda;
     elig[b + Brain.LAT_TURN] = keep * elig[b + Brain.LAT_TURN]! + eligLambda * lat * turnRaw;
     elig[b + Brain.FWD_TURN] = keep * elig[b + Brain.FWD_TURN]! + eligLambda * fwd * turnRaw;
+    elig[b + Brain.SIGHT_LAT_TURN] =
+      keep * elig[b + Brain.SIGHT_LAT_TURN]! + eligLambda * sLat * turnRaw;
+    elig[b + Brain.SIGHT_FWD_TURN] =
+      keep * elig[b + Brain.SIGHT_FWD_TURN]! + eligLambda * sFwd * turnRaw;
     elig[b + Brain.TURN_BIAS] = keep * elig[b + Brain.TURN_BIAS]! + eligLambda * turnRaw;
     elig[b + Brain.LAT_THRUST] = keep * elig[b + Brain.LAT_THRUST]! + eligLambda * lat * thrustRaw;
     elig[b + Brain.FWD_THRUST] = keep * elig[b + Brain.FWD_THRUST]! + eligLambda * fwd * thrustRaw;
+    elig[b + Brain.SIGHT_LAT_THRUST] =
+      keep * elig[b + Brain.SIGHT_LAT_THRUST]! + eligLambda * sLat * thrustRaw;
+    elig[b + Brain.SIGHT_FWD_THRUST] =
+      keep * elig[b + Brain.SIGHT_FWD_THRUST]! + eligLambda * sFwd * thrustRaw;
     elig[b + Brain.THRUST_BIAS] = keep * elig[b + Brain.THRUST_BIAS]! + eligLambda * thrustRaw;
   }
 }

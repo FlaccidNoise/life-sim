@@ -4,7 +4,7 @@ import { OrganismStore } from './store';
 import { SpatialHash } from './spatial-hash';
 import { computeRepulsion, integrate } from './physics';
 import { FoodField } from './food-field';
-import { senseFood } from './sense';
+import { senseFood, senseCreatures } from './sense';
 import { steer, learn } from './brain';
 import { seedGenome, seedScalarGenes, ScalarGene, SCALAR_GENE_COUNT } from './genome';
 import { metabolize, hunt, cullDead, reproduce } from './economy';
@@ -125,9 +125,10 @@ export class World {
     const s = this.store;
     s.rebuildLive();
     this.hash.build(s);
-    // SENSE → THINK/ACT: perceive the food gradient (per-creature sense range), then steer (per-creature
-    // turn/thrust/efficiency genes; sets the thrust force).
+    // SENSE → THINK/ACT: perceive the food gradient (per-creature sense range) + SIGHT (nearby creatures
+    // within the vision cone; uses the start-of-tick hash), then steer (per-creature genes; sets thrust).
     senseFood(s, this.food, cfg.worldWidth, cfg.worldHeight);
+    senseCreatures(s, this.hash, cfg);
     steer(s, cfg.learningEnabled, cfg.eligLambda);
     // MOVE: repulsion adds onto the thrust force, then integrate (per-creature maxSpeed gene).
     computeRepulsion(s, this.hash, cfg.cellRadius, cfg.repulsion, cfg.worldWidth, cfg.worldHeight);

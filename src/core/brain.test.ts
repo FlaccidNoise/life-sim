@@ -89,6 +89,20 @@ describe('steer (per-creature brain)', () => {
     expect(Math.hypot(s.forceX[i]!, s.forceY[i]!)).toBeCloseTo(0.5); // clamped to maxThrust·eff(1)
   });
 
+  it('steers on the sight vector (thrusts along it when SIGHT_FWD_THRUST > 0)', () => {
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.heading[i] = 0; // facing +x
+    s.senseX[i] = 0;
+    s.senseY[i] = 0; // no food gradient — isolate sight
+    s.sightX[i] = 1;
+    s.sightY[i] = 0; // sight points +x (toward prey ahead)
+    setBrain(s, i, { SIGHT_FWD_THRUST: 2 });
+    s.rebuildLive();
+    steer(s, false, 0.2);
+    expect(Math.hypot(s.forceX[i]!, s.forceY[i]!)).toBeCloseTo(2); // thrust = SIGHT_FWD_THRUST·sFwd·eff
+  });
+
   it('metabolic efficiency scales thrust (the thrust half of the tradeoff)', () => {
     const force = (eff: number): number => {
       const s = new OrganismStore(4);

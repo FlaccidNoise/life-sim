@@ -82,6 +82,10 @@ export class Inspector {
       ['gene·birthEnergy', g(ScalarGene.BIRTH_ENERGY)],
       ['gene·diet', g(ScalarGene.DIET)], // 0 herbivore (green) … 1 predator (red)
       ['gene·damage', g(ScalarGene.DAMAGE)],
+      ['gene·visRange', g(ScalarGene.VISION_RANGE)],
+      ['gene·visFOV', g(ScalarGene.VISION_FOV)],
+      ['gene·visAcuity', g(ScalarGene.VISION_ACUITY)],
+      ['sight', `${store.sightX[i]!.toFixed(2)}, ${store.sightY[i]!.toFixed(2)}`],
       ['gene upkeep', geneUpkeep(store.scalarGenes, i, cfg).toFixed(3)],
       ['learn gate', gate.toFixed(2)],
       ['learn drift', drift.toFixed(3)],
