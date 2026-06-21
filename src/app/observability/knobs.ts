@@ -28,11 +28,31 @@ const SPECS: KnobSpec[] = [
   { key: 'initialPopulation', label: 'initial pop', min: 1, max: 2000, step: 1, live: false },
   { key: 'driftSpeed', label: 'drift speed', min: 0, max: 3, step: 0.1, live: false },
   { key: 'foodRegen', label: 'food regen', min: 0, max: 0.2, step: 0.005, live: true },
-  { key: 'eatRate', label: 'eat rate', min: 0, max: 6, step: 0.1, live: true },
   { key: 'basalCost', label: 'basal cost', min: 0, max: 2, step: 0.05, live: true },
   { key: 'reproThreshold', label: 'repro bar', min: 10, max: 150, step: 5, live: true },
   { key: 'satiatedThreshold', label: 'satiated', min: 20, max: 250, step: 5, live: true },
   { key: 'mutationSigma', label: 'mutation σ', min: 0, max: 0.3, step: 0.005, live: true },
+  // Gene CENTERS (seed-time): the founder value + cost baseline for each evolvable scalar gene.
+  { key: 'maxSpeed', label: 'gene· max speed', min: 1, max: 15, step: 0.5, live: false },
+  { key: 'eatRate', label: 'gene· eat rate', min: 0.2, max: 6, step: 0.1, live: false },
+  { key: 'senseStep', label: 'gene· sense range', min: 8, max: 200, step: 4, live: false },
+  { key: 'cellRadius', label: 'gene· size', min: 2, max: 14, step: 0.5, live: false },
+  { key: 'maxTurn', label: 'gene· max turn', min: 0.05, max: 1, step: 0.05, live: false },
+  { key: 'maxThrust', label: 'gene· max thrust', min: 0.1, max: 3, step: 0.1, live: false },
+  {
+    key: 'metabolicEfficiency',
+    label: 'gene· metab eff',
+    min: 0.5,
+    max: 1.5,
+    step: 0.05,
+    live: false,
+  },
+  // Selection-pressure levers (live): basal upkeep per unit of each gene above its center.
+  { key: 'maxSpeedCost', label: 'cost· speed', min: 0, max: 0.5, step: 0.01, live: true },
+  { key: 'eatRateCost', label: 'cost· eat', min: 0, max: 1, step: 0.01, live: true },
+  { key: 'senseRangeCost', label: 'cost· sense', min: 0, max: 0.05, step: 0.001, live: true },
+  { key: 'maxTurnCost', label: 'cost· turn', min: 0, max: 2, step: 0.05, live: true },
+  { key: 'maxThrustCost', label: 'cost· thrust', min: 0, max: 1, step: 0.02, live: true },
 ];
 
 /** Live boolean toggles (checkboxes), e.g. the Baldwin learning master switch. */

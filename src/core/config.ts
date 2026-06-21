@@ -84,6 +84,28 @@ export interface Config {
   maxTurn: number;
   /** Thrust force ceiling — a physical limit on the brain's thrust output. */
   maxThrust: number;
+
+  // ── Evolvable scalar genes (per-creature, heritable, mutated at birth) ───────────────────────────
+  // The genes are maxSpeed, eatRate, senseStep (sense range), cellRadius (size), maxTurn, maxThrust,
+  // and metabolicEfficiency. The config value of each is the FOUNDER CENTER + the cost baseline;
+  // founders seed around it (± founderSigma·center) and offspring mutate (± mutationSigma·center).
+  // Six of them are "more-is-costly" genes: a value ABOVE its center adds basal upkeep (geneUpkeep),
+  // weighted by the coeffs below. metabolicEfficiency is different — a multiplicative tradeoff (see
+  // its center below) — so it has no upkeep coeff.
+  /** Metabolic-efficiency gene CENTER (=1). A self-balancing tradeoff: basal cost ×= e and thrust ×= e,
+   *  so a thrifty (low-e) metabolism is cheap to run but weak; a costly (high-e) one is strong. */
+  metabolicEfficiency: number;
+  /** Basal upkeep per unit of maxSpeed gene above its center (a faster body costs more). */
+  maxSpeedCost: number;
+  /** Basal upkeep per unit of eatRate gene above its center (a hungrier gut costs more). */
+  eatRateCost: number;
+  /** Basal upkeep per unit of senseStep (sense-range) gene above its center (seeing further costs more). */
+  senseRangeCost: number;
+  /** Basal upkeep per unit of maxTurn gene above its center (sharper turning costs more). */
+  maxTurnCost: number;
+  /** Basal upkeep per unit of maxThrust gene above its center (more push costs more). */
+  maxThrustCost: number;
+
   /** Gaussian σ spread of founder brain weights around the seed brain (initial behavioral variation). */
   founderSigma: number;
   /** Gaussian σ of per-weight brain mutation at birth (the evolutionary step size; live knob). */
@@ -160,6 +182,15 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     senseStep: 64,
     maxTurn: 0.35,
     maxThrust: 1,
+    // Evolvable scalar genes. Founders seed at the centers above (maxSpeed/eatRate/senseStep/cellRadius/
+    // maxTurn/maxThrust) + this efficiency center, so the t0 world matches the pre-gene tuning; cost
+    // coeffs (live levers) are modest so selection shapes the distribution rather than slamming it.
+    metabolicEfficiency: 1,
+    maxSpeedCost: 0.05,
+    eatRateCost: 0.15,
+    senseRangeCost: 0.004,
+    maxTurnCost: 0.4,
+    maxThrustCost: 0.2,
     founderSigma: 0.3,
     mutationSigma: 0.05,
     hueMutationSigma: 0.02,

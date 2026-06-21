@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { OrganismStore } from './store';
-import { Brain, BRAIN_GENES } from './genome';
+import { Brain, BRAIN_GENES, ScalarGene, SCALAR_GENE_COUNT } from './genome';
 import { steer, learn } from './brain';
 
-/** Set a creature's genome brain weights (slot) and sync them into the runtime brain steer() reads. */
+/** Set a creature's genome brain weights (slot), seed generous movement genes (so steer's per-creature
+ *  maxTurn/maxThrust clamps + the efficiency multiplier don't interfere), and sync the runtime brain. */
 function setBrain(
   s: OrganismStore,
   slot: number,
@@ -11,6 +12,10 @@ function setBrain(
 ): void {
   const b = slot * BRAIN_GENES;
   for (const [k, v] of Object.entries(w)) s.brain[b + Brain[k as keyof typeof Brain]] = v;
+  const sg = slot * SCALAR_GENE_COUNT;
+  s.scalarGenes[sg + ScalarGene.MAX_TURN] = 1; // generous turn ceiling
+  s.scalarGenes[sg + ScalarGene.MAX_THRUST] = 5; // generous thrust ceiling
+  s.scalarGenes[sg + ScalarGene.METAB_EFF] = 1; // efficiency 1 → thrust unscaled
   s.resetLearned(slot); // runtime brain := genome brain
 }
 
@@ -23,7 +28,7 @@ describe('steer (per-creature brain)', () => {
     s.senseY[i] = 1; // food gradient toward +y (to the left)
     setBrain(s, i, { LAT_TURN: 1.5 });
     s.rebuildLive();
-    steer(s, 0.35, 1, false, 0.2);
+    steer(s, false, 0.2);
     expect(s.heading[i]).toBeGreaterThan(0); // turned toward the food (left)
   });
 
@@ -36,7 +41,7 @@ describe('steer (per-creature brain)', () => {
       s.senseY[i] = 0;
       setBrain(s, i, { FWD_THRUST: 1.5, THRUST_BIAS: 0.3 });
       s.rebuildLive();
-      steer(s, 0.35, 5, false, 0.2);
+      steer(s, false, 0.2);
       return Math.hypot(s.forceX[0]!, s.forceY[0]!);
     };
     expect(mk(1)).toBeGreaterThan(mk(0)); // food ahead → more thrust than cruise alone
@@ -50,10 +55,53 @@ describe('steer (per-creature brain)', () => {
     s.senseY[i] = 1;
     // brain weights default to 0
     s.rebuildLive();
-    steer(s, 0.35, 1, false, 0.2);
+    steer(s, false, 0.2);
     expect(s.heading[i]).toBe(0.5); // no turn
     expect(s.forceX[i]!).toBe(0);
     expect(s.forceY[i]!).toBe(0);
+  });
+
+  it('clamps the heading change to the per-creature MAX_TURN gene', () => {
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.heading[i] = 0;
+    s.senseX[i] = 0;
+    s.senseY[i] = 1; // strong lateral gradient
+    setBrain(s, i, { LAT_TURN: 5 }); // wants a big turn (would be 5 rad unclamped)
+    s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.MAX_TURN] = 0.05; // tiny ceiling
+    s.rebuildLive();
+    steer(s, false, 0.2);
+    expect(s.heading[i]).toBeCloseTo(0.05); // clamped to the gene, not 5
+  });
+
+  it('clamps thrust to the per-creature MAX_THRUST gene', () => {
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.heading[i] = 0; // force lands on +x
+    s.senseX[i] = 1;
+    setBrain(s, i, { FWD_THRUST: 5 }); // wants thrust 5
+    s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.MAX_THRUST] = 0.5; // small ceiling
+    s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.METAB_EFF] = 1;
+    s.rebuildLive();
+    steer(s, false, 0.2);
+    expect(Math.hypot(s.forceX[i]!, s.forceY[i]!)).toBeCloseTo(0.5); // clamped to maxThrust·eff(1)
+  });
+
+  it('metabolic efficiency scales thrust (the thrust half of the tradeoff)', () => {
+    const force = (eff: number): number => {
+      const s = new OrganismStore(4);
+      const i = s.alloc();
+      s.heading[i] = 0;
+      s.senseX[i] = 1;
+      setBrain(s, i, { FWD_THRUST: 1, THRUST_BIAS: 0.3 }); // thrust output 1.3 (< generous maxThrust 5)
+      s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.METAB_EFF] = eff;
+      s.rebuildLive();
+      steer(s, false, 0.2);
+      return Math.hypot(s.forceX[i]!, s.forceY[i]!);
+    };
+    expect(force(1.5)).toBeCloseTo(1.3 * 1.5); // strong (high-e) body pushes harder
+    expect(force(0.5)).toBeCloseTo(1.3 * 0.5); // thrifty (low-e) body pushes weaker
+    expect(force(1.5)).toBeCloseTo(force(0.5) * 3); // scales linearly with efficiency
   });
 });
 
@@ -70,7 +118,7 @@ describe('Baldwin within-life learning (energy-gated)', () => {
     setBrain(s, i, { FWD_THRUST: 1.0 });
     s.energy[i] = SAT; // satiated → learn gate = 1
     s.rebuildLive();
-    steer(s, 0.35, 5, true, 0.5); // lay eligibility
+    steer(s, true, 0.5); // lay eligibility
     learn(s, 0.2, REPRO, SAT, 0.0, 4);
     const b = i * BRAIN_GENES;
     expect(s.learnedBrain[b + Brain.FWD_THRUST]!).toBeGreaterThan(1.0); // consolidated
@@ -85,7 +133,7 @@ describe('Baldwin within-life learning (energy-gated)', () => {
     setBrain(s, i, { FWD_THRUST: 1.0 });
     s.energy[i] = REPRO - 10; // below the repro bar → survival → gate 0
     s.rebuildLive();
-    steer(s, 0.35, 5, true, 0.5); // eligibility is warm…
+    steer(s, true, 0.5); // eligibility is warm…
     learn(s, 0.2, REPRO, SAT, 0.0, 4); // …but it must be ignored
     const b = i * BRAIN_GENES;
     expect(s.learnedBrain[b + Brain.FWD_THRUST]!).toBe(1.0); // untouched
@@ -100,7 +148,7 @@ describe('Baldwin within-life learning (energy-gated)', () => {
       setBrain(s, i, { FWD_THRUST: 1.0 });
       s.energy[i] = energy;
       s.rebuildLive();
-      steer(s, 0.35, 5, true, 0.5);
+      steer(s, true, 0.5);
       learn(s, 0.2, REPRO, SAT, 0.0, 4);
       return s.learnedBrain[i * BRAIN_GENES + Brain.FWD_THRUST]! - 1.0;
     };
@@ -134,7 +182,7 @@ describe('Baldwin within-life learning (energy-gated)', () => {
     s.energy[i] = SAT;
     s.rebuildLive();
     for (let t = 0; t < 200; t++) {
-      steer(s, 0.35, 5, true, 0.5);
+      steer(s, true, 0.5);
       learn(s, 1.0, REPRO, SAT, 0.0, 1.5); // hard reinforcement, clamp 1.5
     }
     const b = i * BRAIN_GENES;
@@ -149,7 +197,7 @@ describe('Baldwin within-life learning (energy-gated)', () => {
     setBrain(s, i, { FWD_THRUST: 1.0 });
     s.energy[i] = SAT;
     s.rebuildLive();
-    steer(s, 0.35, 5, true, 0.5);
+    steer(s, true, 0.5);
     learn(s, 0.2, REPRO, SAT, 0.0, 4);
     const b = i * BRAIN_GENES;
     expect(s.learnedBrain[b + Brain.FWD_THRUST]!).not.toBeCloseTo(1.0); // it drifted

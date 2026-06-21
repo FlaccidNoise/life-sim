@@ -10,27 +10,35 @@
 import { type OrganismStore } from './store';
 import { type FoodField } from './food-field';
 import { type Rng } from './rng';
-import { mutateGenome } from './genome';
+import { type Config } from './config';
+import {
+  mutateGenome,
+  mutateScalarGenes,
+  geneUpkeep,
+  ScalarGene,
+  SCALAR_GENE_COUNT,
+} from './genome';
 
 /**
- * Eat from the current food cell (capped by eatRate and local biomass), pay basal + movement cost,
- * and age. Ascending order so depletion is deterministic when organisms share a cell. Mutates energy.
+ * Eat from the current food cell (capped by the creature's EAT_RATE gene and local biomass), pay basal
+ * + per-gene upkeep + movement cost, and age. Basal is scaled by the metabolic-efficiency gene (the
+ * other half of its tradeoff: thrifty bodies are cheap to run); geneUpkeep adds the cost of the
+ * above-baseline "more-is-costly" genes — together the selection pressure on the traits. Ascending
+ * order so depletion is deterministic when organisms share a cell. Mutates energy.
  */
-export function metabolize(
-  store: OrganismStore,
-  food: FoodField,
-  eatRate: number,
-  basalCost: number,
-  moveCost: number,
-  satiatedThreshold: number,
-): void {
-  const { liveIndices, liveCount, x, y, vx, vy, energy, age } = store;
+export function metabolize(store: OrganismStore, food: FoodField, cfg: Config): void {
+  const { liveIndices, liveCount, x, y, vx, vy, energy, age, scalarGenes } = store;
+  const { basalCost, moveCost, satiatedThreshold } = cfg;
   for (let k = 0; k < liveCount; k++) {
     const i = liveIndices[k]!;
+    const sg = i * SCALAR_GENE_COUNT;
+    const eatRate = scalarGenes[sg + ScalarGene.EAT_RATE]!;
+    const efficiency = scalarGenes[sg + ScalarGene.METAB_EFF]!;
     // SATIATED creatures are "full" → they stop grazing, leaving the biomass in the cell for others.
     const gained = energy[i]! >= satiatedThreshold ? 0 : food.grazeAt(x[i]!, y[i]!, eatRate);
     const speed2 = vx[i]! * vx[i]! + vy[i]! * vy[i]!;
-    energy[i] = energy[i]! + gained - basalCost - moveCost * speed2;
+    const upkeep = basalCost * efficiency + geneUpkeep(scalarGenes, i, cfg);
+    energy[i] = energy[i]! + gained - upkeep - moveCost * speed2;
     age[i] = (age[i]! + 1) >>> 0;
   }
 }
@@ -57,18 +65,9 @@ export function cullDead(store: OrganismStore): number {
  * + hue) with Gaussian mutation — the only source of heritable variation. Children allocated this tick
  * first act next tick (not in the iterated snapshot). RNG is drawn in ascending order. Returns births.
  */
-export function reproduce(
-  store: OrganismStore,
-  rng: Rng,
-  satiatedThreshold: number,
-  reproCost: number,
-  birthEnergy: number,
-  offspringOffset: number,
-  mutationSigma: number,
-  hueMutationSigma: number,
-  worldWidth: number,
-  worldHeight: number,
-): number {
+export function reproduce(store: OrganismStore, rng: Rng, cfg: Config): number {
+  const { satiatedThreshold, reproCost, birthEnergy, offspringOffset, worldWidth, worldHeight } =
+    cfg;
   // Snapshot the parents up front: alloc() mutates liveIndices' backing only via rebuildLive (not
   // here), but children land in freed slots — iterating a fixed count avoids touching them anyway.
   const parents = store.liveIndices;
@@ -95,7 +94,10 @@ export function reproduce(
     heading[child] = heading[p]!;
     energy[child] = birthEnergy;
     energy[p] = energy[p]! - reproCost;
-    mutateGenome(store.brain, store.hue, child, p, rng, mutationSigma, hueMutationSigma);
+    // Inherit the genome with mutation (the only source of heritable variation): brain weights + hue,
+    // then the scalar genes. RNG drawn in a fixed order per child → deterministic.
+    mutateGenome(store.brain, store.hue, child, p, rng, cfg.mutationSigma, cfg.hueMutationSigma);
+    mutateScalarGenes(store.scalarGenes, child, p, rng, cfg);
     // No-Lamarck: the child's runtime brain starts from its freshly-mutated GENOME, not the parent's
     // learned weights. Learning never crosses the generation boundary.
     store.resetLearned(child);

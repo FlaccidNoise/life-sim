@@ -6,7 +6,7 @@ import { computeRepulsion, integrate } from './physics';
 import { FoodField } from './food-field';
 import { senseFood } from './sense';
 import { steer, learn } from './brain';
-import { seedGenome } from './genome';
+import { seedGenome, seedScalarGenes } from './genome';
 import { metabolize, cullDead, reproduce } from './economy';
 import { Hasher } from './hash';
 
@@ -105,6 +105,7 @@ export class World {
       s.heading[i] = angle;
       s.energy[i] = this.config.birthEnergy;
       seedGenome(s.brain, s.hue, i, this.rng, this.config.founderSigma);
+      seedScalarGenes(s.scalarGenes, i, this.rng, this.config); // maxSpeed/eatRate/sense/size/turn/thrust/eff
       s.resetLearned(i); // runtime brain starts at the founder's instinct
     }
     s.rebuildLive();
@@ -116,23 +117,16 @@ export class World {
     const s = this.store;
     s.rebuildLive();
     this.hash.build(s);
-    // SENSE → THINK/ACT: perceive the food gradient, then steer (sets the thrust force).
-    senseFood(s, this.food, cfg.senseStep, cfg.worldWidth, cfg.worldHeight);
-    steer(s, cfg.maxTurn, cfg.maxThrust, cfg.learningEnabled, cfg.eligLambda);
-    // MOVE: repulsion adds onto the thrust force, then integrate.
+    // SENSE → THINK/ACT: perceive the food gradient (per-creature sense range), then steer (per-creature
+    // turn/thrust/efficiency genes; sets the thrust force).
+    senseFood(s, this.food, cfg.worldWidth, cfg.worldHeight);
+    steer(s, cfg.learningEnabled, cfg.eligLambda);
+    // MOVE: repulsion adds onto the thrust force, then integrate (per-creature maxSpeed gene).
     computeRepulsion(s, this.hash, cfg.cellRadius, cfg.repulsion, cfg.worldWidth, cfg.worldHeight);
-    integrate(
-      s,
-      cfg.dt,
-      cfg.damping,
-      cfg.maxSpeed,
-      cfg.stabilityClamp,
-      cfg.worldWidth,
-      cfg.worldHeight,
-    );
+    integrate(s, cfg.dt, cfg.damping, cfg.stabilityClamp, cfg.worldWidth, cfg.worldHeight);
     // METABOLIZE → LEARN → REPRO/DIE. Energy (the band the creature is in) is known after metabolize,
     // so the energy-gated within-life consolidation runs here (eligibility traces were laid in steer).
-    metabolize(s, this.food, cfg.eatRate, cfg.basalCost, cfg.moveCost, cfg.satiatedThreshold);
+    metabolize(s, this.food, cfg);
     if (cfg.learningEnabled)
       learn(
         s,
@@ -143,18 +137,7 @@ export class World {
         cfg.weightClamp,
       );
     this.lastDeaths = cullDead(s);
-    this.lastBirths = reproduce(
-      s,
-      this.rng,
-      cfg.satiatedThreshold,
-      cfg.reproCost,
-      cfg.birthEnergy,
-      cfg.offspringOffset,
-      cfg.mutationSigma,
-      cfg.hueMutationSigma,
-      cfg.worldWidth,
-      cfg.worldHeight,
-    );
+    this.lastBirths = reproduce(s, this.rng, cfg);
     this.totalBirths += this.lastBirths;
     this.totalDeaths += this.lastDeaths;
     s.rebuildLive();

@@ -5,7 +5,8 @@
  * silently inspect a different organism than the one you clicked.
  */
 import { type OrganismStore } from '../../core/store';
-import { Brain, BRAIN_GENES } from '../../core/genome';
+import { type Config } from '../../core/config';
+import { Brain, BRAIN_GENES, ScalarGene, SCALAR_GENE_COUNT, geneUpkeep } from '../../core/genome';
 
 export class Inspector {
   private slot = -1;
@@ -24,11 +25,12 @@ export class Inspector {
     this.slot = -1;
   }
 
-  render(store: OrganismStore | null, reproThreshold = 0, satiatedThreshold = 0): void {
-    if (!store || this.slot < 0) {
+  render(store: OrganismStore | null, cfg: Config | null = null): void {
+    if (!store || !cfg || this.slot < 0) {
       this.root.innerHTML = `<div class="muted">click a dot to inspect</div>`;
       return;
     }
+    const { reproThreshold, satiatedThreshold } = cfg;
     const i = this.slot;
     if (!store.isAlive(i, this.gen)) {
       this.root.innerHTML = `<div class="muted">selected #${i} — gone (slot recycled)</div>`;
@@ -51,6 +53,9 @@ export class Inspector {
       e >= satiatedThreshold ? 'SATIATED' : e >= reproThreshold ? 'REPRODUCTIVE' : 'SURVIVAL';
     const span = satiatedThreshold - reproThreshold;
     const gate = span > 0 ? Math.max(0, Math.min(1, (e - reproThreshold) / span)) : 0;
+    // Evolvable scalar genes (per-creature, heritable) + the basal upkeep they cost this creature.
+    const sg = i * SCALAR_GENE_COUNT;
+    const g = (k: number): string => store.scalarGenes[sg + k]!.toFixed(2);
     const rows: [string, string][] = [
       ['slot', `${i}`],
       ['age', `${store.age[i]!}`],
@@ -58,10 +63,16 @@ export class Inspector {
       ['mode', mode],
       ['speed', speed.toFixed(3)],
       ['hue', store.hue[i]!.toFixed(3)],
-      ['sense', `${store.senseX[i]!.toFixed(2)}, ${store.senseY[i]!.toFixed(2)}`],
+      ['gene·maxSpeed', g(ScalarGene.MAX_SPEED)],
+      ['gene·eatRate', g(ScalarGene.EAT_RATE)],
+      ['gene·senseRange', g(ScalarGene.SENSE_RANGE)],
+      ['gene·size', g(ScalarGene.SIZE)],
+      ['gene·maxTurn', g(ScalarGene.MAX_TURN)],
+      ['gene·maxThrust', g(ScalarGene.MAX_THRUST)],
+      ['gene·metabEff', g(ScalarGene.METAB_EFF)],
+      ['gene upkeep', geneUpkeep(store.scalarGenes, i, cfg).toFixed(3)],
       ['learn gate', gate.toFixed(2)],
       ['learn drift', drift.toFixed(3)],
-      ['latTurn now(gene)', wrow(Brain.LAT_TURN)],
       ['fwdThrust now(gene)', wrow(Brain.FWD_THRUST)],
       ['cruise now(gene)', wrow(Brain.THRUST_BIAS)],
     ];
