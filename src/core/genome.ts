@@ -25,11 +25,13 @@ import { type Config } from './config';
  *   - MAX_TURN    → per-creature turn ceiling (brain.steer)
  *   - MAX_THRUST  → per-creature thrust ceiling (brain.steer)
  *   - METAB_EFF   → metabolic efficiency, a TRADEOFF: basal ×= e and thrust ×= e (cheap+weak ↔ costly+strong)
+ *   - REPRO_THRESHOLD / SATIATED_THRESHOLD / BIRTH_ENERGY → life-history (r/K): the reproductive bars +
+ *     offspring provisioning. Read per-creature in economy/learn; their "cost" is the strategy tradeoff.
  *
  * The five "more-is-costly" genes (maxSpeed, eatRate, senseRange, maxTurn, maxThrust) carry a `costKey`:
- * a value ABOVE its center adds basal upkeep (geneUpkeep). SIZE and METAB_EFF have costKey null — SIZE
- * because it has no sim benefit to pay for yet; METAB_EFF because its cost is the multiplicative basal×e.
- * Adding a new scalar gene = add an enum slot + a spec entry (center Config key, optional cost key, range).
+ * a value ABOVE its center adds basal upkeep (geneUpkeep). The rest have costKey null — SIZE (no sim
+ * benefit yet), METAB_EFF (cost is the multiplicative basal×e), and the three life-history genes (their
+ * cost is the inherent r/K tradeoff). Adding a new scalar gene = an enum slot + a spec entry.
  */
 export const ScalarGene = {
   MAX_SPEED: 0,
@@ -39,8 +41,16 @@ export const ScalarGene = {
   MAX_TURN: 4,
   MAX_THRUST: 5,
   METAB_EFF: 6,
+  // Life-history genes (r/K strategy): the per-creature reproductive bars + offspring provisioning.
+  REPRO_THRESHOLD: 7, // survival↔reproductive boundary (the learn-gate floor; where you land post-breed)
+  SATIATED_THRESHOLD: 8, // "full" bar: stop eating + breed-at-the-top + peak learning
+  BIRTH_ENERGY: 9, // energy each offspring is provisioned with (parent pays this + reproOverhead)
 } as const;
-export const SCALAR_GENE_COUNT = 7;
+export const SCALAR_GENE_COUNT = 10;
+
+/** Minimum reproductive-band width: satiated is read as max(satiatedGene, reproGene + this) so the two
+ *  life-history bars can mutate independently without inverting (which would break the learn gate). */
+export const MIN_BAND = 5;
 
 interface ScalarGeneSpec {
   /** Config key supplying the founder center + the cost baseline for this gene. */
@@ -51,7 +61,10 @@ interface ScalarGeneSpec {
     | 'cellRadius'
     | 'maxTurn'
     | 'maxThrust'
-    | 'metabolicEfficiency';
+    | 'metabolicEfficiency'
+    | 'reproThreshold'
+    | 'satiatedThreshold'
+    | 'birthEnergy';
   /** Config key for the per-unit-above-center basal cost coeff, or null for a non-upkeep gene. */
   costKey:
     | 'maxSpeedCost'
@@ -78,6 +91,10 @@ export const SCALAR_GENE_SPECS: readonly ScalarGeneSpec[] = [
   { centerKey: 'maxTurn', costKey: 'maxTurnCost', min: 0.05, max: 1.2 },
   { centerKey: 'maxThrust', costKey: 'maxThrustCost', min: 0.1, max: 4 },
   { centerKey: 'metabolicEfficiency', costKey: null, min: 0.5, max: 1.5 },
+  // Life-history genes — costKey null (no upkeep; their "cost" is the strategy tradeoff itself).
+  { centerKey: 'reproThreshold', costKey: null, min: 20, max: 120 },
+  { centerKey: 'satiatedThreshold', costKey: null, min: 40, max: 220 },
+  { centerKey: 'birthEnergy', costKey: null, min: 8, max: 90 },
 ];
 
 function clampTo(v: number, min: number, max: number): number {

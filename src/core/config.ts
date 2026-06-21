@@ -62,17 +62,18 @@ export interface Config {
   basalCost: number;
   /** Movement cost per tick = moveCost · speed² (makes fast blind search expensive → senses pay off). */
   moveCost: number;
-  /** Lower edge of the REPRODUCTIVE band: below this an organism is in SURVIVAL mode (forage only — no
-   *  breeding, no learning). Also where a parent lands after breeding. (Historical name: the "repro bar".) */
+  /** FOUNDER CENTER for the per-creature reproThreshold gene: the survival↔reproductive boundary (the
+   *  learn-gate floor; where a parent lands after breeding). Each creature evolves its own. */
   reproThreshold: number;
-  /** SATIATED threshold: at/above this an organism is "full" → it stops eating (leaves biomass for
-   *  others), learns at its peak rate, and BREEDS ("breed at the top"), which drops it back into the
-   *  reproductive band. Must be > reproThreshold. */
+  /** FOUNDER CENTER for the per-creature satiatedThreshold gene: the "full" bar — stop eating (leave
+   *  biomass), peak learning, and BREED ("breed at the top"). Each creature evolves its own (r/K). */
   satiatedThreshold: number;
-  /** Energy the parent spends to reproduce (birthEnergy goes to the child, the remainder is lost).
-   *  Tuned so breeding at `satiatedThreshold` lands the parent near `reproThreshold`. */
-  reproCost: number;
-  /** Starting energy of a seeded organism and of each offspring. */
+  /** Reproduction OVERHEAD: energy lost per birth BEYOND what the child is provisioned with. The parent
+   *  pays (child's birthEnergy gene + reproOverhead), so high-investment offspring genuinely cost more
+   *  (energy-conserving — no free energy from a high birthEnergy gene). */
+  reproOverhead: number;
+  /** FOUNDER CENTER for the per-creature birthEnergy gene: how much energy each offspring starts with
+   *  (and seeded founders start with). Low = many cheap young (r); high = few well-provisioned (K). */
   birthEnergy: number;
   /** Offspring placement offset from the parent, in world units. */
   offspringOffset: number;
@@ -171,10 +172,10 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     moveCost: 0.01,
     // Slow breeding (long generation vs the starvation clock) damps the boom-bust toward a sustained,
     // turning-over population instead of an overshoot-to-extinction. Tuned headlessly.
-    reproThreshold: 60, // survival↔reproductive boundary; parent lands here after breeding
-    satiatedThreshold: 100, // breed-at-the-top trigger + eat-stop + peak learning
-    reproCost: 40, // breeding at 100 drops the parent to ~60 (25 to the child + 15 overhead)
-    birthEnergy: 25,
+    reproThreshold: 60, // gene center: survival↔reproductive boundary
+    satiatedThreshold: 100, // gene center: breed-at-the-top trigger + eat-stop + peak learning
+    reproOverhead: 15, // energy lost per birth beyond provisioning (parent pays birthEnergy + this)
+    birthEnergy: 25, // gene center: offspring provisioning
     offspringOffset: 8,
 
     // Steering + evolution. Founders seeded near a chemotaxis brain (genome.ts FOUNDER_BRAIN) with a

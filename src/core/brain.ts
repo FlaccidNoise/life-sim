@@ -14,7 +14,7 @@
  * learning keeps discovering, since selection favors genomes that start closer to it).
  */
 import { type OrganismStore } from './store';
-import { Brain, BRAIN_GENES, ScalarGene, SCALAR_GENE_COUNT } from './genome';
+import { Brain, BRAIN_GENES, ScalarGene, SCALAR_GENE_COUNT, MIN_BAND } from './genome';
 
 /**
  * Run each creature's runtime brain: food gradient (heading frame) → turn + thrust. Turns the heading
@@ -96,17 +96,19 @@ export function steer(store: OrganismStore, learn: boolean, eligLambda: number):
 export function learn(
   store: OrganismStore,
   learningRate: number,
-  reproThreshold: number,
-  satiatedThreshold: number,
   weightDecay: number,
   weightClamp: number,
 ): void {
-  const { liveIndices, liveCount, energy, brain, learnedBrain, elig } = store;
-  const span = satiatedThreshold - reproThreshold;
+  const { liveIndices, liveCount, energy, brain, learnedBrain, elig, scalarGenes } = store;
   const keep = 1 - weightDecay;
   for (let k = 0; k < liveCount; k++) {
     const i = liveIndices[k]!;
-    let gate = (energy[i]! - reproThreshold) / span;
+    // The gate spans the creature's OWN reproductive band (its life-history genes).
+    const sg = i * SCALAR_GENE_COUNT;
+    const repro = scalarGenes[sg + ScalarGene.REPRO_THRESHOLD]!;
+    let satiated = scalarGenes[sg + ScalarGene.SATIATED_THRESHOLD]!;
+    if (satiated < repro + MIN_BAND) satiated = repro + MIN_BAND;
+    let gate = (energy[i]! - repro) / (satiated - repro);
     if (gate <= 0) continue; // survival mode → freeze the runtime brain (no spare capacity to learn)
     if (gate > 1) gate = 1;
     const rate = learningRate * gate; // peak when satiated
