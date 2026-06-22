@@ -138,8 +138,9 @@ export function senseCreatures(store: OrganismStore, hash: SpatialHash, cfg: Con
             const dietSim = 1 - Math.abs(appeal); // |myDiet − itsDiet| ∈ [0,1]; 1 = same role
             pull += shelter * sizeDiff * dietSim;
           }
-          // Schooling: pull toward a SIMILAR-hue neighbor (circular hue distance → similarity ∈ [0,1]).
-          // Hue-blind mode pulls toward ALL neighbors equally so diverse-lineage prey can co-school.
+          // Schooling: hue-blind (default) pulls toward ALL neighbors equally so diverse-lineage prey
+          // co-school; same-hue mode (cohesionHueBlind:false) scales by hue similarity ∈ [0,1] so only
+          // kin attract. The default is hue-blind because it keeps predators fed (see config.ts).
           if (cohesion > 0) {
             if (cfg.cohesionHueBlind) {
               pull += cohesion; // hue-blind: full schooling pull regardless of lineage

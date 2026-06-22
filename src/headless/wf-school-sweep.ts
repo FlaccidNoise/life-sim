@@ -9,7 +9,8 @@
  * run (argv[2]); runs seeds [1,2,5] × 6000 ticks and prints per-seed metrics + a JSON line.
  *
  * Run: pnpm tsx src/headless/wf-school-sweep.ts <preset>
- *   presets: baseline | gain4 | drive06 | strong | blind4 | blindstrong
+ *   presets: baseline | kin | blind1 | gain4 | drive06 | strong | blind4 | blindstrong
+ *   (baseline subsumes the old wf-legibility-scope: it reports the vision start->end trajectory too)
  */
 import { defaultConfig, type Config } from '../core/config';
 import { World } from '../core/world';
@@ -24,7 +25,8 @@ const BITE_RANGE = 16;
 const SCHOOL_RADIUS = 200;
 
 const PRESETS: Record<string, Partial<Config>> = {
-  baseline: {},
+  baseline: {}, // = the live default, now hue-blind
+  kin: { cohesionHueBlind: false }, // the pre-flip same-hue-only behavior (A/B against baseline)
   blind1: { cohesionHueBlind: true },
   gain4: { cohesionGain: 4 },
   drive06: { cohesionDrive: 0.6 },
@@ -106,7 +108,9 @@ function measure(world: World, cfg: Config): Snap {
   const nndPrey = preyIdx.length > 1 ? nndAcc / preyIdx.length : 0;
   const schoolingIndex = preyIdx.length > 0 ? schoolAcc / preyIdx.length : 0;
 
-  // predEncounter: fraction of predators with >=1 EDIBLE prey within biteRange (economy.ts kill gate).
+  // predEncounter: fraction of COMMITTED predators (DIET>=0.5 — a watchability proxy, NOT economy's
+  // diet>0 hunter test) with >=1 edible target in biteRange. Edibility uses economy.ts's exact gate:
+  // size <= maxPrey (skip only strictly-bigger) AND, cannibalism off, strictly-lower diet (economy.ts:92-93).
   let withBite = 0;
   const hsr = cfg.huntSizeRatio;
   for (const ip of predIdx) {
@@ -118,7 +122,7 @@ function measure(world: World, cfg: Config): Snap {
     for (let k = 0; k < n && !haveBite; k++) {
       const j = s.liveIndices[k]!;
       if (j === ip) continue;
-      if (sg[j * SGC + ScalarGene.SIZE]! >= maxPrey) continue;
+      if (sg[j * SGC + ScalarGene.SIZE]! > maxPrey) continue;
       if (!cfg.cannibalism && sg[j * SGC + ScalarGene.DIET]! >= dietP) continue;
       const dx = wrap(xa - s.x[j]!, W);
       const dy = wrap(ya - s.y[j]!, H);
@@ -143,6 +147,7 @@ interface Row {
   seed: number;
   cohDriveStart: number;
   cohDriveEnd: number;
+  visionStart: number;
   visionEnd: number;
   final: Snap;
 }
@@ -152,15 +157,20 @@ for (const seed of SEEDS) {
   const cfg = defaultConfig({ seed, ...overrides });
   const world = new World(cfg);
   let cohDriveStart = 0;
+  let visionStart = 0;
   for (let t = 1; t <= TICKS; t++) {
     world.step();
-    if (t === START_SAMPLE) cohDriveStart = meanGene(world, ScalarGene.COHESION_DRIVE);
+    if (t === START_SAMPLE) {
+      cohDriveStart = meanGene(world, ScalarGene.COHESION_DRIVE);
+      visionStart = meanGene(world, ScalarGene.VISION_RANGE);
+    }
   }
   rows.push({
     preset,
     seed,
     cohDriveStart,
     cohDriveEnd: meanGene(world, ScalarGene.COHESION_DRIVE),
+    visionStart,
     visionEnd: meanGene(world, ScalarGene.VISION_RANGE),
     final: measure(world, cfg),
   });
@@ -172,7 +182,8 @@ for (const r of rows) {
   console.log(
     `  seed ${r.seed}: pop=${f.pop} pred=${f.pred} prey=${f.prey} | nndPrey=${f.nndPrey.toFixed(1)} ` +
       `school=${f.schoolingIndex.toFixed(2)} predEnc=${f.predEncounter.toFixed(4)} | ` +
-      `cohDrive ${r.cohDriveStart.toFixed(3)}->${r.cohDriveEnd.toFixed(3)} visionEnd=${r.visionEnd.toFixed(1)}`,
+      `cohDrive ${r.cohDriveStart.toFixed(3)}->${r.cohDriveEnd.toFixed(3)} ` +
+      `vision ${r.visionStart.toFixed(1)}->${r.visionEnd.toFixed(1)}`,
   );
 }
 console.log('JSON ' + JSON.stringify(rows));
