@@ -122,11 +122,16 @@ let camX = config.worldWidth / 2;
 let camY = config.worldHeight / 2;
 let zoom = 1;
 
+// Single source of truth for play state, so the desktop play button AND the mobile action-bar play
+// button (wired below) stay in sync. `syncMobileBar` is defined with the mobile UI block at the bottom.
+function setPlaying(v: boolean): void {
+  running = v;
+  controls.setRunning(running);
+  syncMobileBar();
+}
+
 const controls = new Controls(el('controls'), config.seed, {
-  onPlayToggle: () => {
-    running = !running;
-    controls.setRunning(running);
-  },
+  onPlayToggle: () => setPlaying(!running),
   onStep: () => {
     world.step();
     followTick();
@@ -170,6 +175,57 @@ new Knobs(el('knobs'), config, {
 });
 
 controls.setFollow(-1, 0, false); // show the 'l = follow' hint before the first play
+
+// ── Manual mobile / desktop UI mode (no auto-detect) + the mobile action bar ─────────────────────────
+// The user explicitly flips modes; the choice is remembered. Desktop keeps the floating side panels;
+// mobile turns them into bottom sheets summoned from a fixed bar, keeping the canvas the full-screen hero.
+const modeToggle = el<HTMLButtonElement>('mode-toggle');
+const mbarPlay = el<HTMLButtonElement>('mbar-play');
+const mbarControls = el<HTMLButtonElement>('mbar-controls');
+const mbarStats = el<HTMLButtonElement>('mbar-stats');
+const leftPanel = el('left');
+const rightPanel = el('right');
+
+function syncMobileBar(): void {
+  mbarPlay.textContent = running ? '⏸ pause' : '▶ play';
+  mbarPlay.classList.toggle('active', running);
+}
+
+// Open at most one sheet at a time (or none); the other closes so the canvas is never double-covered.
+function openSheet(which: 'left' | 'right' | null): void {
+  const lOpen = which === 'left';
+  const rOpen = which === 'right';
+  leftPanel.classList.toggle('sheet-open', lOpen);
+  rightPanel.classList.toggle('sheet-open', rOpen);
+  mbarControls.classList.toggle('active', lOpen);
+  mbarControls.setAttribute('aria-pressed', String(lOpen));
+  mbarStats.classList.toggle('active', rOpen);
+  mbarStats.setAttribute('aria-pressed', String(rOpen));
+}
+
+function applyMode(mobile: boolean): void {
+  document.body.classList.toggle('mode-mobile', mobile);
+  document.body.classList.toggle('mode-desktop', !mobile);
+  modeToggle.textContent = mobile ? '🖥 desktop' : '📱 mobile';
+  if (!mobile) openSheet(null); // leaving mobile clears any open sheet so the desktop panels show normally
+  syncMobileBar();
+}
+
+let mobileMode = localStorage.getItem('ecosim-ui-mode') === 'mobile';
+applyMode(mobileMode);
+
+modeToggle.addEventListener('click', () => {
+  mobileMode = !mobileMode;
+  localStorage.setItem('ecosim-ui-mode', mobileMode ? 'mobile' : 'desktop');
+  applyMode(mobileMode);
+});
+mbarPlay.addEventListener('click', () => setPlaying(!running));
+mbarControls.addEventListener('click', () =>
+  openSheet(leftPanel.classList.contains('sheet-open') ? null : 'left'),
+);
+mbarStats.addEventListener('click', () =>
+  openSheet(rightPanel.classList.contains('sheet-open') ? null : 'right'),
+);
 
 function rebuild(): void {
   world = new World(config);
