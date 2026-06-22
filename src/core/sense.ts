@@ -9,6 +9,7 @@ import { type OrganismStore } from './store';
 import { type FoodField } from './food-field';
 import { type SpatialHash } from './spatial-hash';
 import { type Config } from './config';
+import { type Walls } from './walls';
 import { ScalarGene, SCALAR_GENE_COUNT } from './genome';
 
 function wrap(v: number, size: number): number {
@@ -66,8 +67,14 @@ export function senseFood(
  *  unbounded. 24 cells ≈ 288u reach at the default cell size — generous for the long-sight experiment. */
 const MAX_VISION_CELLS = 24;
 
-export function senseCreatures(store: OrganismStore, hash: SpatialHash, cfg: Config): void {
+export function senseCreatures(
+  store: OrganismStore,
+  hash: SpatialHash,
+  cfg: Config,
+  walls: Walls | null,
+): void {
   const { liveIndices, liveCount, x, y, heading, hue, sightX, sightY, scalarGenes } = store;
+  const occludes = walls !== null && walls.active && cfg.wallOccludesVision;
   const { cols, rows, bucketStart, sorted } = hash;
   const ww = cfg.worldWidth;
   const wh = cfg.worldHeight;
@@ -126,6 +133,7 @@ export function senseCreatures(store: OrganismStore, hash: SpatialHash, cfg: Con
           const ux = ddx * inv;
           const uy = ddy * inv;
           if (ux * hx + uy * hy < cosFov) continue; // outside the vision cone
+          if (occludes && walls.losBlocked(xi, yi, x[j]!, y[j]!)) continue; // hidden behind a wall
           const jg = j * SCALAR_GENE_COUNT;
           const itsDiet = scalarGenes[jg + ScalarGene.DIET]!;
           const appeal = myDiet - itsDiet; // sign: +toward prey, −away from threats
