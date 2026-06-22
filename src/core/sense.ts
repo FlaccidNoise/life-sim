@@ -90,8 +90,9 @@ export function senseCreatures(store: OrganismStore, hash: SpatialHash, cfg: Con
     // creatures so small prey cluster around big grazers; diet-similarity gates it so prey still flee
     // big predators (the chase/flee appeal dominates there). 0 → no shelter pull (the ablation).
     const shelter = scalarGenes[sg + ScalarGene.SHELTER_DRIVE]! * cfg.shelterGain;
-    // Schooling strength (gene × global ablation/tuning gain). Pulls toward SIMILAR-hue (lineage)
-    // creatures so like-colored creatures herd into schools. 0 → no cohesion pull (the ablation).
+    // Schooling strength (gene × global ablation/tuning gain). Pulls toward neighbors so creatures herd
+    // into schools — hue-blind by default (all neighbors), or same-hue-only when cohesionHueBlind is off
+    // (kin-clumps). 0 → no cohesion pull (the ablation). See the hue-blind branch below.
     const cohesion = scalarGenes[sg + ScalarGene.COHESION_DRIVE]! * cfg.cohesionGain;
     const myHue = hue[i]!;
     const xi = x[i]!;
@@ -138,10 +139,15 @@ export function senseCreatures(store: OrganismStore, hash: SpatialHash, cfg: Con
             pull += shelter * sizeDiff * dietSim;
           }
           // Schooling: pull toward a SIMILAR-hue neighbor (circular hue distance → similarity ∈ [0,1]).
+          // Hue-blind mode pulls toward ALL neighbors equally so diverse-lineage prey can co-school.
           if (cohesion > 0) {
-            let hd = Math.abs(myHue - hue[j]!);
-            if (hd > 0.5) hd = 1 - hd; // hue wraps [0,1) → shortest distance ∈ [0,0.5]
-            pull += cohesion * (1 - 2 * hd); // identical hue → +cohesion, opposite → 0
+            if (cfg.cohesionHueBlind) {
+              pull += cohesion; // hue-blind: full schooling pull regardless of lineage
+            } else {
+              let hd = Math.abs(myHue - hue[j]!);
+              if (hd > 0.5) hd = 1 - hd; // hue wraps [0,1) → shortest distance ∈ [0,0.5]
+              pull += cohesion * (1 - 2 * hd); // identical hue → +cohesion, opposite → 0
+            }
           }
           const w = pull * (1 - d / range) * acuity;
           sx += ux * w;
