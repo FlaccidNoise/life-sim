@@ -5,7 +5,7 @@ import { ScalarGene } from '../core/genome';
 
 describe('dispersionStats (lever B niche-split metric)', () => {
   it('reports zero variance and zero bimodality for an identical (degenerate) sample', () => {
-    const r = dispersionStats(new Array(50).fill(0.5));
+    const r = dispersionStats(new Array<number>(50).fill(0.5));
     expect(r.variance).toBe(0);
     expect(r.bimodality).toBe(0); // BC is undefined with no spread → reported 0, not NaN
   });
@@ -17,7 +17,7 @@ describe('dispersionStats (lever B niche-split metric)', () => {
 
   it('flags a two-peak (specialist) distribution as bimodal (BC > 5/9)', () => {
     // Half the population pinned at channel-A (0), half at channel-B (1): the niche-split shape.
-    const split = [...new Array(40).fill(0), ...new Array(40).fill(1)];
+    const split = [...new Array<number>(40).fill(0), ...new Array<number>(40).fill(1)];
     const r = dispersionStats(split);
     expect(r.variance).toBeCloseTo(0.25, 6); // var of a balanced {0,1} Bernoulli
     expect(r.bimodality).toBeGreaterThan(5 / 9); // ≈0.555 threshold — clearly bimodal
