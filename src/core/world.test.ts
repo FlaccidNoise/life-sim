@@ -65,7 +65,7 @@ describe('World — Phase 0 determinism contract', () => {
       const maxSpeed = s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.MAX_SPEED]!;
       expect(Math.hypot(s.vx[i]!, s.vy[i]!)).toBeLessThanOrEqual(maxSpeed + 1e-6);
     }
-  });
+  }, 60000); // 5000 ticks at the richer foodCap 40 sustains ~1600 creatures → ~22s; 60s leaves CI headroom
 
   it('alive-guardrail (CI proxy): population sustains BOTH births and deaths without extinction', () => {
     // The playground spec's ONE automated guardrail (§10): the world must stay alive — no extinction,

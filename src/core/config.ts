@@ -253,11 +253,13 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     // population sustains BOTH births and deaths (the Phase-2 anti-"0 births" gate).
     foodCols: 128, // 64-unit cells over the 8192 world
     foodRows: 128,
-    foodCap: 20, // rich pockets (raised 14→20): paired with slow regen below, a pocket fills richly then
-    // gets grazed bare and stays bare a while → boom-bust pulses that reward MIGRATION and sustain a
-    // wider range of body sizes (probe: size variety szSd 1.2→2.2 on seed 1, more active, pop steady)
-    foodRegen: 0.04, // slow regrowth (0.07→0.04) → grazed cells stay bare longer, so creatures must MOVE
-    // to fresh food instead of camping one spot (the incentive to explore; tuned headlessly to stay alive)
+    foodCap: 40, // rich pockets (raised 20→40): the prey base was food-STARVED — 70-84% of creatures sat
+    // below their repro bar, so there was no energy headroom to fund a predator layer and predEncounter
+    // stayed 0.000 (predators never landed a bite). Doubling the cap deepens each pocket's prey base; in
+    // the seed 1/2/5 head-to-head it revived predation on 3/3 seeds (predEnc up to 0.045) and ~3×'d pop.
+    foodRegen: 0.06, // faster regrowth (0.04→0.06): pairs with the deeper cap so grazed pockets refill
+    // before the prey base bottoms out — sustains the deeper population rather than starving it back down.
+    // Still leaves a graze-bare lag (cells don't refill instantly), so MIGRATION is still rewarded.
     foodDiffuse: 0.03, // low so pockets don't bleed into the gaps (islands stay distinct)
     foodInit: 1, // pockets start full
     foodPatchCount: 14, // distinct island communities scattered across the archipelago
