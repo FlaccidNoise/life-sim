@@ -191,6 +191,12 @@ export class FoodField {
     return this.B2 ? this.B2[this.idx(x, y)]! : 0;
   }
 
+  /** Per-cell carrying capacity K at a world position (= cap·fertility at baseline; lever C scales it per
+   *  pocket). Read-only — lets a probe read each pocket's richness to test K-vs-trait divergence directly. */
+  capacityAt(x: number, y: number): number {
+    return this.Kcell[this.idx(x, y)]!;
+  }
+
   /** Remove up to `amount` biomass at a position (channel A); returns the amount actually taken. */
   grazeAt(x: number, y: number, amount: number): number {
     const i = this.idx(x, y);
