@@ -189,9 +189,11 @@ export interface Config {
   cohesionDriveCost: number;
   /** Global multiplier on the cohesion term (ablation knob + live tuning). 0 = schooling OFF. */
   cohesionGain: number;
-  /** Schooling SELECTIVITY: false (default) = pull only toward SIMILAR-hue (lineage) neighbors, so
-   *  schools are kin-clumps; true = hue-blind, pull toward ALL neighbors equally, so genetically diverse
-   *  prey can herd into one dense school. An off-by-default behavior knob (byte-identical when false). */
+  /** Schooling SELECTIVITY: true (default) = hue-blind, pull toward ALL neighbors regardless of lineage;
+   *  false = pull only toward SIMILAR-hue (lineage) neighbors so schools are kin-clumps. Hue-blind is the
+   *  default because the school-strength sweep showed it ~3× sustained predator count (99→282 across seeds
+   *  1/2/5) and ~4.5× snapshot predEncounter with zero predator extinctions — the lineage restriction
+   *  starved predators of contact. Set false to restore the kin-clump behavior (still ablatable). */
   cohesionHueBlind: boolean;
   /** FORAGE_PREF gene founder CENTER [0,1] (lever B): 0 = channel-A specialist … 1 = channel-B specialist,
    *  0.5 = generalist. ONLY drawn from RNG (seed + mutation) when foodChannels===2; with one channel the
@@ -364,7 +366,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     cohesionDrive: 0.15,
     cohesionDriveCost: 0.1,
     cohesionGain: 1,
-    cohesionHueBlind: false,
+    cohesionHueBlind: true,
     foragePref: 0.5, // FORAGE_PREF gene center (lever B); unbiased generalist, only drawn when foodChannels===2
     // NB pre-sight, predators hunt by PROXIMITY only — the encounter rate is too low for hunting to
     // pay, so the predator trait does not persist yet (it needs the sight slice to actively target

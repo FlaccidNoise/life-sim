@@ -167,27 +167,47 @@ describe('senseCreatures (sight)', () => {
     expect(s.sightX[0]!).toBe(0); // same setup as the shelter test, but the global gain zeroes it
   });
 
-  // ── schooling / cohesion (similar-hue attraction) ───────────────────────────────────────────────
+  // ── schooling / cohesion ────────────────────────────────────────────────────────────────────────
+  // Default is HUE-BLIND (pull toward any neighbor); cohesionHueBlind:false restores same-hue-only.
   const setCohesion = (s: OrganismStore, slot: number, drive: number): void => {
     s.scalarGenes[slot * SCALAR_GENE_COUNT + ScalarGene.COHESION_DRIVE] = drive;
   };
+  const cfgKin = defaultConfig({ worldWidth: W, worldHeight: H, cohesionHueBlind: false });
 
-  it('a creature is pulled TOWARD a same-hue (lineage) neighbor (schooling)', () => {
+  it('a creature is pulled TOWARD a neighbor (schooling)', () => {
     const s = pair(0, 0); // same diet → appeal ~0, so only cohesion can move the vector
     s.hue[0] = 0.3;
-    s.hue[1] = 0.3; // identical lineage color
+    s.hue[1] = 0.3;
     setCohesion(s, 0, 0.5);
     senseCreatures(s, hashOf(s), cfg);
-    expect(s.sightX[0]!).toBeGreaterThan(0); // drawn toward the same-hue neighbor at +x
+    expect(s.sightX[0]!).toBeGreaterThan(0); // drawn toward the neighbor at +x
   });
 
-  it('no cohesion pull toward an opposite-hue neighbor', () => {
+  it('hue-blind (default) pulls TOWARD an opposite-hue neighbor too', () => {
+    const s = pair(0, 0);
+    s.hue[0] = 0;
+    s.hue[1] = 0.5; // maximally distant hue — irrelevant under hue-blind
+    setCohesion(s, 0, 0.5);
+    senseCreatures(s, hashOf(s), cfg);
+    expect(s.sightX[0]!).toBeGreaterThan(0); // lineage ignored → still schools
+  });
+
+  it('cohesionHueBlind:false gives NO cohesion pull toward an opposite-hue neighbor (kin-clump mode)', () => {
     const s = pair(0, 0);
     s.hue[0] = 0;
     s.hue[1] = 0.5; // maximally distant hue → similarity 0
     setCohesion(s, 0, 0.5);
-    senseCreatures(s, hashOf(s), cfg);
+    senseCreatures(s, hashOf(s), cfgKin);
     expect(s.sightX[0]!).toBe(0); // appeal 0 and hueSim 0 → neutral
+  });
+
+  it('cohesionHueBlind:false still pulls TOWARD a same-hue neighbor', () => {
+    const s = pair(0, 0);
+    s.hue[0] = 0.3;
+    s.hue[1] = 0.3; // identical lineage color → full similarity
+    setCohesion(s, 0, 0.5);
+    senseCreatures(s, hashOf(s), cfgKin);
+    expect(s.sightX[0]!).toBeGreaterThan(0); // kin attract
   });
 
   it('founder-strength cohesion does NOT override fleeing a same-hue predator', () => {
