@@ -58,11 +58,13 @@
         top: 14px;
         left: 14px;
         width: 280px;
+        z-index: 10; /* above the floating legend (z-index 5) so panel clicks always win */
       }
       #right {
         top: 14px;
         right: 14px;
         width: 280px;
+        z-index: 10;
       }
       h1 {
         font-size: 12px;
@@ -151,25 +153,145 @@
         display: block;
         border-radius: 5px;
       }
-      #legend {
+      /* Floating dot legend — bottom-centre over the canvas (clear of both side panels), closeable
+         (✕ → reopen pill). */
+      #legend-panel {
+        position: fixed;
+        left: 50%;
+        transform: translateX(-50%);
+        bottom: 14px;
+        width: 268px;
+        z-index: 5;
         font-size: 11px;
-        line-height: 1.7;
+        line-height: 1.5;
       }
-      #legend b {
+      #legend-pill {
+        position: fixed;
+        left: 50%;
+        transform: translateX(-50%);
+        bottom: 14px;
+        z-index: 5;
+        display: none;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        backdrop-filter: var(--blur);
+        -webkit-backdrop-filter: var(--blur);
+        color: var(--muted);
+        padding: 6px 11px;
+        cursor: pointer;
+        font: inherit;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      #legend-pill:hover {
+        color: var(--accent);
+        border-color: var(--accent);
+      }
+      .lg-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        color: var(--muted);
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        margin-bottom: 7px;
+      }
+      .lg-x {
+        background: none;
+        border: none;
+        color: var(--muted);
+        cursor: pointer;
+        font: inherit;
+        padding: 0 2px;
+        line-height: 1;
+      }
+      .lg-x:hover {
+        color: var(--accent);
+      }
+      .lg-row {
+        margin-bottom: 5px;
+      }
+      .lg-row b {
         color: var(--text);
       }
-      .lg-sw {
-        display: inline-block;
-        width: 10px;
-        height: 10px;
+      .lg-gl {
+        color: var(--text);
+        margin-left: 4px;
+      }
+      .lg-tri {
+        font-size: 9px;
+      }
+      .lg-cl {
+        color: var(--accent);
+      }
+      /* A channel row that doesn't apply in the current color mode (e.g. saturation/brightness in
+         energy mode, where the shader fixes them) — struck out so the legend never over-claims. */
+      .lg-na {
+        opacity: 0.4;
+        text-decoration: line-through;
+      }
+      .lg-bar {
+        height: 7px;
+        border-radius: 3px;
+        margin-top: 3px;
+      }
+      .lg-satbar {
+        background: linear-gradient(90deg, #5a6470, #2fd0e8);
+      }
+      .lg-valbar {
+        background: linear-gradient(90deg, #14202c, #cfe8f5);
+      }
+      /* Below ~880px the two 280px side panels leave too little centre gap — the legend would overlap
+         them, so hide it (and its pill) rather than collide. */
+      @media (max-width: 880px) {
+        #legend-panel,
+        #legend-pill {
+          display: none !important;
+        }
+      }
+      /* Distributions field picker — a compact disclosure of checkboxes above the histogram canvas. */
+      .dist-pick {
+        margin-bottom: 6px;
+        font-size: 11px;
+      }
+      .dist-pick > summary {
+        color: var(--muted);
+        cursor: pointer;
+        list-style: none;
+        user-select: none;
+      }
+      .dist-pick > summary:hover {
+        color: var(--accent);
+      }
+      .dist-pick[open] > summary {
+        color: var(--accent);
+      }
+      .dist-fields {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1px 10px;
+        margin-top: 6px;
+        max-height: 210px;
+        overflow-y: auto;
+      }
+      .dist-fields label {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .dist-fields input {
+        accent-color: var(--accent);
+        margin: 0;
+      }
+      .dist-sw {
+        width: 8px;
+        height: 8px;
         border-radius: 2px;
-        vertical-align: middle;
-      }
-      .lg-herb {
-        background: hsl(122, 80%, 55%);
-      }
-      .lg-pred {
-        background: hsl(0, 80%, 55%);
+        flex: 0 0 auto;
       }
       #inspector .row {
         display: flex;
@@ -192,8 +314,8 @@
       <h1>ecosim · archipelago</h1>
       <div id="hud-body" class="muted">
         evolving swimmers in fertility pockets across a huge ocean. scroll = zoom · drag = pan ·
-        click = inspect · <b>f</b> = food heatmap · <b>o</b> = creature overlay · <b>l</b> = follow
-        + record.
+        click = inspect · <b>f</b> = food heatmap · <b>o</b> = creature overlay · <b>c</b> = color
+        mode · <b>l</b> = follow + record.
       </div>
       <h2>controls</h2>
       <div id="controls"></div>
@@ -202,25 +324,22 @@
     </div>
 
     <div id="right" class="panel">
-      <h2>legend</h2>
-      <div id="legend" class="muted">
-        <div>
-          <b>hue</b> green = herbivore → red = predator <span class="lg-sw lg-herb"></span
-          ><span class="lg-sw lg-pred"></span>
-        </div>
-        <div><b>size</b> = body size (radius)</div>
-        <div><b>saturation</b> = vision — vivid = sharp eyes, grey = near-blind</div>
-        <div><b>brightness</b> = speed — bright = active/hunting, dim = idle/jiggling</div>
-      </div>
       <h2>population</h2>
       <canvas id="graph"></canvas>
       <h2>distributions</h2>
+      <details id="dist-pick" class="dist-pick">
+        <summary>fields ▾</summary>
+        <div id="dist-fields" class="dist-fields"></div>
+      </details>
       <canvas id="dist"></canvas>
       <h2>brain</h2>
       <canvas id="brain"></canvas>
       <h2>inspector</h2>
       <div id="inspector"></div>
     </div>
+
+    <div id="legend-panel" class="panel"></div>
+    <button id="legend-pill">legend</button>
 
     <script type="module" src="/src/app/main.ts"></script>
   </body>

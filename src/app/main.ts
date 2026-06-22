@@ -10,13 +10,14 @@
 import { World } from '../core/world';
 import { defaultConfig, type Config } from '../core/config';
 import { scanHealth } from '../core/health';
-import { Renderer } from '../render/renderer';
+import { Renderer, ColorMode } from '../render/renderer';
 import { buildOverlaySegments } from '../render/overlay';
 import { Controls } from './observability/controls';
 import { Knobs } from './observability/knobs';
 import { Inspector } from './observability/inspector';
 import { BrainView } from './observability/brain-view';
 import { Distributions } from './observability/distributions';
+import { Legend } from './observability/legend';
 import { FollowRecorder } from './observability/follow-recorder';
 import { TimeSeriesGraph } from './observability/graph';
 
@@ -49,12 +50,15 @@ const graph = new TimeSeriesGraph(el<HTMLCanvasElement>('graph'), [
 const inspector = new Inspector(el('inspector'));
 const brainView = new BrainView(el<HTMLCanvasElement>('brain'));
 const distributions = new Distributions(el<HTMLCanvasElement>('dist'));
+distributions.mountPicker(el('dist-fields'));
+const legend = new Legend(el('legend-panel'), el('legend-pill'));
 const recorder = new FollowRecorder();
 
 let running = false;
 let speed = 1; // sim ticks per animation frame; <1 = slow-mo (interpolated for fluid motion)
 let showFood = true; // food heatmap overlay (toggle with 'f')
 let showOverlay = true; // per-creature debug overlay on the selection (toggle with 'o')
+let colorMode: ColorMode = ColorMode.LINEAGE; // dot hue source (cycle with 'c'): lineage → diet → energy
 let selected: { slot: number; gen: number } | null = null;
 // Scratch for the selected creature's overlay line vertices ([x,y,r,g,b] per vertex; gl.LINES).
 const overlayScratch = new Float32Array(2048);
@@ -214,10 +218,14 @@ globalThis.addEventListener('mouseup', (e) => {
 
 globalThis.addEventListener('resize', () => renderer.resize());
 
-// 'f' food heatmap · 'o' creature overlay · 'l' lock follow-cam + record the selected creature.
+// 'f' food heatmap · 'o' creature overlay · 'c' cycle dot color-mode · 'l' lock follow-cam + record.
 globalThis.addEventListener('keydown', (e) => {
   if (e.key === 'f' || e.key === 'F') showFood = !showFood;
   if (e.key === 'o' || e.key === 'O') showOverlay = !showOverlay;
+  if (e.key === 'c' || e.key === 'C') {
+    colorMode = ((colorMode + 1) % 3) as ColorMode;
+    legend.setColorMode(colorMode);
+  }
   if (e.key === 'l' || e.key === 'L') {
     if (recorder.following) {
       recorder.clear();
@@ -304,7 +312,7 @@ function frame(): void {
     camY = world.store.y[recorder.followedSlot]!;
   }
   renderer.setCamera(camX, camY, zoom);
-  renderer.draw(world.store, world.food, showFood, interp);
+  renderer.draw(world.store, world.food, showFood, interp, colorMode);
   // Path trail of the followed creature (fading old→new; seam-crossing segments skipped so toroidal
   // wraps don't streak). A tight loop = spinning in place; a directed line = foraging.
   if (showOverlay && recorder.following && trailX.length > 1) {
