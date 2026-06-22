@@ -71,6 +71,16 @@ export interface Config {
    *  between pockets, 0 inside a pocket — so crossing the open water is risky and residents stay home long
    *  enough for local communities to diverge. The ISOLATION lever. 0 = OFF (byte-identical). */
   deadWaterCost: number;
+  /** Per-pocket carrying-capacity VARIANCE (lever C — archipelago biome diversity). 0 = every pocket has
+   *  the same ceiling K = cap (the ablation OFF state: no RNG drawn, Kcell stays exactly cap·fertility,
+   *  byte-identical). >0 draws each pocket an independent richness scale s ∈ [1−this, 1+this] from a FORKED
+   *  RNG stream, so pockets range from lean (cap·(1−this)) to rich (cap·(1+this)). Distinct K per island →
+   *  lineages on different pockets face different carrying capacity → body-size / strategy diverges across
+   *  the archipelago. The forked stream keeps the archipelago LAYOUT fixed: the pocket centres (fertility
+   *  map) and seedPatches' main-RNG draws are identical across variance, so turning this on moves only
+   *  per-pocket K — not where the islands are. Founders, rejection-sampled onto biomass, then settle
+   *  differently on the re-weighted islands (the intended ecological effect, not a layout shift). */
+  pocketCapVariance: number;
   /** Number of independent food channels (lever B, niche partitioning). 1 = a single biomass field,
    *  byte-identical to a one-resource world (the ablation OFF state). 2 = a second logistic channel B2
    *  sharing the same fertility map; each cell's cap is split A/B so total biomass is unchanged. This is
@@ -79,6 +89,13 @@ export interface Config {
   /** Channel-B's share of each cell's carrying capacity, [0,1] (channel A gets 1−this). Only used when
    *  foodChannels===2. 0.5 = symmetric two-resource cell; lower makes B scarcer (sharpens specialization). */
   foodChannelRatio: number;
+  /** Specialization CONVERSION bonus (lever B, two-channel only): a committed forager (FORAGE_PREF→0 or 1)
+   *  converts grazed biomass into spec=1+this·(2·|pref−0.5|) energy, vs 1× for a generalist (pref=0.5).
+   *  This is the disruptive pressure that splits one FORAGE_PREF cloud into two niches — no biomass is
+   *  created (the field still depletes by what's grazed; specialists are just MORE EFFICIENT at their
+   *  channel). 0 = ablation (no specialization incentive; income ceiling = single-channel, so the only
+   *  difference left is the split resource pool itself). Only read when foodChannels===2. */
+  forageSpecBonus: number;
   /** Max biomass an organism ingests per tick from its current cell (→ energy 1:1). */
   eatRate: number;
   /** Basal metabolic cost per tick (the starvation clock — high enough that not-eating kills). */
@@ -177,6 +194,35 @@ export interface Config {
    *  itself (prey, not peers) — so similar-diet "guild-mates" are spared, preventing predator-on-
    *  predator drain. Kinship here is the diet gap (the same signal sight uses), not genetic lineage. */
   cannibalism: boolean;
+  /** Red Queen counter-damage (lever E1). When a predator lands a bite it pays back this FRACTION of the
+   *  prey's DAMAGE gene in energy: predatorEnergy −= counterBiteFraction · preyDAMAGE. 0 = OFF (hunt skips
+   *  the subtraction → byte-identical to today). No gene, no RNG — a pure coefficient read in hunt.
+   *  The FIRM effect is a predator-side TAX: biting high-DAMAGE prey costs the attacker, so it raises the
+   *  bar on whom it pays to hunt. The hoped-for prey-side response (prey evolving teeth as a deterrent) is
+   *  UNVERIFIED and may not occur: DAMAGE is upkeep-costed for every creature, a bitten prey dies regardless
+   *  of its own DAMAGE, and a diet-0 prey gets zero offensive income from teeth — so any return is purely an
+   *  indirect kin/group effect (degrading predators that bite neighbours) and individual selection may push
+   *  prey DAMAGE DOWN instead. Treat the arms race as a hypothesis to probe, not a given. Higher fractions
+   *  make hunting less rewarding (net depends on predationGain/realized drain, not a clean threshold); a
+   *  large value starves predators. Safe live-tune ~0.1–0.3. */
+  counterBiteFraction: number;
+
+  // ── Density-dependent mortality (lever D — boom-bust) ───────────────────────────────────────────
+  /** Energy drained per tick per local neighbor ABOVE crowdThreshold: extraCost = this·max(0, N−crowdThreshold),
+   *  where N = live creatures within crowdRadius. 0 = OFF (metabolize skips the neighbor scan entirely, so the
+   *  energy arithmetic is byte-identical to today). >0 knocks back the locally-dominant — a dense grazer clump
+   *  drains faster than it can climb to its breed bar, then thins via the EXISTING cull (energy≤0 dies) — which
+   *  turns the flat/damped equilibrium into boom-bust oscillation. No gene, no RNG: a pure config coefficient
+   *  read in metabolize, the same class as basalCost/moveCost. */
+  crowdingMortality: number;
+  /** Free-density band: the local-neighbor count below which crowding costs NOTHING. Sparse creatures (e.g.
+   *  predators, whose nearest-neighbor distance ≫ crowdRadius) sit under it and are spared. Only read when
+   *  crowdingMortality>0 (untouched on the OFF skip path). */
+  crowdThreshold: number;
+  /** Radius (world units) for counting local neighbors. Default 2·cellRadius (= the collision/hash-cell cutoff,
+   *  so the existing 3×3 hash neighborhood already covers it — no scan-size growth). Only read when
+   *  crowdingMortality>0. */
+  crowdRadius: number;
 
   // ── Vision genes (founder centers + costs; sight is metabolically expensive — no free eyes) ────────
   /** VISION_RANGE gene center — how far a creature sees other creatures (world units). */
@@ -291,6 +337,14 @@ export interface Config {
   /** Susceptibility exponent: push ×= (cellRadius/size)^this (big bodies resist). */
   flowPushSizeExp: number;
 
+  // ── Interoceptive hunger brain input (lever E2 — ablation knob; OFF by default = byte-identical) ───
+  /** Adds a HUNGER sense to the brain: a creature feels its own energy deficit (1 − energy/satiatedBar,
+   *  clamped to [0,1]) as an extra input wired to two evolvable synapses (HUNGER_TURN, HUNGER_THRUST), so
+   *  steering can become state-dependent (e.g. cast/forage harder when starving, cruise when full). false =
+   *  OFF: the two synapses are never seeded/mutated with RNG and never read, so the sim is byte-identical to
+   *  pre-E2 (safeguard #1). true = the weights seed near 0 and EVOLVE; behavior couples to internal state. */
+  hungerSense: boolean;
+
   // ── Observation hooks (optional; OFF by default — pure instrumentation, never affects the sim) ────
   /** Fired once per successful birth inside reproduce(), in ascending parent-slot order, BEFORE the
    *  tick counter advances. Read-only by contract: it must not touch the store, RNG, or iteration —
@@ -343,8 +397,10 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     foodPatchRichnessVar: 0, // OFF: uniform pockets, NO extra RNG draw → byte-identical to legacy
     foodMaxFertility: 1, // legacy clamp (K never exceeds cap); raise with richness>1 to deepen reservoirs
     deadWaterCost: 0, // OFF: no dead-water tax → byte-identical; >0 = isolation (residents stay in pockets)
+    pocketCapVariance: 0, // lever C OFF: every pocket K = cap (byte-identical). >0 = per-pocket K variance
     foodChannels: 1, // single resource (byte-identical OFF state); 2 = niche-partitioning second channel
     foodChannelRatio: 0.5, // symmetric A/B split when channels===2 (total per-cell cap unchanged)
+    forageSpecBonus: 0.5, // specialists convert up to 1.5× energy (the disruptive niche-split pressure)
     eatRate: 2,
     basalCost: 0.12, // low starvation clock → longer lives + a SOFTER early crash, so predator founders
     // survive the sparse phase long enough to reach the prey boom (predator-viability fix; was 0.2)
@@ -396,6 +452,15 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     herbivoryExp: 1.3, // predators get little from algae → lean on HUNTING (max viable on seeds 1/2;
     // obligate carnivory, exp≥1.6, starves predators at this encounter rate — proven by probe)
     cannibalism: true, // current behavior (bite anyone nearest); flip off to spare same-diet peers
+    // Red Queen counter-damage (lever E1) OFF by default: 0 → hunt skips the counter-bite, byte-identical.
+    // >0 (live-tune ~0.1–0.3) taxes the predator by counterBiteFraction·preyDAMAGE per bite; the prey-side
+    // arms-race response is a hypothesis to probe, not a given (see the interface doc).
+    counterBiteFraction: 0,
+    // Density-dependent mortality (lever D) OFF by default: crowdingMortality 0 → metabolize skips the
+    // neighbor scan, hash byte-identical. >0 (live-tune ~0.15–0.4) drains the over-dense → boom-bust breathing.
+    crowdingMortality: 0,
+    crowdThreshold: 6, // local neighbors allowed for free; above this the per-neighbor drain kicks in
+    crowdRadius: 12, // = 2·cellRadius (one hash-cell cutoff; the 3×3 neighborhood already covers it)
     // Vision. Founders seed with modest eyes (range ~14, ~57° half-cone, acuity 1); all costed so
     // predators evolve long focused sight and prey evolve wide all-around sight, each paying for it.
     visionRange: 140, // long-sight experiment: ~10× the old 14 so creatures see across the sparse world
@@ -462,6 +527,9 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     flowScale: 18,
     flowPushStrength: 0,
     flowPushSizeExp: 1,
+    // Interoceptive hunger brain input (lever E2): OFF = byte-identical (hunger synapses unseeded/unread).
+    // Flip on to give the brain its own energy-deficit sense, evolving from a neutral 0.
+    hungerSense: false,
     ...overrides,
   };
 }

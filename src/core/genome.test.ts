@@ -4,6 +4,7 @@ import { defaultConfig } from './config';
 import {
   Brain,
   BRAIN_GENES,
+  BRAIN_CORE_GENES,
   seedGenome,
   mutateGenome,
   ScalarGene,
@@ -19,7 +20,7 @@ describe('genome', () => {
     const brain = new Float32Array(10 * BRAIN_GENES);
     const hue = new Float32Array(10);
     const rng = new Rng(1);
-    for (let s = 0; s < 10; s++) seedGenome(brain, hue, s, rng, 0.3, false, false);
+    for (let s = 0; s < 10; s++) seedGenome(brain, hue, s, rng, 0.3, false, false, false);
     // founders differ from one another (not all identical)
     const firstGene = (s: number): number => brain[s * BRAIN_GENES]!;
     const allSame = Array.from({ length: 10 }, (_, s) => firstGene(s)).every(
@@ -40,7 +41,8 @@ describe('genome', () => {
     // parent (slot 0) with known weights
     for (let g = 0; g < BRAIN_GENES; g++) brain[g] = g + 1;
     hue[0] = 0.5;
-    mutateGenome(brain, hue, 1, 0, rng, 0.05, 0.02, true, true); // child = slot 1 (env genes ON → all drift)
+    // all gates ON → every brain gene (core + wall + flow + hunger) drifts, so the assertion below holds
+    mutateGenome(brain, hue, 1, 0, rng, 0.05, 0.02, true, true, true);
     for (let g = 0; g < BRAIN_GENES; g++) {
       const diff = Math.abs(brain[BRAIN_GENES + g]! - brain[g]!);
       expect(diff).toBeLessThan(0.5); // close to parent (small σ)
@@ -51,13 +53,41 @@ describe('genome', () => {
     expect(Math.abs(hue[1]! - 0.5)).toBeLessThan(0.2); // inherited near the parent's hue
   });
 
+  it('seedGenome with hungerSense OFF draws the IDENTICAL RNG sequence as the pre-E2 core (E2 ablation)', () => {
+    // The gotcha: if the 2 hunger synapses drew RNG when off, every downstream rng.state — and the whole
+    // seeded world — would shift. Mirror: `a` seeds a genome (hungerSense false); `b` draws exactly the
+    // pre-E2 sequence (BRAIN_CORE_GENES gaussians + 1 hue float). Identical seed ⇒ identical end state.
+    const a = new Rng(7);
+    const b = new Rng(7);
+    const brain = new Float32Array(BRAIN_GENES);
+    const hue = new Float32Array(1);
+    seedGenome(brain, hue, 0, a, 0.3, false, false, false);
+    for (let g = 0; g < BRAIN_CORE_GENES; g++) b.gaussian(0, 0.3);
+    b.float();
+    expect(a.state).toBe(b.state);
+    // and the unused hunger weights are left at their founder 0
+    expect(brain[Brain.HUNGER_TURN]!).toBe(0);
+    expect(brain[Brain.HUNGER_THRUST]!).toBe(0);
+  });
+
+  it('mutateGenome with hungerSense OFF draws the IDENTICAL RNG sequence as the pre-E2 core (E2 ablation)', () => {
+    const a = new Rng(11);
+    const b = new Rng(11);
+    const brain = new Float32Array(2 * BRAIN_GENES);
+    const hue = new Float32Array(2);
+    mutateGenome(brain, hue, 1, 0, a, 0.05, 0.02, false, false, false);
+    for (let g = 0; g < BRAIN_CORE_GENES; g++) b.gaussian(0, 0.05);
+    b.gaussian(0, 0.02); // hue mutation draw
+    expect(a.state).toBe(b.state);
+  });
+
   it('hue mutation wraps into [0,1)', () => {
     const brain = new Float32Array(4 * BRAIN_GENES);
     const hue = new Float32Array(4);
     hue[0] = 0.99;
     // large hue σ so it likely crosses the 1.0 boundary; result must still be in range
     for (let t = 0; t < 50; t++) {
-      mutateGenome(brain, hue, 1, 0, new Rng(t), 0.05, 0.5, false, false);
+      mutateGenome(brain, hue, 1, 0, new Rng(t), 0.05, 0.5, false, false, false);
       expect(hue[1]!).toBeGreaterThanOrEqual(0);
       expect(hue[1]!).toBeLessThan(1);
     }
@@ -70,7 +100,7 @@ describe('env-sense brain genes (wall + flow — RNG-gated)', () => {
     const hue = new Float32Array(1);
     const a = new Rng(5);
     const b = new Rng(5);
-    seedGenome(brain, hue, 0, a, 0.3, false, false); // off
+    seedGenome(brain, hue, 0, a, 0.3, false, false, false); // all gated off
     for (let g = Brain.WALL_LAT_TURN; g <= Brain.FLOW_FWD_THRUST; g++) expect(brain[g]).toBe(0);
     // a parallel rng that draws only the 10 base weights + hue must end in the SAME state.
     for (let g = 0; g < 10; g++) b.gaussian(0, 0.3);
@@ -81,7 +111,7 @@ describe('env-sense brain genes (wall + flow — RNG-gated)', () => {
   it('env-sense weights ARE drawn when gated on', () => {
     const brain = new Float32Array(BRAIN_GENES);
     const hue = new Float32Array(1);
-    seedGenome(brain, hue, 0, new Rng(5), 0.3, true, true);
+    seedGenome(brain, hue, 0, new Rng(5), 0.3, true, true, false);
     let nonzero = 0;
     for (let g = Brain.WALL_LAT_TURN; g <= Brain.FLOW_FWD_THRUST; g++)
       if (brain[g] !== 0) nonzero++;

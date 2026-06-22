@@ -37,8 +37,17 @@ export class FoodField {
   private readonly cellH: number;
   private readonly initFraction: number;
   private readonly fertility: Float32Array; // per-cell K share, [0,1]
+  // Per-cell TOTAL carrying capacity (summed across channels). Baseline = cap·fertility (so it tracks the
+  // [0,1] fertility map); lever C's pocketCapVariance overwrites it per pocket so K can exceed cap. Each
+  // channel's K is Kcell·capFrac. Float64 (not Float32) so the v=0 baseline is BYTE-IDENTICAL to the old
+  // `cap·fertility` reads — a Float32 store would round the float64 product and break the determinism gate.
+  private readonly Kcell: Float64Array;
   private readonly channels: number; // 1 (default, single field) or 2 (second resource B2)
   private readonly ratio: number; // channel-B share of each cell's cap, [0,1] (A gets 1−ratio)
+  // Lever C bookkeeping (set by seedPatches): pocket centres in WORLD coords (so a probe can assign each
+  // creature to its island) + the variance actually applied (so maxCapacity reports the true render ceiling).
+  private patchCentres: { x: number; y: number }[] = [];
+  private varianceUsed = 0;
   private B: Float64Array;
   private scratch: Float64Array;
   private B2: Float64Array | null = null; // second channel; allocated only when channels===2
@@ -63,13 +72,22 @@ export class FoodField {
     this.channels = channels;
     this.ratio = channelRatio;
     this.fertility = new Float32Array(cols * rows).fill(1); // uniform full world by default
+    this.Kcell = new Float64Array(cols * rows);
     this.B = new Float64Array(cols * rows);
     this.scratch = new Float64Array(cols * rows);
     if (channels === 2) {
       this.B2 = new Float64Array(cols * rows);
       this.scratch2 = new Float64Array(cols * rows);
     }
+    this.recomputeK();
     this.refill();
+  }
+
+  /** Recompute the per-cell carrying capacity from the fertility map: Kcell = cap·fertility (the uniform
+   *  baseline). Called whenever fertility changes (construction + seedPatches). Lever C overwrites Kcell
+   *  per pocket AFTER this, so this is the v=0 / no-variance state. */
+  private recomputeK(): void {
+    for (let i = 0; i < this.Kcell.length; i++) this.Kcell[i] = this.cap * this.fertility[i]!;
   }
 
   /** Channel-A cap fraction of cap·fertility. Single-channel = 1 (×1 is an IEEE identity, so the field is
@@ -78,43 +96,66 @@ export class FoodField {
     return this.channels === 2 ? 1 - this.ratio : 1;
   }
 
-  /** B ← capShare·fertility·initFraction (the seeded starting biomass per cell, per channel). */
+  /** B ← Kcell·capShare·initFraction (the seeded starting biomass per cell, per channel). Reads the
+   *  per-cell capacity Kcell (= cap·fertility at the v=0 baseline) so it stays byte-identical to the old
+   *  `cap·fertility·frac·init` while letting lever C vary K per pocket. */
   private refill(): void {
     const fracA = this.fracA;
-    for (let i = 0; i < this.B.length; i++)
-      this.B[i] = this.cap * this.fertility[i]! * fracA * this.initFraction;
+    for (let i = 0; i < this.B.length; i++) this.B[i] = this.Kcell[i]! * fracA * this.initFraction;
     if (this.B2)
       for (let i = 0; i < this.B2.length; i++)
-        this.B2[i] = this.cap * this.fertility[i]! * this.ratio * this.initFraction;
+        this.B2[i] = this.Kcell[i]! * this.ratio * this.initFraction;
   }
 
   /**
    * Carve `count` Gaussian fertility pockets (radius `radiusCells`, in grid cells) over a near-dead
    * baseline — the archipelago. Deterministic via the provided RNG. Refills biomass to the new map.
    * Both channels share the SAME fertility map (a pocket is rich in both resources).
+   *
+   * Lever C (per-pocket K variance): with `variance > 0` (and a `forkedRng`), each pocket draws an
+   * independent richness scale s ∈ [1−variance, 1+variance] from the FORKED stream, and the per-cell
+   * carrying capacity Kcell is built from the SCALED Gaussian sum (kAccum) rather than the [0,1]-clamped
+   * fertility map — so a rich pocket reaches cap·(1+variance) and a lean one cap·(1−variance). The
+   * fertility map itself is left UNSCALED (it still feeds the world's "in a pocket" founder test + each
+   * channel's biomass share). With `variance === 0` no scale is drawn and Kcell is rebuilt via recomputeK
+   * (= cap·fertility, float32 read) so the field is byte-identical to a no-variance world.
    */
   seedPatches(
     count: number,
     radiusCells: number,
     baseFertility: number,
     rng: { float(): number },
+    // SP1 sticky-pockets (deepen the fertility map; main-rng draw, gated on richnessVar):
     richness = 1,
     richnessVar = 0,
     maxFertility = 1,
+    // Lever C per-pocket K variance (scale Kcell; forked-rng draw, gated on variance):
+    variance = 0,
+    forkedRng?: { float(): number },
   ): void {
     const { cols, rows, fertility } = this;
     fertility.fill(baseFertility);
     this.patchCenters.length = 0;
+    this.patchCentres = [];
     const twoSigma2 = 2 * radiusCells * radiusCells;
+    // Only build the scaled-K accumulator when variance is active; otherwise the v=0 path stays exactly
+    // the legacy fertility-only accumulation (→ recomputeK → byte-identical).
+    const useVar = variance > 0 && !!forkedRng;
+    this.varianceUsed = useVar ? variance : 0;
+    const kAccum = useVar ? new Float64Array(cols * rows) : null;
     for (let p = 0; p < count; p++) {
       const pc = rng.float() * cols;
       const pr = rng.float() * rows;
       this.patchCenters.push({ x: pc * this.cellW, y: pr * this.cellH });
-      // Per-pocket peak amplitude. With richnessVar===0 we draw NOTHING extra (peak = richness), so when
-      // richness===1 + maxFertility===1 the whole loop is byte-identical to legacy (+g, clamp 1). Only when
-      // variation is on do we consume one RNG draw per pocket — kept here, before creatures are seeded.
+      this.patchCentres.push({ x: pc * this.cellW, y: pr * this.cellH });
+      // SP1 per-pocket peak amplitude. With richnessVar===0 we draw NOTHING extra (peak = richness), so when
+      // richness===1 + maxFertility===1 the loop is byte-identical to legacy (+g, clamp 1). Only when
+      // variation is on do we consume one MAIN-rng draw per pocket — kept here, before creatures are seeded.
       const peak =
         richnessVar > 0 ? richness * (1 + richnessVar * (2 * rng.float() - 1)) : richness;
+      // Lever C per-pocket carrying-capacity scale s_p ∈ [1−variance, 1+variance], from the FORKED stream so
+      // the MAIN rng (placement + peak) is identical to the v=0 run. s_p ≡ 1 when variance is off (no draw).
+      const sp = useVar ? 1 - variance + forkedRng!.float() * (2 * variance) : 1;
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
           // toroidal cell distance to the patch centre
@@ -126,8 +167,24 @@ export class FoodField {
           const i = r * cols + c;
           const v = fertility[i]! + peak * g;
           fertility[i] = v > maxFertility ? maxFertility : v;
+          // Lever C K accumulation parallels the fertility build; peak===1 when SP1 is off, so this reduces
+          // exactly to lever C's `g·sp` in isolation (and to the legacy path when both are off → kAccum null).
+          if (kAccum) kAccum[i] = kAccum[i]! + peak * g * sp;
         }
       }
+    }
+    if (kAccum) {
+      // Build Kcell from the scaled Gaussian sum, clamped to [0, cap·(1+variance)]: dead water stays at
+      // cap·baseFertility and a pocket peak reaches up to cap·(1+variance).
+      const upper = 1 + variance;
+      for (let i = 0; i < kAccum.length; i++) {
+        let f = baseFertility + kAccum[i]!;
+        if (f < 0) f = 0;
+        else if (f > upper) f = upper;
+        this.Kcell[i] = this.cap * f;
+      }
+    } else {
+      this.recomputeK(); // v=0: byte-identical cap·fertility (reads the float32 fertility map)
     }
     this.refill();
   }
@@ -170,6 +227,12 @@ export class FoodField {
     return this.fertility[this.idx(x, y)]!;
   }
 
+  /** Per-cell carrying capacity K at a world position (= cap·fertility at baseline; lever C scales it per
+   *  pocket). Read-only — lets a probe read each pocket's richness to test K-vs-trait divergence directly. */
+  capacityAt(x: number, y: number): number {
+    return this.Kcell[this.idx(x, y)]!;
+  }
+
   /** Remove up to `amount` biomass at a position (channel A); returns the amount actually taken. */
   grazeAt(x: number, y: number, amount: number): number {
     const i = this.idx(x, y);
@@ -197,9 +260,22 @@ export class FoodField {
     return s;
   }
 
-  /** Global per-cell capacity ceiling (for normalizing the render overlay). */
+  /** Global per-cell capacity ceiling = foodCap (the base K; the world's "in a pocket" founder test keys
+   *  off this, so it stays the GLOBAL cap even under lever C — do not switch it to per-pocket K). */
   get capacity(): number {
     return this.cap;
+  }
+
+  /** The highest per-cell K actually reachable = cap·(1+pocketCapVariance) (lever C). Used to normalize
+   *  the render overlay so rich pockets don't clip white. Equals `capacity` when variance is off. */
+  get maxCapacity(): number {
+    return this.cap * (1 + this.varianceUsed);
+  }
+
+  /** Pocket centres in WORLD coordinates, recorded during the last seedPatches (empty when none seeded).
+   *  Read-only — lets the biome-divergence probe assign each creature to its nearest island. */
+  pocketCentres(): readonly { x: number; y: number }[] {
+    return this.patchCentres;
   }
 
   /**
@@ -208,7 +284,10 @@ export class FoodField {
    * Channel A only (render is unchanged by the second channel for now).
    */
   fillTexture(out: Uint8Array): void {
-    const inv = this.cap > 0 ? 255 / this.cap : 0;
+    // Normalize against the MAX reachable K (cap·(1+variance)) so lever-C rich pockets don't clip white.
+    // With variance off this equals cap, so the texture is unchanged.
+    const max = this.maxCapacity;
+    const inv = max > 0 ? 255 / max : 0;
     for (let i = 0; i < this.B.length; i++) {
       const v = this.B[i]! * inv;
       out[i] = v < 0 ? 0 : v > 255 ? 255 : v;
@@ -236,14 +315,15 @@ export class FoodField {
     second: boolean,
     blocked: Uint8Array | null,
   ): void {
-    const { cols, rows, cap, fertility } = this;
+    const { cols, rows, Kcell } = this;
     if (regen > 0) {
       for (let i = 0; i < field.length; i++) {
         if (blocked !== null && blocked[i] === 1) {
           field[i] = 0; // rock grows nothing
           continue;
         }
-        const k = cap * fertility[i]! * capFrac;
+        // Kcell = cap·fertility at baseline (byte-identical to the legacy read), scaled per pocket by lever C.
+        const k = Kcell[i]! * capFrac;
         const b = field[i]!;
         let nb: number;
         if (k <= 1e-6) {

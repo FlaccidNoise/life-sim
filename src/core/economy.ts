@@ -57,6 +57,7 @@ function wrapDelta(d: number, size: number): number {
  */
 export function hunt(store: OrganismStore, hash: SpatialHash, cfg: Config): void {
   const { biteRange, worldWidth, worldHeight, cannibalism, predationGain, huntSizeRatio } = cfg;
+  const { counterBiteFraction } = cfg;
   const { liveIndices, liveCount, x, y, energy, scalarGenes } = store;
   const { cols, rows, bucketStart, sorted } = hash;
   const range2 = biteRange * biteRange;
@@ -110,6 +111,15 @@ export function hunt(store: OrganismStore, hash: SpatialHash, cfg: Config): void
     // deliberately CREATES energy (not strictly conserved) so hunting is a big payoff vs. grazing — the
     // incentive to seek prey instead of sitting on the food field.
     energy[i] = energy[i]! + drain * predationGain;
+    // Red Queen counter-bite (lever E1): the prey bites back — the predator pays back counterBiteFraction
+    // of the prey's DAMAGE gene. The drain already landed (a costly bite is still a bite) and the prey is
+    // NOT spared, so this is purely a predator-side tax: biting high-DAMAGE prey hurts the attacker. Whether
+    // prey actually evolve teeth in response is unverified (DAMAGE is upkeep-costed and gives diet-0 prey no
+    // individual benefit — see the config doc). Gated so the OFF path is byte-identical; no RNG.
+    if (counterBiteFraction > 0)
+      energy[i] =
+        energy[i]! -
+        counterBiteFraction * scalarGenes[best * SCALAR_GENE_COUNT + ScalarGene.DAMAGE]!;
   }
 }
 
@@ -120,9 +130,27 @@ export function hunt(store: OrganismStore, hash: SpatialHash, cfg: Config): void
  * above-baseline "more-is-costly" genes — together the selection pressure on the traits. Ascending
  * order so depletion is deterministic when organisms share a cell. Mutates energy.
  */
-export function metabolize(store: OrganismStore, food: FoodField, cfg: Config): void {
+export function metabolize(
+  store: OrganismStore,
+  food: FoodField,
+  hash: SpatialHash,
+  cfg: Config,
+): void {
   const { liveIndices, liveCount, x, y, vx, vy, energy, age, scalarGenes } = store;
   const { basalCost, moveCost, deadWaterCost } = cfg;
+  const { crowdingMortality, crowdThreshold, crowdRadius, worldWidth, worldHeight } = cfg;
+  // Lever D (density-dependent mortality): when crowdingMortality>0 each creature pays an energy drain
+  // per local neighbor above crowdThreshold, counted in the post-MOVE hash (the same one hunt uses). The
+  // scan covers crowdRadius; loop-invariant scan params are precomputed here, and the whole per-creature
+  // block below is SKIPPED when OFF so the energy arithmetic stays byte-identical. RNG-free → deterministic.
+  const { cols, rows, bucketStart, sorted } = hash;
+  const crowdR2 = crowdRadius * crowdRadius;
+  let crowdR = 1;
+  if (crowdingMortality > 0) {
+    const cellSize = Math.min(worldWidth / cols, worldHeight / rows);
+    const halfGrid = Math.floor((Math.min(cols, rows) - 1) / 2);
+    crowdR = Math.min(halfGrid, Math.max(1, Math.ceil(crowdRadius / cellSize)));
+  }
   for (let k = 0; k < liveCount; k++) {
     const i = liveIndices[k]!;
     const sg = i * SCALAR_GENE_COUNT;
@@ -135,7 +163,24 @@ export function metabolize(store: OrganismStore, food: FoodField, cfg: Config): 
     // keeps a real fallback so predators survive the sparse stretches between kills (pure herbivore unaffected).
     const satiated = satiatedBar(scalarGenes, i, cfg);
     const herbivory = (1 - diet) ** cfg.herbivoryExp;
-    const gained = energy[i]! >= satiated ? 0 : food.grazeAt(x[i]!, y[i]!, eatRate * herbivory);
+    let gained: number;
+    if (energy[i]! >= satiated) {
+      gained = 0; // full → stop grazing (leave biomass; peak learning + breed at the top)
+    } else if (cfg.foodChannels === 2) {
+      // TWO-CHANNEL niche split (lever B): spend the eat budget across the two resources by FORAGE_PREF
+      // (a B-specialist puts ~all of it on channel B), then convert at the specialization rate. spec ∈
+      // [1, 1+forageSpecBonus]: committing to one channel converts grazed biomass into MORE energy than a
+      // generalist. No biomass is created — the field depletes by exactly (takeA+takeB); the bonus is a
+      // conversion efficiency. This is the disruptive pressure that pulls FORAGE_PREF apart into two niches.
+      const pref = scalarGenes[sg + ScalarGene.FORAGE_PREF]!;
+      const spec = 1 + cfg.forageSpecBonus * (2 * Math.abs(pref - 0.5));
+      const budget = eatRate * herbivory;
+      const takeA = food.grazeAt(x[i]!, y[i]!, budget * (1 - pref));
+      const takeB = food.grazeAt2(x[i]!, y[i]!, budget * pref);
+      gained = (takeA + takeB) * spec;
+    } else {
+      gained = food.grazeAt(x[i]!, y[i]!, eatRate * herbivory); // single channel (byte-identical original)
+    }
     const speed2 = vx[i]! * vx[i]! + vy[i]! * vy[i]!;
     // Bigger bodies are costlier to move (mass): the speed² cost scales by (size/cellRadius)^sizeMoveCostExp.
     let moveFactor = 1;
@@ -151,6 +196,33 @@ export function metabolize(store: OrganismStore, food: FoodField, cfg: Config): 
     if (deadWaterCost > 0) {
       const fert = food.fertilityAt(x[i]!, y[i]!);
       if (fert < 1) energy[i] = energy[i] - deadWaterCost * (1 - fert);
+    }
+    // Lever D: pay the local-crowding drain ON TOP (skipped entirely when OFF → byte-identical). Count
+    // live neighbors within crowdRadius via the post-MOVE hash, then drain crowdingMortality per neighbor
+    // above the free band. Ascending order + integer count + RNG-free, so the tick stays reproducible.
+    if (crowdingMortality > 0) {
+      const xi = x[i]!;
+      const yi = y[i]!;
+      const ci = hash.colOf(xi);
+      const cj = hash.rowOf(yi);
+      let neighbors = 0;
+      for (let dy = -crowdR; dy <= crowdR; dy++) {
+        const by = (cj + dy + rows) % rows;
+        for (let dx = -crowdR; dx <= crowdR; dx++) {
+          const bx = (ci + dx + cols) % cols;
+          const b = by * cols + bx;
+          const end = bucketStart[b + 1]!;
+          for (let idx = bucketStart[b]!; idx < end; idx++) {
+            const j = sorted[idx]!;
+            if (j === i) continue;
+            const ddx = wrapDelta(xi - x[j]!, worldWidth);
+            const ddy = wrapDelta(yi - y[j]!, worldHeight);
+            if (ddx * ddx + ddy * ddy <= crowdR2) neighbors++;
+          }
+        }
+      }
+      const over = neighbors - crowdThreshold;
+      if (over > 0) energy[i] = energy[i]! - crowdingMortality * over;
     }
     age[i] = (age[i]! + 1) >>> 0;
   }
@@ -232,6 +304,7 @@ export function reproduce(
       cfg.hueMutationSigma,
       wallSenseGenes,
       flowSenseGenes,
+      cfg.hungerSense,
     );
     mutateScalarGenes(store.scalarGenes, child, p, rng, cfg);
     // No-Lamarck: the child's runtime brain starts from its freshly-mutated GENOME, not the parent's

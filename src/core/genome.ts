@@ -241,7 +241,7 @@ export const Brain = {
   SIGHT_FWD_THRUST: 9, // forward sight → thrust (chase prey / flee predators)
   // Wall-sense weights: wall-proximity vector (lateral, forward) in the heading frame → turn + thrust.
   // Seed at 0 and only drawn when the world HAS walls (wallSenseGenes), so a wall-less world stays
-  // byte-identical. Steer (Task 6.3) wires these in; here they're allocated + gated only.
+  // byte-identical. Steer wires these in; here they're allocated + gated only.
   WALL_LAT_TURN: 10,
   WALL_FWD_TURN: 11,
   WALL_LAT_THRUST: 12,
@@ -251,8 +251,18 @@ export const Brain = {
   FLOW_FWD_TURN: 15,
   FLOW_LAT_THRUST: 16,
   FLOW_FWD_THRUST: 17,
+  // Interoceptive HUNGER input (lever E2): the creature senses its own energy deficit and can steer on it.
+  // These two synapses, and their seed/mutation RNG, are LIVE only when cfg.hungerSense is on (else the
+  // weights stay 0 and consume no RNG — see seedGenome/mutateGenome). Kept LAST so each gated block (wall,
+  // flow, hunger) consumes RNG only when on; with all three off the draw sequence is the BRAIN_CORE_GENES
+  // pre-feature stream, byte-identical to legacy.
+  HUNGER_TURN: 18, // hunger scalar → turn (e.g. wander/cast more when starving)
+  HUNGER_THRUST: 19, // hunger scalar → thrust (e.g. forage harder when starving)
 } as const;
-export const BRAIN_GENES = 18;
+/** Senses-core brain weights (food + sight) — the count present before walls/flow/hunger, and the RNG-draw
+ *  count when all three gated blocks are off. Each gated block extends the array but draws RNG only when on. */
+export const BRAIN_CORE_GENES = 10;
+export const BRAIN_GENES = 20;
 
 /** Founder brain ≈ the hand-tuned chemotaxis controller (turn toward lateral food, thrust up-gradient,
  *  gentle cruise) + ACTIVE sight: turn toward & thrust along the appeal-signed sight vector. Because that
@@ -264,15 +274,16 @@ export const BRAIN_GENES = 18;
  *  [LAT_TURN, FWD_TURN, LAT_THRUST, FWD_THRUST, TURN_BIAS, THRUST_BIAS,
  *   SIGHT_LAT_TURN, SIGHT_FWD_TURN, SIGHT_LAT_THRUST, SIGHT_FWD_THRUST,
  *   WALL_LAT_TURN, WALL_FWD_TURN, WALL_LAT_THRUST, WALL_FWD_THRUST,
- *   FLOW_LAT_TURN, FLOW_FWD_TURN, FLOW_LAT_THRUST, FLOW_FWD_THRUST]. */
+ *   FLOW_LAT_TURN, FLOW_FWD_TURN, FLOW_LAT_THRUST, FLOW_FWD_THRUST, HUNGER_TURN, HUNGER_THRUST]. */
 const FOUNDER_BRAIN: readonly number[] = [
-  1.2, 0, 0, 1.5, 0, 0.3, 1.0, 0, 0, 1.2, 0, 0, 0, 0, 0, 0, 0, 0,
+  1.2, 0, 0, 1.5, 0, 0.3, 1.0, 0, 0, 1.2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 ];
 
 /** Seed a founder's genome: founder brain + Gaussian spread, random hue (lineage colors diverge).
- *  The 8 env-sense weights are GATED: a WALL weight is drawn only when `wallSenseGenes`, a FLOW weight
- *  only when `flowSenseGenes`. When gated off the weight is set to its founder value (0) WITHOUT drawing
- *  RNG — so with both off the stream is byte-identical to the pre-env 10-gene genome (the ablation gate). */
+ *  The 8 env-sense weights (wall/flow) and the 2 hunger weights are GATED: a WALL weight is drawn only
+ *  when `wallSenseGenes`, a FLOW weight only when `flowSenseGenes`, a HUNGER weight only when `hungerSense`.
+ *  When gated off the weight is set to its founder value (0) WITHOUT drawing RNG — so with all three off the
+ *  stream is byte-identical to the pre-feature BRAIN_CORE_GENES genome (the ablation gate). */
 export function seedGenome(
   brain: Float32Array,
   hue: Float32Array,
@@ -281,12 +292,14 @@ export function seedGenome(
   founderSigma: number,
   wallSenseGenes: boolean,
   flowSenseGenes: boolean,
+  hungerSense: boolean,
 ): void {
   const base = slot * BRAIN_GENES;
   for (let g = 0; g < BRAIN_GENES; g++) {
     const isWall = g >= Brain.WALL_LAT_TURN && g <= Brain.WALL_FWD_THRUST;
     const isFlow = g >= Brain.FLOW_LAT_TURN && g <= Brain.FLOW_FWD_THRUST;
-    if ((isWall && !wallSenseGenes) || (isFlow && !flowSenseGenes)) {
+    const isHunger = g >= Brain.HUNGER_TURN && g <= Brain.HUNGER_THRUST;
+    if ((isWall && !wallSenseGenes) || (isFlow && !flowSenseGenes) || (isHunger && !hungerSense)) {
       brain[base + g] = FOUNDER_BRAIN[g]!; // 0, no draw
       continue;
     }
@@ -295,9 +308,10 @@ export function seedGenome(
   hue[slot] = rng.float();
 }
 
-/** Copy a parent's genome to a child with Gaussian mutation (the only source of variation). Env-sense
- *  weights are GATED as in seedGenome: when off, the child INHERITS the parent's weight with NO draw —
- *  so both flags off keeps the birth stream byte-identical to the pre-env engine. */
+/** Copy a parent's genome to a child with Gaussian mutation (the only source of variation). The wall/flow
+ *  and hunger weights are GATED exactly as in seedGenome: when their flag is off, the child INHERITS the
+ *  parent's weight with NO draw — so all three off keeps the birth stream byte-identical to the pre-feature
+ *  engine. */
 export function mutateGenome(
   brain: Float32Array,
   hue: Float32Array,
@@ -308,13 +322,15 @@ export function mutateGenome(
   hueSigma: number,
   wallSenseGenes: boolean,
   flowSenseGenes: boolean,
+  hungerSense: boolean,
 ): void {
   const cb = child * BRAIN_GENES;
   const pb = parent * BRAIN_GENES;
   for (let g = 0; g < BRAIN_GENES; g++) {
     const isWall = g >= Brain.WALL_LAT_TURN && g <= Brain.WALL_FWD_THRUST;
     const isFlow = g >= Brain.FLOW_LAT_TURN && g <= Brain.FLOW_FWD_THRUST;
-    if ((isWall && !wallSenseGenes) || (isFlow && !flowSenseGenes)) {
+    const isHunger = g >= Brain.HUNGER_TURN && g <= Brain.HUNGER_THRUST;
+    if ((isWall && !wallSenseGenes) || (isFlow && !flowSenseGenes) || (isHunger && !hungerSense)) {
       brain[cb + g] = brain[pb + g]!; // inherit, no draw
       continue;
     }

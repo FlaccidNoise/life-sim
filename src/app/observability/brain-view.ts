@@ -1,17 +1,18 @@
 /**
  * Brain view — a live node-link diagram of a selected creature's controller, so you can WATCH it think.
- * The brain is a single-layer LINEAR map (genome.ts / brain.ts): nine sensory inputs in the heading
- * frame — forward & lateral food gradient, forward & lateral sight, forward & lateral wall-avoidance,
- * forward & lateral flow, and a constant bias — fan out to two motor outputs (turn, thrust) through
- * eighteen weights. This panel draws the inputs (lit by their live value), the weighted edges
- * (sign = color, |weight| = thickness, live activity = brightness), and the resulting outputs,
- * updating every frame.
+ * The brain is a single-layer LINEAR map (genome.ts / brain.ts): sensory inputs in the heading frame —
+ * forward & lateral food gradient, forward & lateral sight, forward & lateral wall-avoidance (when walls
+ * are on), forward & lateral flow (when flow is on), a constant bias, and (when the hungerSense lever is
+ * on) an interoceptive hunger drive — fan out to two motor outputs (turn, thrust). This panel draws the
+ * inputs (lit by their live value), the weighted edges (sign = color, |weight| = thickness, live activity
+ * = brightness), and the resulting outputs, updating every frame.
  *
  * computeBrainState() recomputes the inputs/outputs with the SAME math as steer(); a test pins it to an
  * actual steer() run so the picture can never drift from what the sim really does. BrainView only draws.
  */
 import { type OrganismStore } from '../../core/store';
 import { type Config } from '../../core/config';
+import { satiatedBar } from '../../core/economy';
 import { Brain, BRAIN_GENES, ScalarGene, SCALAR_GENE_COUNT } from '../../core/genome';
 
 export interface BrainInputNode {
@@ -24,13 +25,14 @@ export interface BrainInputNode {
 }
 
 export interface BrainState {
-  // 9, fixed order: food fwd/lat, sight fwd/lat, wall fwd/lat, flow fwd/lat, bias
+  // fixed order: food fwd/lat, sight fwd/lat, wall fwd/lat (walls on), flow fwd/lat (flow on), bias,
+  // (+ hunger when hungerSense)
   inputs: BrainInputNode[];
   turnRaw: number; // pre-clamp network sum → turn
   thrustRaw: number; // pre-clamp network sum → thrust
   turn: number; // applied turn (clamped to ±maxTurn gene)
   thrust: number; // applied thrust (clamped [0,maxThrust], ×metabolic efficiency)
-  drift: number; // Σ|learned − instinct| over all 18 weights (within-life learning so far)
+  drift: number; // Σ|learned − instinct| over all brain weights (within-life learning so far)
 }
 
 /** Recompute one creature's brain I/O with steer()'s exact math (read-only). */
@@ -79,6 +81,15 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
     node('flow lat', flLat, Brain.FLOW_LAT_TURN, Brain.FLOW_LAT_THRUST),
     node('bias', 1, Brain.TURN_BIAS, Brain.THRUST_BIAS),
   ];
+  // Hunger input only exists when the lever is on — mirror steer()'s gate so the picture matches the
+  // sim (off: the term isn't summed at all, exactly as in steer()).
+  if (cfg.hungerSense) {
+    const sb = satiatedBar(store.scalarGenes, slot, cfg);
+    let hunger = sb > 0 ? 1 - store.energy[slot]! / sb : 1;
+    if (hunger < 0) hunger = 0;
+    else if (hunger > 1) hunger = 1;
+    inputs.push(node('hunger', hunger, Brain.HUNGER_TURN, Brain.HUNGER_THRUST));
+  }
 
   let turnRaw = 0;
   let thrustRaw = 0;

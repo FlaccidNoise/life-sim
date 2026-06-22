@@ -245,6 +245,14 @@ class StubRng {
     return this.s / 0x7fffffff;
   }
 }
+// Deterministic stand-in RNG for lever-C seedPatches (the field only calls .float()).
+class Lcg {
+  constructor(private s: number) {}
+  float(): number {
+    this.s = (this.s * 1103515245 + 12345) & 0x7fffffff;
+    return this.s / 0x7fffffff;
+  }
+}
 /** Like StubRng but counts float() calls — to assert the per-pocket RNG-draw gate. */
 class CountingRng extends StubRng {
   calls = 0;
@@ -329,5 +337,44 @@ describe('FoodField per-pocket richness (SP1)', () => {
     for (let y = 4; y < 256; y += 8)
       for (let x = 4; x < 256; x += 8) minFert = Math.min(minFert, f.fertilityAt(x, y));
     expect(minFert).toBeLessThan(0.05); // dead water between pockets
+  });
+});
+
+// Replays a fixed sequence (then repeats the last value) — for scripting pocket centres / scales exactly.
+class QueueRng {
+  private i = 0;
+  constructor(private q: number[]) {}
+  float(): number {
+    const v = this.q[Math.min(this.i, this.q.length - 1)]!;
+    this.i++;
+    return v;
+  }
+}
+
+describe('FoodField — per-pocket carrying-capacity variance (lever C)', () => {
+  it('variance=0 ignores the forked RNG (identical to the no-variance path)', () => {
+    const a = new FoodField(256, 256, 64, 64, K, 1);
+    a.seedPatches(3, 6, 0.02, new Lcg(5));
+    const b = new FoodField(256, 256, 64, 64, K, 1);
+    // Same MAIN-rng sequence (fresh Lcg, same seed) + a forked rng that must go UNUSED at variance 0.
+    b.seedPatches(3, 6, 0.02, new Lcg(5), 1, 0, 1, 0, new QueueRng([0.0, 0.99, 0.5]));
+    for (let y = 2; y < 256; y += 16)
+      for (let x = 2; x < 256; x += 16) expect(b.sampleAt(x, y)).toBe(a.sampleAt(x, y));
+  });
+
+  it('variance>0 diverges pocket K — a lean pocket stays below cap, a rich one rises above it', () => {
+    // Single channel, init 1 → sampleAt at a pocket peak == that pocket's Kcell.
+    const f = new FoodField(256, 256, 64, 64, K, 1);
+    // Scripted MAIN rng → two well-separated pockets at cells (16,16) and (48,48): draws pc,pr per pocket.
+    const mainRng = new QueueRng([0.25, 0.25, 0.75, 0.75]);
+    // Forked scales at variance 0.4: s = 0.6 + 0.8·r. r=0 → lean s=0.6; r≈1 → rich s≈1.4.
+    const forked = new QueueRng([0.0, 0.999]);
+    f.seedPatches(2, 6, 0, mainRng, 1, 0, 1, 0.4, forked);
+    const lean = f.sampleAt(66, 66); // pocket 0 peak ≈ cap·0.6 = 6
+    const rich = f.sampleAt(194, 194); // pocket 1 peak ≈ cap·1.4 = 14
+    expect(lean).toBeGreaterThan(0.4 * K); // clearly a pocket, not dead water
+    expect(lean).toBeLessThan(K); // lean pocket: carrying capacity BELOW the base cap
+    expect(rich).toBeGreaterThan(K); // rich pocket: K raised ABOVE the base cap (the lever-C effect)
+    expect(rich).toBeGreaterThan(lean); // the two islands have genuinely diverged in K
   });
 });

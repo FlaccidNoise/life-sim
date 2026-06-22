@@ -27,6 +27,14 @@ function genes(
   for (const [idx, v] of Object.entries(overrides)) s.scalarGenes[base + Number(idx)] = v;
 }
 
+/** Build a spatial hash over the store's live set. metabolize's signature requires it for the lever-D
+ *  crowding scan; with crowdingMortality=0 (the default) it is never read. cellSize 12 = default crowdRadius. */
+function hashOf(s: OrganismStore): SpatialHash {
+  const h = new SpatialHash(W, H, 12, 64);
+  h.build(s);
+  return h;
+}
+
 describe('metabolize', () => {
   const cfg = defaultConfig({ basalCost: 0.4, moveCost: 0.01, satiatedThreshold: 1000 });
 
@@ -39,7 +47,7 @@ describe('metabolize', () => {
     genes(s, i, cfg, { [ScalarGene.EAT_RATE]: 2 });
     s.rebuildLive();
     const food = new FoodField(W, H, 16, 16, 10, 1); // cell full (B=10)
-    metabolize(s, food, cfg);
+    metabolize(s, food, hashOf(s), cfg);
     expect(s.energy[i]).toBeCloseTo(5 + 2 - 0.4); // eat 2, basal 0.4·eff(1), no movement, no gene cost
     expect(food.sampleAt(10, 10)).toBeCloseTo(8); // 2 grazed
     expect(s.age[i]!).toBe(1);
@@ -55,7 +63,7 @@ describe('metabolize', () => {
     genes(s, i, cfgSat, { [ScalarGene.EAT_RATE]: 2 });
     s.rebuildLive();
     const food = new FoodField(W, H, 16, 16, 10, 1);
-    metabolize(s, food, cfgSat);
+    metabolize(s, food, hashOf(s), cfgSat);
     expect(food.sampleAt(10, 10)).toBeCloseTo(10); // nothing grazed
     expect(s.energy[i]).toBeCloseTo(100 - 0.4); // still pays basal
   });
@@ -71,7 +79,7 @@ describe('metabolize', () => {
     genes(s, i, cfg, { [ScalarGene.EAT_RATE]: 2 });
     s.rebuildLive();
     const food = new FoodField(W, H, 16, 16, 10, 0); // empty → no eat income
-    metabolize(s, food, cfg);
+    metabolize(s, food, hashOf(s), cfg);
     expect(s.energy[i]).toBeCloseTo(50 - 0.4 - 0.01 * 25);
   });
 
@@ -88,7 +96,7 @@ describe('metabolize', () => {
     });
     s.rebuildLive();
     const food = new FoodField(W, H, 16, 16, 10, 0); // empty → isolate the costs
-    metabolize(s, food, cfg);
+    metabolize(s, food, hashOf(s), cfg);
     // upkeep = basal(0.4)·eff(1) + 4·maxSpeedCost(0.05) + 2·eatRateCost(0.15) = 0.4 + 0.2 + 0.3 = 0.9
     expect(s.energy[i]).toBeCloseTo(50 - 0.9);
   });
@@ -102,7 +110,7 @@ describe('metabolize', () => {
     genes(s, i, cfg, { [ScalarGene.METAB_EFF]: 0.5 }); // half-efficiency metabolism
     s.rebuildLive();
     const food = new FoodField(W, H, 16, 16, 10, 0); // empty
-    metabolize(s, food, cfg);
+    metabolize(s, food, hashOf(s), cfg);
     expect(s.energy[i]).toBeCloseTo(50 - 0.4 * 0.5); // basal halved, no gene upkeep
   });
 
@@ -130,11 +138,145 @@ describe('metabolize', () => {
       s.energy[i] = 50;
       genes(s, i, cfg); // herbivore, centred genes → no gene upkeep, efficiency 1
       s.rebuildLive();
-      metabolize(s, food, defaultConfig({ basalCost: 0.4, moveCost: 0, deadWaterCost }));
+      metabolize(s, food, hashOf(s), defaultConfig({ basalCost: 0.4, moveCost: 0, deadWaterCost }));
       return 50 - s.energy[i];
     };
     expect(lossAt(0)).toBeCloseTo(0.4); // OFF: just basal (no food in dead water → no graze income)
     expect(lossAt(2)).toBeCloseTo(0.4 + 2); // basal + deadWaterCost·(1−fertility=0)
+  });
+});
+
+describe('metabolize density-dependent crowding drain (lever D)', () => {
+  // Costs zeroed + empty food so the ONLY energy change is the crowding drain. crowdRadius 12 ≤ the hash
+  // cell, so the 3×3 neighborhood covers it; clustering everyone within a ~2-unit box keeps them in range.
+  const base = {
+    basalCost: 0,
+    moveCost: 0,
+    satiatedThreshold: 1000,
+    crowdThreshold: 6,
+    crowdRadius: 12,
+    worldWidth: W,
+    worldHeight: H,
+  };
+  const empty = (): FoodField => new FoodField(W, H, 16, 16, 10, 0);
+  /** focal (slot 0) at (50,50) + (count−1) neighbors packed into a ~2-unit box, all within crowdRadius. */
+  const cluster = (cfg: Config, count: number): { s: OrganismStore; focal: number } => {
+    const s = new OrganismStore(16);
+    let focal = -1;
+    for (let n = 0; n < count; n++) {
+      const i = s.alloc();
+      if (n === 0) focal = i;
+      s.x[i] = 50 + (n % 3);
+      s.y[i] = 50 + ((n / 3) | 0);
+      s.energy[i] = 50;
+      genes(s, i, cfg);
+    }
+    s.rebuildLive();
+    return { s, focal };
+  };
+
+  it('crowdingMortality=0 → no drain even when densely packed (the byte-identical OFF path)', () => {
+    const cfg = defaultConfig({ ...base, crowdingMortality: 0 });
+    const { s, focal } = cluster(cfg, 9); // focal + 8 neighbors
+    metabolize(s, empty(), hashOf(s), cfg);
+    expect(s.energy[focal]).toBeCloseTo(50); // OFF → unchanged (gained 0, costs 0)
+  });
+
+  it('drains crowdingMortality per neighbor above crowdThreshold', () => {
+    const cfg = defaultConfig({ ...base, crowdingMortality: 0.3 });
+    const { s, focal } = cluster(cfg, 9); // focal sees 8 neighbors; over = 8 − 6 = 2
+    metabolize(s, empty(), hashOf(s), cfg);
+    expect(s.energy[focal]).toBeCloseTo(50 - 0.3 * 2); // drain 0.6
+  });
+
+  it('a creature inside the free band (neighbors ≤ crowdThreshold) pays nothing', () => {
+    const cfg = defaultConfig({ ...base, crowdingMortality: 0.3 });
+    const { s, focal } = cluster(cfg, 5); // focal sees 4 ≤ 6 → no drain
+    metabolize(s, empty(), hashOf(s), cfg);
+    expect(s.energy[focal]).toBeCloseTo(50);
+  });
+
+  it('an isolated creature (no neighbors in radius) pays nothing even with crowding ON', () => {
+    const cfg = defaultConfig({ ...base, crowdingMortality: 0.3 });
+    const s = new OrganismStore(4);
+    const a = s.alloc();
+    s.x[a] = 10;
+    s.y[a] = 10;
+    s.energy[a] = 50;
+    genes(s, a, cfg);
+    const b = s.alloc();
+    s.x[b] = 100;
+    s.y[b] = 100; // far beyond crowdRadius from a
+    s.energy[b] = 50;
+    genes(s, b, cfg);
+    s.rebuildLive();
+    metabolize(s, empty(), hashOf(s), cfg);
+    expect(s.energy[a]).toBeCloseTo(50);
+    expect(s.energy[b]).toBeCloseTo(50);
+  });
+});
+
+describe('metabolize two-channel niche split (lever B)', () => {
+  // foodChannels=2: the eat budget splits across channels A/B by FORAGE_PREF, then converts at the
+  // specialization rate spec=1+forageSpecBonus·(2·|pref−0.5|). Costs zeroed so energy delta == income.
+  const cfg = defaultConfig({
+    basalCost: 0,
+    moveCost: 0,
+    satiatedThreshold: 1000,
+    foodChannels: 2,
+    forageSpecBonus: 0.5,
+  });
+  // K=10 split 0.5/0.5 → each channel's cap = 5, both full. eatRate 2 = center → no gene upkeep.
+  const dualFood = (): FoodField => new FoodField(W, H, 16, 16, 10, 1, 2, 0.5);
+
+  it('a generalist (pref 0.5) grazes BOTH channels equally at base conversion (spec=1)', () => {
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.x[i] = 10;
+    s.y[i] = 10;
+    s.energy[i] = 5;
+    genes(s, i, cfg, { [ScalarGene.EAT_RATE]: 2, [ScalarGene.FORAGE_PREF]: 0.5 });
+    s.rebuildLive();
+    const food = dualFood();
+    metabolize(s, food, hashOf(s), cfg);
+    expect(s.energy[i]).toBeCloseTo(5 + 2); // take 1 from A + 1 from B, spec=1 → gained 2
+    expect(food.sampleAt(10, 10)).toBeCloseTo(5 - 1);
+    expect(food.sampleAt2(10, 10)).toBeCloseTo(5 - 1);
+  });
+
+  it('a hard B-specialist (pref 1) eats only channel B and converts at the 1.5× bonus', () => {
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.x[i] = 10;
+    s.y[i] = 10;
+    s.energy[i] = 5;
+    genes(s, i, cfg, { [ScalarGene.EAT_RATE]: 2, [ScalarGene.FORAGE_PREF]: 1 });
+    s.rebuildLive();
+    const food = dualFood();
+    metabolize(s, food, hashOf(s), cfg);
+    expect(s.energy[i]).toBeCloseTo(5 + 3); // takeB 2, spec=1.5 → gained 3
+    expect(food.sampleAt(10, 10)).toBeCloseTo(5); // channel A untouched
+    expect(food.sampleAt2(10, 10)).toBeCloseTo(5 - 2); // channel B depleted by 2
+  });
+
+  it('forageSpecBonus=0 removes the windfall: a specialist earns the single-channel ceiling', () => {
+    const cfg0 = defaultConfig({
+      basalCost: 0,
+      moveCost: 0,
+      satiatedThreshold: 1000,
+      foodChannels: 2,
+      forageSpecBonus: 0,
+    });
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.x[i] = 10;
+    s.y[i] = 10;
+    s.energy[i] = 5;
+    genes(s, i, cfg0, { [ScalarGene.EAT_RATE]: 2, [ScalarGene.FORAGE_PREF]: 1 });
+    s.rebuildLive();
+    const food = dualFood();
+    metabolize(s, food, hashOf(s), cfg0);
+    expect(s.energy[i]).toBeCloseTo(5 + 2); // takeB 2, spec=1 → gained 2 (no specialization bonus)
   });
 });
 
@@ -196,7 +338,7 @@ describe('metabolize size→move-cost coupling', () => {
     genes(s, i, cfg, { [ScalarGene.SIZE]: 12 }); // 2× reference → moveFactor (12/6)^1 = 2
     s.rebuildLive();
     const food = new FoodField(W, H, 16, 16, 10, 0); // empty → isolate the costs
-    metabolize(s, food, cfg);
+    metabolize(s, food, hashOf(s), cfg);
     expect(s.energy[i]).toBeCloseTo(50 - 0.4 - 0.01 * 2 * 25); // movement cost doubled by size
   });
 });
@@ -358,6 +500,52 @@ describe('hunt (predation)', () => {
     hunt(s, mkHash(s), cfg);
     expect(s.energy[pred]).toBe(20);
     expect(s.energy[prey]).toBe(30);
+  });
+
+  describe('Red Queen counter-bite (lever E1)', () => {
+    // A predator (diet 1, damage 5) and an armed herbivore (diet 0, DAMAGE 8) 4 units apart. The bite
+    // drains 5 from the prey and the predator absorbs 5×predationGain; with counter-bite ON the predator
+    // then pays back counterBiteFraction × the prey's DAMAGE gene.
+    const setup = (preyDamage: number): { s: OrganismStore; pred: number; prey: number } => {
+      const s = new OrganismStore(4);
+      const pred = s.alloc();
+      const prey = s.alloc();
+      s.x[pred] = 50;
+      s.y[pred] = 50;
+      s.energy[pred] = 20;
+      s.x[prey] = 54;
+      s.y[prey] = 50;
+      s.energy[prey] = 30;
+      genes(s, pred, cfg, { [ScalarGene.DIET]: 1, [ScalarGene.DAMAGE]: 5, [ScalarGene.SIZE]: 10 });
+      genes(s, prey, cfg, {
+        [ScalarGene.DIET]: 0,
+        [ScalarGene.DAMAGE]: preyDamage,
+        [ScalarGene.SIZE]: 5,
+      });
+      s.rebuildLive();
+      return { s, pred, prey };
+    };
+
+    it('counterBiteFraction 0 (OFF) → predator pays no counter-cost (byte-identical bite)', () => {
+      const { s, pred, prey } = setup(8);
+      hunt(s, mkHash(s), { ...cfg, counterBiteFraction: 0 });
+      expect(s.energy[prey]).toBeCloseTo(25); // drained 5
+      expect(s.energy[pred]).toBeCloseTo(20 + 5 * cfg.predationGain); // pure gain, no counter
+    });
+
+    it('counterBiteFraction > 0 → predator pays counterBiteFraction × prey DAMAGE', () => {
+      const { s, pred, prey } = setup(8);
+      hunt(s, mkHash(s), { ...cfg, counterBiteFraction: 0.15 });
+      expect(s.energy[prey]).toBeCloseTo(25); // prey still loses exactly the drain
+      // gain 5×gain, then counter-bite 0.15×8 = 1.2 back out → biting an armed prey costs the attacker
+      expect(s.energy[pred]).toBeCloseTo(20 + 5 * cfg.predationGain - 0.15 * 8);
+    });
+
+    it('a toothless prey (DAMAGE 0) imposes no counter-cost even when ON (defense scales with the gene)', () => {
+      const { s, pred } = setup(0);
+      hunt(s, mkHash(s), { ...cfg, counterBiteFraction: 0.15 });
+      expect(s.energy[pred]).toBeCloseTo(20 + 5 * cfg.predationGain); // 0.15×0 = 0 → same as OFF
+    });
   });
 });
 
