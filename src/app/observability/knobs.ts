@@ -57,6 +57,24 @@ const SPECS: KnobSpec[] = [
   { key: 'predatorFraction', label: 'predator frac', min: 0, max: 0.6, step: 0.05, live: false },
   // Capped at the spatial-hash cell size (2·cellRadius=12): the 3×3 scan can't reach further.
   { key: 'biteRange', label: 'bite range', min: 0, max: 12, step: 1, live: true },
+  // ── Aquarium: diversity pockets (seed-time *) + the predator bundle ────────────────────────────────
+  // Deep predator-haven vs shallow grazer-refuge pockets → distinct island communities (reset to apply).
+  { key: 'foodPatchRichness', label: 'pocket richness', min: 1, max: 4, step: 0.5, live: false },
+  {
+    key: 'foodPatchRichnessVar',
+    label: 'pocket variation',
+    min: 0,
+    max: 1,
+    step: 0.1,
+    live: false,
+  },
+  { key: 'foodMaxFertility', label: 'max fertility', min: 1, max: 6, step: 0.5, live: false },
+  { key: 'deadWaterCost', label: 'dead-water cost', min: 0, max: 1, step: 0.05, live: true },
+  // Predator bundle (see predation-engine-ceiling memory): make the bite pay (gain/herbivory fallback) +
+  // cluster-seed predator founders into the deepest pockets so a hunter lineage survives the bootstrap.
+  { key: 'predationGain', label: 'predation gain', min: 1, max: 6, step: 0.5, live: true },
+  { key: 'herbivoryExp', label: 'herbivory exp', min: 1, max: 2, step: 0.05, live: true },
+  { key: 'predatorSeedClusters', label: 'pred nurseries', min: 0, max: 6, step: 1, live: false },
   // Selection-pressure levers (live): basal upkeep per unit of each gene above its center.
   { key: 'maxSpeedCost', label: 'cost· speed', min: 0, max: 0.5, step: 0.01, live: true },
   { key: 'eatRateCost', label: 'cost· eat', min: 0, max: 1, step: 0.01, live: true },

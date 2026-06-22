@@ -233,3 +233,101 @@ describe('FoodField', () => {
     expect(minB).toBeLessThan(0.1 * K); // dead water
   });
 });
+
+/** A deterministic LCG stub (mirrors the seedPatches test) — same seed → same pocket layout. */
+class StubRng {
+  private s: number;
+  constructor(seed = 5) {
+    this.s = seed;
+  }
+  float(): number {
+    this.s = (this.s * 1103515245 + 12345) & 0x7fffffff;
+    return this.s / 0x7fffffff;
+  }
+}
+/** Like StubRng but counts float() calls — to assert the per-pocket RNG-draw gate. */
+class CountingRng extends StubRng {
+  calls = 0;
+  override float(): number {
+    this.calls++;
+    return super.float();
+  }
+}
+
+describe('FoodField per-pocket richness (SP1)', () => {
+  it('defaults (richness 1, var 0, maxFertility 1) are byte-identical to legacy seedPatches', () => {
+    const legacy = new FoodField(256, 256, 64, 64, K, 1);
+    legacy.seedPatches(3, 6, 0.02, new StubRng(7)); // legacy 4-arg call
+    const explicit = new FoodField(256, 256, 64, 64, K, 1);
+    explicit.seedPatches(3, 6, 0.02, new StubRng(7), 1, 0, 1); // explicit legacy values
+    for (let y = 2; y < 256; y += 11)
+      for (let x = 2; x < 256; x += 11) expect(explicit.sampleAt(x, y)).toBe(legacy.sampleAt(x, y));
+  });
+
+  it('draws NO extra RNG when var=0 (2/pocket), one extra when var>0 (3/pocket) — the ablation gate', () => {
+    const off = new CountingRng();
+    new FoodField(256, 256, 64, 64, K, 1).seedPatches(5, 4, 0, off, 1, 0, 1);
+    expect(off.calls).toBe(5 * 2); // x,y centre draws only
+
+    const on = new CountingRng();
+    new FoodField(256, 256, 64, 64, K, 1).seedPatches(5, 4, 0, on, 1.5, 0.3, 2);
+    expect(on.calls).toBe(5 * 3); // x,y + one peak draw per pocket
+  });
+
+  it('records a world-space centre per pocket (for diagnostics)', () => {
+    const f = new FoodField(256, 256, 64, 64, K, 1);
+    f.seedPatches(4, 5, 0, new StubRng(3), 1, 0, 1);
+    expect(f.patchCenters).toHaveLength(4);
+    for (const c of f.patchCenters) {
+      expect(c.x).toBeGreaterThanOrEqual(0);
+      expect(c.x).toBeLessThan(256);
+      expect(c.y).toBeGreaterThanOrEqual(0);
+      expect(c.y).toBeLessThan(256);
+    }
+    // re-seeding replaces (does not append) the centres
+    f.seedPatches(2, 5, 0, new StubRng(3), 1, 0, 1);
+    expect(f.patchCenters).toHaveLength(2);
+  });
+
+  it('richness>1 with maxFertility>1 deepens a pocket past K=cap (a deep reservoir)', () => {
+    const base = new FoodField(256, 256, 64, 64, K, 1);
+    base.seedPatches(1, 6, 0, new StubRng(3), 1, 0, 1);
+    const deep = new FoodField(256, 256, 64, 64, K, 1);
+    deep.seedPatches(1, 6, 0, new StubRng(3), 2.5, 0, 3); // same seed → same centre, deeper peak
+    const c = deep.patchCenters[0]!;
+    expect(base.sampleAt(c.x, c.y)).toBeLessThanOrEqual(K + 1e-9); // legacy: K never exceeds cap
+    expect(deep.sampleAt(c.x, c.y)).toBeGreaterThan(K); // reservoir exceeds K=cap
+  });
+
+  it('maxFertility clamps: richness>1 with maxFertility=1 cannot exceed K=cap', () => {
+    const f = new FoodField(256, 256, 64, 64, K, 1);
+    f.seedPatches(1, 6, 0, new StubRng(3), 3, 0, 1); // rich peak but legacy clamp
+    const c = f.patchCenters[0]!;
+    expect(f.sampleAt(c.x, c.y)).toBeLessThanOrEqual(K + 1e-9);
+  });
+
+  it('var=0 → uniform pocket depth; var>0 → varied (predator-haven vs grazer-refuge)', () => {
+    const uniform = new FoodField(512, 512, 128, 128, K, 1);
+    uniform.seedPatches(6, 4, 0, new StubRng(11), 2, 0, 4);
+    const uDepths = uniform.patchCenters.map((c) => uniform.sampleAt(c.x, c.y));
+    const uSpread = Math.max(...uDepths) - Math.min(...uDepths);
+
+    const varied = new FoodField(512, 512, 128, 128, K, 1);
+    varied.seedPatches(6, 4, 0, new StubRng(11), 2, 0.6, 4); // same seed/centres, varied depth
+    const vDepths = varied.patchCenters.map((c) => varied.sampleAt(c.x, c.y));
+    const vSpread = Math.max(...vDepths) - Math.min(...vDepths);
+
+    expect(vSpread).toBeGreaterThan(uSpread * 2); // variation creates real depth spread
+  });
+
+  it('fertilityAt reports per-cell fertility (pocket high, dead water ~0) — for the dead-water tax', () => {
+    const f = new FoodField(256, 256, 64, 64, K, 1);
+    f.seedPatches(2, 5, 0, new StubRng(3), 1, 0, 1);
+    const c = f.patchCenters[0]!;
+    expect(f.fertilityAt(c.x, c.y)).toBeGreaterThan(0.5); // inside a pocket
+    let minFert = Infinity;
+    for (let y = 4; y < 256; y += 8)
+      for (let x = 4; x < 256; x += 8) minFert = Math.min(minFert, f.fertilityAt(x, y));
+    expect(minFert).toBeLessThan(0.05); // dead water between pockets
+  });
+});

@@ -56,6 +56,21 @@ export interface Config {
   foodPatchRadius: number;
   /** Fertility of the dead water between pockets, [0,1] (small → near-dead gaps that isolate pockets). */
   foodBaseFertility: number;
+  /** Per-pocket richness peak (Gaussian amplitude). 1 = legacy (each pocket peaks at fertility 1 → K=cap).
+   *  >1 makes pockets DEEP reservoirs (peak fertility>1 → K=cap·peak>cap), so a pocket holds a dense, deep
+   *  prey cluster regardless of world size — the big-world predation lever. */
+  foodPatchRichness: number;
+  /** Per-pocket richness VARIATION, [0,1]: each pocket's peak = richness·(1 + var·(2·rng−1)), so pockets
+   *  differ in depth (some deep predator-havens, some shallow grazer-refuges). 0 = uniform (NO extra RNG
+   *  draw → byte-identical to legacy when richness=1 and maxFertility=1). The diversity-from-place lever. */
+  foodPatchRichnessVar: number;
+  /** Hard clamp on per-cell fertility after pockets are summed. 1 = legacy (K never exceeds cap). Raise it
+   *  to let deep pockets exceed K=cap (needed for foodPatchRichness>1 to actually deepen the reservoir). */
+  foodMaxFertility: number;
+  /** Dead-water tax: extra per-tick energy drain ∝ (1−fertility) under a creature — max in the dead gaps
+   *  between pockets, 0 inside a pocket — so crossing the open water is risky and residents stay home long
+   *  enough for local communities to diverge. The ISOLATION lever. 0 = OFF (byte-identical). */
+  deadWaterCost: number;
   /** Number of independent food channels (lever B, niche partitioning). 1 = a single biomass field,
    *  byte-identical to a one-resource world (the ablation OFF state). 2 = a second logistic channel B2
    *  sharing the same fertility map; each cell's cap is split A/B so total biomass is unchanged. This is
@@ -139,6 +154,10 @@ export interface Config {
   damageCost: number;
   /** Fraction of FOUNDERS seeded as predators (diet ≈ 0.9) so the hunter niche is expressed from t0. */
   predatorFraction: number;
+  /** Founding-protection: seed the predator founders CLUSTERED into the N deepest pockets (instead of
+   *  scattered) so a hunter lineage starts together on a dense prey reservoir and survives the bootstrap —
+   *  the founding lottery is the real gate on big-world predation. 0 = OFF (scattered, byte-identical). */
+  predatorSeedClusters: number;
   /** Bite reach in world units: a predator drains the nearest creature within this radius. */
   biteRange: number;
   /** Big-eats-small gate: a predator can only bite prey at least this many times SMALLER than itself
@@ -320,6 +339,10 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     foodPatchCount: 14, // distinct island communities scattered across the archipelago
     foodPatchRadius: 5, // ~320-unit pockets (5 cells × 64 units) — small + separate, not merged
     foodBaseFertility: 0, // truly dead water between pockets → real isolation, distinct islands
+    foodPatchRichness: 1, // legacy depth (peak fertility 1 → K=cap); >1 = deep reservoirs (the spike lever)
+    foodPatchRichnessVar: 0, // OFF: uniform pockets, NO extra RNG draw → byte-identical to legacy
+    foodMaxFertility: 1, // legacy clamp (K never exceeds cap); raise with richness>1 to deepen reservoirs
+    deadWaterCost: 0, // OFF: no dead-water tax → byte-identical; >0 = isolation (residents stay in pockets)
     foodChannels: 1, // single resource (byte-identical OFF state); 2 = niche-partitioning second channel
     foodChannelRatio: 0.5, // symmetric A/B split when channels===2 (total per-cell cap unchanged)
     eatRate: 2,
@@ -364,6 +387,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     damage: 12, // bite-strength center: a kill drains a big chunk (lucrative hunting, energy-CONSERVING)
     damageCost: 0.05, // upkeep per damage above center
     predatorFraction: 0.15,
+    predatorSeedClusters: 0, // OFF: predators scattered (byte-identical); >0 = cluster into N deepest pockets
     biteRange: 16, // reach to land a sight-guided kill (hunt now scans a neighborhood sized to this)
     huntSizeRatio: 1.15, // must be ≥15% bigger than prey to eat it → size is a refuge + a weapon
     predationGain: 1.8, // meat is concentrated: a bite yields 1.8× the drain, so even RARE kills pay
@@ -421,16 +445,20 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     motorSquash: false,
 
     // Walls: 5 biome regions over a 512² fine grid (16u cells), ~35% solid, vision-occluding.
+    // Default OFF (wallRegionCount 0) so defaultConfig stays a TRUE no-op — byte-identical to the
+    // pre-feature engine (the OFF-state golden contract). The shipping VALUES live here so the live
+    // demo turns walls on with a single override (wallRegionCount 5); see src/app/main.ts.
     wallCols: 512,
     wallRows: 512,
-    wallRegionCount: 5,
+    wallRegionCount: 0,
     wallDensity: 0.43,
     wallPocketCoreRadius: 3,
     wallCorridorRadius: 2,
     wallOccludesVision: true,
     wallSenseRange: 24,
-    // Flow: gentle divergence-free current that drifts food; creature push OFF by default.
-    flowStrength: 0.15,
+    // Flow: gentle divergence-free current that drifts food; default OFF (flowStrength 0) for the same
+    // no-op reason as walls. The demo opts in with flowStrength 0.15. Creature push OFF by default.
+    flowStrength: 0,
     flowScale: 18,
     flowPushStrength: 0,
     flowPushSizeExp: 1,
