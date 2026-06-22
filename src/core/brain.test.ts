@@ -1,7 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { OrganismStore } from './store';
+import { defaultConfig, type Config } from './config';
 import { Brain, BRAIN_GENES, ScalarGene, SCALAR_GENE_COUNT } from './genome';
 import { steer, learn } from './brain';
+
+// Default config (hungerSense OFF) for every steer() call below; the hunger lever has its own block.
+const CFG = defaultConfig();
 
 /** Set a creature's genome brain weights (slot), seed generous movement genes (so steer's per-creature
  *  maxTurn/maxThrust clamps + the efficiency multiplier don't interfere), and sync the runtime brain. */
@@ -30,7 +34,7 @@ describe('steer (per-creature brain)', () => {
     s.senseY[i] = 1; // food gradient toward +y (to the left)
     setBrain(s, i, { LAT_TURN: 1.5 });
     s.rebuildLive();
-    steer(s, false, 0.2, false);
+    steer(s, false, 0.2, false, CFG);
     expect(s.heading[i]).toBeGreaterThan(0); // turned toward the food (left)
   });
 
@@ -43,7 +47,7 @@ describe('steer (per-creature brain)', () => {
       s.senseY[i] = 0;
       setBrain(s, i, { FWD_THRUST: 1.5, THRUST_BIAS: 0.3 });
       s.rebuildLive();
-      steer(s, false, 0.2, false);
+      steer(s, false, 0.2, false, CFG);
       return Math.hypot(s.forceX[0]!, s.forceY[0]!);
     };
     expect(mk(1)).toBeGreaterThan(mk(0)); // food ahead → more thrust than cruise alone
@@ -57,7 +61,7 @@ describe('steer (per-creature brain)', () => {
     s.senseY[i] = 1;
     // brain weights default to 0
     s.rebuildLive();
-    steer(s, false, 0.2, false);
+    steer(s, false, 0.2, false, CFG);
     expect(s.heading[i]).toBe(0.5); // no turn
     expect(s.forceX[i]!).toBe(0);
     expect(s.forceY[i]!).toBe(0);
@@ -72,7 +76,7 @@ describe('steer (per-creature brain)', () => {
     setBrain(s, i, { LAT_TURN: 5 }); // wants a big turn (would be 5 rad unclamped)
     s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.MAX_TURN] = 0.05; // tiny ceiling
     s.rebuildLive();
-    steer(s, false, 0.2, false);
+    steer(s, false, 0.2, false, CFG);
     expect(s.heading[i]).toBeCloseTo(0.05); // clamped to the gene, not 5
   });
 
@@ -85,7 +89,7 @@ describe('steer (per-creature brain)', () => {
     s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.MAX_THRUST] = 0.5; // small ceiling
     s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.METAB_EFF] = 1;
     s.rebuildLive();
-    steer(s, false, 0.2, false);
+    steer(s, false, 0.2, false, CFG);
     expect(Math.hypot(s.forceX[i]!, s.forceY[i]!)).toBeCloseTo(0.5); // clamped to maxThrust·eff(1)
   });
 
@@ -99,7 +103,7 @@ describe('steer (per-creature brain)', () => {
     s.sightY[i] = 0; // sight points +x (toward prey ahead)
     setBrain(s, i, { SIGHT_FWD_THRUST: 2 });
     s.rebuildLive();
-    steer(s, false, 0.2, false);
+    steer(s, false, 0.2, false, CFG);
     expect(Math.hypot(s.forceX[i]!, s.forceY[i]!)).toBeCloseTo(2); // thrust = SIGHT_FWD_THRUST·sFwd·eff
   });
 
@@ -112,7 +116,7 @@ describe('steer (per-creature brain)', () => {
       setBrain(s, i, { FWD_THRUST: 1, THRUST_BIAS: 0.3 }); // thrust output 1.3 (< generous maxThrust 5)
       s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.METAB_EFF] = eff;
       s.rebuildLive();
-      steer(s, false, 0.2, false);
+      steer(s, false, 0.2, false, CFG);
       return Math.hypot(s.forceX[i]!, s.forceY[i]!);
     };
     expect(force(1.5)).toBeCloseTo(1.3 * 1.5); // strong (high-e) body pushes harder
@@ -133,7 +137,7 @@ describe('Baldwin within-life learning (reward-modulated)', () => {
     s.prevEnergy[i] = 50;
     s.energy[i] = 60; // reward +10 (clamped to +5)
     s.rebuildLive();
-    steer(s, true, 0.5, false); // lay eligibility
+    steer(s, true, 0.5, false, CFG); // lay eligibility
     learn(s, 0.2, 0.0, 4, 5);
     const b = i * BRAIN_GENES;
     expect(s.learnedBrain[b + Brain.FWD_THRUST]!).toBeGreaterThan(1.0); // reinforced
@@ -149,7 +153,7 @@ describe('Baldwin within-life learning (reward-modulated)', () => {
     s.prevEnergy[i] = 60;
     s.energy[i] = 50; // reward −10 → the behavior gets UNlearned
     s.rebuildLive();
-    steer(s, true, 0.5, false);
+    steer(s, true, 0.5, false, CFG);
     learn(s, 0.2, 0.0, 4, 5);
     expect(s.learnedBrain[i * BRAIN_GENES + Brain.FWD_THRUST]!).toBeLessThan(1.0); // weakened below instinct
   });
@@ -181,7 +185,7 @@ describe('Baldwin within-life learning (reward-modulated)', () => {
     for (let t = 0; t < 200; t++) {
       s.prevEnergy[i] = 50;
       s.energy[i] = 60; // sustained reward each tick (learn() resets prevEnergy, so re-set it)
-      steer(s, true, 0.5, false);
+      steer(s, true, 0.5, false, CFG);
       learn(s, 1.0, 0.0, 0.5, 5); // hard reinforcement, deviation bound 0.5
     }
     // Can't run off to a saturated controller: it stays within ±0.5 of instinct.
@@ -200,7 +204,7 @@ describe('Baldwin within-life learning (reward-modulated)', () => {
     for (let t = 0; t < 200; t++) {
       s.prevEnergy[i] = 50;
       s.energy[i] = 60;
-      steer(s, true, 0.5, false);
+      steer(s, true, 0.5, false, CFG);
       learn(s, 1.0, 0.0, 0.5, 5);
     }
     // Biases stay at instinct no matter how hard/long we reinforce (Float32-exact equality to the seed).
@@ -217,7 +221,7 @@ describe('Baldwin within-life learning (reward-modulated)', () => {
     s.prevEnergy[i] = 50;
     s.energy[i] = 60;
     s.rebuildLive();
-    steer(s, true, 0.5, false);
+    steer(s, true, 0.5, false, CFG);
     learn(s, 0.2, 0.0, 4, 5);
     const b = i * BRAIN_GENES;
     expect(s.learnedBrain[b + Brain.FWD_THRUST]!).not.toBeCloseTo(1.0); // it drifted
@@ -240,7 +244,7 @@ describe('motorSquash (smooth tanh saturation — the legibility knob)', () => {
       setBrain(s, i, { LAT_TURN: 2 }); // turnRaw = 2 (overshoots the limit)
       s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.MAX_TURN] = 1; // limit M = 1
       s.rebuildLive();
-      steer(s, false, 0.2, squash);
+      steer(s, false, 0.2, squash, CFG);
       return s.heading[i]!;
     };
     expect(headingAfter(false)).toBeCloseTo(1.0); // hard clamp: snaps to MAX_TURN
@@ -259,7 +263,7 @@ describe('motorSquash (smooth tanh saturation — the legibility knob)', () => {
       setBrain(s, i, { LAT_TURN: 0.1 }); // turnRaw = 0.1, well below the limit
       s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.MAX_TURN] = 1;
       s.rebuildLive();
-      steer(s, false, 0.2, squash);
+      steer(s, false, 0.2, squash, CFG);
       return s.heading[i]!;
     };
     expect(headingAfter(true)).toBeCloseTo(headingAfter(false), 2); // ≈ identical for small signals
@@ -275,7 +279,7 @@ describe('motorSquash (smooth tanh saturation — the legibility knob)', () => {
       s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.MAX_THRUST] = 1; // limit 1
       s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.METAB_EFF] = 1;
       s.rebuildLive();
-      steer(s, false, 0.2, squash);
+      steer(s, false, 0.2, squash, CFG);
       return Math.hypot(s.forceX[i]!, s.forceY[i]!);
     };
     expect(force(false)).toBeCloseTo(1.0); // clamped to MAX_THRUST
@@ -291,8 +295,50 @@ describe('motorSquash (smooth tanh saturation — the legibility knob)', () => {
     setBrain(s, i, { FWD_THRUST: -3 }); // thrustRaw = −3 (would be reverse)
     s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.MAX_THRUST] = 1;
     s.rebuildLive();
-    steer(s, false, 0.2, true);
+    steer(s, false, 0.2, true, CFG);
     expect(s.forceX[i]!).toBe(0); // floored, not negative
     expect(s.forceY[i]!).toBe(0);
+  });
+});
+
+describe('interoceptive hunger input (lever E2)', () => {
+  // hunger = clamp(1 − energy/satiatedBar, 0, 1): empty body → ~1, full → 0. Gated on cfg.hungerSense:
+  // when off, the synapse is dead and energy level cannot influence steering (the ablation contract).
+  const HUNGER_ON = defaultConfig({ hungerSense: true });
+
+  // No food/sight input → motor output is THRUST_BIAS + (HUNGER_THRUST·hunger, only when the lever is on).
+  const thrustAt = (energy: number, cfg: Config): number => {
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.heading[i] = 0;
+    setBrain(s, i, { THRUST_BIAS: 0.2, HUNGER_THRUST: 2 });
+    s.energy[i] = energy;
+    s.rebuildLive();
+    steer(s, false, 0.2, false, cfg);
+    return Math.hypot(s.forceX[0]!, s.forceY[0]!);
+  };
+
+  it('a hungry creature thrusts harder than a full one when HUNGER_THRUST > 0', () => {
+    // energy 0 → hunger 1 (full drive); huge energy → hunger clamps to 0 (no drive), for any satiatedBar>0.
+    expect(thrustAt(0, HUNGER_ON)).toBeGreaterThan(thrustAt(1e6, HUNGER_ON));
+  });
+
+  it('with hungerSense OFF the hunger synapse is dead — energy level changes nothing (ablation)', () => {
+    expect(thrustAt(0, CFG)).toBe(thrustAt(1e6, CFG)); // identical: hunger term never computed
+  });
+
+  it('drives a turn via HUNGER_TURN only when the lever is on', () => {
+    const headingAfter = (cfg: Config): number => {
+      const s = new OrganismStore(4);
+      const i = s.alloc();
+      s.heading[i] = 0;
+      setBrain(s, i, { HUNGER_TURN: 0.5 });
+      s.energy[i] = 0; // empty → hunger ≈ 1
+      s.rebuildLive();
+      steer(s, false, 0.2, false, cfg);
+      return s.heading[i]!;
+    };
+    expect(headingAfter(HUNGER_ON)).toBeGreaterThan(0); // hunger turns the heading
+    expect(headingAfter(CFG)).toBe(0); // off → no turn at all
   });
 });
