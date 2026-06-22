@@ -56,6 +56,16 @@ export interface Config {
   foodPatchRadius: number;
   /** Fertility of the dead water between pockets, [0,1] (small → near-dead gaps that isolate pockets). */
   foodBaseFertility: number;
+  /** Per-pocket carrying-capacity VARIANCE (lever C — archipelago biome diversity). 0 = every pocket has
+   *  the same ceiling K = cap (the ablation OFF state: no RNG drawn, Kcell stays exactly cap·fertility,
+   *  byte-identical). >0 draws each pocket an independent richness scale s ∈ [1−this, 1+this] from a FORKED
+   *  RNG stream, so pockets range from lean (cap·(1−this)) to rich (cap·(1+this)). Distinct K per island →
+   *  lineages on different pockets face different carrying capacity → body-size / strategy diverges across
+   *  the archipelago. The forked stream keeps the archipelago LAYOUT fixed: the pocket centres (fertility
+   *  map) and seedPatches' main-RNG draws are identical across variance, so turning this on moves only
+   *  per-pocket K — not where the islands are. Founders, rejection-sampled onto biomass, then settle
+   *  differently on the re-weighted islands (the intended ecological effect, not a layout shift). */
+  pocketCapVariance: number;
   /** Number of independent food channels (lever B, niche partitioning). 1 = a single biomass field,
    *  byte-identical to a one-resource world (the ablation OFF state). 2 = a second logistic channel B2
    *  sharing the same fertility map; each cell's cap is split A/B so total biomass is unchanged. This is
@@ -298,6 +308,8 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     foodPatchCount: 14, // distinct island communities scattered across the archipelago
     foodPatchRadius: 5, // ~320-unit pockets (5 cells × 64 units) — small + separate, not merged
     foodBaseFertility: 0, // truly dead water between pockets → real isolation, distinct islands
+    pocketCapVariance: 0, // lever C OFF: every pocket K = cap (byte-identical). >0 = per-pocket K variance
+
     foodChannels: 1, // single resource (byte-identical OFF state); 2 = niche-partitioning second channel
     foodChannelRatio: 0.5, // symmetric A/B split when channels===2 (total per-cell cap unchanged)
     forageSpecBonus: 0.5, // specialists convert up to 1.5× energy (the disruptive niche-split pressure)
