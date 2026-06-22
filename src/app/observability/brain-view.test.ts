@@ -3,6 +3,7 @@ import { OrganismStore } from '../../core/store';
 import { defaultConfig } from '../../core/config';
 import { ScalarGene, SCALAR_GENE_COUNT, SCALAR_GENE_SPECS, BRAIN_GENES } from '../../core/genome';
 import { steer } from '../../core/brain';
+import { satiatedBar } from '../../core/economy';
 import { computeBrainState } from './brain-view';
 
 const cfg = defaultConfig();
@@ -39,7 +40,7 @@ describe('computeBrainState', () => {
     const h0 = s.heading[i]!;
     const st = computeBrainState(s, cfg, i);
     // Run the REAL steer (no learning, so eligibility isn't touched) and compare.
-    steer(s, false, cfg.eligLambda, cfg.motorSquash);
+    steer(s, false, cfg.eligLambda, cfg.motorSquash, cfg);
     const appliedTurn = s.heading[i]! - h0;
     const appliedThrust = Math.hypot(s.forceX[i]!, s.forceY[i]!);
     expect(st.turn).toBeCloseTo(appliedTurn, 10);
@@ -61,6 +62,34 @@ describe('computeBrainState', () => {
       'bias',
     ]);
     expect(st.inputs[8]!.value).toBe(1); // bias is constant 1
+  });
+
+  it('adds a 6th hunger input that matches a real steer() run when hungerSense is on', () => {
+    const hc = defaultConfig({ hungerSense: true });
+    const s = setup();
+    const i = 0;
+    // Half-full → a FRACTIONAL hunger (0.5), not the degenerate hunger=1 of an empty body. setup()
+    // already supplies nonzero food + sight, so this pins the picture in the genuine combined case.
+    s.energy[i] = 0.5 * satiatedBar(s.scalarGenes, i, hc);
+    const h0 = s.heading[i]!;
+    const st = computeBrainState(s, hc, i);
+    expect(st.inputs.map((n) => n.label)).toEqual([
+      'food fwd',
+      'food lat',
+      'sight fwd',
+      'sight lat',
+      'wall fwd',
+      'wall lat',
+      'flow fwd',
+      'flow lat',
+      'bias',
+      'hunger',
+    ]);
+    expect(st.inputs[9]!.value).toBeCloseTo(0.5, 10); // fractional drive, genuinely exercised (idx 9 = hunger)
+    // The hunger node must reproduce the turn/thrust steer() actually applies under the SAME mode.
+    steer(s, false, hc.eligLambda, hc.motorSquash, hc);
+    expect(st.turn).toBeCloseTo(s.heading[i]! - h0, 10);
+    expect(st.thrust).toBeCloseTo(Math.hypot(s.forceX[i]!, s.forceY[i]!), 10);
   });
 
   it('reports learning drift = Σ|learned − instinct|', () => {
@@ -88,7 +117,7 @@ describe('computeBrainState', () => {
     const h0 = s.heading[i]!;
     const st = computeBrainState(s, sq, i);
     // The picture must match a REAL squashed steer() run — the no-drift contract under the ON mode too.
-    steer(s, false, sq.eligLambda, sq.motorSquash);
+    steer(s, false, sq.eligLambda, sq.motorSquash, sq);
     expect(st.turn).toBeCloseTo(s.heading[i]! - h0, 10);
     expect(st.thrust).toBeCloseTo(Math.hypot(s.forceX[i]!, s.forceY[i]!), 10);
     // Squash EASES into the limit (never snaps): raw overshoots maxTurn, applied stays strictly inside it.

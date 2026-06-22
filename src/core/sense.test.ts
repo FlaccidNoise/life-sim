@@ -36,9 +36,40 @@ describe('senseFood', () => {
     s.y[i] = H / 2;
     s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.SENSE_RANGE] = W / COLS; // sample one cell apart
     s.rebuildLive();
-    senseFood(s, f, W, H);
+    senseFood(s, f, defaultConfig({ worldWidth: W, worldHeight: H })); // foodChannels defaults to 1
     expect(s.senseX[i]!).toBeGreaterThan(0); // points toward +x (more food)
     expect(Math.abs(s.senseY[i]!)).toBeLessThan(Math.abs(s.senseX[i]!)); // ~no y component
+  });
+
+  it('two-channel: a channel-B specialist smells toward the B gradient, an A-specialist toward A', () => {
+    // Channel A rises toward +x (gradientField); build channel B rising toward −x (mirror) so the two
+    // resources pull in OPPOSITE directions — then preference alone decides which way a creature is drawn.
+    const f = new FoodField(W, H, COLS, ROWS, K, 1, 2, 0.5); // two channels, symmetric split
+    const cellW = W / COLS;
+    const cellH = H / ROWS;
+    for (let r = 0; r < ROWS; r++)
+      for (let c = 0; c < COLS; c++) {
+        const cx = c * cellW + cellW / 2;
+        const cy = r * cellH + cellH / 2;
+        const halfK = K / 2; // each channel's cap after the split
+        f.grazeAt(cx, cy, halfK - (halfK * c) / (COLS - 1)); // A: rich toward +x
+        f.grazeAt2(cx, cy, halfK - (halfK * (COLS - 1 - c)) / (COLS - 1)); // B: rich toward −x
+      }
+    const cfg = defaultConfig({ worldWidth: W, worldHeight: H, foodChannels: 2 });
+    const s = new OrganismStore(4);
+    const a = s.alloc(); // A-specialist
+    const b = s.alloc(); // B-specialist
+    for (const i of [a, b]) {
+      s.x[i] = W / 2;
+      s.y[i] = H / 2;
+      s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.SENSE_RANGE] = cellW;
+    }
+    s.scalarGenes[a * SCALAR_GENE_COUNT + ScalarGene.FORAGE_PREF] = 0; // pure A
+    s.scalarGenes[b * SCALAR_GENE_COUNT + ScalarGene.FORAGE_PREF] = 1; // pure B
+    s.rebuildLive();
+    senseFood(s, f, cfg);
+    expect(s.senseX[a]!).toBeGreaterThan(0); // A-specialist pulled toward +x (channel A)
+    expect(s.senseX[b]!).toBeLessThan(0); // B-specialist pulled toward −x (channel B)
   });
 });
 

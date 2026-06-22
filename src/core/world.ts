@@ -103,6 +103,11 @@ export class World {
         cfg.foodPatchRichness,
         cfg.foodPatchRichnessVar,
         cfg.foodMaxFertility,
+        cfg.pocketCapVariance,
+        // Lever C draws per-pocket K scales from a FORKED substream (does NOT consume this.rng), so the
+        // archipelago LAYOUT — pocket centres + the main-RNG draws here — is identical across variance;
+        // only each island's K changes (founders then rejection-sample onto the re-weighted biomass).
+        this.rng.fork(0xc),
       );
     } else {
       this.food.reset();
@@ -186,6 +191,7 @@ export class World {
         this.config.founderSigma,
         this.wallSenseGenes,
         this.flowSenseGenes,
+        this.config.hungerSense,
       );
       seedScalarGenes(s.scalarGenes, i, this.rng, this.config); // incl. life-history + trophic genes
       // Seed predators as OMNIVORES (diet 0.6): they survive on plants through the sparse early phase
@@ -219,10 +225,10 @@ export class World {
     this.hash.build(s);
     // SENSE → THINK/ACT: perceive the food gradient (per-creature sense range) + SIGHT (nearby creatures
     // within the vision cone; uses the start-of-tick hash), then steer (per-creature genes; sets thrust).
-    senseFood(s, this.food, cfg.worldWidth, cfg.worldHeight);
+    senseFood(s, this.food, cfg);
     senseEnv(s, this.walls, cfg.flowStrength > 0 ? this.flow : null, cfg);
     senseCreatures(s, this.hash, cfg, this.walls);
-    steer(s, cfg.learningEnabled, cfg.eligLambda, cfg.motorSquash);
+    steer(s, cfg.learningEnabled, cfg.eligLambda, cfg.motorSquash, cfg);
     // MOVE: flow push (size-scaled current) then repulsion add onto the thrust force, then integrate.
     if (cfg.flowPushStrength > 0) applyFlowForce(s, this.flow, cfg);
     computeRepulsion(s, this.hash, cfg.cellRadius, cfg.repulsion, cfg.worldWidth, cfg.worldHeight);
@@ -243,7 +249,7 @@ export class World {
     hunt(s, this.hash, cfg);
     // METABOLIZE → LEARN → REPRO/DIE. Energy (the band the creature is in) is known after metabolize,
     // so the energy-gated within-life consolidation runs here (eligibility traces were laid in steer).
-    metabolize(s, this.food, cfg);
+    metabolize(s, this.food, this.hash, cfg);
     if (cfg.learningEnabled)
       learn(s, cfg.learningRate, cfg.weightDecay, cfg.maxLearnDeviation, cfg.learnRewardClamp);
     this.lastDeaths = cullDead(s);
