@@ -6,7 +6,13 @@ import { computeRepulsion, integrate } from './physics';
 import { FoodField } from './food-field';
 import { senseFood, senseCreatures } from './sense';
 import { steer, learn } from './brain';
-import { seedGenome, seedScalarGenes, ScalarGene, SCALAR_GENE_COUNT } from './genome';
+import {
+  seedGenome,
+  seedScalarGenes,
+  ScalarGene,
+  SCALAR_GENE_COUNT,
+  SCALAR_GENE_SPECS,
+} from './genome';
 import { metabolize, hunt, cullDead, reproduce } from './economy';
 import { Hasher } from './hash';
 
@@ -114,12 +120,13 @@ export class World {
       s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.DIET] = isPredator ? 0.7 : 0;
       // Wide UNIFORM SIZE seed: spread founders across a flat body-size band so distinct size niches (and
       // the predation refuge + shelter pulls they drive) exist from t0, instead of all clustering at the
-      // center. spread 0 → all at center (the ablation). Clamped to the SIZE gene range [2,16].
+      // center. spread 0 → all at center (the ablation). Clamped to the SIZE gene range [2,32].
       const spread = this.config.founderSizeSpread;
       if (spread > 0) {
         const c = this.config.cellRadius;
-        const lo = Math.max(2, c * (1 - spread));
-        const hi = Math.min(16, c * (1 + spread));
+        const sizeSpec = SCALAR_GENE_SPECS[ScalarGene.SIZE]!;
+        const lo = Math.max(sizeSpec.min, c * (1 - spread));
+        const hi = Math.min(sizeSpec.max, c * (1 + spread));
         s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.SIZE] = this.rng.range(lo, hi);
       }
       // Founder starts at its own (seeded) BIRTH_ENERGY gene — consistent with how offspring are provisioned.

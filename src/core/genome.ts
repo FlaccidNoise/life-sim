@@ -117,7 +117,7 @@ export const SCALAR_GENE_SPECS: readonly ScalarGeneSpec[] = [
   { centerKey: 'maxSpeed', costKey: 'maxSpeedCost', min: 1, max: 20 },
   { centerKey: 'eatRate', costKey: 'eatRateCost', min: 0.2, max: 8 },
   { centerKey: 'senseStep', costKey: 'senseRangeCost', min: 8, max: 256 },
-  { centerKey: 'cellRadius', costKey: 'sizeCost', min: 2, max: 16 }, // SIZE: now physical (refuge + bite), so costed
+  { centerKey: 'cellRadius', costKey: 'sizeCost', min: 2, max: 32 }, // SIZE: physical (refuge + bite + speed/move/store couplings), so costed; max 2× for big-body strategies
   { centerKey: 'maxTurn', costKey: 'maxTurnCost', min: 0.05, max: 1.2 },
   { centerKey: 'maxThrust', costKey: 'maxThrustCost', min: 0.1, max: 4 },
   { centerKey: 'metabolicEfficiency', costKey: null, min: 0.5, max: 1.5 },
