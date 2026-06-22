@@ -78,4 +78,21 @@ describe('World — Phase 0 determinism contract', () => {
     expect(w.population).toBeGreaterThan(0); // not extinct
     expect(w.population).toBeLessThan(cfg.maxOrganisms); // food-limited, not buffer-pegged
   });
+
+  it('no live creature ever occupies a solid wall cell (births relocate out of walls)', () => {
+    // reproduce() places a child at parent ± offspringOffset in a random direction; without a wall
+    // check the child can be born INSIDE a solid cell. Walls are ON by default → scan every live
+    // creature after a long run and assert the invariant "no body sits in a wall" holds.
+    const cfg = defaultConfig({ seed: 1 });
+    const w = new World(cfg);
+    expect(w.walls.active).toBe(true); // guard: the default world actually has walls to test against
+    for (let t = 0; t < 1500; t++) {
+      w.step();
+      const s = w.store;
+      for (let k = 0; k < s.liveCount; k++) {
+        const i = s.liveIndices[k]!;
+        expect(w.walls.isSolidAt(s.x[i]!, s.y[i]!)).toBe(false);
+      }
+    }
+  });
 });
