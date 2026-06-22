@@ -245,6 +245,33 @@ export interface Config {
    *  learning is unchanged. OFF by default so the determinism hash is byte-identical until you opt in. */
   motorSquash: boolean;
 
+  // ── Walls (env pass 1) ─────────────────────────────────────────────────────
+  /** FINE wall-grid resolution (decoupled from the food grid for creature-scale nooks). */
+  wallCols: number;
+  wallRows: number;
+  /** Voronoi biome regions, each carved by one generator. 0 = NO WALLS (off; byte-identical). */
+  wallRegionCount: number;
+  /** Target solid fraction [0,1] of the carved terrain. */
+  wallDensity: number;
+  /** Fine cells kept open at a food-pocket centre in pocket-eroding regions. */
+  wallPocketCoreRadius: number;
+  /** Corridor half-width (fine cells) carved by the connectivity guarantee. */
+  wallCorridorRadius: number;
+  /** Ablation: walls block line-of-sight (sight occlusion). false = sight ignores walls. */
+  wallOccludesVision: boolean;
+  /** Central-difference half-step (world units) for the neural wall-proximity gradient. */
+  wallSenseRange: number;
+
+  // ── Flow field (env pass 1) ────────────────────────────────────────────────
+  /** Advection magnitude (CFL-clamped to ≤0.25 cell/tick). 0 = NO FLOW (off; byte-identical). */
+  flowStrength: number;
+  /** Streamfunction wavelength in FOOD cells (eddy size). */
+  flowScale: number;
+  /** Force on creatures from the current. 0 = OFF (default — byte-identical). */
+  flowPushStrength: number;
+  /** Susceptibility exponent: push ×= (cellRadius/size)^this (big bodies resist). */
+  flowPushSizeExp: number;
+
   // ── Observation hooks (optional; OFF by default — pure instrumentation, never affects the sim) ────
   /** Fired once per successful birth inside reproduce(), in ascending parent-slot order, BEFORE the
    *  tick counter advances. Read-only by contract: it must not touch the store, RNG, or iteration —
@@ -392,6 +419,21 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     // Steering output shaping: OFF = hard clamp (current behavior, byte-identical hash). Flip on to
     // smoothly tanh-squash turn/thrust → graded, legible steering (kills the motor-saturation spin).
     motorSquash: false,
+
+    // Walls: 5 biome regions over a 512² fine grid (16u cells), ~35% solid, vision-occluding.
+    wallCols: 512,
+    wallRows: 512,
+    wallRegionCount: 5,
+    wallDensity: 0.35,
+    wallPocketCoreRadius: 3,
+    wallCorridorRadius: 2,
+    wallOccludesVision: true,
+    wallSenseRange: 24,
+    // Flow: gentle divergence-free current that drifts food; creature push OFF by default.
+    flowStrength: 0.15,
+    flowScale: 18,
+    flowPushStrength: 0,
+    flowPushSizeExp: 1,
     ...overrides,
   };
 }
