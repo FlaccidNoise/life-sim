@@ -5,6 +5,7 @@ import { SpatialHash } from './spatial-hash';
 import { computeRepulsion, integrate } from './physics';
 import { FoodField } from './food-field';
 import { Walls } from './walls';
+import { FlowField } from './flow-field';
 import { senseFood, senseCreatures } from './sense';
 import { steer, learn } from './brain';
 import {
@@ -33,6 +34,7 @@ export class World {
   readonly hash: SpatialHash;
   readonly food: FoodField;
   readonly walls: Walls;
+  readonly flow: FlowField;
   tick = 0;
   /** Per-tick + cumulative vital rates (telemetry — drives the population graph and the gate). */
   lastBirths = 0;
@@ -65,6 +67,13 @@ export class World {
       config.worldHeight,
       config.wallCols,
       config.wallRows,
+      config,
+    );
+    this.flow = new FlowField(
+      config.worldWidth,
+      config.worldHeight,
+      config.foodCols,
+      config.foodRows,
       config,
     );
     this.setup();
