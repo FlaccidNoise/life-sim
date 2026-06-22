@@ -35,6 +35,7 @@ interface Metrics {
   drift: number;
   births: number;
   deaths: number;
+  shelterIdx: number; // mean dist from each SMALL creature to its nearest ≥1.3×-larger creature (lower = more sheltering)
 }
 
 function measure(world: World): Metrics {
@@ -59,6 +60,7 @@ function measure(world: World): Metrics {
       drift: 0,
       births: world.totalBirths,
       deaths: world.totalDeaths,
+      shelterIdx: 0,
     };
   }
   let herb = 0;
@@ -117,6 +119,36 @@ function measure(world: World): Metrics {
     for (let g = 0; g < BRAIN_GENES; g++)
       driftSum += Math.abs(learnedBrain[b + g]! - brain[b + g]!);
   }
+  // Shelter index: for each SMALL creature (size below the population median), the toroidal distance to
+  // the nearest creature ≥1.3× its size. Mean over small creatures. Lower = small bodies sit closer to
+  // big bodies = more sheltering/clustering. O(n²) brute force — fine at probe populations.
+  const ww = world.config.worldWidth;
+  const wh = world.config.worldHeight;
+  const sortedSizes = [...sizes].sort((a, b) => a - b);
+  const medSize = sortedSizes[Math.floor(sortedSizes.length / 2)]!;
+  let shelterSum = 0;
+  let shelterN = 0;
+  for (let k = 0; k < liveCount; k++) {
+    const i = liveIndices[k]!;
+    const szi = scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.SIZE]!;
+    if (szi >= medSize) continue; // only the small half seeks shelter
+    let best = Infinity;
+    for (let m = 0; m < liveCount; m++) {
+      if (m === k) continue;
+      const j = liveIndices[m]!;
+      if (scalarGenes[j * SCALAR_GENE_COUNT + ScalarGene.SIZE]! < szi * 1.3) continue; // not "much larger"
+      let dx = Math.abs(s.x[j]! - s.x[i]!);
+      let dy = Math.abs(s.y[j]! - s.y[i]!);
+      if (dx > ww * 0.5) dx = ww - dx;
+      if (dy > wh * 0.5) dy = wh - dy;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < best) best = d2;
+    }
+    if (best < Infinity) {
+      shelterSum += Math.sqrt(best);
+      shelterN++;
+    }
+  }
   const hs = world.hash.stats();
   return {
     pop: liveCount,
@@ -135,6 +167,7 @@ function measure(world: World): Metrics {
     drift: driftSum / liveCount,
     births: world.totalBirths,
     deaths: world.totalDeaths,
+    shelterIdx: shelterN > 0 ? shelterSum / shelterN : 0,
   };
 }
 
@@ -155,19 +188,35 @@ function run(label: string, overrides: Partial<Config>): { label: string; m: Met
 // meanSpeed (active not passive), and more size variance (szSd). Tested on 2 seeds.
 // Find the highest herbivoryExp where predators still PERSIST (max hunting pressure, still alive), with
 // sizeCost 0.015 locked for more size variance. Two seeds for robustness.
+// SHELTER-SEEKING ablation: shelterGain 0 (off) vs 1 (on) on seeds 1/2/5. Want shelterIdx to DROP with
+// shelter on (small bodies sit closer to big ones = clustering) AND the world to stay alive (pop>0,
+// births>0) on every seed. shelterIdx printed last.
 const CASES: { label: string; o: Partial<Config> }[] = [
-  { label: 'exp1.3 szC.015 s1', o: { herbivoryExp: 1.3, sizeCost: 0.015 } },
-  { label: 'exp1.4 szC.015 s1', o: { herbivoryExp: 1.4, sizeCost: 0.015 } },
-  { label: 'exp1.5 szC.015 s1', o: { herbivoryExp: 1.5, sizeCost: 0.015 } },
-  { label: 'exp1.3 szC.015 s2', o: { herbivoryExp: 1.3, sizeCost: 0.015, seed: 2 } },
-  { label: 'exp1.4 szC.015 s2', o: { herbivoryExp: 1.4, sizeCost: 0.015, seed: 2 } },
-  { label: 'exp1.4 szC.015 s5', o: { herbivoryExp: 1.4, sizeCost: 0.015, seed: 5 } },
+  { label: 'shelter OFF s1', o: { shelterGain: 0 } },
+  { label: 'shelter ON  s1', o: { shelterGain: 1 } },
+  { label: 'shelter OFF s2', o: { shelterGain: 0, seed: 2 } },
+  { label: 'shelter ON  s2', o: { shelterGain: 1, seed: 2 } },
+  { label: 'shelter OFF s5', o: { shelterGain: 0, seed: 5 } },
+  { label: 'shelter ON  s5', o: { shelterGain: 1, seed: 5 } },
 ];
 
 console.log(`=== density + ablation probe: ${ticks} ticks, seed ${seed}, world 8192² ===\n`);
 const header =
   'case'.padEnd(28) +
-  ['pop', 'herb', 'pred', 'size', 'szSd', 'diet', 'spd', 'visR', 'occ%', 'turnSat%', 'drift']
+  [
+    'pop',
+    'herb',
+    'pred',
+    'size',
+    'szSd',
+    'diet',
+    'spd',
+    'visR',
+    'occ%',
+    'turnSat%',
+    'drift',
+    'shelterIdx',
+  ]
     .map((h) => h.padStart(9))
     .join('');
 console.log(header);
@@ -188,6 +237,7 @@ for (const c of CASES) {
       m.occPct.toFixed(2),
       m.turnSatPct.toFixed(0),
       m.drift.toFixed(1),
+      m.shelterIdx.toFixed(0),
     ]
       .map((v) => v.padStart(9))
       .join('');

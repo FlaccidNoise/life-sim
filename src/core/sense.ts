@@ -85,6 +85,11 @@ export function senseCreatures(store: OrganismStore, hash: SpatialHash, cfg: Con
     const range2 = range * range;
     const cosFov = Math.cos(scalarGenes[sg + ScalarGene.VISION_FOV]!);
     const myDiet = scalarGenes[sg + ScalarGene.DIET]!;
+    const mySize = scalarGenes[sg + ScalarGene.SIZE]!;
+    // Shelter-seeking strength (gene × global ablation/tuning gain). Pulls toward LARGER, similar-diet
+    // creatures so small prey cluster around big grazers; diet-similarity gates it so prey still flee
+    // big predators (the chase/flee appeal dominates there). 0 → no shelter pull (the ablation).
+    const shelter = scalarGenes[sg + ScalarGene.SHELTER_DRIVE]! * cfg.shelterGain;
     const xi = x[i]!;
     const yi = y[i]!;
     const hx = Math.cos(heading[i]!);
@@ -116,8 +121,19 @@ export function senseCreatures(store: OrganismStore, hash: SpatialHash, cfg: Con
           const ux = ddx * inv;
           const uy = ddy * inv;
           if (ux * hx + uy * hy < cosFov) continue; // outside the vision cone
-          const appeal = myDiet - scalarGenes[j * SCALAR_GENE_COUNT + ScalarGene.DIET]!;
-          const w = appeal * (1 - d / range) * acuity; // sign: +toward prey, −away from threats
+          const jg = j * SCALAR_GENE_COUNT;
+          const itsDiet = scalarGenes[jg + ScalarGene.DIET]!;
+          const appeal = myDiet - itsDiet; // sign: +toward prey, −away from threats
+          // Shelter pull: toward creatures BIGGER than me (sizeDiff>0), weighted by diet-similarity so it
+          // only draws me to my own guild's big bodies — a big predator (dissimilar diet) gets ~no shelter
+          // pull and the negative appeal makes me flee it instead.
+          const sizeDiff = scalarGenes[jg + ScalarGene.SIZE]! - mySize;
+          let pull = appeal;
+          if (shelter > 0 && sizeDiff > 0) {
+            const dietSim = 1 - Math.abs(appeal); // |myDiet − itsDiet| ∈ [0,1]; 1 = same role
+            pull += shelter * sizeDiff * dietSim;
+          }
+          const w = pull * (1 - d / range) * acuity;
           sx += ux * w;
           sy += uy * w;
         }

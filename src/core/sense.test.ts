@@ -121,4 +121,49 @@ describe('senseCreatures (sight)', () => {
     expect(s.sightX[0]!).toBe(0); // the d===0 contributor is skipped, not NaN
     expect(s.sightY[0]!).toBe(0);
   });
+
+  // ── shelter-seeking (size-aware sight) ──────────────────────────────────────────────────────────
+  const setSize = (s: OrganismStore, slot: number, size: number): void => {
+    s.scalarGenes[slot * SCALAR_GENE_COUNT + ScalarGene.SIZE] = size;
+  };
+  const setShelter = (s: OrganismStore, slot: number, drive: number): void => {
+    s.scalarGenes[slot * SCALAR_GENE_COUNT + ScalarGene.SHELTER_DRIVE] = drive;
+  };
+
+  it('a small herbivore is pulled TOWARD a bigger same-guild creature (shelter)', () => {
+    const s = pair(0, 0); // same diet → chase/flee appeal is ~0, so only shelter can move the vector
+    setSize(s, 0, 4); // viewer small
+    setSize(s, 1, 12); // neighbor much bigger
+    setShelter(s, 0, 0.2);
+    senseCreatures(s, hashOf(s), cfg);
+    expect(s.sightX[0]!).toBeGreaterThan(0); // drawn toward the big neighbor at +x
+  });
+
+  it('shelter does NOT override fleeing a bigger PREDATOR (diet-similarity gates it)', () => {
+    const s = pair(0, 1); // viewer herbivore, neighbor carnivore (dissimilar diet → dietSim ≈ 0)
+    setSize(s, 0, 4);
+    setSize(s, 1, 12); // predator is bigger, but shelter must not draw prey into it
+    setShelter(s, 0, 0.2);
+    senseCreatures(s, hashOf(s), cfg);
+    expect(s.sightX[0]!).toBeLessThan(0); // still flees the predator
+  });
+
+  it('no shelter pull toward a SMALLER same-guild creature', () => {
+    const s = pair(0, 0);
+    setSize(s, 0, 12); // viewer big
+    setSize(s, 1, 4); // neighbor smaller → sizeDiff < 0 → no shelter term
+    setShelter(s, 0, 0.2);
+    senseCreatures(s, hashOf(s), cfg);
+    expect(s.sightX[0]!).toBe(0); // appeal 0 and no shelter → neutral
+  });
+
+  it('shelterGain 0 ablates the shelter pull', () => {
+    const cfg0 = defaultConfig({ worldWidth: W, worldHeight: H, shelterGain: 0 });
+    const s = pair(0, 0);
+    setSize(s, 0, 4);
+    setSize(s, 1, 12);
+    setShelter(s, 0, 0.2);
+    senseCreatures(s, hashOf(s), cfg0);
+    expect(s.sightX[0]!).toBe(0); // same setup as the shelter test, but the global gain zeroes it
+  });
 });
