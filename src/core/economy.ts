@@ -213,6 +213,9 @@ export function reproduce(store: OrganismStore, rng: Rng, cfg: Config): number {
     store.prevEnergy[child] = childEnergy; // first-tick learning reward = 0 for the newborn
     energy[p] = energy[p]! - childEnergy - reproOverhead;
     births++;
+    // Optional observation hook (off by default): hand the harness exact child→parent identity. Read-
+    // only by contract — no store/RNG/order effect — so the determinism hash is unchanged (see Config).
+    cfg.onBirth?.(p, store.genId[p]!, child, store.genId[child]!);
   }
   return births;
 }

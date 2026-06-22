@@ -216,6 +216,13 @@ export interface Config {
    *  instinct — it can't run off to a saturated controller. The bias synapses are excluded from
    *  plasticity entirely (their constant input makes Hebbian learning a positive-feedback runaway). */
   maxLearnDeviation: number;
+
+  // ── Observation hooks (optional; OFF by default — pure instrumentation, never affects the sim) ────
+  /** Fired once per successful birth inside reproduce(), in ascending parent-slot order, BEFORE the
+   *  tick counter advances. Read-only by contract: it must not touch the store, RNG, or iteration —
+   *  it exists so a harness can attribute child→parent lineage without an energy-trace heuristic.
+   *  Undefined in defaultConfig, so production runs and the determinism hash are unaffected. */
+  onBirth?: (parentSlot: number, parentGen: number, childSlot: number, childGen: number) => void;
 }
 
 export function defaultConfig(overrides: Partial<Config> = {}): Config {
