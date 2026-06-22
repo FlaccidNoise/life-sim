@@ -230,9 +230,11 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     // population sustains BOTH births and deaths (the Phase-2 anti-"0 births" gate).
     foodCols: 128, // 64-unit cells over the 8192 world
     foodRows: 128,
-    foodCap: 14, // rich pockets so a SMALL island still sustains a breeding community
-    foodRegen: 0.07, // slower regrowth → grazed cells stay bare longer, so creatures must MOVE to fresh
-    // food instead of camping one spot (the incentive to explore; tuned headlessly to stay alive)
+    foodCap: 20, // rich pockets (raised 14→20): paired with slow regen below, a pocket fills richly then
+    // gets grazed bare and stays bare a while → boom-bust pulses that reward MIGRATION and sustain a
+    // wider range of body sizes (probe: size variety szSd 1.2→2.2 on seed 1, more active, pop steady)
+    foodRegen: 0.04, // slow regrowth (0.07→0.04) → grazed cells stay bare longer, so creatures must MOVE
+    // to fresh food instead of camping one spot (the incentive to explore; tuned headlessly to stay alive)
     foodDiffuse: 0.03, // low so pockets don't bleed into the gaps (islands stay distinct)
     foodInit: 1, // pockets start full
     foodPatchCount: 14, // distinct island communities scattered across the archipelago

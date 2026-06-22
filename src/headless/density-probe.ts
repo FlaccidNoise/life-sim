@@ -226,16 +226,18 @@ function run(label: string, overrides: Partial<Config>): { label: string; m: Met
 // SCHOOLING ablation: cohesionGain 0 (off) vs 1 (on) on seeds 1/2/5. Want schoolSim to RISE with
 // cohesion on (nearest neighbors share a lineage color = schools) AND the world to stay alive on every
 // seed. schoolSim is the last column; shelterIdx kept for context (shelter is on at its default).
-// SCHOOLING ablation at the shipped strength (cohesionDrive 0.15): cohesionGain 0 (off) vs 1 (on),
-// seeds 1/2/5. Liveness gate (pop>0, world alive). schoolSim is saturated by natal kin-clustering so it
-// can't isolate the behavior — the schooling is confirmed at unit level (sense.test) + watched live.
+// VARIETY sweep: wider founder spread + slower/richer food vs the current baseline, seeds 1/5. Want
+// MORE size/trophic variety (szSd, diet) and predators present, while staying alive (pop>0). Slower
+// regen → boom-bust that rewards migration; wider founderSigma → more raw material from t0.
 const CASES: { label: string; o: Partial<Config> }[] = [
-  { label: 'school OFF s1', o: { cohesionGain: 0 } },
-  { label: 'school ON  s1', o: { cohesionGain: 1 } },
-  { label: 'school OFF s2', o: { cohesionGain: 0, seed: 2 } },
-  { label: 'school ON  s2', o: { cohesionGain: 1, seed: 2 } },
-  { label: 'school OFF s5', o: { cohesionGain: 0, seed: 5 } },
-  { label: 'school ON  s5', o: { cohesionGain: 1, seed: 5 } },
+  { label: 'base        s1', o: {} },
+  { label: 'fSig.6      s1', o: { founderSigma: 0.6 } },
+  { label: 'regen.04    s1', o: { foodRegen: 0.04 } },
+  { label: 'regen.04cap20 s1', o: { foodRegen: 0.04, foodCap: 20 } },
+  { label: 'base        s5', o: { seed: 5 } },
+  { label: 'fSig.6      s5', o: { founderSigma: 0.6, seed: 5 } },
+  { label: 'regen.04    s5', o: { foodRegen: 0.04, seed: 5 } },
+  { label: 'regen.04cap20 s5', o: { foodRegen: 0.04, foodCap: 20, seed: 5 } },
 ];
 
 console.log(`=== density + ablation probe: ${ticks} ticks, seed ${seed}, world 8192² ===\n`);
