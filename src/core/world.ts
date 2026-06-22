@@ -4,6 +4,7 @@ import { OrganismStore } from './store';
 import { SpatialHash } from './spatial-hash';
 import { computeRepulsion, integrate } from './physics';
 import { FoodField } from './food-field';
+import { Walls } from './walls';
 import { senseFood, senseCreatures } from './sense';
 import { steer, learn } from './brain';
 import {
@@ -31,6 +32,7 @@ export class World {
   readonly store: OrganismStore;
   readonly hash: SpatialHash;
   readonly food: FoodField;
+  readonly walls: Walls;
   tick = 0;
   /** Per-tick + cumulative vital rates (telemetry — drives the population graph and the gate). */
   lastBirths = 0;
@@ -57,6 +59,13 @@ export class World {
       config.foodInit,
       config.foodChannels,
       config.foodChannelRatio,
+    );
+    this.walls = new Walls(
+      config.worldWidth,
+      config.worldHeight,
+      config.wallCols,
+      config.wallRows,
+      config,
     );
     this.setup();
   }
@@ -97,7 +106,10 @@ export class World {
       for (let t = 0; t < 8; t++) {
         const tx = this.rng.range(0, worldWidth);
         const ty = this.rng.range(0, worldHeight);
-        const f = this.food.sampleAt(tx, ty);
+        // Reject spawns inside walls (gated: with walls off this is byte-identical — same draws, same
+        // sampleAt). A solid candidate scores -1 so an open fertile pocket always wins over it.
+        const f =
+          this.walls.active && this.walls.isSolidAt(tx, ty) ? -1 : this.food.sampleAt(tx, ty);
         if (f > best) {
           best = f;
           bx = tx;
@@ -161,6 +173,7 @@ export class World {
       cfg.worldHeight,
       cfg.cellRadius,
       cfg.sizeSpeedExp,
+      this.walls,
     );
     // HUNT: predators (diet>0) bite nearby creatures. Rebuild the hash at post-MOVE positions first so
     // bites use where creatures actually are this tick.
