@@ -22,7 +22,7 @@ describe('integrate', () => {
     s.vy[i] = -3;
     setMaxSpeed(s, i, 1e9); // ceiling far above → clamp inert
     s.rebuildLive();
-    integrate(s, 1, 1, true, W, H);
+    integrate(s, 1, 1, true, W, H, 6, 0);
     expect(s.x[i]).toBeCloseTo(102);
     expect(s.y[i]).toBeCloseTo(97);
   });
@@ -34,7 +34,7 @@ describe('integrate', () => {
     s.vy[i] = 0;
     setMaxSpeed(s, i, 1e9);
     s.rebuildLive();
-    integrate(s, 1, 0.5, true, W, H);
+    integrate(s, 1, 0.5, true, W, H, 6, 0);
     expect(s.vx[i]).toBeCloseTo(5);
   });
 
@@ -49,16 +49,41 @@ describe('integrate', () => {
       return s;
     };
     const clamped = make(6);
-    integrate(clamped, 1, 1, true, W, H);
+    integrate(clamped, 1, 1, true, W, H, 6, 0);
     expect(Math.hypot(clamped.vx[0]!, clamped.vy[0]!)).toBeCloseTo(6); // clamped to its gene
 
     const faster = make(12);
-    integrate(faster, 1, 1, true, W, H);
+    integrate(faster, 1, 1, true, W, H, 6, 0);
     expect(Math.hypot(faster.vx[0]!, faster.vy[0]!)).toBeCloseTo(12); // a faster gene → higher cap
 
     const unclamped = make(6);
-    integrate(unclamped, 1, 1, false, W, H);
+    integrate(unclamped, 1, 1, false, W, H, 6, 0);
     expect(Math.hypot(unclamped.vx[0]!, unclamped.vy[0]!)).toBeCloseTo(100); // clamp off → through
+  });
+
+  it('size taxes the speed ceiling: a 2×-size body is clamped to (1/2)^exp of its gene', () => {
+    const refSize = 6;
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.vx[i] = 100;
+    s.vy[i] = 0;
+    setMaxSpeed(s, i, 10); // gene ceiling 10
+    s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.SIZE] = 2 * refSize; // twice the reference size
+    s.rebuildLive();
+    integrate(s, 1, 1, true, W, H, refSize, 1); // exp 1 → ceiling × (refSize/size) = ×0.5
+    expect(Math.hypot(s.vx[0]!, s.vy[0]!)).toBeCloseTo(5); // 10 × 0.5
+  });
+
+  it('sizeSpeedExp 0 leaves the ceiling untaxed regardless of size', () => {
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.vx[i] = 100;
+    s.vy[i] = 0;
+    setMaxSpeed(s, i, 8);
+    s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.SIZE] = 30; // huge, but coupling off
+    s.rebuildLive();
+    integrate(s, 1, 1, true, W, H, 6, 0);
+    expect(Math.hypot(s.vx[0]!, s.vy[0]!)).toBeCloseTo(8); // unaffected
   });
 
   it('wraps position toroidally', () => {
@@ -70,7 +95,7 @@ describe('integrate', () => {
     s.vy[i] = -3;
     setMaxSpeed(s, i, 1e9);
     s.rebuildLive();
-    integrate(s, 1, 1, true, W, H);
+    integrate(s, 1, 1, true, W, H, 6, 0);
     expect(s.x[i]).toBeCloseTo(2); // wrapped past the right edge
     expect(s.y[i]).toBeCloseTo(H - 2); // wrapped past the top
   });
