@@ -73,6 +73,9 @@ export class World {
         cfg.foodPatchRadius,
         cfg.foodBaseFertility,
         this.rng,
+        cfg.foodPatchRichness,
+        cfg.foodPatchRichnessVar,
+        cfg.foodMaxFertility,
       );
     } else {
       this.food.reset();
