@@ -2,7 +2,7 @@ import { type Config } from './config';
 import { Rng } from './rng';
 import { OrganismStore } from './store';
 import { SpatialHash } from './spatial-hash';
-import { computeRepulsion, integrate } from './physics';
+import { applyFlowForce, computeRepulsion, integrate } from './physics';
 import { FoodField } from './food-field';
 import { Walls } from './walls';
 import { FlowField } from './flow-field';
@@ -171,7 +171,8 @@ export class World {
     senseFood(s, this.food, cfg.worldWidth, cfg.worldHeight);
     senseCreatures(s, this.hash, cfg, this.walls);
     steer(s, cfg.learningEnabled, cfg.eligLambda, cfg.motorSquash);
-    // MOVE: repulsion adds onto the thrust force, then integrate (per-creature maxSpeed gene).
+    // MOVE: flow push (size-scaled current) then repulsion add onto the thrust force, then integrate.
+    if (cfg.flowPushStrength > 0) applyFlowForce(s, this.flow, cfg);
     computeRepulsion(s, this.hash, cfg.cellRadius, cfg.repulsion, cfg.worldWidth, cfg.worldHeight);
     integrate(
       s,

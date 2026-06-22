@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { OrganismStore } from './store';
 import { SpatialHash } from './spatial-hash';
-import { computeRepulsion, integrate } from './physics';
+import { computeRepulsion, integrate, applyFlowForce } from './physics';
 import { ScalarGene, SCALAR_GENE_COUNT } from './genome';
 import { Walls } from './walls';
+import { FlowField } from './flow-field';
 import { defaultConfig } from './config';
 
 const W = 512;
@@ -234,5 +235,47 @@ describe('computeRepulsion', () => {
     computeRepulsion(s, hash, 6, 2, W, H);
     expect(s.forceX[a]!).toBe(0);
     expect(s.forceY[a]!).toBe(0);
+  });
+});
+
+describe('applyFlowForce', () => {
+  it('flow push is off when flowPushStrength=0 (force buffer untouched)', () => {
+    const flow = new FlowField(
+      1024,
+      1024,
+      16,
+      16,
+      defaultConfig({ flowStrength: 2, flowPushStrength: 0 }),
+    );
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.rebuildLive();
+    s.forceX[i] = 1;
+    s.forceY[i] = 2;
+    applyFlowForce(s, flow, defaultConfig({ flowPushStrength: 0 }));
+    expect(s.forceX[i]).toBe(1);
+    expect(s.forceY[i]).toBe(2);
+  });
+
+  it('smaller bodies are pushed harder than larger bodies', () => {
+    const cfg = defaultConfig({
+      flowStrength: 3,
+      flowPushStrength: 5,
+      flowPushSizeExp: 1,
+      cellRadius: 6,
+    });
+    const flow = new FlowField(1024, 1024, 16, 16, cfg);
+    const s = new OrganismStore(4);
+    const small = s.alloc();
+    const large = s.alloc();
+    s.x[small] = s.x[large] = 100; // identical position
+    s.y[small] = s.y[large] = 100;
+    s.scalarGenes[small * SCALAR_GENE_COUNT + ScalarGene.SIZE] = 3; // small
+    s.scalarGenes[large * SCALAR_GENE_COUNT + ScalarGene.SIZE] = 24; // large
+    s.rebuildLive();
+    applyFlowForce(s, flow, cfg);
+    expect(Math.hypot(s.forceX[small]!, s.forceY[small]!)).toBeGreaterThan(
+      Math.hypot(s.forceX[large]!, s.forceY[large]!),
+    );
   });
 });
