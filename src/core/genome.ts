@@ -239,33 +239,65 @@ export const Brain = {
   SIGHT_FWD_TURN: 7, // forward sight vector → turn
   SIGHT_LAT_THRUST: 8, // lateral sight → thrust
   SIGHT_FWD_THRUST: 9, // forward sight → thrust (chase prey / flee predators)
+  // Wall-sense weights: wall-proximity vector (lateral, forward) in the heading frame → turn + thrust.
+  // Seed at 0 and only drawn when the world HAS walls (wallSenseGenes), so a wall-less world stays
+  // byte-identical. Steer (Task 6.3) wires these in; here they're allocated + gated only.
+  WALL_LAT_TURN: 10,
+  WALL_FWD_TURN: 11,
+  WALL_LAT_THRUST: 12,
+  WALL_FWD_THRUST: 13,
+  // Flow-sense weights: flow-transient vector (lateral, forward) → turn + thrust. Gated on flowSenseGenes.
+  FLOW_LAT_TURN: 14,
+  FLOW_FWD_TURN: 15,
+  FLOW_LAT_THRUST: 16,
+  FLOW_FWD_THRUST: 17,
 } as const;
-export const BRAIN_GENES = 10;
+export const BRAIN_GENES = 18;
 
 /** Founder brain ≈ the hand-tuned chemotaxis controller (turn toward lateral food, thrust up-gradient,
  *  gentle cruise) + ACTIVE sight: turn toward & thrust along the appeal-signed sight vector. Because that
  *  vector already points TOWARD prey (predators) and AWAY from threats (prey), one pair of positive
  *  weights gives chase AND flee from birth — so vision drives behavior immediately instead of waiting
- *  for the sight weights to evolve up from 0. Founders seed near this + noise. Layout order = Brain enum:
+ *  for the sight weights to evolve up from 0. Founders seed near this + noise. The 8 env-sense weights
+ *  (wall + flow) seed at 0 — neutral — so the response is evolved/learned, not hand-set (and a world with
+ *  walls/flow OFF never draws them, staying byte-identical). Layout order = Brain enum:
  *  [LAT_TURN, FWD_TURN, LAT_THRUST, FWD_THRUST, TURN_BIAS, THRUST_BIAS,
- *   SIGHT_LAT_TURN, SIGHT_FWD_TURN, SIGHT_LAT_THRUST, SIGHT_FWD_THRUST]. */
-const FOUNDER_BRAIN: readonly number[] = [1.2, 0, 0, 1.5, 0, 0.3, 1.0, 0, 0, 1.2];
+ *   SIGHT_LAT_TURN, SIGHT_FWD_TURN, SIGHT_LAT_THRUST, SIGHT_FWD_THRUST,
+ *   WALL_LAT_TURN, WALL_FWD_TURN, WALL_LAT_THRUST, WALL_FWD_THRUST,
+ *   FLOW_LAT_TURN, FLOW_FWD_TURN, FLOW_LAT_THRUST, FLOW_FWD_THRUST]. */
+const FOUNDER_BRAIN: readonly number[] = [
+  1.2, 0, 0, 1.5, 0, 0.3, 1.0, 0, 0, 1.2, 0, 0, 0, 0, 0, 0, 0, 0,
+];
 
-/** Seed a founder's genome: founder brain + Gaussian spread, random hue (lineage colors diverge). */
+/** Seed a founder's genome: founder brain + Gaussian spread, random hue (lineage colors diverge).
+ *  The 8 env-sense weights are GATED: a WALL weight is drawn only when `wallSenseGenes`, a FLOW weight
+ *  only when `flowSenseGenes`. When gated off the weight is set to its founder value (0) WITHOUT drawing
+ *  RNG — so with both off the stream is byte-identical to the pre-env 10-gene genome (the ablation gate). */
 export function seedGenome(
   brain: Float32Array,
   hue: Float32Array,
   slot: number,
   rng: Rng,
   founderSigma: number,
+  wallSenseGenes: boolean,
+  flowSenseGenes: boolean,
 ): void {
   const base = slot * BRAIN_GENES;
-  for (let g = 0; g < BRAIN_GENES; g++)
+  for (let g = 0; g < BRAIN_GENES; g++) {
+    const isWall = g >= Brain.WALL_LAT_TURN && g <= Brain.WALL_FWD_THRUST;
+    const isFlow = g >= Brain.FLOW_LAT_TURN && g <= Brain.FLOW_FWD_THRUST;
+    if ((isWall && !wallSenseGenes) || (isFlow && !flowSenseGenes)) {
+      brain[base + g] = FOUNDER_BRAIN[g]!; // 0, no draw
+      continue;
+    }
     brain[base + g] = FOUNDER_BRAIN[g]! + rng.gaussian(0, founderSigma);
+  }
   hue[slot] = rng.float();
 }
 
-/** Copy a parent's genome to a child with Gaussian mutation (the only source of variation). */
+/** Copy a parent's genome to a child with Gaussian mutation (the only source of variation). Env-sense
+ *  weights are GATED as in seedGenome: when off, the child INHERITS the parent's weight with NO draw —
+ *  so both flags off keeps the birth stream byte-identical to the pre-env engine. */
 export function mutateGenome(
   brain: Float32Array,
   hue: Float32Array,
@@ -274,10 +306,20 @@ export function mutateGenome(
   rng: Rng,
   sigma: number,
   hueSigma: number,
+  wallSenseGenes: boolean,
+  flowSenseGenes: boolean,
 ): void {
   const cb = child * BRAIN_GENES;
   const pb = parent * BRAIN_GENES;
-  for (let g = 0; g < BRAIN_GENES; g++) brain[cb + g] = brain[pb + g]! + rng.gaussian(0, sigma);
+  for (let g = 0; g < BRAIN_GENES; g++) {
+    const isWall = g >= Brain.WALL_LAT_TURN && g <= Brain.WALL_FWD_THRUST;
+    const isFlow = g >= Brain.FLOW_LAT_TURN && g <= Brain.FLOW_FWD_THRUST;
+    if ((isWall && !wallSenseGenes) || (isFlow && !flowSenseGenes)) {
+      brain[cb + g] = brain[pb + g]!; // inherit, no draw
+      continue;
+    }
+    brain[cb + g] = brain[pb + g]! + rng.gaussian(0, sigma);
+  }
   let h = hue[parent]! + rng.gaussian(0, hueSigma);
   h -= Math.floor(h); // wrap into [0,1)
   hue[child] = h;

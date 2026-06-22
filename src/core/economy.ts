@@ -171,7 +171,13 @@ export function cullDead(store: OrganismStore): number {
  * parent's genome with Gaussian mutation. Children allocated this tick first act next tick. RNG drawn
  * in ascending order. Returns births. r/K strategies emerge from the satiated + birthEnergy genes.
  */
-export function reproduce(store: OrganismStore, rng: Rng, cfg: Config): number {
+export function reproduce(
+  store: OrganismStore,
+  rng: Rng,
+  cfg: Config,
+  wallSenseGenes: boolean,
+  flowSenseGenes: boolean,
+): number {
   const { reproOverhead, offspringOffset, worldWidth, worldHeight } = cfg;
   // Snapshot the parents up front: alloc() mutates liveIndices' backing only via rebuildLive (not
   // here), but children land in freed slots — iterating a fixed count avoids touching them anyway.
@@ -200,7 +206,17 @@ export function reproduce(store: OrganismStore, rng: Rng, cfg: Config): number {
     heading[child] = heading[p]!;
     // Inherit the genome with mutation FIRST (brain + hue, then scalar genes) so the child's
     // BIRTH_ENERGY gene is known before we provision it. RNG drawn in a fixed order per child.
-    mutateGenome(store.brain, store.hue, child, p, rng, cfg.mutationSigma, cfg.hueMutationSigma);
+    mutateGenome(
+      store.brain,
+      store.hue,
+      child,
+      p,
+      rng,
+      cfg.mutationSigma,
+      cfg.hueMutationSigma,
+      wallSenseGenes,
+      flowSenseGenes,
+    );
     mutateScalarGenes(store.scalarGenes, child, p, rng, cfg);
     // No-Lamarck: the child's runtime brain starts from its freshly-mutated GENOME, not the parent's
     // learned weights. Learning never crosses the generation boundary.
