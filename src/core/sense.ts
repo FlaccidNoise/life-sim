@@ -10,6 +10,7 @@ import { type FoodField } from './food-field';
 import { type SpatialHash } from './spatial-hash';
 import { type Config } from './config';
 import { type Walls } from './walls';
+import { type FlowField } from './flow-field';
 import { ScalarGene, SCALAR_GENE_COUNT } from './genome';
 
 function wrap(v: number, size: number): number {
@@ -51,6 +52,38 @@ export function senseFood(
       (food.sampleAt(xi, wrap(yi + step, worldHeight)) -
         food.sampleAt(xi, wrap(yi - step, worldHeight))) *
       inv;
+  }
+}
+
+/** Fill the per-creature environment senses (world frame): the wall-proximity gradient (points away from
+ *  walls) and the local flow vector. Gated — each writes 0 when its feature is absent (so the brain inputs
+ *  are inert and the all-off state is byte-identical). Allocation-free, ascending order. */
+export function senseEnv(
+  store: OrganismStore,
+  walls: Walls | null,
+  flow: FlowField | null,
+  cfg: Config,
+): void {
+  const { liveIndices, liveCount, x, y, wallSenseX, wallSenseY, flowSenseX, flowSenseY } = store;
+  const wallsOn = walls !== null && walls.active;
+  const flowOn = flow !== null && cfg.flowStrength > 0;
+  for (let k = 0; k < liveCount; k++) {
+    const i = liveIndices[k]!;
+    if (wallsOn) {
+      const g = walls.proxGradAt(x[i]!, y[i]!, cfg.wallSenseRange);
+      wallSenseX[i] = g.gx;
+      wallSenseY[i] = g.gy;
+    } else {
+      wallSenseX[i] = 0;
+      wallSenseY[i] = 0;
+    }
+    if (flowOn) {
+      flowSenseX[i] = flow.sampleX(x[i]!, y[i]!);
+      flowSenseY[i] = flow.sampleY(x[i]!, y[i]!);
+    } else {
+      flowSenseX[i] = 0;
+      flowSenseY[i] = 0;
+    }
   }
 }
 
