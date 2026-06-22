@@ -56,6 +56,17 @@ export interface Config {
   foodPatchRadius: number;
   /** Fertility of the dead water between pockets, [0,1] (small → near-dead gaps that isolate pockets). */
   foodBaseFertility: number;
+  /** Per-pocket richness peak (Gaussian amplitude). 1 = legacy (each pocket peaks at fertility 1 → K=cap).
+   *  >1 makes pockets DEEP reservoirs (peak fertility>1 → K=cap·peak>cap), so a pocket holds a dense, deep
+   *  prey cluster regardless of world size — the big-world predation lever. */
+  foodPatchRichness: number;
+  /** Per-pocket richness VARIATION, [0,1]: each pocket's peak = richness·(1 + var·(2·rng−1)), so pockets
+   *  differ in depth (some deep predator-havens, some shallow grazer-refuges). 0 = uniform (NO extra RNG
+   *  draw → byte-identical to legacy when richness=1 and maxFertility=1). The diversity-from-place lever. */
+  foodPatchRichnessVar: number;
+  /** Hard clamp on per-cell fertility after pockets are summed. 1 = legacy (K never exceeds cap). Raise it
+   *  to let deep pockets exceed K=cap (needed for foodPatchRichness>1 to actually deepen the reservoir). */
+  foodMaxFertility: number;
   /** Number of independent food channels (lever B, niche partitioning). 1 = a single biomass field,
    *  byte-identical to a one-resource world (the ablation OFF state). 2 = a second logistic channel B2
    *  sharing the same fertility map; each cell's cap is split A/B so total biomass is unchanged. This is
@@ -293,6 +304,9 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     foodPatchCount: 14, // distinct island communities scattered across the archipelago
     foodPatchRadius: 5, // ~320-unit pockets (5 cells × 64 units) — small + separate, not merged
     foodBaseFertility: 0, // truly dead water between pockets → real isolation, distinct islands
+    foodPatchRichness: 1, // legacy depth (peak fertility 1 → K=cap); >1 = deep reservoirs (the spike lever)
+    foodPatchRichnessVar: 0, // OFF: uniform pockets, NO extra RNG draw → byte-identical to legacy
+    foodMaxFertility: 1, // legacy clamp (K never exceeds cap); raise with richness>1 to deepen reservoirs
     foodChannels: 1, // single resource (byte-identical OFF state); 2 = niche-partitioning second channel
     foodChannelRatio: 0.5, // symmetric A/B split when channels===2 (total per-cell cap unchanged)
     eatRate: 2,
