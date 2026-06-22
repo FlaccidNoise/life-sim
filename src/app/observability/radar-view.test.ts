@@ -27,9 +27,9 @@ describe('computeRadar', () => {
     expect(st.axes.map((a) => a.label)).toEqual([
       'diet',
       'bite',
-      'spd',
+      'agility',
       'size',
-      'smell',
+      'vision',
       'r/K',
       'prov',
     ]);
@@ -41,18 +41,20 @@ describe('computeRadar', () => {
     // Push two genes to their spec extremes and assert norm hits 0 and 1 exactly.
     const sizeSpec = SCALAR_GENE_SPECS[ScalarGene.SIZE]!;
     setGene(s, 0, ScalarGene.SIZE, sizeSpec.min);
-    setGene(s, 0, ScalarGene.MAX_SPEED, SCALAR_GENE_SPECS[ScalarGene.MAX_SPEED]!.max);
+    setGene(s, 0, ScalarGene.MAX_TURN, SCALAR_GENE_SPECS[ScalarGene.MAX_TURN]!.max);
     const st = computeRadar(s, cfg, 0);
     expect(st.axes.find((a) => a.label === 'size')!.norm).toBe(0);
-    expect(st.axes.find((a) => a.label === 'spd')!.norm).toBe(1);
+    expect(st.axes.find((a) => a.label === 'agility')!.norm).toBe(1);
   });
 
   it('maps a centered gene to its proportional position on the ring', () => {
     const st = computeRadar(centered(), cfg, 0);
-    const spd = st.axes.find((a) => a.label === 'spd')!;
-    const spec = SCALAR_GENE_SPECS[ScalarGene.MAX_SPEED]!;
-    expect(spd.norm).toBeCloseTo((cfg.maxSpeed - spec.min) / (spec.max - spec.min), 10);
-    expect(spd.value).toBe(cfg.maxSpeed);
+    const agility = st.axes.find((a) => a.label === 'agility')!;
+    const spec = SCALAR_GENE_SPECS[ScalarGene.MAX_TURN]!;
+    // maxTurn's center (0.35) isn't exactly representable in the Float32Array gene store, so compare at
+    // float32 precision rather than full double precision.
+    expect(agility.norm).toBeCloseTo((cfg.maxTurn - spec.min) / (spec.max - spec.min), 6);
+    expect(agility.value).toBeCloseTo(cfg.maxTurn, 6);
   });
 
   it('clamps out-of-range values into [0,1]', () => {
@@ -78,7 +80,7 @@ describe('computeRadar', () => {
 
 describe('radar lenses', () => {
   it('registers ordered lenses with capability first + default', () => {
-    expect(LENSES.map((l) => l.key)).toEqual(['capability', 'sensesSocial', 'lifeHistory']);
+    expect(LENSES.map((l) => l.key)).toEqual(['capability', 'lifeHistory']);
     expect(DEFAULT_LENS).toBe('capability');
     expect(LENSES[0]!.axes).toBe(CAPABILITY_AXES);
   });
