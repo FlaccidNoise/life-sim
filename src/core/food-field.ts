@@ -27,6 +27,11 @@ export class FoodField {
   private readonly cellH: number;
   private readonly initFraction: number;
   private readonly fertility: Float32Array; // per-cell K share, [0,1]
+  // Per-cell TOTAL carrying capacity (summed across channels). Baseline = cap·fertility (so it tracks the
+  // [0,1] fertility map); lever C's pocketCapVariance overwrites it per pocket so K can exceed cap. Each
+  // channel's K is Kcell·capFrac. Float64 (not Float32) so the v=0 baseline is BYTE-IDENTICAL to the old
+  // `cap·fertility` reads — a Float32 store would round the float64 product and break the determinism gate.
+  private readonly Kcell: Float64Array;
   private readonly channels: number; // 1 (default, single field) or 2 (second resource B2)
   private readonly ratio: number; // channel-B share of each cell's cap, [0,1] (A gets 1−ratio)
   private B: Float64Array;
@@ -52,13 +57,22 @@ export class FoodField {
     this.channels = channels;
     this.ratio = channelRatio;
     this.fertility = new Float32Array(cols * rows).fill(1); // uniform full world by default
+    this.Kcell = new Float64Array(cols * rows);
     this.B = new Float64Array(cols * rows);
     this.scratch = new Float64Array(cols * rows);
     if (channels === 2) {
       this.B2 = new Float64Array(cols * rows);
       this.scratch2 = new Float64Array(cols * rows);
     }
+    this.recomputeK();
     this.refill();
+  }
+
+  /** Recompute the per-cell carrying capacity from the fertility map: Kcell = cap·fertility (the uniform
+   *  baseline). Called whenever fertility changes (construction + seedPatches). Lever C overwrites Kcell
+   *  per pocket AFTER this, so this is the v=0 / no-variance state. */
+  private recomputeK(): void {
+    for (let i = 0; i < this.Kcell.length; i++) this.Kcell[i] = this.cap * this.fertility[i]!;
   }
 
   /** Channel-A cap fraction of cap·fertility. Single-channel = 1 (×1 is an IEEE identity, so the field is
@@ -67,14 +81,15 @@ export class FoodField {
     return this.channels === 2 ? 1 - this.ratio : 1;
   }
 
-  /** B ← capShare·fertility·initFraction (the seeded starting biomass per cell, per channel). */
+  /** B ← Kcell·capShare·initFraction (the seeded starting biomass per cell, per channel). Reads the
+   *  per-cell capacity Kcell (= cap·fertility at the v=0 baseline) so it stays byte-identical to the old
+   *  `cap·fertility·frac·init` while letting lever C vary K per pocket. */
   private refill(): void {
     const fracA = this.fracA;
-    for (let i = 0; i < this.B.length; i++)
-      this.B[i] = this.cap * this.fertility[i]! * fracA * this.initFraction;
+    for (let i = 0; i < this.B.length; i++) this.B[i] = this.Kcell[i]! * fracA * this.initFraction;
     if (this.B2)
       for (let i = 0; i < this.B2.length; i++)
-        this.B2[i] = this.cap * this.fertility[i]! * this.ratio * this.initFraction;
+        this.B2[i] = this.Kcell[i]! * this.ratio * this.initFraction;
   }
 
   /**
@@ -108,6 +123,7 @@ export class FoodField {
         }
       }
     }
+    this.recomputeK();
     this.refill();
   }
 
@@ -199,10 +215,10 @@ export class FoodField {
     diffuse: number,
     second: boolean,
   ): void {
-    const { cols, rows, cap, fertility } = this;
+    const { cols, rows, Kcell } = this;
     if (regen > 0) {
       for (let i = 0; i < field.length; i++) {
-        const k = cap * fertility[i]! * capFrac;
+        const k = Kcell[i]! * capFrac;
         const b = field[i]!;
         let nb: number;
         if (k <= 1e-6) {
