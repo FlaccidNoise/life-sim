@@ -213,7 +213,14 @@ export class World {
     if (cfg.learningEnabled)
       learn(s, cfg.learningRate, cfg.weightDecay, cfg.maxLearnDeviation, cfg.learnRewardClamp);
     this.lastDeaths = cullDead(s);
-    this.lastBirths = reproduce(s, this.rng, cfg, this.wallSenseGenes, this.flowSenseGenes);
+    this.lastBirths = reproduce(
+      s,
+      this.rng,
+      cfg,
+      this.wallSenseGenes,
+      this.flowSenseGenes,
+      this.walls,
+    );
     this.totalBirths += this.lastBirths;
     this.totalDeaths += this.lastDeaths;
     s.rebuildLive();

@@ -12,6 +12,7 @@ import { type FoodField } from './food-field';
 import { type SpatialHash } from './spatial-hash';
 import { type Rng } from './rng';
 import { type Config } from './config';
+import { type Walls } from './walls';
 import {
   mutateGenome,
   mutateScalarGenes,
@@ -177,6 +178,7 @@ export function reproduce(
   cfg: Config,
   wallSenseGenes: boolean,
   flowSenseGenes: boolean,
+  walls: Walls | null,
 ): number {
   const { reproOverhead, offspringOffset, worldWidth, worldHeight } = cfg;
   // Snapshot the parents up front: alloc() mutates liveIndices' backing only via rebuildLive (not
@@ -199,6 +201,13 @@ export function reproduce(
     if (cx < 0) cx += worldWidth;
     cy %= worldHeight;
     if (cy < 0) cy += worldHeight;
+    // Never spawn a child inside solid terrain (the parent's pos is already a valid open cell, so fall
+    // back to it; soft-repulsion then separates them). RNG-free, so the per-child draw count is fixed —
+    // with walls off (null / inactive) this never fires and the run stays byte-identical.
+    if (walls !== null && walls.active && walls.isSolidAt(cx, cy)) {
+      cx = x[p]!;
+      cy = y[p]!;
+    }
     x[child] = cx;
     y[child] = cy;
     vx[child] = vx[p]!;

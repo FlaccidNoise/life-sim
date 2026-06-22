@@ -367,7 +367,7 @@ describe('reproduce (breed at the per-creature satiated bar)', () => {
     s.energy[p] = 100;
     genes(s, p, cfg); // parent genes at centers (satiated 60, birthEnergy 25)
     s.rebuildLive();
-    const births = reproduce(s, new Rng(1), cfg, false, false);
+    const births = reproduce(s, new Rng(1), cfg, false, false, null);
     expect(births).toBe(1);
     expect(s.energy[p]).toBeCloseTo(100 - 25 - 15); // paid childBirthEnergy(25) + reproOverhead(15)
     s.rebuildLive();
@@ -382,7 +382,7 @@ describe('reproduce (breed at the per-creature satiated bar)', () => {
     s.energy[p] = 59; // < satiated gene 60
     genes(s, p, cfg);
     s.rebuildLive();
-    expect(reproduce(s, new Rng(1), cfg, false, false)).toBe(0);
+    expect(reproduce(s, new Rng(1), cfg, false, false, null)).toBe(0);
   });
 
   it('breeds at the parent’s OWN satiated GENE, not the config default', () => {
@@ -406,7 +406,7 @@ describe('reproduce (breed at the per-creature satiated bar)', () => {
       [ScalarGene.BIRTH_ENERGY]: 20,
     });
     s.rebuildLive();
-    expect(reproduce(s, new Rng(1), cfgHigh, false, false)).toBe(1); // breeds on its gene, not the config 100
+    expect(reproduce(s, new Rng(1), cfgHigh, false, false, null)).toBe(1); // breeds on its gene, not the config 100
   });
 
   it('breed bar is reproGene+MIN_BAND when the satiated gene is below the repro gene', () => {
@@ -423,7 +423,7 @@ describe('reproduce (breed at the per-creature satiated bar)', () => {
         [ScalarGene.BIRTH_ENERGY]: 20,
       });
       s.rebuildLive();
-      return reproduce(s, new Rng(1), c, false, false);
+      return reproduce(s, new Rng(1), c, false, false, null);
     };
     expect(breeds(60 + MIN_BAND - 1)).toBe(0); // below the guarded bar (NOT the inverted satiated 40)
     expect(breeds(60 + MIN_BAND + 1)).toBe(1); // above it → breeds
@@ -446,7 +446,7 @@ describe('reproduce (breed at the per-creature satiated bar)', () => {
     s.energy[p] = 500;
     genes(s, p, c, { [ScalarGene.BIRTH_ENERGY]: 30 });
     s.rebuildLive();
-    expect(reproduce(s, new Rng(5), c, false, false)).toBe(1);
+    expect(reproduce(s, new Rng(5), c, false, false, null)).toBe(1);
     s.rebuildLive();
     const child = s.liveIndices[1]!;
     const childGene = s.scalarGenes[child * SCALAR_GENE_COUNT + ScalarGene.BIRTH_ENERGY]!;
@@ -478,10 +478,10 @@ describe('reproduce (breed at the per-creature satiated bar)', () => {
       return s;
     };
     const s1 = make();
-    reproduce(s1, new Rng(7), detCfg, false, false);
+    reproduce(s1, new Rng(7), detCfg, false, false, null);
     s1.rebuildLive();
     const s2 = make();
-    reproduce(s2, new Rng(7), detCfg, false, false);
+    reproduce(s2, new Rng(7), detCfg, false, false, null);
     s2.rebuildLive();
     for (let k = 0; k < s1.liveCount; k++) {
       const i = s1.liveIndices[k]!;
