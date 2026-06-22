@@ -199,7 +199,12 @@ export class World {
     this.totalDeaths += this.lastDeaths;
     s.rebuildLive();
     // FIELDS
-    this.food.step(cfg.foodRegen, cfg.foodDiffuse);
+    this.food.step(
+      cfg.foodRegen,
+      cfg.foodDiffuse,
+      null,
+      this.walls.active ? this.walls.foodBlockedMask() : null,
+    );
     this.tick++;
   }
 

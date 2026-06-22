@@ -11,19 +11,19 @@ describe('FoodField', () => {
   it('logistic regrowth grows biomass toward the cap', () => {
     const f = new FoodField(W, H, COLS, ROWS, K, 0.5); // start at K/2
     const before = f.sampleAt(0, 0);
-    f.step(0.1, 0);
+    f.step(0.1, 0, null, null);
     const after = f.sampleAt(0, 0);
     expect(after).toBeGreaterThan(before);
     expect(after).toBeLessThanOrEqual(K);
     // run to convergence
-    for (let i = 0; i < 1000; i++) f.step(0.1, 0);
+    for (let i = 0; i < 1000; i++) f.step(0.1, 0, null, null);
     expect(f.sampleAt(0, 0)).toBeCloseTo(K, 3);
   });
 
   it('regen=0 leaves biomass unchanged (food OFF)', () => {
     const f = new FoodField(W, H, COLS, ROWS, K, 0.7);
     const before = f.sampleAt(40, 40);
-    f.step(0, 0);
+    f.step(0, 0, null, null);
     expect(f.sampleAt(40, 40)).toBe(before);
   });
 
@@ -43,8 +43,20 @@ describe('FoodField', () => {
     const cx = cellW * 4 + cellW / 2; // a cell well inside the grid
     f.grazeAt(cx, cellW * 4 + cellW / 2, K); // empty it
     expect(f.sampleAt(cx, cellW * 4 + cellW / 2)).toBe(0);
-    f.step(0, 0.1); // diffusion only
+    f.step(0, 0.1, null, null); // diffusion only
     expect(f.sampleAt(cx, cellW * 4 + cellW / 2)).toBeGreaterThan(0); // reseeded from neighbors
+  });
+
+  it('blocked cells hold no biomass and do not diffuse through walls', () => {
+    const f = new FoodField(128, 128, 4, 4, 10, 1); // 4×4, full
+    const blocked = new Uint8Array(16);
+    blocked[1 * 4 + 1] = 1; // dam one interior cell
+    const totalBefore = f.total();
+    f.step(0.1, 0.2, null, blocked);
+    // dammed cell drained to 0 (cell (1,1) is the world region [32,64)×[32,64))
+    expect(f.sampleAt(1 * 32 + 16, 1 * 32 + 16)).toBe(0);
+    // no biomass leaked INTO the wall: total dropped by the dammed cell's biomass (no-flux conserves the rest)
+    expect(f.total()).toBeCloseTo(totalBefore - 10, 5);
   });
 
   it('reset refills to the initial biomass', () => {
@@ -71,7 +83,7 @@ describe('FoodField', () => {
     expect(f.sampleAt2(0, 0)).toBeCloseTo(K / 2 - 2);
     expect(f.sampleAt(0, 0)).toBeCloseTo(K / 2); // channel A unaffected
     // Each channel regrows toward its OWN cap (K/2), not the global K.
-    for (let i = 0; i < 1000; i++) f.step(0.1, 0);
+    for (let i = 0; i < 1000; i++) f.step(0.1, 0, null, null);
     expect(f.sampleAt(0, 0)).toBeCloseTo(K / 2, 3);
     expect(f.sampleAt2(0, 0)).toBeCloseTo(K / 2, 3);
   });
