@@ -4,7 +4,15 @@ import prettier from 'eslint-config-prettier';
 export default tseslint.config(
   // Root config files are not part of the TS project; don't type-check-lint them.
   {
-    ignores: ['dist', 'coverage', 'node_modules', '*.config.ts', '*.config.js', 'eslint.config.js'],
+    ignores: [
+      'dist',
+      'coverage',
+      'node_modules',
+      '.claude/worktrees', // transient git worktrees (other branches) — never lint these copies
+      '*.config.ts',
+      '*.config.js',
+      'eslint.config.js',
+    ],
   },
   // Type-checked rules apply to source only.
   {
