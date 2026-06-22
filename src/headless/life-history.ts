@@ -451,7 +451,7 @@ function runSeed(seed: number, ticks: number, stride: number): SeedResult {
   p(`${''.padEnd(20)} ${'·'.repeat(maxGen + 1)}`);
   for (let g = 0; g < SCALAR_GENE_COUNT; g++) {
     const series = geneByGen.map((row, gg) => (genHist[gg]! > 0 ? row[g]! : NaN));
-    const finite = series.filter((v) => Number.isFinite(v)) as number[];
+    const finite = series.filter((v) => Number.isFinite(v));
     const first = finite[0]!;
     const last = finite[finite.length - 1]!;
     const d = last - first;
@@ -683,7 +683,7 @@ if (results.length === 1) {
       0,
     )}%**`,
   );
-  const ratios = results.map((r) => r.top1to2).filter((x) => Number.isFinite(x)) as number[];
+  const ratios = results.map((r) => r.top1to2).filter((x) => Number.isFinite(x));
   p(
     `- top1:2 ratio: ${ratios.length ? fmtRange(ratios, 1) : 'n/a'}` +
       `${ratios.length < n ? ` (${n - ratios.length} seed(s) had a single dynasty → ∞)` : ''}`,
@@ -753,7 +753,7 @@ if (results.length === 1) {
   p(`${''.padEnd(20)} ${'·'.repeat(poolMaxGen + 1)}`);
   for (let g = 0; g < SCALAR_GENE_COUNT; g++) {
     const series = poolGeneMean.map((row, gg) => (poolGenN[gg]! > 0 ? row[g]! : NaN));
-    const finite = series.filter((v) => Number.isFinite(v)) as number[];
+    const finite = series.filter((v) => Number.isFinite(v));
     const first = finite[0]!;
     const last = finite[finite.length - 1]!;
     const d = last - first;
