@@ -21,6 +21,24 @@ import {
   MIN_BAND,
 } from './genome';
 
+/**
+ * A creature's effective "full" bar (where it stops eating and breeds): its SATIATED_THRESHOLD gene
+ * scaled by body size — a bigger body holds a DEEPER energy reserve ((size/cellRadius)^sizeStoreExp) —
+ * then floored to MIN_BAND above its repro bar. Shared by metabolize (eat-stop) and reproduce (breed
+ * trigger) so the two never diverge. sizeStoreExp 0 → no size coupling (the pure gene bar).
+ */
+export function satiatedBar(scalarGenes: Float32Array, i: number, cfg: Config): number {
+  const sg = i * SCALAR_GENE_COUNT;
+  const repro = scalarGenes[sg + ScalarGene.REPRO_THRESHOLD]!;
+  let satiated = scalarGenes[sg + ScalarGene.SATIATED_THRESHOLD]!;
+  if (cfg.sizeStoreExp > 0) {
+    const size = scalarGenes[sg + ScalarGene.SIZE]!;
+    satiated *= (size / cfg.cellRadius) ** cfg.sizeStoreExp;
+  }
+  const floor = repro + MIN_BAND;
+  return satiated < floor ? floor : satiated;
+}
+
 /** Shortest signed delta a→b on a torus of the given size (|result| ≤ size/2). */
 function wrapDelta(d: number, size: number): number {
   const h = size * 0.5;
@@ -110,18 +128,22 @@ export function metabolize(store: OrganismStore, food: FoodField, cfg: Config): 
     const eatRate = scalarGenes[sg + ScalarGene.EAT_RATE]!;
     const efficiency = scalarGenes[sg + ScalarGene.METAB_EFF]!;
     const diet = scalarGenes[sg + ScalarGene.DIET]!; // 0 grazer … 1 hunter; graze income ×(1−diet)
-    // SATIATED at the creature's OWN satiated bar (gene), kept above its repro bar by MIN_BAND.
-    const repro = scalarGenes[sg + ScalarGene.REPRO_THRESHOLD]!;
-    let satiated = scalarGenes[sg + ScalarGene.SATIATED_THRESHOLD]!;
-    if (satiated < repro + MIN_BAND) satiated = repro + MIN_BAND;
-    // SATIATED creatures are "full" → they stop grazing. Plant income falls off as (1−diet)^herbivoryExp,
-    // so carnivores get less from the green field and lean on hunting — but exp=1 keeps a real fallback so
-    // predators survive the sparse stretches between kills (a pure herbivore is unaffected at any exp).
+    // SATIATED at the creature's OWN size-scaled satiated bar (bigger body = deeper reserve), kept above
+    // its repro bar by MIN_BAND. SATIATED creatures are "full" → they stop grazing. Plant income falls off
+    // as (1−diet)^herbivoryExp, so carnivores get less from the green field and lean on hunting — but exp=1
+    // keeps a real fallback so predators survive the sparse stretches between kills (pure herbivore unaffected).
+    const satiated = satiatedBar(scalarGenes, i, cfg);
     const herbivory = (1 - diet) ** cfg.herbivoryExp;
     const gained = energy[i]! >= satiated ? 0 : food.grazeAt(x[i]!, y[i]!, eatRate * herbivory);
     const speed2 = vx[i]! * vx[i]! + vy[i]! * vy[i]!;
+    // Bigger bodies are costlier to move (mass): the speed² cost scales by (size/cellRadius)^sizeMoveCostExp.
+    let moveFactor = 1;
+    if (cfg.sizeMoveCostExp > 0) {
+      const size = scalarGenes[sg + ScalarGene.SIZE]!;
+      moveFactor = (size / cfg.cellRadius) ** cfg.sizeMoveCostExp;
+    }
     const upkeep = basalCost * efficiency + geneUpkeep(scalarGenes, i, cfg);
-    energy[i] = energy[i]! + gained - upkeep - moveCost * speed2;
+    energy[i] = energy[i]! + gained - upkeep - moveCost * moveFactor * speed2;
     age[i] = (age[i]! + 1) >>> 0;
   }
 }
@@ -160,12 +182,8 @@ export function reproduce(store: OrganismStore, rng: Rng, cfg: Config): number {
   for (let k = 0; k < n; k++) {
     const p = parents[k]!;
     if (!store.isAlive(p)) continue; // died in the cull this tick
-    // Breed at the parent's OWN satiated bar (gene), kept above its repro bar by MIN_BAND.
-    const pb = p * SCALAR_GENE_COUNT;
-    const pRepro = scalarGenes[pb + ScalarGene.REPRO_THRESHOLD]!;
-    let pSat = scalarGenes[pb + ScalarGene.SATIATED_THRESHOLD]!;
-    if (pSat < pRepro + MIN_BAND) pSat = pRepro + MIN_BAND;
-    if (energy[p]! < pSat) continue; // not full yet → keep foraging
+    // Breed at the parent's OWN size-scaled satiated bar (bigger body = deeper reserve to fill first).
+    if (energy[p]! < satiatedBar(scalarGenes, p, cfg)) continue; // not full yet → keep foraging
     const child = store.alloc();
     if (child < 0) break; // store full — stop (population is buffer-capped)
     const angle = rng.range(0, Math.PI * 2);
@@ -188,13 +206,16 @@ export function reproduce(store: OrganismStore, rng: Rng, cfg: Config): number {
     // learned weights. Learning never crosses the generation boundary.
     store.resetLearned(child);
     // Provision the child up to its BIRTH_ENERGY gene, capped by the parent's spare energy (energy-
-    // conserving; parent stays ≥ 0 since pSat > reproOverhead).
+    // conserving; parent stays ≥ 0 since the satiated bar it just cleared > reproOverhead).
     const childBirth = scalarGenes[child * SCALAR_GENE_COUNT + ScalarGene.BIRTH_ENERGY]!;
     const childEnergy = Math.min(childBirth, energy[p]! - reproOverhead);
     energy[child] = childEnergy;
     store.prevEnergy[child] = childEnergy; // first-tick learning reward = 0 for the newborn
     energy[p] = energy[p]! - childEnergy - reproOverhead;
     births++;
+    // Optional observation hook (off by default): hand the harness exact child→parent identity. Read-
+    // only by contract — no store/RNG/order effect — so the determinism hash is unchanged (see Config).
+    cfg.onBirth?.(p, store.genId[p]!, child, store.genId[child]!);
   }
   return births;
 }

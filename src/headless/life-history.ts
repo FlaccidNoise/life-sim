@@ -15,7 +15,8 @@
  */
 import { World } from '../core/world';
 import { defaultConfig, type Config } from '../core/config';
-import { ScalarGene, SCALAR_GENE_COUNT, MIN_BAND } from '../core/genome';
+import { ScalarGene, SCALAR_GENE_COUNT } from '../core/genome';
+import { satiatedBar } from '../core/economy';
 import { computeBrainState } from '../app/observability/brain-view';
 import { writeFileSync } from 'node:fs';
 
@@ -48,9 +49,12 @@ interface Life {
   breedings: number;
   breedTicks: number[];
   ageAtFirstBreed: number; // -1 if never
-  // breeding detection state (every tick)
+  // lineage (ground truth from the onBirth hook)
+  generation: number; // founders = 0; child = parent.generation + 1
+  parentId: string | null; // key of the parent (null for founders)
+  childIds: string[]; // keys of this individual's direct offspring
+  // last-seen state (energy arc + finalize)
   lastEnergy: number;
-  lastSatBar: number;
   // end of life
   lastTick: number;
   lastAge: number;
@@ -96,6 +100,22 @@ function keyOf(slot: number, gen: number): string {
   return `${slot}:${gen}`;
 }
 
+// ── Ground-truth breeding via the onBirth hook (no energy-drop heuristic) ──────────────────────────
+// reproduce() fires onBirth once per real birth, mid-step (before world.tick advances). We buffer the
+// events and drain them at the top of the NEXT observe() — which runs right after this step() — so each
+// birth is attributed to the exact tick it happened, with exact parent→child identity. childMeta carries
+// the parent link forward so the child's Life (first seen this same observe) is born knowing its lineage.
+const pendingBirths: Array<{ pk: string; ck: string; parentSlot: number }> = [];
+const childMeta = new Map<string, { parentKey: string; generation: number }>();
+let unattributedBreeds = 0; // births whose parent wasn't yet tracked (founder breeding at step 1) — expect 0
+config.onBirth = (parentSlot, parentGen, childSlot, childGen) => {
+  pendingBirths.push({
+    pk: keyOf(parentSlot, parentGen),
+    ck: keyOf(childSlot, childGen),
+    parentSlot,
+  });
+};
+
 function snapshotGenes(slot: number): number[] {
   const base = slot * SCALAR_GENE_COUNT;
   const g = new Array<number>(SCALAR_GENE_COUNT);
@@ -105,29 +125,50 @@ function snapshotGenes(slot: number): number[] {
 
 function observe(tick: number): void {
   const s = world.store;
+
+  // (1) Drain this step's births FIRST — ground truth from the hook. Attribute each to its parent's
+  // Life and record the child→parent link so the child (first seen below) is born knowing its lineage.
+  for (const b of pendingBirths) {
+    const parent = tracked.get(b.pk);
+    if (parent) {
+      parent.breedings++;
+      parent.breedTicks.push(tick);
+      parent.childIds.push(b.ck);
+      if (parent.ageAtFirstBreed < 0) parent.ageAtFirstBreed = s.age[b.parentSlot]!;
+      childMeta.set(b.ck, { parentKey: b.pk, generation: parent.generation + 1 });
+    } else {
+      // Parent not yet tracked — only possible if a founder bred during step 1 (before the first
+      // observe). Founders seed below their satiated bar, so this should never fire; counted as a guard.
+      unattributedBreeds++;
+      childMeta.set(b.ck, { parentKey: b.pk, generation: 1 });
+    }
+  }
+  pendingBirths.length = 0;
+
+  // (2) Walk the live set.
   const seenThisTick = new Set<string>();
   for (let k = 0; k < s.liveCount; k++) {
     const i = s.liveIndices[k]!;
     const gen = s.genId[i]!;
     const key = keyOf(i, gen);
     seenThisTick.add(key);
-    const sg = i * SCALAR_GENE_COUNT;
     const energy = s.energy[i]!;
     const age = s.age[i]!;
-    const reproBar = s.scalarGenes[sg + ScalarGene.REPRO_THRESHOLD]!;
-    let satBar = s.scalarGenes[sg + ScalarGene.SATIATED_THRESHOLD]!;
-    if (satBar < reproBar + MIN_BAND) satBar = reproBar + MIN_BAND;
+    const reproBar = s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.REPRO_THRESHOLD]!;
+    const satBar = satiatedBar(s.scalarGenes, i, config); // same bar the sim breeds on (size-scaled)
     const mode = modeOf(energy, reproBar, satBar);
 
     let life = tracked.get(key);
     if (life === undefined) {
-      // First sighting → a new individual (founder if seen on the very first observed tick).
+      // First sighting → a new individual. Lineage comes from childMeta (set in step 1 above) if it was
+      // born in-sim; otherwise it's a founder (gen 0, no parent) seen on the very first observed tick.
+      const meta = childMeta.get(key);
       life = {
         id: key,
         slot: i,
         genId: gen,
-        isFounder: tick === 1,
-        birthTick: tick === 1 ? 0 : tick,
+        isFounder: meta === undefined && tick === 1,
+        birthTick: meta === undefined && tick === 1 ? 0 : tick,
         birthEnergy: energy,
         birthGenes: snapshotGenes(i),
         birthHue: s.hue[i]!,
@@ -138,8 +179,10 @@ function observe(tick: number): void {
         breedings: 0,
         breedTicks: [],
         ageAtFirstBreed: -1,
+        generation: meta ? meta.generation : 0,
+        parentId: meta ? meta.parentKey : null,
+        childIds: [],
         lastEnergy: energy,
-        lastSatBar: satBar,
         lastTick: tick,
         lastAge: age,
         lastEnergyFinal: energy,
@@ -147,19 +190,6 @@ function observe(tick: number): void {
         samples: [],
       };
       tracked.set(key, life);
-    } else {
-      // Breeding detection (every tick): a one-tick energy DROP ≥ reproOverhead. A creature grazes up
-      // across its satiated bar and breeds in the SAME step() (metabolize → reproduce), so its prior
-      // end-of-tick energy can still be below the bar — we can't gate on "was satiated". But a birth
-      // costs childEnergy+reproOverhead (≥ ~20, economy.ts:193-196) while max per-tick upkeep is <~3, so
-      // the drop magnitude alone separates a birth from metabolic loss cleanly. (A predation bite could
-      // also drop energy, but predators go ~extinct here; cross-checked vs world.totalBirths below.)
-      const drop = life.lastEnergy - energy;
-      if (drop >= config.reproOverhead - 1e-9) {
-        life.breedings++;
-        life.breedTicks.push(tick);
-        if (life.ageAtFirstBreed < 0) life.ageAtFirstBreed = age;
-      }
     }
 
     // Per-tick aggregates.
@@ -168,7 +198,6 @@ function observe(tick: number): void {
     life.obsCount++;
     life.modeTicks[mode]++;
     life.lastEnergy = energy;
-    life.lastSatBar = satBar;
     life.lastTick = tick;
     life.lastAge = age;
     life.lastEnergyFinal = energy;
@@ -249,6 +278,26 @@ function hueBins(cohort: Life[]): number {
   return bins.size;
 }
 
+// Lineage (ground truth): generation depth, generation histogram, and dynasty sizes (transitive
+// descendants per founder — the real measure of differential reproductive success / selection).
+const byId = new Map(all.map((l) => [l.id, l]));
+function descendantCount(root: Life): number {
+  let n = 0;
+  const stack = [...root.childIds];
+  while (stack.length > 0) {
+    const c = byId.get(stack.pop()!);
+    if (c === undefined) continue;
+    n++;
+    for (const ck of c.childIds) stack.push(ck);
+  }
+  return n;
+}
+const maxGen = all.reduce((m, l) => Math.max(m, l.generation), 0);
+const genHist = new Array<number>(maxGen + 1).fill(0);
+for (const l of all) genHist[l.generation]!++;
+const dynasties = founders.map((f) => ({ f, d: descendantCount(f) })).sort((a, b) => b.d - a.d);
+const livingFounders = founders.filter((f) => f.deathTick < 0).length;
+
 // ── Report ───────────────────────────────────────────────────────────────────────────────────────
 const L: string[] = [];
 const p = (s = '') => L.push(s);
@@ -277,8 +326,9 @@ p(
 );
 p(`- Age at first breed (breeders): median ${fbMed}`);
 p(
-  `- **Validation**: detected breedings ${totalDetectedBreedings} vs world.totalBirths ${world.totalBirths} ` +
-    `(Δ ${totalDetectedBreedings - world.totalBirths})`,
+  `- **Validation** (ground truth via onBirth hook): attributed breedings ${totalDetectedBreedings} + ` +
+    `unattributed ${unattributedBreeds} = ${totalDetectedBreedings + unattributedBreeds} vs world.totalBirths ` +
+    `${world.totalBirths} (Δ ${totalDetectedBreedings + unattributedBreeds - world.totalBirths})`,
 );
 p();
 p(
@@ -302,20 +352,54 @@ p(
     `(${hueBins(lateCohort) < hueBins(earlyCohort) ? 'lineages CONVERGING — a few dynasties dominate' : 'lineages diversifying'})`,
 );
 p();
+p(`## Lineage & generations (ground-truth child→parent links)`);
+p(`- Deepest generation reached: **gen ${maxGen}** (founders = gen 0)`);
+p(
+  `- Founders: ${founders.length} seeded · ${dynasties.filter((x) => x.d > 0).length} left descendants · ` +
+    `${livingFounders} still alive at run end`,
+);
+p('- Population by generation:');
+p('```');
+for (let g = 0; g <= maxGen; g++) {
+  const n = genHist[g]!;
+  const bar = '█'.repeat(Math.round((40 * n) / (all.length || 1)));
+  p(`  gen ${String(g).padStart(2)}: ${String(n).padStart(5)}  ${bar}`);
+}
+p('```');
+p('- Largest founding dynasties (transitive descendants):');
+for (const { f, d } of dynasties.slice(0, 5)) {
+  if (d === 0) break;
+  p(
+    `  - ${f.id} (hue ${f.birthHue.toFixed(2)}, ${f.birthGenes[ScalarGene.DIET]! < 0.5 ? 'grazer' : 'predator'}): ` +
+      `**${d} descendants**, ${f.childIds.length} direct children, bred ${f.breedings}×`,
+  );
+}
+p();
 
 // ── Featured life-stories ──
+// Effective breeding bar = the sim's satiatedBar() applied to this individual's birth genes (raw
+// SATIATED_THRESHOLD gene is NOT the breeding bar once size-scaling is on — reuse the sim's own helper).
+function effBreedBar(l: Life): number {
+  const arr = new Float32Array(SCALAR_GENE_COUNT);
+  for (let g = 0; g < SCALAR_GENE_COUNT; g++) arr[g] = l.birthGenes[g]!;
+  return satiatedBar(arr, 0, config);
+}
 function story(label: string, l: Life): void {
   const span = lifespan(l);
   const fate = l.deathTick < 0 ? `still alive at t${l.lastTick}` : `died t${l.deathTick}`;
   const diet = l.birthGenes[ScalarGene.DIET]!;
   p(`### ${label}: ${l.id} ${l.isFounder ? '(founder)' : `(born t${l.birthTick})`}`);
   p(
+    `- gen ${l.generation}${l.parentId ? ` · parent ${l.parentId}` : ' · founding lineage'} · ` +
+      `${l.childIds.length} direct children`,
+  );
+  p(
     `- lifespan ${span} ticks · ${fate} at age ${l.lastAge}, energy ${l.lastEnergyFinal.toFixed(1)}`,
   );
   p(
     `- ${diet < 0.5 ? 'GRAZER' : 'PREDATOR'} diet ${diet.toFixed(2)} · size ${l.birthGenes[ScalarGene.SIZE]!.toFixed(1)} · ` +
       `eff ${l.birthGenes[ScalarGene.METAB_EFF]!.toFixed(2)} · vision ${l.birthGenes[ScalarGene.VISION_RANGE]!.toFixed(0)}u · ` +
-      `repro@${l.birthGenes[ScalarGene.REPRO_THRESHOLD]!.toFixed(0)}/sat@${l.birthGenes[ScalarGene.SATIATED_THRESHOLD]!.toFixed(0)} · hue ${l.birthHue.toFixed(2)}`,
+      `repro@${l.birthGenes[ScalarGene.REPRO_THRESHOLD]!.toFixed(0)}/breed@${effBreedBar(l).toFixed(0)} · hue ${l.birthHue.toFixed(2)}`,
   );
   p(
     `- reproduced **${l.breedings}×**${l.breedings > 0 ? ` (first at age ${l.ageAtFirstBreed}; ticks ${l.breedTicks.slice(0, 8).join(', ')}${l.breedTicks.length > 8 ? ', …' : ''})` : ' — never reached the breeding bar'}`,
@@ -355,6 +439,9 @@ const header = [
   'slot',
   'genId',
   'isFounder',
+  'generation',
+  'parentId',
+  'directChildren',
   'birthTick',
   'deathTick',
   'lifespan',
@@ -371,6 +458,9 @@ const rows = all.map((l) =>
     l.slot,
     l.genId,
     l.isFounder ? 1 : 0,
+    l.generation,
+    l.parentId ?? '',
+    l.childIds.length,
     l.birthTick,
     l.deathTick,
     lifespan(l),

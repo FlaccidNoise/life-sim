@@ -4,7 +4,7 @@ import { FoodField } from './food-field';
 import { SpatialHash } from './spatial-hash';
 import { Rng } from './rng';
 import { defaultConfig, type Config } from './config';
-import { metabolize, hunt, cullDead, reproduce } from './economy';
+import { metabolize, hunt, cullDead, reproduce, satiatedBar } from './economy';
 import { ScalarGene, SCALAR_GENE_COUNT, SCALAR_GENE_SPECS, MIN_BAND } from './genome';
 
 const W = 128;
@@ -104,6 +104,69 @@ describe('metabolize', () => {
     const food = new FoodField(W, H, 16, 16, 10, 0); // empty
     metabolize(s, food, cfg);
     expect(s.energy[i]).toBeCloseTo(50 - 0.4 * 0.5); // basal halved, no gene upkeep
+  });
+});
+
+describe('satiatedBar (size-scaled energy reserve)', () => {
+  it('scales the full bar with body size — a 2×-size body has a 2× reserve (exp 1)', () => {
+    const cfg = defaultConfig({ cellRadius: 6, sizeStoreExp: 1 });
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    genes(s, i, cfg, {
+      [ScalarGene.SATIATED_THRESHOLD]: 100,
+      [ScalarGene.REPRO_THRESHOLD]: 40,
+      [ScalarGene.SIZE]: 12, // 2× the reference (cellRadius 6)
+    });
+    expect(satiatedBar(s.scalarGenes, i, cfg)).toBeCloseTo(200); // 100 × (12/6)^1
+  });
+
+  it('a small body’s scaled bar is floored to MIN_BAND above its repro bar', () => {
+    const cfg = defaultConfig({ cellRadius: 6, sizeStoreExp: 1 });
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    genes(s, i, cfg, {
+      [ScalarGene.SATIATED_THRESHOLD]: 100,
+      [ScalarGene.REPRO_THRESHOLD]: 40,
+      [ScalarGene.SIZE]: 2, // 100 × (2/6) = 33.3 < repro(40)+MIN_BAND(5)=45 → floored
+    });
+    expect(satiatedBar(s.scalarGenes, i, cfg)).toBeCloseTo(40 + MIN_BAND);
+  });
+
+  it('sizeStoreExp 0 leaves the bar at the raw gene (no size coupling)', () => {
+    const cfg = defaultConfig({ cellRadius: 6, sizeStoreExp: 0 });
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    genes(s, i, cfg, {
+      [ScalarGene.SATIATED_THRESHOLD]: 100,
+      [ScalarGene.REPRO_THRESHOLD]: 40,
+      [ScalarGene.SIZE]: 30, // huge, but coupling off
+    });
+    expect(satiatedBar(s.scalarGenes, i, cfg)).toBeCloseTo(100);
+  });
+});
+
+describe('metabolize size→move-cost coupling', () => {
+  it('a 2×-size body pays 2× the movement cost (exp 1)', () => {
+    const cfg = defaultConfig({
+      basalCost: 0.4,
+      moveCost: 0.01,
+      satiatedThreshold: 1000,
+      cellRadius: 6,
+      sizeMoveCostExp: 1,
+      sizeCost: 0, // isolate the move-cost coupling from the SIZE gene's own upkeep
+    });
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.x[i] = 10;
+    s.y[i] = 10;
+    s.vx[i] = 3;
+    s.vy[i] = 4; // speed² = 25
+    s.energy[i] = 50;
+    genes(s, i, cfg, { [ScalarGene.SIZE]: 12 }); // 2× reference → moveFactor (12/6)^1 = 2
+    s.rebuildLive();
+    const food = new FoodField(W, H, 16, 16, 10, 0); // empty → isolate the costs
+    metabolize(s, food, cfg);
+    expect(s.energy[i]).toBeCloseTo(50 - 0.4 - 0.01 * 2 * 25); // movement cost doubled by size
   });
 });
 

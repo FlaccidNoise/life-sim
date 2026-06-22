@@ -110,6 +110,17 @@ export interface Config {
   /** Basal upkeep per unit of SIZE gene above its center — now that size confers a predation refuge +
    *  bigger bite, it earns a cost (a big body is expensive to run), so size is a tradeoff not free drift. */
   sizeCost: number;
+  /** SIZE physical couplings (all relative to cellRadius as the reference size; exp 0 = coupling OFF).
+   *  Together they make a big body a slow, expensive-to-move tank with deep reserves — a real strategy. */
+  /** Speed-ceiling tax: a creature's max-speed gene is scaled by (cellRadius/size)^sizeSpeedExp, so
+   *  bigger = slower (a big body can't move as fast). */
+  sizeSpeedExp: number;
+  /** Move-cost tax: the speed² movement cost is scaled by (size/cellRadius)^sizeMoveCostExp, so bigger =
+   *  costlier to move (mass costs energy to push). */
+  sizeMoveCostExp: number;
+  /** Energy-store boon: the satiated "full" bar is scaled by (size/cellRadius)^sizeStoreExp, so bigger =
+   *  a deeper energy reserve (fills richer in good times, rides out lean stretches — helps big predators). */
+  sizeStoreExp: number;
 
   // ── Trophic / predation ──────────────────────────────────────────────────────────────────────────
   /** DIET gene center — ONLY the mutation-step reference (founders are seeded bimodally, not here). */
@@ -205,6 +216,13 @@ export interface Config {
    *  instinct — it can't run off to a saturated controller. The bias synapses are excluded from
    *  plasticity entirely (their constant input makes Hebbian learning a positive-feedback runaway). */
   maxLearnDeviation: number;
+
+  // ── Observation hooks (optional; OFF by default — pure instrumentation, never affects the sim) ────
+  /** Fired once per successful birth inside reproduce(), in ascending parent-slot order, BEFORE the
+   *  tick counter advances. Read-only by contract: it must not touch the store, RNG, or iteration —
+   *  it exists so a harness can attribute child→parent lineage without an energy-trace heuristic.
+   *  Undefined in defaultConfig, so production runs and the determinism hash are unaffected. */
+  onBirth?: (parentSlot: number, parentGen: number, childSlot: number, childGen: number) => void;
 }
 
 export function defaultConfig(overrides: Partial<Config> = {}): Config {
@@ -272,6 +290,15 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     maxTurnCost: 0.4,
     maxThrustCost: 0.2,
     sizeCost: 0.015, // low upkeep → wider SIZE variance (probe szSd↑); still bounds the size arms race
+    sizeSpeedExp: 0.2, // bigger = slower: gentle tax on the speed ceiling (size 2× ref → ~0.87×). A
+    // GENTLE setting is deliberate: at 0.5 the slowdown anti-selects big bodies so hard that size
+    // variety collapses; 0.2 is visible in motion yet lets big-body lineages persist (sweep-tuned).
+    sizeMoveCostExp: 0, // bigger = costlier-to-move coupling DISABLED (live lever, raise to re-enable).
+    // The move-cost penalty taxes the very chasing that predation depends on, so ANY positive value
+    // taxed hunters into extinction on every probe seed — kept as a 0-default knob, not a behavior.
+    sizeStoreExp: 1, // bigger = proportionally deeper energy reserve (size 2× ref → 2× the "full" bar).
+    // The size BENEFIT: a deep tank rides out sparse pockets, which is what makes big bodies (and the
+    // big-bodied predators that need them) viable — it DOUBLED surviving predators in the sweep.
     // Trophic / predation. ~15% of founders start as hunters (diet≈0.9); damage above its center costs
     // upkeep so predators evolve teeth at a price; bite reach ≈ 2·cellRadius (the collision cutoff).
     diet: 0.5,

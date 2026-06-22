@@ -78,6 +78,8 @@ export function integrate(
   stabilityClamp: boolean,
   worldWidth: number,
   worldHeight: number,
+  refSize: number,
+  sizeSpeedExp: number,
 ): void {
   const { liveIndices, liveCount, x, y, vx, vy, forceX, forceY, scalarGenes } = store;
   for (let k = 0; k < liveCount; k++) {
@@ -85,7 +87,15 @@ export function integrate(
     let nvx = (vx[i]! + forceX[i]! * dt) * damping;
     let nvy = (vy[i]! + forceY[i]! * dt) * damping;
     if (stabilityClamp) {
-      const maxSpeed = scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.MAX_SPEED]!;
+      const sg = i * SCALAR_GENE_COUNT;
+      // Bigger bodies are slower: tax the evolved speed ceiling by (refSize/size)^sizeSpeedExp. Penalty
+      // ONLY (size > refSize) — a small body never gets a speed BONUS above its gene, so the gene stays
+      // the true ceiling ("bigger = slower", not "smaller = faster").
+      let maxSpeed = scalarGenes[sg + ScalarGene.MAX_SPEED]!;
+      if (sizeSpeedExp > 0) {
+        const size = scalarGenes[sg + ScalarGene.SIZE]!;
+        if (size > refSize) maxSpeed *= (refSize / size) ** sizeSpeedExp;
+      }
       const s2 = nvx * nvx + nvy * nvy;
       if (s2 > maxSpeed * maxSpeed) {
         const scale = maxSpeed / Math.sqrt(s2);
