@@ -166,4 +166,46 @@ describe('senseCreatures (sight)', () => {
     senseCreatures(s, hashOf(s), cfg0);
     expect(s.sightX[0]!).toBe(0); // same setup as the shelter test, but the global gain zeroes it
   });
+
+  // ── schooling / cohesion (similar-hue attraction) ───────────────────────────────────────────────
+  const setCohesion = (s: OrganismStore, slot: number, drive: number): void => {
+    s.scalarGenes[slot * SCALAR_GENE_COUNT + ScalarGene.COHESION_DRIVE] = drive;
+  };
+
+  it('a creature is pulled TOWARD a same-hue (lineage) neighbor (schooling)', () => {
+    const s = pair(0, 0); // same diet → appeal ~0, so only cohesion can move the vector
+    s.hue[0] = 0.3;
+    s.hue[1] = 0.3; // identical lineage color
+    setCohesion(s, 0, 0.5);
+    senseCreatures(s, hashOf(s), cfg);
+    expect(s.sightX[0]!).toBeGreaterThan(0); // drawn toward the same-hue neighbor at +x
+  });
+
+  it('no cohesion pull toward an opposite-hue neighbor', () => {
+    const s = pair(0, 0);
+    s.hue[0] = 0;
+    s.hue[1] = 0.5; // maximally distant hue → similarity 0
+    setCohesion(s, 0, 0.5);
+    senseCreatures(s, hashOf(s), cfg);
+    expect(s.sightX[0]!).toBe(0); // appeal 0 and hueSim 0 → neutral
+  });
+
+  it('founder-strength cohesion does NOT override fleeing a same-hue predator', () => {
+    const s = pair(0, 1); // viewer herbivore, neighbor predator
+    s.hue[0] = 0.3;
+    s.hue[1] = 0.3; // same lineage color, but it wants to eat me
+    setCohesion(s, 0, 0.5); // founder center — bounded below the flee appeal (−1)
+    senseCreatures(s, hashOf(s), cfg);
+    expect(s.sightX[0]!).toBeLessThan(0); // still flees
+  });
+
+  it('cohesionGain 0 ablates the schooling pull', () => {
+    const cfg0 = defaultConfig({ worldWidth: W, worldHeight: H, cohesionGain: 0 });
+    const s = pair(0, 0);
+    s.hue[0] = 0.3;
+    s.hue[1] = 0.3;
+    setCohesion(s, 0, 0.5);
+    senseCreatures(s, hashOf(s), cfg0);
+    expect(s.sightX[0]!).toBe(0);
+  });
 });
