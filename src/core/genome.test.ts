@@ -131,4 +131,72 @@ describe('scalar genes (evolvable per-creature traits)', () => {
       5 * cfg.visionRangeCost + 0.4 * cfg.visionFovCost + 1 * cfg.visionAcuityCost,
     );
   });
+
+  it('FORAGE_PREF carries no upkeep (costKey null — preference is free)', () => {
+    const g = new Float32Array(4 * SCALAR_GENE_COUNT);
+    for (let gi = 0; gi < SCALAR_GENE_COUNT; gi++) g[gi] = cfg[SCALAR_GENE_SPECS[gi]!.centerKey];
+    g[ScalarGene.FORAGE_PREF] = 1; // hard channel-B specialist — must add nothing to upkeep
+    expect(geneUpkeep(g, 0, cfg)).toBeCloseTo(0);
+  });
+});
+
+describe('FORAGE_PREF gene (lever B — two-channel niche axis, RNG-gated)', () => {
+  // gaussian() is stateless (2 float draws per call), so "no extra draw" is verifiable by comparing the
+  // RNG state to a reference that draws one gaussian per NON-FORAGE gene.
+  it('is inert when single-channel: pinned at center, consumes no RNG (the determinism gate)', () => {
+    const single = defaultConfig({ foodChannels: 1 });
+    const N = 8;
+    const g = new Float32Array(N * SCALAR_GENE_COUNT);
+    const rng = new Rng(7);
+    for (let s = 0; s < N; s++) seedScalarGenes(g, s, rng, single);
+    // Every founder's FORAGE_PREF is EXACTLY the center — no gaussian → no spread.
+    for (let s = 0; s < N; s++)
+      expect(g[s * SCALAR_GENE_COUNT + ScalarGene.FORAGE_PREF]).toBe(single.foragePref);
+    // The RNG advanced by exactly (SCALAR_GENE_COUNT − 1) gaussians per founder — the SAME stream as the
+    // pre-FORAGE_PREF engine. This is what makes foodChannels=1 byte-identical to before the gene existed.
+    const ref = new Rng(7);
+    for (let s = 0; s < N; s++)
+      for (let gi = 0; gi < SCALAR_GENE_COUNT; gi++)
+        if (gi !== ScalarGene.FORAGE_PREF) ref.gaussian(0, 1);
+    expect(rng.state).toBe(ref.state);
+  });
+
+  it('inherits verbatim with no mutation draw when single-channel (birth stream unperturbed)', () => {
+    const single = defaultConfig({ foodChannels: 1 });
+    const g = new Float32Array(2 * SCALAR_GENE_COUNT);
+    g[ScalarGene.FORAGE_PREF] = 0.83; // a non-center parent value
+    const rng = new Rng(4);
+    mutateScalarGenes(g, 1, 0, rng, single);
+    // Child === parent's STORED value (Float32) — copied verbatim, no drift. (Compare to the stored
+    // value, not the JS double 0.83, which Float32 rounds to 0.8299999833106995.)
+    expect(g[SCALAR_GENE_COUNT + ScalarGene.FORAGE_PREF]).toBe(g[ScalarGene.FORAGE_PREF]);
+    const ref = new Rng(4);
+    for (let gi = 0; gi < SCALAR_GENE_COUNT; gi++)
+      if (gi !== ScalarGene.FORAGE_PREF) ref.gaussian(0, 1);
+    expect(rng.state).toBe(ref.state); // one fewer draw than the gene count
+  });
+
+  it('evolves when two-channel: seeded with spread and mutates around the parent', () => {
+    const dual = defaultConfig({ foodChannels: 2 });
+    const N = 40;
+    const g = new Float32Array(N * SCALAR_GENE_COUNT);
+    const rng = new Rng(1);
+    for (let s = 0; s < N; s++) seedScalarGenes(g, s, rng, dual);
+    const prefOf = (s: number): number => g[s * SCALAR_GENE_COUNT + ScalarGene.FORAGE_PREF]!;
+    // There IS spread now — the gaussian is drawn — and every value is clamped to [0,1].
+    expect(Array.from({ length: N }, (_, s) => prefOf(s)).every((v) => v === prefOf(0))).toBe(
+      false,
+    );
+    for (let s = 0; s < N; s++) {
+      expect(prefOf(s)).toBeGreaterThanOrEqual(0);
+      expect(prefOf(s)).toBeLessThanOrEqual(1);
+    }
+    // Mutation drifts the child near (but not equal to) the parent.
+    const child = new Float32Array(2 * SCALAR_GENE_COUNT);
+    child[ScalarGene.FORAGE_PREF] = 0.4;
+    mutateScalarGenes(child, 1, 0, new Rng(9), dual);
+    const c = child[SCALAR_GENE_COUNT + ScalarGene.FORAGE_PREF]!;
+    expect(Math.abs(c - 0.4)).toBeGreaterThan(0);
+    expect(Math.abs(c - 0.4)).toBeLessThan(0.5);
+  });
 });
