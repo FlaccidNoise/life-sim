@@ -121,7 +121,7 @@ export function hunt(store: OrganismStore, hash: SpatialHash, cfg: Config): void
  */
 export function metabolize(store: OrganismStore, food: FoodField, cfg: Config): void {
   const { liveIndices, liveCount, x, y, vx, vy, energy, age, scalarGenes } = store;
-  const { basalCost, moveCost } = cfg;
+  const { basalCost, moveCost, deadWaterCost } = cfg;
   for (let k = 0; k < liveCount; k++) {
     const i = liveIndices[k]!;
     const sg = i * SCALAR_GENE_COUNT;
@@ -144,6 +144,13 @@ export function metabolize(store: OrganismStore, food: FoodField, cfg: Config): 
     }
     const upkeep = basalCost * efficiency + geneUpkeep(scalarGenes, i, cfg);
     energy[i] = energy[i]! + gained - upkeep - moveCost * moveFactor * speed2;
+    // Dead-water tax (isolation lever): extra drain where fertility is low — max in the dead gaps, 0 inside
+    // a pocket — so crossing the open water is risky and residents stay home. Gated so OFF (0) skips the
+    // fertility lookup entirely and the energy line above stays byte-identical.
+    if (deadWaterCost > 0) {
+      const fert = food.fertilityAt(x[i]!, y[i]!);
+      if (fert < 1) energy[i] = energy[i] - deadWaterCost * (1 - fert);
+    }
     age[i] = (age[i]! + 1) >>> 0;
   }
 }
