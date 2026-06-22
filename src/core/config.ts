@@ -176,6 +176,23 @@ export interface Config {
    *  predator drain. Kinship here is the diet gap (the same signal sight uses), not genetic lineage. */
   cannibalism: boolean;
 
+  // ── Density-dependent mortality (lever D — boom-bust) ───────────────────────────────────────────
+  /** Energy drained per tick per local neighbor ABOVE crowdThreshold: extraCost = this·max(0, N−crowdThreshold),
+   *  where N = live creatures within crowdRadius. 0 = OFF (metabolize skips the neighbor scan entirely, so the
+   *  energy arithmetic is byte-identical to today). >0 knocks back the locally-dominant — a dense grazer clump
+   *  drains faster than it can climb to its breed bar, then thins via the EXISTING cull (energy≤0 dies) — which
+   *  turns the flat/damped equilibrium into boom-bust oscillation. No gene, no RNG: a pure config coefficient
+   *  read in metabolize, the same class as basalCost/moveCost. */
+  crowdingMortality: number;
+  /** Free-density band: the local-neighbor count below which crowding costs NOTHING. Sparse creatures (e.g.
+   *  predators, whose nearest-neighbor distance ≫ crowdRadius) sit under it and are spared. Only read when
+   *  crowdingMortality>0 (untouched on the OFF skip path). */
+  crowdThreshold: number;
+  /** Radius (world units) for counting local neighbors. Default 2·cellRadius (= the collision/hash-cell cutoff,
+   *  so the existing 3×3 hash neighborhood already covers it — no scan-size growth). Only read when
+   *  crowdingMortality>0. */
+  crowdRadius: number;
+
   // ── Vision genes (founder centers + costs; sight is metabolically expensive — no free eyes) ────────
   /** VISION_RANGE gene center — how far a creature sees other creatures (world units). */
   visionRange: number;
@@ -363,6 +380,11 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     herbivoryExp: 1.3, // predators get little from algae → lean on HUNTING (max viable on seeds 1/2;
     // obligate carnivory, exp≥1.6, starves predators at this encounter rate — proven by probe)
     cannibalism: true, // current behavior (bite anyone nearest); flip off to spare same-diet peers
+    // Density-dependent mortality (lever D) OFF by default: crowdingMortality 0 → metabolize skips the
+    // neighbor scan, hash byte-identical. >0 (live-tune ~0.15–0.4) drains the over-dense → boom-bust breathing.
+    crowdingMortality: 0,
+    crowdThreshold: 6, // local neighbors allowed for free; above this the per-neighbor drain kicks in
+    crowdRadius: 12, // = 2·cellRadius (one hash-cell cutoff; the 3×3 neighborhood already covers it)
     // Vision. Founders seed with modest eyes (range ~14, ~57° half-cone, acuity 1); all costed so
     // predators evolve long focused sight and prey evolve wide all-around sight, each paying for it.
     visionRange: 140, // long-sight experiment: ~10× the old 14 so creatures see across the sparse world
