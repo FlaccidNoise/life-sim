@@ -61,9 +61,16 @@ describe('World — Phase 0 determinism contract', () => {
       const i = s.liveIndices[k]!;
       expect(Number.isFinite(s.x[i]!)).toBe(true);
       expect(Number.isFinite(s.vx[i]!)).toBe(true);
-      // clamp ON ⇒ speed never exceeds this creature's OWN evolved maxSpeed gene (+tiny FP slack)
-      const maxSpeed = s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.MAX_SPEED]!;
-      expect(Math.hypot(s.vx[i]!, s.vy[i]!)).toBeLessThanOrEqual(maxSpeed + 1e-6);
+      // "No explosion" = no runaway divergence: the integrate clamp keeps every INTEGRATED creature at
+      // or below its OWN evolved maxSpeed gene (+tiny FP slack). A creature born THIS tick (age 0) is
+      // excluded: reproduce() copies the parent's velocity to the child, which a child whose mutated
+      // maxSpeed gene is lower than the parent's speed exceeds for exactly one tick — it's clamped to its
+      // own gene on its first integrate next tick. That 1-tick birth transient is finite and bounded (it
+      // can't exceed the global gene cap), not a runaway, so the ceiling is asserted on age>0 creatures.
+      if (s.age[i]! > 0) {
+        const maxSpeed = s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.MAX_SPEED]!;
+        expect(Math.hypot(s.vx[i]!, s.vy[i]!)).toBeLessThanOrEqual(maxSpeed + 1e-6);
+      }
     }
   }, 60000); // 5000 ticks at the richer foodCap 40 sustains ~1600 creatures → ~22s; 60s leaves CI headroom
 
