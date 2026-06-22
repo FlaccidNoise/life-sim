@@ -36,6 +36,7 @@ export class Walls {
   private readonly prox: Float32Array; // fine clamped hop-distance to nearest solid (cells)
   private readonly proxCap: number;
   private readonly _active: boolean;
+  private pocketCells: number[] = []; // fine-cell index of each food-pocket centroid (cached in generate)
 
   constructor(
     private readonly worldWidth: number,
@@ -106,13 +107,15 @@ export class Walls {
   proxGradAt(x: number, y: number, step: number): { gx: number; gy: number } {
     if (!this._active) return { gx: 0, gy: 0 };
     const inv = 1 / (2 * step);
-    const sample = (px: number, py: number): number =>
-      this.prox[
-        this.cellIdx(this.colOf(wrap(px, this.worldWidth)), this.rowOf(wrap(py, this.worldHeight)))
-      ]!;
+    const ww = this.worldWidth;
+    const wh = this.worldHeight;
+    const xpos = this.prox[this.cellIdx(this.colOf(wrap(x + step, ww)), this.rowOf(wrap(y, wh)))]!;
+    const xneg = this.prox[this.cellIdx(this.colOf(wrap(x - step, ww)), this.rowOf(wrap(y, wh)))]!;
+    const ypos = this.prox[this.cellIdx(this.colOf(wrap(x, ww)), this.rowOf(wrap(y + step, wh)))]!;
+    const yneg = this.prox[this.cellIdx(this.colOf(wrap(x, ww)), this.rowOf(wrap(y - step, wh)))]!;
     return {
-      gx: (sample(x + step, y) - sample(x - step, y)) * inv,
-      gy: (sample(x, y + step) - sample(x, y - step)) * inv,
+      gx: (xpos - xneg) * inv,
+      gy: (ypos - yneg) * inv,
     };
   }
 
@@ -204,6 +207,7 @@ export class Walls {
   private connectPockets(cfg: Config): void {
     if (cfg.foodPatchCount <= 0) return;
     const centroids = this.pocketCentroids(cfg);
+    this.pocketCells = centroids.map((p) => this.cellIdx(this.colOf(p.x), this.rowOf(p.y)));
     for (let i = 1; i < centroids.length; i++)
       this.carveCorridor(centroids[i - 1]!, centroids[i]!, cfg.wallCorridorRadius);
   }
@@ -311,32 +315,15 @@ export class Walls {
 
   /** TEST HELPER: are all food-pocket centroids in one connected open component? */
   allPocketsConnected(): boolean {
-    const cfg = { foodCols: this.foodCols, foodRows: this.foodRows } as Config;
-    void cfg;
-    // flood-fill open cells from the first reachable centroid cell, check the rest land in it.
-    return this.componentLabelCoversAllOpenSeeds();
-  }
-
-  private componentLabelCoversAllOpenSeeds(): boolean {
+    if (this.pocketCells.length <= 1) return true;
     const { cols, rows } = this;
     const n = cols * rows;
     const seen = new Uint8Array(n);
-    // seed flood from the first open cell
-    let start = -1;
-    for (let i = 0; i < n; i++)
-      if (!this.solid[i]) {
-        start = i;
-        break;
-      }
-    if (start < 0) return false;
+    const start = this.pocketCells[0]!;
     const stack = [start];
     seen[start] = 1;
-    let openCount = 0;
-    for (let i = 0; i < n; i++) if (!this.solid[i]) openCount++;
-    let reached = 0;
     while (stack.length) {
       const idx = stack.pop()!;
-      reached++;
       const c = idx % cols;
       const r = (idx - c) / cols;
       const nbrs = [
@@ -351,7 +338,7 @@ export class Walls {
           stack.push(ni);
         }
     }
-    // Connectivity guarantee target: the largest component holds (almost) all open cells.
-    return reached >= openCount * 0.95;
+    for (let i = 1; i < this.pocketCells.length; i++) if (!seen[this.pocketCells[i]!]) return false;
+    return true;
   }
 }
