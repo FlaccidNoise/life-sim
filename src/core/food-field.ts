@@ -34,6 +34,10 @@ export class FoodField {
   private readonly Kcell: Float64Array;
   private readonly channels: number; // 1 (default, single field) or 2 (second resource B2)
   private readonly ratio: number; // channel-B share of each cell's cap, [0,1] (A gets 1−ratio)
+  // Lever C bookkeeping (set by seedPatches): pocket centres in WORLD coords (so a probe can assign each
+  // creature to its island) + the variance actually applied (so maxCapacity reports the true render ceiling).
+  private patchCentres: { x: number; y: number }[] = [];
+  private varianceUsed = 0;
   private B: Float64Array;
   private scratch: Float64Array;
   private B2: Float64Array | null = null; // second channel; allocated only when channels===2
@@ -115,14 +119,17 @@ export class FoodField {
   ): void {
     const { cols, rows, fertility } = this;
     fertility.fill(baseFertility);
+    this.patchCentres = [];
     const twoSigma2 = 2 * radiusCells * radiusCells;
     // Only build the scaled-K accumulator when variance is active; otherwise the v=0 path stays exactly
     // the legacy fertility-only accumulation (→ recomputeK → byte-identical).
     const useVar = variance > 0 && !!forkedRng;
+    this.varianceUsed = useVar ? variance : 0;
     const kAccum = useVar ? new Float64Array(cols * rows) : null;
     for (let p = 0; p < count; p++) {
       const pc = rng.float() * cols;
       const pr = rng.float() * rows;
+      this.patchCentres.push({ x: pc * this.cellW, y: pr * this.cellH });
       // Per-pocket carrying-capacity scale s_p ∈ [1−variance, 1+variance], from the FORKED stream so the
       // MAIN rng (placement) is identical to the v=0 run. s_p ≡ 1 when variance is off (no draw).
       const sp = useVar ? 1 - variance + forkedRng!.float() * (2 * variance) : 1;
@@ -211,9 +218,22 @@ export class FoodField {
     return s;
   }
 
-  /** Global per-cell capacity ceiling (for normalizing the render overlay). */
+  /** Global per-cell capacity ceiling = foodCap (the base K; the world's "in a pocket" founder test keys
+   *  off this, so it stays the GLOBAL cap even under lever C — do not switch it to per-pocket K). */
   get capacity(): number {
     return this.cap;
+  }
+
+  /** The highest per-cell K actually reachable = cap·(1+pocketCapVariance) (lever C). Used to normalize
+   *  the render overlay so rich pockets don't clip white. Equals `capacity` when variance is off. */
+  get maxCapacity(): number {
+    return this.cap * (1 + this.varianceUsed);
+  }
+
+  /** Pocket centres in WORLD coordinates, recorded during the last seedPatches (empty when none seeded).
+   *  Read-only — lets the biome-divergence probe assign each creature to its nearest island. */
+  pocketCentres(): readonly { x: number; y: number }[] {
+    return this.patchCentres;
   }
 
   /**
@@ -222,7 +242,10 @@ export class FoodField {
    * Channel A only (render is unchanged by the second channel for now).
    */
   fillTexture(out: Uint8Array): void {
-    const inv = this.cap > 0 ? 255 / this.cap : 0;
+    // Normalize against the MAX reachable K (cap·(1+variance)) so lever-C rich pockets don't clip white.
+    // With variance off this equals cap, so the texture is unchanged.
+    const max = this.maxCapacity;
+    const inv = max > 0 ? 255 / max : 0;
     for (let i = 0; i < this.B.length; i++) {
       const v = this.B[i]! * inv;
       out[i] = v < 0 ? 0 : v > 255 ? 255 : v;
