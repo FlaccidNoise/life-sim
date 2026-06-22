@@ -7,6 +7,7 @@ full design rationale lives in `docs/superpowers/specs/`.
 - 2026-06-15: Data-oriented SoA ("ECS-lite") over OOP/ECS-library → [architecture.md](architecture.md)
 - 2026-06-15: Custom particle physics over rigid-body engines → [architecture.md](architecture.md)
 - 2026-06-15: Pure headless `core/`; Workers + SharedArrayBuffer deferred to M8 → [architecture.md](architecture.md)
+- 2026-06-22: Environmental features pass 1 — walls + flow field + neural env sensing (decoupled high-res wall grid; destructible walls deferred) → [architecture.md](architecture.md)
 
 ## Tech Choices
 - 2026-06-15: TypeScript (strict) over Rust → [tech-choices.md](tech-choices.md)
