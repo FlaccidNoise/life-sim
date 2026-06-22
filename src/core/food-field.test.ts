@@ -114,6 +114,85 @@ describe('FoodField', () => {
         expect(f.sampleAt(c * 64 + 32, r * 64 + 32)).toBeGreaterThanOrEqual(-1e-9);
   });
 
+  it('advection transports a real biomass gradient (conserved, positive)', () => {
+    const f = new FoodField(128, 128, 16, 16, K, 1);
+    const cw = 128 / 16;
+    // Graze a few cells to carve a real biomass GRADIENT (uniform fields advect trivially).
+    f.grazeAt(cw * 4 + cw / 2, cw * 4 + cw / 2, K);
+    f.grazeAt(cw * 5 + cw / 2, cw * 4 + cw / 2, K * 0.5);
+    f.grazeAt(cw * 4 + cw / 2, cw * 5 + cw / 2, K * 0.7);
+    const flow = new FlowField(
+      128,
+      128,
+      16,
+      16,
+      defaultConfig({ flowStrength: 2, flowScale: 6, seed: 2 }),
+    );
+    const initial: number[] = [];
+    for (let r = 0; r < 16; r++)
+      for (let c = 0; c < 16; c++) initial.push(f.sampleAt(c * cw + cw / 2, r * cw + cw / 2));
+    const before = f.total();
+    for (let t = 0; t < 50; t++) f.step(0, 0, flow, null); // pure advection
+    expect(f.total()).toBeCloseTo(before, 4); // mass conserved across a non-uniform field
+    let changed = false;
+    let k = 0;
+    for (let r = 0; r < 16; r++)
+      for (let c = 0; c < 16; c++) {
+        const v = f.sampleAt(c * cw + cw / 2, r * cw + cw / 2);
+        if (Math.abs(v - initial[k]!) > 1e-9) changed = true; // transport actually moved biomass
+        expect(v).toBeGreaterThanOrEqual(-1e-9); // positivity under a real gradient
+        k++;
+      }
+    expect(changed).toBe(true); // not a vacuous pass — at least one cell's biomass moved
+  });
+
+  it('advection conserves and transports BOTH channels independently (B2)', () => {
+    const f = new FoodField(128, 128, 16, 16, K, 1, 2, 0.5); // channels=2
+    const cw = 128 / 16;
+    f.grazeAt(cw * 4 + cw / 2, cw * 4 + cw / 2, K * 0.4); // gradient in channel A
+    f.grazeAt2(cw * 6 + cw / 2, cw * 6 + cw / 2, K * 0.4); // a DIFFERENT gradient in channel B
+    const flow = new FlowField(
+      128,
+      128,
+      16,
+      16,
+      defaultConfig({ flowStrength: 2, flowScale: 6, seed: 2 }),
+    );
+    const initA: number[] = [];
+    const initB: number[] = [];
+    let totA0 = 0;
+    let totB0 = 0;
+    for (let r = 0; r < 16; r++)
+      for (let c = 0; c < 16; c++) {
+        const a = f.sampleAt(c * cw + cw / 2, r * cw + cw / 2);
+        const b = f.sampleAt2(c * cw + cw / 2, r * cw + cw / 2);
+        initA.push(a);
+        initB.push(b);
+        totA0 += a;
+        totB0 += b;
+      }
+    for (let t = 0; t < 50; t++) f.step(0, 0, flow, null);
+    let totA1 = 0;
+    let totB1 = 0;
+    let changedA = false;
+    let changedB = false;
+    let k = 0;
+    for (let r = 0; r < 16; r++)
+      for (let c = 0; c < 16; c++) {
+        const a = f.sampleAt(c * cw + cw / 2, r * cw + cw / 2);
+        const b = f.sampleAt2(c * cw + cw / 2, r * cw + cw / 2);
+        totA1 += a;
+        totB1 += b;
+        if (Math.abs(a - initA[k]!) > 1e-9) changedA = true;
+        if (Math.abs(b - initB[k]!) > 1e-9) changedB = true;
+        k++;
+      }
+    expect(totA1).toBeCloseTo(totA0, 4); // channel A conserves its OWN total
+    expect(totB1).toBeCloseTo(totB0, 4); // channel B conserves its OWN total (no A/B cross-leak)
+    expect(changedA).toBe(true); // both channels transported (guards a B2 pairing/index bug)
+    expect(changedB).toBe(true);
+  });
+
   it('advection is a no-op when flowStrength=0', () => {
     const f1 = new FoodField(1024, 1024, 16, 16, 10, 1);
     const f2 = new FoodField(1024, 1024, 16, 16, 10, 1);
