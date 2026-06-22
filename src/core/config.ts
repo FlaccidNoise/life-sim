@@ -424,7 +424,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     wallCols: 512,
     wallRows: 512,
     wallRegionCount: 5,
-    wallDensity: 0.35,
+    wallDensity: 0.43,
     wallPocketCoreRadius: 3,
     wallCorridorRadius: 2,
     wallOccludesVision: true,
