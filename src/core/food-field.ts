@@ -274,9 +274,9 @@ export class FoodField {
    *  (every flux subtracted from a donor is added to a receiver) and no-flux at walls. CFL ≤ 0.25
    *  (enforced by FlowField) keeps it positivity-preserving with 4 outflow faces. */
   private advect(flow: FlowField, blocked: Uint8Array | null): void {
-    const { cols, rows, cellW } = this;
-    this.advectChannel(this.B, flow, blocked, cols, rows, cellW);
-    if (this.B2) this.advectChannel(this.B2, flow, blocked, cols, rows, cellW);
+    const { cols, rows, cellW, cellH } = this;
+    this.advectChannel(this.B, flow, blocked, cols, rows, cellW, cellH);
+    if (this.B2) this.advectChannel(this.B2, flow, blocked, cols, rows, cellW, cellH);
   }
 
   private advectChannel(
@@ -286,11 +286,14 @@ export class FoodField {
     cols: number,
     rows: number,
     cellW: number,
+    cellH: number,
   ): void {
     const out = this.advectScratch ?? (this.advectScratch = new Float64Array(B.length));
     out.set(B);
     const { flowX, flowY } = flow;
-    const inv = 1 / cellW;
+    // Per-axis 1/cell: +x divides by cellW, +y by cellH (they differ on a non-square food grid).
+    const invX = 1 / cellW;
+    const invY = 1 / cellH;
     for (let r = 0; r < rows; r++) {
       const cur = r * cols;
       const dn = ((r + 1) % rows) * cols;
@@ -299,17 +302,19 @@ export class FoodField {
         const rt = cur + ((c + 1) % cols);
         const di = dn + c;
         if (blocked === null || blocked[i] === 0) {
+          // Flux omits a dt factor: this assumes the dt=1 fixed-scale safeguard. At dt<1 the moved
+          // fraction (|v|·dt/cell) would exceed the CFL=0.25 ceiling and break positivity.
           // +x face to the right neighbour
           if (blocked === null || blocked[rt] === 0) {
             const uf = 0.5 * (flowX[i]! + flowX[rt]!);
-            const flux = uf * (uf > 0 ? B[i]! : B[rt]!) * inv;
+            const flux = uf * (uf > 0 ? B[i]! : B[rt]!) * invX;
             out[i]! -= flux;
             out[rt]! += flux;
           }
           // +y face to the lower neighbour
           if (blocked === null || blocked[di] === 0) {
             const vf = 0.5 * (flowY[i]! + flowY[di]!);
-            const flux = vf * (vf > 0 ? B[i]! : B[di]!) * inv;
+            const flux = vf * (vf > 0 ? B[i]! : B[di]!) * invY;
             out[i]! -= flux;
             out[di]! += flux;
           }
