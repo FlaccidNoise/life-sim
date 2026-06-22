@@ -25,40 +25,33 @@ interface RadarAxisDef {
   color: string; // accent color for the spoke label + vertex dot
 }
 
-/** CAPABILITY lens — the default seven spokes, clockwise from the top. Ordered so predator-capability
- *  genes (diet, bite, speed, size) cluster on one side and the life-history/sensory genes (smell, r/K,
- *  provisioning) on the other, making a predator and a plant pull toward opposite halves of the chart. */
+// Lens spoke-sets are gated by the multi-seed variance census (src/headless/gene-variance.ts): a spoke
+// ships only for a gene that actually VARIES across the population (≥10% IQR of its clamp range), so no
+// spoke is born flat. `diet` is the one deliberate exception — at the current scale the population is a
+// grazer monoculture so diet reads flat, but it's the trophic ANCHOR + the green→red guild-fill driver
+// + the explicit target of the diversity work, so it stays as the honest monoculture indicator.
+
+/** CAPABILITY lens — the headline "what kind of competitor" mix across categories, clockwise from top.
+ *  spd (maxSpeed) and smell (senseRange) were dropped as census-FLAT and replaced by agility (maxTurn)
+ *  and vision (visionRange), both PROMOTE — so every spoke but the diet anchor demonstrably varies. */
 export const CAPABILITY_AXES: readonly RadarAxisDef[] = [
   { gene: ScalarGene.DIET, label: 'diet', color: '#d98b6a' },
   { gene: ScalarGene.DAMAGE, label: 'bite', color: '#e0566a' },
-  { gene: ScalarGene.MAX_SPEED, label: 'spd', color: '#5fd9e8' },
+  { gene: ScalarGene.MAX_TURN, label: 'agility', color: '#e0b15f' },
   { gene: ScalarGene.SIZE, label: 'size', color: '#9aa7b4' },
-  { gene: ScalarGene.SENSE_RANGE, label: 'smell', color: '#b6d957' },
+  { gene: ScalarGene.VISION_RANGE, label: 'vision', color: '#5f9de8' },
   { gene: ScalarGene.REPRO_THRESHOLD, label: 'r/K', color: '#e88fb0' },
   { gene: ScalarGene.BIRTH_ENERGY, label: 'prov', color: '#e8cf7a' },
 ];
 
-/** SENSES & SOCIAL lens — perception + grouping genes (all existing today). The vision spokes are kept
- *  here knowing some may census FLAT at the live scale (see the variance gate / roadmap); Phase 2 prunes
- *  what doesn't vary and adds the boldness/trail genes here as they land. */
-export const SENSES_SOCIAL_AXES: readonly RadarAxisDef[] = [
-  { gene: ScalarGene.VISION_RANGE, label: 'vis·rng', color: '#5f9de8' },
-  { gene: ScalarGene.VISION_FOV, label: 'vis·fov', color: '#7f8fe0' },
-  { gene: ScalarGene.VISION_ACUITY, label: 'vis·acu', color: '#9f7fe0' },
-  { gene: ScalarGene.SENSE_RANGE, label: 'smell', color: '#b6d957' },
-  { gene: ScalarGene.COHESION_DRIVE, label: 'school', color: '#8a7fe8' },
-  { gene: ScalarGene.SHELTER_DRIVE, label: 'shelter', color: '#7fb0e8' },
-];
-
-/** LIFE-HISTORY lens — reproductive strategy, metabolism, and body-plan genes (all existing today).
- *  Longevity and dispersal join here in Phases 3-4 as they're built. */
+/** LIFE-HISTORY lens — the reproduction/metabolism deep-dive, the strongest-varying cluster (metabEff
+ *  alone spans ~41% IQR). Flat eatRate + maxThrust dropped; all six spokes PROMOTE. */
 export const LIFE_HISTORY_AXES: readonly RadarAxisDef[] = [
   { gene: ScalarGene.REPRO_THRESHOLD, label: 'r/K', color: '#e88fb0' },
+  { gene: ScalarGene.SATIATED_THRESHOLD, label: 'satiety', color: '#e8b07a' },
   { gene: ScalarGene.BIRTH_ENERGY, label: 'prov', color: '#e8cf7a' },
   { gene: ScalarGene.METAB_EFF, label: 'econ', color: '#5fc9b0' },
-  { gene: ScalarGene.EAT_RATE, label: 'eat', color: '#9fd97f' },
   { gene: ScalarGene.MAX_TURN, label: 'agility', color: '#e0b15f' },
-  { gene: ScalarGene.MAX_THRUST, label: 'burst', color: '#e07fa0' },
   { gene: ScalarGene.SIZE, label: 'size', color: '#9aa7b4' },
 ];
 
@@ -69,10 +62,11 @@ export interface RadarLens {
 }
 
 /** The swappable radar lenses (the display decision: one ≤8-spoke radar, selectable axis-sets). Order is
- *  the <select> order; the first is the default. New genes append spokes to the relevant lens. */
+ *  the <select> order; the first is the default. A "Senses & Social" lens is DEFERRED: at the current
+ *  scale every social gene (cohesion, shelter, foragePref) censuses FLAT, so it would be empty — it
+ *  returns once boldness (Phase 3) and pheromone-trail (Phase 5) genes add varying social spokes. */
 export const LENSES: readonly RadarLens[] = [
   { key: 'capability', name: 'Capability', axes: CAPABILITY_AXES },
-  { key: 'sensesSocial', name: 'Senses & Social', axes: SENSES_SOCIAL_AXES },
   { key: 'lifeHistory', name: 'Life-history', axes: LIFE_HISTORY_AXES },
 ];
 
