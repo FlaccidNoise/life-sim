@@ -15,12 +15,6 @@ function wrapDelta(d: number, size: number): number {
   return d;
 }
 
-/** Positive remainder: wrap a position into [0, size) on the torus. */
-function wrapPos(v: number, size: number): number {
-  const m = v % size;
-  return m < 0 ? m + size : m;
-}
-
 /**
  * Soft repulsion: each organism is pushed away from neighbors it overlaps (center distance <
  * 2·cellRadius), force = repulsion · overlap along the separation axis. ACCUMULATES (+=) into the
@@ -116,26 +110,13 @@ export function integrate(
     let px = x[i]! + nvx * dt;
     let py = y[i]! + nvy * dt;
     if (walls !== null && walls.active) {
-      // Slide: if the full move lands in a wall, try the x-only then y-only sub-move and zero the
-      // blocked velocity component; if neither sub-move is open, stay put (zero both).
-      if (walls.isSolidAt(wrapPos(px, worldWidth), wrapPos(py, worldHeight))) {
-        const ox = x[i]!;
-        const oy = y[i]!;
-        const xOpen = !walls.isSolidAt(wrapPos(px, worldWidth), wrapPos(oy, worldHeight));
-        const yOpen = !walls.isSolidAt(wrapPos(ox, worldWidth), wrapPos(py, worldHeight));
-        if (xOpen) {
-          py = oy;
-          vy[i] = 0;
-        } else if (yOpen) {
-          px = ox;
-          vx[i] = 0;
-        } else {
-          px = ox;
-          py = oy;
-          vx[i] = 0;
-          vy[i] = 0;
-        }
-      }
+      // Swept slide: walk the move in ≤1-cell hops so a fast creature cannot tunnel through a thin
+      // wall. Zero the velocity component on any axis the sweep blocked.
+      const swept = walls.sweptCollide(x[i]!, y[i]!, nvx * dt, nvy * dt);
+      px = swept.x;
+      py = swept.y;
+      if (swept.blockedX) vx[i] = 0;
+      if (swept.blockedY) vy[i] = 0;
     }
     px %= worldWidth;
     if (px < 0) px += worldWidth;

@@ -149,6 +149,57 @@ describe('integrate', () => {
     }
     expect(s.vx[i]).toBe(0); // blocked x-component zeroed
   });
+
+  it('a fast creature cannot tunnel through a 1-cell wall (swept collision)', () => {
+    const cfg = defaultConfig({
+      worldWidth: 1024,
+      worldHeight: 1024,
+      wallCols: 64,
+      wallRows: 64,
+      foodCols: 16,
+      foodRows: 16,
+      foodPatchCount: 0,
+      wallRegionCount: 1,
+      wallDensity: 0.5,
+      seed: 1,
+    });
+    const walls = new Walls(1024, 1024, 64, 64, cfg);
+    const cellW = 1024 / 64;
+    // Open cell whose right neighbour is solid and the cell beyond is open — a thin wall to tunnel.
+    let oc = -1;
+    let or = -1;
+    for (let r = 0; r < 64 && oc < 0; r++)
+      for (let c = 0; c < 62; c++) {
+        const here = (c + 0.5) * cellW;
+        const wall = (c + 1.5) * cellW;
+        const beyond = (c + 2.5) * cellW;
+        const yy = (r + 0.5) * cellW;
+        if (
+          !walls.isSolidAt(here, yy) &&
+          walls.isSolidAt(wall, yy) &&
+          !walls.isSolidAt(beyond, yy)
+        ) {
+          oc = c;
+          or = r;
+          break;
+        }
+      }
+    expect(oc).toBeGreaterThanOrEqual(0);
+
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    const startX = (oc + 0.5) * cellW;
+    s.x[i] = startX;
+    s.y[i] = (or + 0.5) * cellW;
+    s.vx[i] = 3 * cellW; // ≥ 2·cellW — a single-cell final-cell check would tunnel clean through
+    s.vy[i] = 0;
+    setMaxSpeed(s, i, 1e9); // clamp inert
+    s.rebuildLive();
+    integrate(s, 1, 1, true, 1024, 1024, 6, 0, walls);
+    expect(walls.isSolidAt(s.x[i], s.y[i])).toBe(false); // not inside the wall
+    expect(s.x[i]).toBeLessThan((oc + 1.5) * cellW); // stayed on the near side (did not pass through)
+    expect(s.vx[i]).toBe(0); // blocked x-component zeroed
+  });
 });
 
 describe('computeRepulsion', () => {

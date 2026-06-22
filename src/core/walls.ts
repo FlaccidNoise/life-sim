@@ -103,6 +103,56 @@ export class Walls {
     return false;
   }
 
+  /**
+   * Swept (substepped) slide from open (ox,oy) over intended displacement (dx,dy), checked in hops no
+   * larger than one wall cell so a fast move cannot tunnel through a thin wall. At each hop the next
+   * position is tested toroidally; if solid, the hop's sub-move is axis-separated (try x then y, advance
+   * whichever is open, mark the blocked axis; both solid → stop). Returns the final PRE-WRAP position
+   * (the caller commits the toroidal wrap) and which axes were blocked.
+   */
+  sweptCollide(
+    ox: number,
+    oy: number,
+    dx: number,
+    dy: number,
+  ): { x: number; y: number; blockedX: boolean; blockedY: boolean } {
+    const ww = this.worldWidth;
+    const wh = this.worldHeight;
+    const n = Math.max(
+      1,
+      Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) / Math.min(this.cellW, this.cellH)),
+    );
+    const hx = dx / n;
+    const hy = dy / n;
+    let cx = ox;
+    let cy = oy;
+    let blockedX = false;
+    let blockedY = false;
+    for (let s = 0; s < n; s++) {
+      const nx = cx + hx;
+      const ny = cy + hy;
+      if (!this.isSolidAt(wrap(nx, ww), wrap(ny, wh))) {
+        cx = nx;
+        cy = ny;
+        continue;
+      }
+      const xOpen = hx !== 0 && !this.isSolidAt(wrap(nx, ww), wrap(cy, wh));
+      const yOpen = hy !== 0 && !this.isSolidAt(wrap(cx, ww), wrap(ny, wh));
+      if (xOpen) {
+        cx = nx;
+        blockedY = true;
+      } else if (yOpen) {
+        cy = ny;
+        blockedX = true;
+      } else {
+        blockedX = blockedX || hx !== 0;
+        blockedY = blockedY || hy !== 0;
+        break;
+      }
+    }
+    return { x: cx, y: cy, blockedX, blockedY };
+  }
+
   /** Central difference of the proximity field (points AWAY from walls). Zero when inactive. */
   proxGradAt(x: number, y: number, step: number): { gx: number; gy: number } {
     if (!this._active) return { gx: 0, gy: 0 };
