@@ -341,4 +341,30 @@ describe('interoceptive hunger input (lever E2)', () => {
     expect(headingAfter(HUNGER_ON)).toBeGreaterThan(0); // hunger turns the heading
     expect(headingAfter(CFG)).toBe(0); // off → no turn at all
   });
+
+  it('lays an eligibility trace on the hunger synapses when learning + hungerSense are both on', () => {
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.heading[i] = 0;
+    setBrain(s, i, { HUNGER_TURN: 0.5, HUNGER_THRUST: 2 }); // resetLearned zeros elig
+    s.energy[i] = 0; // empty → hunger ≈ 1 → both hunger synapses fire
+    s.rebuildLive();
+    steer(s, true, 0.5, false, HUNGER_ON); // learn=true lays the trace
+    const b = i * BRAIN_GENES;
+    expect(s.elig[b + Brain.HUNGER_THRUST]!).not.toBe(0); // pre·post = hunger·thrustRaw ≠ 0
+    expect(s.elig[b + Brain.HUNGER_TURN]!).not.toBe(0);
+  });
+
+  it('lays NO hunger eligibility when hungerSense is off, even while learning (ablation)', () => {
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.heading[i] = 0;
+    setBrain(s, i, { HUNGER_TURN: 0.5, HUNGER_THRUST: 2 });
+    s.energy[i] = 0;
+    s.rebuildLive();
+    steer(s, true, 0.5, false, CFG); // hungerSense OFF → the elig block is gated out
+    const b = i * BRAIN_GENES;
+    expect(s.elig[b + Brain.HUNGER_THRUST]!).toBe(0); // trace untouched
+    expect(s.elig[b + Brain.HUNGER_TURN]!).toBe(0);
+  });
 });
