@@ -31,10 +31,19 @@ function el<T extends HTMLElement>(id: string): T {
 const canvas = el<HTMLCanvasElement>('view');
 const hudBody = el('hud-body');
 
-// Live demo opts into the env feature's intended shipping state: walls (5 biome regions, vision-
-// occluding, food-damming) + a gentle drift flow. defaultConfig keeps these OFF so headless/tests
-// stay byte-identical to the pre-feature engine; the demo turns them on here (guardrail-gated).
-let config: Config = defaultConfig({ wallRegionCount: 5, flowStrength: 0.15 });
+// Live demo = the FULL PACKAGE (the three guardrail-verified pillars). defaultConfig keeps every feature
+// OFF so headless/tests stay byte-identical to the pre-feature engine; the demo opts in here. Each flip
+// was confirmed to keep the world alive (births>0, not extinct, not buffer-pegged) at 8k ticks × 2 seeds:
+//   • walls + flow      — spatial structure: 5 vision-occluding/food-damming biome regions + drift current
+//   • motorSquash       — legibility: graded tanh steering (kills the motor-saturation spin/vibrate)
+//   • foodChannels = 2  — diversity: a second resource axis so specialists beat generalists
+// counterBiteFraction stays OFF (predator-fragile, unproven payoff) — exposed as a live knob to tune.
+let config: Config = defaultConfig({
+  wallRegionCount: 5,
+  flowStrength: 0.15,
+  motorSquash: true,
+  foodChannels: 2,
+});
 let world = new World(config);
 
 let renderer: Renderer;
