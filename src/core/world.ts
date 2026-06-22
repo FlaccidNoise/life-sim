@@ -100,6 +100,9 @@ export class World {
         cfg.foodPatchRadius,
         cfg.foodBaseFertility,
         this.rng,
+        cfg.foodPatchRichness,
+        cfg.foodPatchRichnessVar,
+        cfg.foodMaxFertility,
       );
     } else {
       this.food.reset();
@@ -107,33 +110,67 @@ export class World {
     this.seedWorld();
   }
 
-  /** Populate the initial organisms — rejection-sampled onto fertile spots (the pockets). */
+  /** Populate the initial organisms — rejection-sampled onto fertile spots (the pockets). Predators are
+   *  optionally cluster-seeded into the deepest pockets (founding-protection) so a hunter lineage starts
+   *  together on a dense prey reservoir rather than scattered into the sparse bootstrap. */
   private seedWorld(): void {
-    const { worldWidth, worldHeight, initialPopulation, driftSpeed, maxOrganisms } = this.config;
+    const {
+      worldWidth,
+      worldHeight,
+      initialPopulation,
+      driftSpeed,
+      maxOrganisms,
+      predatorSeedClusters,
+    } = this.config;
     const s = this.store;
     const n = Math.min(initialPopulation, maxOrganisms);
     const fertileThreshold = 0.3 * this.food.capacity; // "in a pocket"
+    // Founding-protection: pick the N deepest pockets as predator NURSERIES (sorted by fertility depth) so
+    // the hunter founders start together in a prey-rich reservoir — the founding lottery is the real gate
+    // on big-world predation. Empty when the knob is OFF or there are no pockets → predators fall back to
+    // the same rejection-sample as grazers (the byte-identical OFF state). Sort reads fertility, no RNG.
+    const nurseries: { x: number; y: number }[] = [];
+    if (predatorSeedClusters > 0 && this.food.patchCenters.length > 0) {
+      const sorted = [...this.food.patchCenters].sort(
+        (a, b) => this.food.fertilityAt(b.x, b.y) - this.food.fertilityAt(a.x, a.y),
+      );
+      for (let p = 0; p < Math.min(predatorSeedClusters, sorted.length); p++)
+        nurseries.push(sorted[p]!);
+    }
+    const jx = (this.config.foodPatchRadius * worldWidth) / this.config.foodCols; // pocket radius (world u)
+    const jy = (this.config.foodPatchRadius * worldHeight) / this.config.foodRows;
     for (let k = 0; k < n; k++) {
       const i = s.alloc();
       if (i < 0) break;
-      // Try a few random spots; take the first in a pocket (else the last tried) so founders start on
-      // food rather than starving in dead water.
+      // Bimodal DIET seed: the first predatorFraction of founders are hunters, rest grazers (diet 0). This
+      // expresses the predator niche from t0 (it won't bootstrap from an all-grazer start).
+      const isPredator = k < this.config.predatorFraction * n;
       let bx = 0;
       let by = 0;
-      let best = -1;
-      for (let t = 0; t < 8; t++) {
-        const tx = this.rng.range(0, worldWidth);
-        const ty = this.rng.range(0, worldHeight);
-        // Reject spawns inside walls (gated: with walls off this is byte-identical — same draws, same
-        // sampleAt). A solid candidate scores -1 so an open fertile pocket always wins over it.
-        const f =
-          this.walls.active && this.walls.isSolidAt(tx, ty) ? -1 : this.food.sampleAt(tx, ty);
-        if (f > best) {
-          best = f;
-          bx = tx;
-          by = ty;
+      if (isPredator && nurseries.length > 0) {
+        // Cluster this predator into one of the deepest pockets (round-robin), jittered within the pocket,
+        // so the hunter lineage starts together on a dense prey reservoir. 2 RNG draws (vs the scan below).
+        const nur = nurseries[k % nurseries.length]!;
+        bx = (((nur.x + this.rng.range(-jx, jx)) % worldWidth) + worldWidth) % worldWidth;
+        by = (((nur.y + this.rng.range(-jy, jy)) % worldHeight) + worldHeight) % worldHeight;
+      } else {
+        // Try a few random spots; take the first in a pocket (else the last tried) so founders start on
+        // food rather than starving in dead water.
+        let best = -1;
+        for (let t = 0; t < 8; t++) {
+          const tx = this.rng.range(0, worldWidth);
+          const ty = this.rng.range(0, worldHeight);
+          // Reject spawns inside walls (gated: with walls off this is byte-identical — same draws, same
+          // sampleAt). A solid candidate scores -1 so an open fertile pocket always wins over it.
+          const f =
+            this.walls.active && this.walls.isSolidAt(tx, ty) ? -1 : this.food.sampleAt(tx, ty);
+          if (f > best) {
+            best = f;
+            bx = tx;
+            by = ty;
+          }
+          if (f >= fertileThreshold) break;
         }
-        if (f >= fertileThreshold) break;
       }
       s.x[i] = bx;
       s.y[i] = by;
@@ -151,9 +188,6 @@ export class World {
         this.flowSenseGenes,
       );
       seedScalarGenes(s.scalarGenes, i, this.rng, this.config); // incl. life-history + trophic genes
-      // Bimodal DIET seed: the first predatorFraction of founders are hunters (diet 0.9), rest grazers
-      // (diet 0). This expresses the predator niche from t0 (it won't bootstrap from an all-grazer start).
-      const isPredator = k < this.config.predatorFraction * n;
       // Seed predators as OMNIVORES (diet 0.6): they survive on plants through the sparse early phase
       // AND hunt opportunistically, so the trait isn't wiped before prey density builds (without
       // prey-sensing a pure hunter starves first). Diet then evolves up where hunting pays.

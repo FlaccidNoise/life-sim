@@ -30,6 +30,9 @@ import { type FlowField } from './flow-field';
 export class FoodField {
   readonly cols: number;
   readonly rows: number;
+  /** World-space (x,y) of each pocket centre, set by seedPatches. Diagnostics only (creatures-per-pocket,
+   *  between-pocket gene variance) — not part of sim state, not hashed. */
+  readonly patchCenters: { x: number; y: number }[] = [];
   private readonly cellW: number;
   private readonly cellH: number;
   private readonly initFraction: number;
@@ -95,13 +98,23 @@ export class FoodField {
     radiusCells: number,
     baseFertility: number,
     rng: { float(): number },
+    richness = 1,
+    richnessVar = 0,
+    maxFertility = 1,
   ): void {
     const { cols, rows, fertility } = this;
     fertility.fill(baseFertility);
+    this.patchCenters.length = 0;
     const twoSigma2 = 2 * radiusCells * radiusCells;
     for (let p = 0; p < count; p++) {
       const pc = rng.float() * cols;
       const pr = rng.float() * rows;
+      this.patchCenters.push({ x: pc * this.cellW, y: pr * this.cellH });
+      // Per-pocket peak amplitude. With richnessVar===0 we draw NOTHING extra (peak = richness), so when
+      // richness===1 + maxFertility===1 the whole loop is byte-identical to legacy (+g, clamp 1). Only when
+      // variation is on do we consume one RNG draw per pocket — kept here, before creatures are seeded.
+      const peak =
+        richnessVar > 0 ? richness * (1 + richnessVar * (2 * rng.float() - 1)) : richness;
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
           // toroidal cell distance to the patch centre
@@ -111,8 +124,8 @@ export class FoodField {
           if (dr > rows / 2) dr = rows - dr;
           const g = Math.exp(-(dc * dc + dr * dr) / twoSigma2);
           const i = r * cols + c;
-          const v = fertility[i]! + g;
-          fertility[i] = v > 1 ? 1 : v;
+          const v = fertility[i]! + peak * g;
+          fertility[i] = v > maxFertility ? maxFertility : v;
         }
       }
     }
@@ -149,6 +162,12 @@ export class FoodField {
   /** Biomass at a world position (channel B). 0 when the second channel is not active. */
   sampleAt2(x: number, y: number): number {
     return this.B2 ? this.B2[this.idx(x, y)]! : 0;
+  }
+
+  /** Per-cell FERTILITY at a world position — the stable "is this a pocket" signal (unlike biomass, which
+   *  dips when grazed). Pockets ≥ ~1 (deep ones >1), dead water ≈ baseFertility. For the dead-water tax. */
+  fertilityAt(x: number, y: number): number {
+    return this.fertility[this.idx(x, y)]!;
   }
 
   /** Remove up to `amount` biomass at a position (channel A); returns the amount actually taken. */

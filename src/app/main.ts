@@ -31,7 +31,10 @@ function el<T extends HTMLElement>(id: string): T {
 const canvas = el<HTMLCanvasElement>('view');
 const hudBody = el('hud-body');
 
-let config: Config = defaultConfig();
+// Live demo opts into the env feature's intended shipping state: walls (5 biome regions, vision-
+// occluding, food-damming) + a gentle drift flow. defaultConfig keeps these OFF so headless/tests
+// stay byte-identical to the pre-feature engine; the demo turns them on here (guardrail-gated).
+let config: Config = defaultConfig({ wallRegionCount: 5, flowStrength: 0.15 });
 let world = new World(config);
 
 let renderer: Renderer;
