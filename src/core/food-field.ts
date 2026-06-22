@@ -40,6 +40,7 @@ export class FoodField {
   private scratch: Float64Array;
   private B2: Float64Array | null = null; // second channel; allocated only when channels===2
   private scratch2: Float64Array | null = null;
+  private advectScratch: Float64Array | null = null; // reused flux-accumulation buffer (lazy)
 
   constructor(
     private readonly worldWidth: number,
@@ -269,10 +270,54 @@ export class FoodField {
     }
   }
 
-  /** Advect biomass along the flow current (donor-cell). Empty until the advection task lands. */
+  /** First-order donor-cell (upwind) flux advection of biomass along the flow field. Conservative
+   *  (every flux subtracted from a donor is added to a receiver) and no-flux at walls. CFL ≤ 0.25
+   *  (enforced by FlowField) keeps it positivity-preserving with 4 outflow faces. */
   private advect(flow: FlowField, blocked: Uint8Array | null): void {
-    void flow;
-    void blocked;
+    const { cols, rows, cellW } = this;
+    this.advectChannel(this.B, flow, blocked, cols, rows, cellW);
+    if (this.B2) this.advectChannel(this.B2, flow, blocked, cols, rows, cellW);
+  }
+
+  private advectChannel(
+    B: Float64Array,
+    flow: FlowField,
+    blocked: Uint8Array | null,
+    cols: number,
+    rows: number,
+    cellW: number,
+  ): void {
+    const out = this.advectScratch ?? (this.advectScratch = new Float64Array(B.length));
+    out.set(B);
+    const { flowX, flowY } = flow;
+    const inv = 1 / cellW;
+    for (let r = 0; r < rows; r++) {
+      const cur = r * cols;
+      const dn = ((r + 1) % rows) * cols;
+      for (let c = 0; c < cols; c++) {
+        const i = cur + c;
+        const rt = cur + ((c + 1) % cols);
+        const di = dn + c;
+        if (blocked === null || blocked[i] === 0) {
+          // +x face to the right neighbour
+          if (blocked === null || blocked[rt] === 0) {
+            const uf = 0.5 * (flowX[i]! + flowX[rt]!);
+            const flux = uf * (uf > 0 ? B[i]! : B[rt]!) * inv;
+            out[i]! -= flux;
+            out[rt]! += flux;
+          }
+          // +y face to the lower neighbour
+          if (blocked === null || blocked[di] === 0) {
+            const vf = 0.5 * (flowY[i]! + flowY[di]!);
+            const flux = vf * (vf > 0 ? B[i]! : B[di]!) * inv;
+            out[i]! -= flux;
+            out[di]! += flux;
+          }
+        }
+      }
+    }
+    // copy back (B is the canonical buffer; out is reused scratch)
+    B.set(out);
   }
 
   /** Mix the field into a deterministic state hash (food is part of sim state). Channel B is mixed in
