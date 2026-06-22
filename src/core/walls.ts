@@ -187,7 +187,7 @@ export class Walls {
 
   private generate(cfg: Config): void {
     if (!this._active) {
-      this.deriveMasks(cfg);
+      this.deriveMasks();
       return;
     }
     const rng = new Rng((cfg.seed ^ SALT) >>> 0);
@@ -204,7 +204,7 @@ export class Walls {
       this.solid[i] = patterns[this.regionGen[this.region[i]!]!]![i]!;
     this.openPockets(cfg);
     this.connectPockets(cfg);
-    this.deriveMasks(cfg);
+    this.deriveMasks();
   }
 
   /** Scatter `wallRegionCount` seeds (wall Rng), assign each fine cell to its nearest seed by toroidal
@@ -335,8 +335,7 @@ export class Walls {
     }
   }
 
-  private deriveMasks(cfg: Config): void {
-    void cfg;
+  private deriveMasks(): void {
     this.deriveFoodBlocked();
     this.deriveProx();
   }

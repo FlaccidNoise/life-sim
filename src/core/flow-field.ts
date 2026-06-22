@@ -62,7 +62,9 @@ export class FlowField {
     }
   }
 
-  /** Periodic value noise (same scheme as Walls.carveNoise) → smooth streamfunction. */
+  /** Periodic value noise → smooth streamfunction. Deliberately NOT shared with wall-gen/carveNoise:
+   *  this uses a Float64 lattice (a continuous streamfunction), while carveNoise uses a Float32 lattice
+   *  thresholded to a 0/1 mask — unifying them would change both outputs, so they stay separate. */
   private noise(cfg: Config, cols: number, rows: number): Float64Array {
     const rng = new Rng((cfg.seed ^ SALT) >>> 0);
     const wl = cfg.flowScale > 0 ? cfg.flowScale : 12;
