@@ -241,7 +241,7 @@ describe('motorSquash (smooth tanh saturation — the legibility knob)', () => {
       s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.MAX_TURN] = 1; // limit M = 1
       s.rebuildLive();
       steer(s, false, 0.2, squash);
-      return s.heading[i]!;
+      return s.heading[i];
     };
     expect(headingAfter(false)).toBeCloseTo(1.0); // hard clamp: snaps to MAX_TURN
     expect(headingAfter(true)).toBeCloseTo(Math.tanh(2)); // squash: 1·tanh(2) ≈ 0.964 — below the limit
@@ -260,7 +260,7 @@ describe('motorSquash (smooth tanh saturation — the legibility knob)', () => {
       s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.MAX_TURN] = 1;
       s.rebuildLive();
       steer(s, false, 0.2, squash);
-      return s.heading[i]!;
+      return s.heading[i];
     };
     expect(headingAfter(true)).toBeCloseTo(headingAfter(false), 2); // ≈ identical for small signals
   });
