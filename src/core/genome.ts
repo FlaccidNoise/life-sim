@@ -57,8 +57,12 @@ export const ScalarGene = {
   // sight vector (sense.senseCreatures), so small prey cluster around big herbivores. Costed (no free
   // herding instinct). Diet-similarity gates it so prey shelter near big grazers but still flee predators.
   SHELTER_DRIVE: 15,
+  // Social gene: schooling/cohesion. Weights an attraction toward creatures of a SIMILAR HUE (shared
+  // lineage/kin) into the sight vector, so like-colored creatures herd into visible schools. Costed (no
+  // free schooling). Bounded so it can't override fleeing a threat (the appeal term still dominates there).
+  COHESION_DRIVE: 16,
 } as const;
-export const SCALAR_GENE_COUNT = 16;
+export const SCALAR_GENE_COUNT = 17;
 
 /** Minimum reproductive-band width: satiated is read as max(satiatedGene, reproGene + this) so the two
  *  life-history bars can mutate independently without inverting (which would break the learn gate). */
@@ -82,7 +86,8 @@ interface ScalarGeneSpec {
     | 'visionRange'
     | 'visionFov'
     | 'visionAcuity'
-    | 'shelterDrive';
+    | 'shelterDrive'
+    | 'cohesionDrive';
   /** Config key for the per-unit-above-center basal cost coeff, or null for a non-upkeep gene. */
   costKey:
     | 'maxSpeedCost'
@@ -96,6 +101,7 @@ interface ScalarGeneSpec {
     | 'visionFovCost'
     | 'visionAcuityCost'
     | 'shelterDriveCost'
+    | 'cohesionDriveCost'
     | null;
   /** Hard clamp range the gene value is kept within (at seed and at every mutation). */
   min: number;
@@ -133,6 +139,9 @@ export const SCALAR_GENE_SPECS: readonly ScalarGeneSpec[] = [
   // SHELTER_DRIVE — costed social attraction toward bigger same-guild creatures (no free herding).
   // Center > 0 so the center-relative mutation step isn't frozen; weakly ON from birth, selection tunes.
   { centerKey: 'shelterDrive', costKey: 'shelterDriveCost', min: 0, max: 0.4 },
+  // COHESION_DRIVE — costed attraction toward same-hue (lineage) creatures → schools. Center > 0 so the
+  // gene can mutate; bounded so it stays comparable to the chase/flee appeal rather than swamping it.
+  { centerKey: 'cohesionDrive', costKey: 'cohesionDriveCost', min: 0, max: 2 },
 ];
 
 function clampTo(v: number, min: number, max: number): number {

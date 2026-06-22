@@ -36,6 +36,7 @@ interface Metrics {
   births: number;
   deaths: number;
   shelterIdx: number; // mean dist from each SMALL creature to its nearest ≥1.3×-larger creature (lower = more sheltering)
+  schoolSim: number; // mean hue-similarity (∈[0,1]) of each creature to its NEAREST neighbor (higher = like-color schools)
 }
 
 function measure(world: World): Metrics {
@@ -61,6 +62,7 @@ function measure(world: World): Metrics {
       births: world.totalBirths,
       deaths: world.totalDeaths,
       shelterIdx: 0,
+      schoolSim: 0,
     };
   }
   let herb = 0;
@@ -149,6 +151,35 @@ function measure(world: World): Metrics {
       shelterN++;
     }
   }
+  // School similarity: for each creature, the hue-similarity to its NEAREST neighbor (any), meaned over
+  // all. A local pairwise measure → robust to population-composition shifts (unlike shelterIdx). Higher =
+  // neighbors share a lineage color = schools. O(n²) brute force, fine at probe populations.
+  let schoolSum = 0;
+  let schoolN = 0;
+  for (let k = 0; k < liveCount; k++) {
+    const i = liveIndices[k]!;
+    let best = Infinity;
+    let bestJ = -1;
+    for (let m = 0; m < liveCount; m++) {
+      if (m === k) continue;
+      const j = liveIndices[m]!;
+      let dx = Math.abs(s.x[j]! - s.x[i]!);
+      let dy = Math.abs(s.y[j]! - s.y[i]!);
+      if (dx > ww * 0.5) dx = ww - dx;
+      if (dy > wh * 0.5) dy = wh - dy;
+      const d2 = dx * dx + dy * dy;
+      if (d2 < best) {
+        best = d2;
+        bestJ = j;
+      }
+    }
+    if (bestJ >= 0) {
+      let hd = Math.abs(s.hue[i]! - s.hue[bestJ]!);
+      if (hd > 0.5) hd = 1 - hd;
+      schoolSum += 1 - 2 * hd;
+      schoolN++;
+    }
+  }
   const hs = world.hash.stats();
   return {
     pop: liveCount,
@@ -168,6 +199,7 @@ function measure(world: World): Metrics {
     births: world.totalBirths,
     deaths: world.totalDeaths,
     shelterIdx: shelterN > 0 ? shelterSum / shelterN : 0,
+    schoolSim: schoolN > 0 ? schoolSum / schoolN : 0,
   };
 }
 
@@ -191,13 +223,19 @@ function run(label: string, overrides: Partial<Config>): { label: string; m: Met
 // SHELTER-SEEKING ablation: shelterGain 0 (off) vs 1 (on) on seeds 1/2/5. Want shelterIdx to DROP with
 // shelter on (small bodies sit closer to big ones = clustering) AND the world to stay alive (pop>0,
 // births>0) on every seed. shelterIdx printed last.
+// SCHOOLING ablation: cohesionGain 0 (off) vs 1 (on) on seeds 1/2/5. Want schoolSim to RISE with
+// cohesion on (nearest neighbors share a lineage color = schools) AND the world to stay alive on every
+// seed. schoolSim is the last column; shelterIdx kept for context (shelter is on at its default).
+// SCHOOLING ablation at the shipped strength (cohesionDrive 0.15): cohesionGain 0 (off) vs 1 (on),
+// seeds 1/2/5. Liveness gate (pop>0, world alive). schoolSim is saturated by natal kin-clustering so it
+// can't isolate the behavior — the schooling is confirmed at unit level (sense.test) + watched live.
 const CASES: { label: string; o: Partial<Config> }[] = [
-  { label: 'shelter OFF s1', o: { shelterGain: 0 } },
-  { label: 'shelter ON  s1', o: { shelterGain: 1 } },
-  { label: 'shelter OFF s2', o: { shelterGain: 0, seed: 2 } },
-  { label: 'shelter ON  s2', o: { shelterGain: 1, seed: 2 } },
-  { label: 'shelter OFF s5', o: { shelterGain: 0, seed: 5 } },
-  { label: 'shelter ON  s5', o: { shelterGain: 1, seed: 5 } },
+  { label: 'school OFF s1', o: { cohesionGain: 0 } },
+  { label: 'school ON  s1', o: { cohesionGain: 1 } },
+  { label: 'school OFF s2', o: { cohesionGain: 0, seed: 2 } },
+  { label: 'school ON  s2', o: { cohesionGain: 1, seed: 2 } },
+  { label: 'school OFF s5', o: { cohesionGain: 0, seed: 5 } },
+  { label: 'school ON  s5', o: { cohesionGain: 1, seed: 5 } },
 ];
 
 console.log(`=== density + ablation probe: ${ticks} ticks, seed ${seed}, world 8192² ===\n`);
@@ -216,6 +254,7 @@ const header =
     'turnSat%',
     'drift',
     'shelterIdx',
+    'schoolSim',
   ]
     .map((h) => h.padStart(9))
     .join('');
@@ -238,6 +277,7 @@ for (const c of CASES) {
       m.turnSatPct.toFixed(0),
       m.drift.toFixed(1),
       m.shelterIdx.toFixed(0),
+      m.schoolSim.toFixed(2),
     ]
       .map((v) => v.padStart(9))
       .join('');

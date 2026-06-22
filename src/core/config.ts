@@ -163,6 +163,13 @@ export interface Config {
   /** Global multiplier on the shelter term (ablation knob + live tuning). 0 = shelter OFF (proves it
    *  earns its keep); 1 = full strength. Does not touch the gene, so the gene still evolves under it. */
   shelterGain: number;
+  /** COHESION_DRIVE gene center — how strongly a creature is pulled toward SIMILAR-HUE (lineage)
+   *  creatures (folded into the sight vector → visible schools). Center > 0 so mutation isn't frozen. */
+  cohesionDrive: number;
+  /** Basal upkeep per unit of COHESION_DRIVE above its center (a strong schooling instinct costs more). */
+  cohesionDriveCost: number;
+  /** Global multiplier on the cohesion term (ablation knob + live tuning). 0 = schooling OFF. */
+  cohesionGain: number;
 
   /** Gaussian σ spread of founder brain weights around the seed brain (initial behavioral variation). */
   founderSigma: number;
@@ -284,6 +291,13 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     shelterDrive: 0.06,
     shelterDriveCost: 0.5,
     shelterGain: 1,
+    // Schooling. Center 0.15 — a GENTLE same-hue pull: stronger (0.3+) clumps creatures so tight they
+    // overgraze and crash carrying capacity (probe: pop −41% @0.3); 0.15 costs only ~11% pop on seed 1
+    // and HELPS on seed 5 (loosely-schooling prey are easier to hunt → predators thrive). Modest cost;
+    // gain 1 = on (ablate with 0). NB the term is gene × hueSim[≤1], bounded below the flee appeal.
+    cohesionDrive: 0.15,
+    cohesionDriveCost: 0.1,
+    cohesionGain: 1,
     // NB pre-sight, predators hunt by PROXIMITY only — the encounter rate is too low for hunting to
     // pay, so the predator trait does not persist yet (it needs the sight slice to actively target
     // prey). The mechanic + genes + color are in place; sight activates it.

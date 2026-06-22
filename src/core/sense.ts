@@ -67,7 +67,7 @@ export function senseFood(
 const MAX_VISION_CELLS = 24;
 
 export function senseCreatures(store: OrganismStore, hash: SpatialHash, cfg: Config): void {
-  const { liveIndices, liveCount, x, y, heading, sightX, sightY, scalarGenes } = store;
+  const { liveIndices, liveCount, x, y, heading, hue, sightX, sightY, scalarGenes } = store;
   const { cols, rows, bucketStart, sorted } = hash;
   const ww = cfg.worldWidth;
   const wh = cfg.worldHeight;
@@ -90,6 +90,10 @@ export function senseCreatures(store: OrganismStore, hash: SpatialHash, cfg: Con
     // creatures so small prey cluster around big grazers; diet-similarity gates it so prey still flee
     // big predators (the chase/flee appeal dominates there). 0 → no shelter pull (the ablation).
     const shelter = scalarGenes[sg + ScalarGene.SHELTER_DRIVE]! * cfg.shelterGain;
+    // Schooling strength (gene × global ablation/tuning gain). Pulls toward SIMILAR-hue (lineage)
+    // creatures so like-colored creatures herd into schools. 0 → no cohesion pull (the ablation).
+    const cohesion = scalarGenes[sg + ScalarGene.COHESION_DRIVE]! * cfg.cohesionGain;
+    const myHue = hue[i]!;
     const xi = x[i]!;
     const yi = y[i]!;
     const hx = Math.cos(heading[i]!);
@@ -132,6 +136,12 @@ export function senseCreatures(store: OrganismStore, hash: SpatialHash, cfg: Con
           if (shelter > 0 && sizeDiff > 0) {
             const dietSim = 1 - Math.abs(appeal); // |myDiet − itsDiet| ∈ [0,1]; 1 = same role
             pull += shelter * sizeDiff * dietSim;
+          }
+          // Schooling: pull toward a SIMILAR-hue neighbor (circular hue distance → similarity ∈ [0,1]).
+          if (cohesion > 0) {
+            let hd = Math.abs(myHue - hue[j]!);
+            if (hd > 0.5) hd = 1 - hd; // hue wraps [0,1) → shortest distance ∈ [0,0.5]
+            pull += cohesion * (1 - 2 * hd); // identical hue → +cohesion, opposite → 0
           }
           const w = pull * (1 - d / range) * acuity;
           sx += ux * w;
