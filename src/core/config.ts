@@ -314,7 +314,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     // Seed founders across a wide UNIFORM size band (cellRadius·[0, 2] = ~[2,12]) so big/small body
     // niches — and the predation refuge + shelter dynamics they drive — exist from t0 rather than having
     // to evolve out of a monomorphic start. Probe: szSd up, world stays alive. 0 disables (all at center).
-    founderSizeSpread: 1.0,
+    founderSizeSpread: 2.5, // wide band over the 2× range (≈[2,21] at cellRadius 6) → strong size variance from t0
     mutationSigma: 0.05,
     hueMutationSigma: 0.02,
 
