@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { OrganismStore } from '../../core/store';
-import { ScalarGene, SCALAR_GENE_COUNT } from '../../core/genome';
-import { histogram } from './distributions';
+import { ScalarGene, SCALAR_GENE_COUNT, SCALAR_GENE_SPECS } from '../../core/genome';
+import { histogram, FIELD_REGISTRY } from './distributions';
 
 /** A store with `n` live creatures whose diet gene is set by `diets`. */
 function storeWithDiets(diets: number[]): OrganismStore {
@@ -56,5 +56,30 @@ describe('histogram', () => {
     s.rebuildLive();
     const h = histogram(s, () => 0, 0, 1, 5);
     expect(h).toEqual([0, 0, 0, 0, 0]);
+  });
+});
+
+describe('FIELD_REGISTRY', () => {
+  it('covers energy + age + every scalar gene', () => {
+    expect(FIELD_REGISTRY.length).toBe(SCALAR_GENE_COUNT + 2);
+    expect(FIELD_REGISTRY.map((f) => f.key)).toContain('energy');
+    expect(FIELD_REGISTRY.map((f) => f.key)).toContain('age');
+    expect(FIELD_REGISTRY.map((f) => f.key)).toContain('diet');
+    expect(FIELD_REGISTRY.map((f) => f.key)).toContain('foragePref');
+  });
+
+  it('sources gene ranges from SCALAR_GENE_SPECS', () => {
+    const diet = FIELD_REGISTRY.find((f) => f.key === 'diet')!;
+    expect(diet.min).toBe(SCALAR_GENE_SPECS[ScalarGene.DIET]!.min);
+    expect(diet.max).toBe(SCALAR_GENE_SPECS[ScalarGene.DIET]!.max);
+    expect(diet.dietColored).toBe(true);
+    const speed = FIELD_REGISTRY.find((f) => f.key === 'maxSpeed')!;
+    expect(speed.min).toBe(SCALAR_GENE_SPECS[ScalarGene.MAX_SPEED]!.min);
+    expect(speed.max).toBe(SCALAR_GENE_SPECS[ScalarGene.MAX_SPEED]!.max);
+  });
+
+  it('gives every field a distinct stable color index', () => {
+    const idxs = FIELD_REGISTRY.map((f) => f.colorIndex);
+    expect(new Set(idxs).size).toBe(idxs.length);
   });
 });

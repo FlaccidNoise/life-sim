@@ -1,14 +1,19 @@
 /**
  * Population distributions — the histograms the headless gene-MEANS hide. A mean is a lie about a
  * bimodal population: diet is split into grazers (~0) and hunters (~0.9), so its mean (~0.18) describes
- * nobody. This panel draws the actual SHAPE — diet (colored green→red like the dots), energy, age,
- * vision range, max speed — plus the herbivore/predator headcount, updating every frame.
+ * nobody. This panel draws the actual SHAPE of every trait, updating each frame.
+ *
+ * Every one of the 18 scalar genes plus energy + age is available as a field (built from
+ * SCALAR_GENE_SPECS so the ranges stay honest); a checkbox picker chooses which to show. Each field
+ * draws in its own stable palette hue (diet keeps the green→red trophic ramp) so adjacent histograms
+ * read as distinct, not one flat blue.
  *
  * histogram() is a pure bucketing pass over the live set; the Distributions class is a dumb 2D-canvas
  * drawer over it. Read-only — never touches the sim.
  */
 import { type OrganismStore } from '../../core/store';
-import { ScalarGene, SCALAR_GENE_COUNT } from '../../core/genome';
+import { ScalarGene, SCALAR_GENE_COUNT, SCALAR_GENE_SPECS } from '../../core/genome';
+import { dietColor, dietShape, fieldColor, rgbCss } from '../../render/palette';
 
 /** Bucket the live population by `accessor` into `bins` equal bins over [min,max] (clamped). */
 export function histogram(
@@ -32,12 +37,14 @@ export function histogram(
 }
 
 interface FieldSpec {
+  key: string;
   label: string;
   bins: number;
   accessor: (store: OrganismStore, slot: number) => number;
   min: number;
-  max: number; // if NaN, computed per-frame from the live max (auto-scale)
-  dietColored?: boolean; // color bins green→red (for the diet histogram)
+  max: number; // NaN → computed per-frame from the live max (auto-scale)
+  colorIndex: number; // stable index into the palette (a field keeps its hue regardless of selection)
+  dietColored?: boolean; // color bins green→red (the diet histogram)
 }
 
 const gene =
@@ -45,21 +52,119 @@ const gene =
   (s: OrganismStore, i: number): number =>
     s.scalarGenes[i * SCALAR_GENE_COUNT + g]!;
 
-const FIELDS: readonly FieldSpec[] = [
-  { label: 'diet', bins: 14, accessor: gene(ScalarGene.DIET), min: 0, max: 1, dietColored: true },
-  { label: 'energy', bins: 16, accessor: (s, i) => s.energy[i]!, min: 0, max: NaN },
-  { label: 'age', bins: 16, accessor: (s, i) => s.age[i]!, min: 0, max: NaN },
-  { label: 'visionRange', bins: 12, accessor: gene(ScalarGene.VISION_RANGE), min: 0, max: 256 },
-  { label: 'maxSpeed', bins: 12, accessor: gene(ScalarGene.MAX_SPEED), min: 1, max: 20 },
-];
+// Short labels for the scalar genes, indexed by ScalarGene id.
+const GENE_LABELS: Record<number, string> = {
+  [ScalarGene.MAX_SPEED]: 'maxSpeed',
+  [ScalarGene.EAT_RATE]: 'eatRate',
+  [ScalarGene.SENSE_RANGE]: 'senseRange',
+  [ScalarGene.SIZE]: 'size',
+  [ScalarGene.MAX_TURN]: 'maxTurn',
+  [ScalarGene.MAX_THRUST]: 'maxThrust',
+  [ScalarGene.METAB_EFF]: 'metabEff',
+  [ScalarGene.REPRO_THRESHOLD]: 'reproBar',
+  [ScalarGene.SATIATED_THRESHOLD]: 'satiated',
+  [ScalarGene.BIRTH_ENERGY]: 'birthEnergy',
+  [ScalarGene.DIET]: 'diet',
+  [ScalarGene.DAMAGE]: 'damage',
+  [ScalarGene.VISION_RANGE]: 'visionRange',
+  [ScalarGene.VISION_FOV]: 'visionFOV',
+  [ScalarGene.VISION_ACUITY]: 'visAcuity',
+  [ScalarGene.SHELTER_DRIVE]: 'shelterDrive',
+  [ScalarGene.COHESION_DRIVE]: 'cohesionDrive',
+  [ScalarGene.FORAGE_PREF]: 'foragePref',
+};
+
+/** The full field registry: energy + age + every scalar gene (range pulled from SCALAR_GENE_SPECS). */
+export const FIELD_REGISTRY: readonly FieldSpec[] = buildRegistry();
+
+function buildRegistry(): FieldSpec[] {
+  const fields: FieldSpec[] = [
+    {
+      key: 'energy',
+      label: 'energy',
+      bins: 16,
+      accessor: (s, i) => s.energy[i]!,
+      min: 0,
+      max: NaN,
+      colorIndex: 0,
+    },
+    {
+      key: 'age',
+      label: 'age',
+      bins: 16,
+      accessor: (s, i) => s.age[i]!,
+      min: 0,
+      max: NaN,
+      colorIndex: 1,
+    },
+  ];
+  for (let g = 0; g < SCALAR_GENE_COUNT; g++) {
+    const spec = SCALAR_GENE_SPECS[g]!;
+    const key = GENE_LABELS[g] ?? `gene${g}`;
+    fields.push({
+      key,
+      label: key,
+      bins: g === ScalarGene.DIET ? 14 : 12,
+      accessor: gene(g),
+      min: spec.min,
+      max: spec.max,
+      colorIndex: fields.length,
+      dietColored: g === ScalarGene.DIET,
+    });
+  }
+  return fields;
+}
+
+const DEFAULT_KEYS = ['diet', 'energy', 'age', 'visionRange', 'maxSpeed'];
 
 export class Distributions {
   private readonly ctx: CanvasRenderingContext2D;
+  // Selected fields, in registry order. Default = the original five.
+  private fields: FieldSpec[] = FIELD_REGISTRY.filter((f) => DEFAULT_KEYS.includes(f.key));
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('2D canvas context unavailable for distributions');
     this.ctx = ctx;
+    this.applyHeight();
+  }
+
+  /** A field's bar color: the trophic ramp for diet, else its stable palette hue. */
+  private static fieldCss(spec: FieldSpec): string {
+    return rgbCss(fieldColor(spec.colorIndex));
+  }
+
+  /** Grow the canvas with the field count so rows stay readable (≈42px/field, min 220). */
+  private applyHeight(): void {
+    this.canvas.style.height = `${Math.max(220, this.fields.length * 42)}px`;
+  }
+
+  /**
+   * Build the checkbox picker into `container`: one toggle per registry field (with its color swatch),
+   * checked when selected. Toggling updates the selected set live (registry order preserved).
+   */
+  mountPicker(container: HTMLElement): void {
+    container.innerHTML = '';
+    const selected = new Set(this.fields.map((f) => f.key));
+    for (const spec of FIELD_REGISTRY) {
+      const label = document.createElement('label');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = selected.has(spec.key);
+      cb.addEventListener('change', () => {
+        if (cb.checked) selected.add(spec.key);
+        else selected.delete(spec.key);
+        this.fields = FIELD_REGISTRY.filter((f) => selected.has(f.key));
+        this.applyHeight();
+      });
+      const sw = document.createElement('span');
+      sw.className = 'dist-sw';
+      sw.style.background = spec.dietColored
+        ? `linear-gradient(90deg, ${rgbCss(dietColor(0))}, ${rgbCss(dietColor(1))})`
+        : Distributions.fieldCss(spec);
+      label.append(cb, sw, document.createTextNode(spec.label));
+      container.appendChild(label);
+    }
   }
 
   render(store: OrganismStore | null): void {
@@ -84,26 +189,37 @@ export class Distributions {
       return;
     }
 
-    // Header: the trophic headcount the diet-mean hides.
+    // Header: the trophic headcount the diet-mean hides — bucketed by the SAME dietShape() the dots
+    // use (○ herbivore / ◇ omnivore / △ predator), so the count and the on-canvas glyphs agree.
     let herb = 0;
+    let omni = 0;
     let pred = 0;
     for (let k = 0; k < store.liveCount; k++) {
-      if (store.scalarGenes[store.liveIndices[k]! * SCALAR_GENE_COUNT + ScalarGene.DIET]! >= 0.5)
-        pred++;
+      const shape = dietShape(
+        store.scalarGenes[store.liveIndices[k]! * SCALAR_GENE_COUNT + ScalarGene.DIET]!,
+      );
+      if (shape === 2) pred++;
+      else if (shape === 1) omni++;
       else herb++;
     }
     ctx.font = `${Math.round(10 * dpr)}px ui-monospace, monospace`;
     ctx.fillStyle = 'rgba(150,170,190,0.85)';
-    ctx.fillText(`pop ${store.liveCount}   herb ${herb}   pred ${pred}`, 6 * dpr, 4 * dpr);
+    ctx.fillText(`pop ${store.liveCount}   ○${herb} ◇${omni} △${pred}`, 6 * dpr, 4 * dpr);
+
+    if (this.fields.length === 0) {
+      ctx.fillStyle = 'rgba(140,160,180,0.6)';
+      ctx.fillText('no fields selected — pick some above', 6 * dpr, 22 * dpr);
+      return;
+    }
 
     const headerH = 18 * dpr;
-    const rowH = (h - headerH) / FIELDS.length;
+    const rowH = (h - headerH) / this.fields.length;
     const padL = 6 * dpr;
     const padR = 6 * dpr;
     const barTop = 12 * dpr; // room for the label inside each row
 
-    for (let f = 0; f < FIELDS.length; f++) {
-      const spec = FIELDS[f]!;
+    for (let f = 0; f < this.fields.length; f++) {
+      const spec = this.fields[f]!;
       let max = spec.max;
       if (Number.isNaN(max)) {
         max = 1;
@@ -126,13 +242,14 @@ export class Distributions {
       const bw = (w - padL - padR) / spec.bins;
       const barAreaTop = y0 + barTop;
       const barAreaH = rowH - barTop - 3 * dpr;
+      const solid = Distributions.fieldCss(spec);
       for (let b = 0; b < spec.bins; b++) {
         const bh = (counts[b]! / peak) * barAreaH;
         if (spec.dietColored) {
           const t = b / (spec.bins - 1); // green (herbivore) → red (predator)
-          ctx.fillStyle = `rgb(${Math.round(60 + 180 * t)},${Math.round(200 - 140 * t)},90)`;
+          ctx.fillStyle = rgbCss(dietColor(t));
         } else {
-          ctx.fillStyle = 'rgba(120,200,240,0.8)';
+          ctx.fillStyle = solid;
         }
         ctx.fillRect(bx0 + b * bw, barAreaTop + (barAreaH - bh), Math.max(1, bw - dpr), bh);
       }
