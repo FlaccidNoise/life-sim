@@ -111,6 +111,11 @@ export class FoodField {
     this.refill();
   }
 
+  /** Read-only view of the fertility map (for the wall generator's pocket awareness). */
+  fertilityMap(): Float32Array {
+    return this.fertility;
+  }
+
   /** Refill to the initial biomass (so World.reset reproduces a fresh construction's state). */
   reset(): void {
     this.refill();
