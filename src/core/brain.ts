@@ -14,6 +14,8 @@
  * learning keeps discovering, since selection favors genomes that start closer to it).
  */
 import { type OrganismStore } from './store';
+import { type Config } from './config';
+import { satiatedBar } from './economy';
 import { Brain, BRAIN_GENES, ScalarGene, SCALAR_GENE_COUNT } from './genome';
 
 /**
@@ -23,16 +25,24 @@ import { Brain, BRAIN_GENES, ScalarGene, SCALAR_GENE_COUNT } from './genome';
  * metabolic-efficiency gene (thrifty bodies push weaker). When `learn` is true, also accumulates the
  * per-synapse eligibility trace (pre·post, blended by `eligLambda`) for the later weight update — the
  * trace bridges the gap between a steering decision and the energy reward it earns ticks later.
+ *
+ * When `cfg.hungerSense` is on, an extra interoceptive input is mixed in: hunger = clamp(1 −
+ * energy/satiatedBar, 0, 1) (0 = full, 1 = empty), gated on two evolvable synapses (interoception
+ * lever E2 — a creature sensing its OWN energy state; NOT a coevolutionary/Red Queen mechanism). It is
+ * purely additive and OFF-gated — with hungerSense off, the hunger term and its eligibility are NOT
+ * computed, so turn/thrust (and the determinism hash) are byte-identical to pre-E2.
  */
 export function steer(
   store: OrganismStore,
   learn: boolean,
   eligLambda: number,
   motorSquash: boolean,
+  cfg: Config,
 ): void {
   const { liveIndices, liveCount, heading, senseX, senseY, sightX, sightY, forceX, forceY } = store;
-  const { learnedBrain, elig } = store;
+  const { learnedBrain, elig, energy } = store;
   const genes = store.scalarGenes;
+  const hungerSense = cfg.hungerSense;
   for (let k = 0; k < liveCount; k++) {
     const i = liveIndices[k]!;
     const sg = i * SCALAR_GENE_COUNT;
@@ -53,18 +63,30 @@ export function steer(
 
     const b = i * BRAIN_GENES;
     // Turn/thrust = food-gradient response + sight response (both in the heading frame).
-    const turnRaw =
+    let turnRaw =
       learnedBrain[b + Brain.LAT_TURN]! * lat +
       learnedBrain[b + Brain.FWD_TURN]! * fwd +
       learnedBrain[b + Brain.SIGHT_LAT_TURN]! * sLat +
       learnedBrain[b + Brain.SIGHT_FWD_TURN]! * sFwd +
       learnedBrain[b + Brain.TURN_BIAS]!;
-    const thrustRaw =
+    let thrustRaw =
       learnedBrain[b + Brain.LAT_THRUST]! * lat +
       learnedBrain[b + Brain.FWD_THRUST]! * fwd +
       learnedBrain[b + Brain.SIGHT_LAT_THRUST]! * sLat +
       learnedBrain[b + Brain.SIGHT_FWD_THRUST]! * sFwd +
       learnedBrain[b + Brain.THRUST_BIAS]!;
+
+    // Interoceptive hunger (lever E2): a scalar drive on its own pair of synapses. Gated, not +0'd,
+    // so the OFF path leaves turn/thrust byte-identical (satiatedBar isn't even consulted when off).
+    let hunger = 0;
+    if (hungerSense) {
+      const sb = satiatedBar(genes, i, cfg);
+      hunger = sb > 0 ? 1 - energy[i]! / sb : 1;
+      if (hunger < 0) hunger = 0;
+      else if (hunger > 1) hunger = 1;
+      turnRaw += learnedBrain[b + Brain.HUNGER_TURN]! * hunger;
+      thrustRaw += learnedBrain[b + Brain.HUNGER_THRUST]! * hunger;
+    }
 
     let turn: number;
     let thrust: number;
@@ -108,6 +130,12 @@ export function steer(
     elig[b + Brain.SIGHT_FWD_THRUST] =
       keep * elig[b + Brain.SIGHT_FWD_THRUST]! + eligLambda * sFwd * thrustRaw;
     elig[b + Brain.THRUST_BIAS] = keep * elig[b + Brain.THRUST_BIAS]! + eligLambda * thrustRaw;
+    if (hungerSense) {
+      elig[b + Brain.HUNGER_TURN] =
+        keep * elig[b + Brain.HUNGER_TURN]! + eligLambda * hunger * turnRaw;
+      elig[b + Brain.HUNGER_THRUST] =
+        keep * elig[b + Brain.HUNGER_THRUST]! + eligLambda * hunger * thrustRaw;
+    }
   }
 }
 

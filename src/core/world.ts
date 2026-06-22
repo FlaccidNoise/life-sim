@@ -154,7 +154,7 @@ export class World {
     // within the vision cone; uses the start-of-tick hash), then steer (per-creature genes; sets thrust).
     senseFood(s, this.food, cfg);
     senseCreatures(s, this.hash, cfg);
-    steer(s, cfg.learningEnabled, cfg.eligLambda, cfg.motorSquash);
+    steer(s, cfg.learningEnabled, cfg.eligLambda, cfg.motorSquash, cfg);
     // MOVE: repulsion adds onto the thrust force, then integrate (per-creature maxSpeed gene).
     computeRepulsion(s, this.hash, cfg.cellRadius, cfg.repulsion, cfg.worldWidth, cfg.worldHeight);
     integrate(
