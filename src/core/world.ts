@@ -150,7 +150,16 @@ export class World {
     steer(s, cfg.learningEnabled, cfg.eligLambda);
     // MOVE: repulsion adds onto the thrust force, then integrate (per-creature maxSpeed gene).
     computeRepulsion(s, this.hash, cfg.cellRadius, cfg.repulsion, cfg.worldWidth, cfg.worldHeight);
-    integrate(s, cfg.dt, cfg.damping, cfg.stabilityClamp, cfg.worldWidth, cfg.worldHeight);
+    integrate(
+      s,
+      cfg.dt,
+      cfg.damping,
+      cfg.stabilityClamp,
+      cfg.worldWidth,
+      cfg.worldHeight,
+      cfg.cellRadius,
+      cfg.sizeSpeedExp,
+    );
     // HUNT: predators (diet>0) bite nearby creatures. Rebuild the hash at post-MOVE positions first so
     // bites use where creatures actually are this tick.
     this.hash.build(s);
