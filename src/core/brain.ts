@@ -31,6 +31,7 @@ export function steer(
   motorSquash: boolean,
 ): void {
   const { liveIndices, liveCount, heading, senseX, senseY, sightX, sightY, forceX, forceY } = store;
+  const { wallSenseX, wallSenseY, flowSenseX, flowSenseY } = store;
   const { learnedBrain, elig } = store;
   const genes = store.scalarGenes;
   for (let k = 0; k < liveCount; k++) {
@@ -50,20 +51,36 @@ export function steer(
     const vy = sightY[i]!;
     const sFwd = vx * dx + vy * dy; // sight vector ahead (appeal-signed)
     const sLat = -vx * dy + vy * dx; // sight vector to the left
+    const wallVx = wallSenseX[i]!;
+    const wallVy = wallSenseY[i]!;
+    const wFwd = wallVx * dx + wallVy * dy; // wall-avoidance gradient ahead
+    const wLat = -wallVx * dy + wallVy * dx; // wall-avoidance gradient to the left
+    const flowVx = flowSenseX[i]!;
+    const flowVy = flowSenseY[i]!;
+    const flFwd = flowVx * dx + flowVy * dy; // current/flow vector ahead
+    const flLat = -flowVx * dy + flowVy * dx; // current/flow vector to the left
 
     const b = i * BRAIN_GENES;
-    // Turn/thrust = food-gradient response + sight response (both in the heading frame).
+    // Turn/thrust = food-gradient + sight + wall + flow responses (all in the heading frame).
     const turnRaw =
       learnedBrain[b + Brain.LAT_TURN]! * lat +
       learnedBrain[b + Brain.FWD_TURN]! * fwd +
       learnedBrain[b + Brain.SIGHT_LAT_TURN]! * sLat +
       learnedBrain[b + Brain.SIGHT_FWD_TURN]! * sFwd +
+      learnedBrain[b + Brain.WALL_LAT_TURN]! * wLat +
+      learnedBrain[b + Brain.WALL_FWD_TURN]! * wFwd +
+      learnedBrain[b + Brain.FLOW_LAT_TURN]! * flLat +
+      learnedBrain[b + Brain.FLOW_FWD_TURN]! * flFwd +
       learnedBrain[b + Brain.TURN_BIAS]!;
     const thrustRaw =
       learnedBrain[b + Brain.LAT_THRUST]! * lat +
       learnedBrain[b + Brain.FWD_THRUST]! * fwd +
       learnedBrain[b + Brain.SIGHT_LAT_THRUST]! * sLat +
       learnedBrain[b + Brain.SIGHT_FWD_THRUST]! * sFwd +
+      learnedBrain[b + Brain.WALL_LAT_THRUST]! * wLat +
+      learnedBrain[b + Brain.WALL_FWD_THRUST]! * wFwd +
+      learnedBrain[b + Brain.FLOW_LAT_THRUST]! * flLat +
+      learnedBrain[b + Brain.FLOW_FWD_THRUST]! * flFwd +
       learnedBrain[b + Brain.THRUST_BIAS]!;
 
     let turn: number;
@@ -107,6 +124,22 @@ export function steer(
       keep * elig[b + Brain.SIGHT_LAT_THRUST]! + eligLambda * sLat * thrustRaw;
     elig[b + Brain.SIGHT_FWD_THRUST] =
       keep * elig[b + Brain.SIGHT_FWD_THRUST]! + eligLambda * sFwd * thrustRaw;
+    elig[b + Brain.WALL_LAT_TURN] =
+      keep * elig[b + Brain.WALL_LAT_TURN]! + eligLambda * wLat * turnRaw;
+    elig[b + Brain.WALL_FWD_TURN] =
+      keep * elig[b + Brain.WALL_FWD_TURN]! + eligLambda * wFwd * turnRaw;
+    elig[b + Brain.WALL_LAT_THRUST] =
+      keep * elig[b + Brain.WALL_LAT_THRUST]! + eligLambda * wLat * thrustRaw;
+    elig[b + Brain.WALL_FWD_THRUST] =
+      keep * elig[b + Brain.WALL_FWD_THRUST]! + eligLambda * wFwd * thrustRaw;
+    elig[b + Brain.FLOW_LAT_TURN] =
+      keep * elig[b + Brain.FLOW_LAT_TURN]! + eligLambda * flLat * turnRaw;
+    elig[b + Brain.FLOW_FWD_TURN] =
+      keep * elig[b + Brain.FLOW_FWD_TURN]! + eligLambda * flFwd * turnRaw;
+    elig[b + Brain.FLOW_LAT_THRUST] =
+      keep * elig[b + Brain.FLOW_LAT_THRUST]! + eligLambda * flLat * thrustRaw;
+    elig[b + Brain.FLOW_FWD_THRUST] =
+      keep * elig[b + Brain.FLOW_FWD_THRUST]! + eligLambda * flFwd * thrustRaw;
     elig[b + Brain.THRUST_BIAS] = keep * elig[b + Brain.THRUST_BIAS]! + eligLambda * thrustRaw;
   }
 }

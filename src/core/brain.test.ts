@@ -103,6 +103,47 @@ describe('steer (per-creature brain)', () => {
     expect(Math.hypot(s.forceX[i]!, s.forceY[i]!)).toBeCloseTo(2); // thrust = SIGHT_FWD_THRUST·sFwd·eff
   });
 
+  it('a positive WALL_FWD_THRUST weight converts a forward wall-gradient into forward thrust', () => {
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.heading[i] = 0; // facing +x
+    s.wallSenseX[i] = 1;
+    s.wallSenseY[i] = 0; // wall-gradient points +x (ahead in the heading frame)
+    setBrain(s, i, { WALL_FWD_THRUST: 2 });
+    s.rebuildLive();
+    steer(s, false, 0.2, false);
+    expect(s.forceX[i]!).toBeGreaterThan(0); // forward wall-gradient drives forward thrust
+  });
+
+  it('wall/flow terms contribute nothing when their senses + weights are 0 (all-off ablation)', () => {
+    // With wallSense/flowSense = 0 and the 8 wall/flow weights = 0, steer must produce EXACTLY the
+    // force the food + sight terms alone produce — the new terms are 0·0 and vanish.
+    const force = (withSenses: boolean): readonly [number, number] => {
+      const s = new OrganismStore(4);
+      const i = s.alloc();
+      s.heading[i] = 0;
+      s.senseX[i] = 1; // forward food gradient
+      s.senseY[i] = 0;
+      s.sightX[i] = 0;
+      s.sightY[i] = 1; // lateral sight
+      setBrain(s, i, { FWD_THRUST: 1, SIGHT_LAT_THRUST: 0.5, LAT_TURN: 0.3 });
+      if (withSenses) {
+        // Non-zero wall/flow inputs, but their weights stay 0 → still no contribution.
+        s.wallSenseX[i] = 0.7;
+        s.wallSenseY[i] = -0.4;
+        s.flowSenseX[i] = -0.2;
+        s.flowSenseY[i] = 0.9;
+      }
+      s.rebuildLive();
+      steer(s, false, 0.2, false);
+      return [s.forceX[i]!, s.forceY[i]!];
+    };
+    const off = force(false);
+    const on = force(true);
+    expect(on[0]).toBe(off[0]); // wall/flow inputs with 0 weights change nothing
+    expect(on[1]).toBe(off[1]);
+  });
+
   it('metabolic efficiency scales thrust (the thrust half of the tradeoff)', () => {
     const force = (eff: number): number => {
       const s = new OrganismStore(4);
