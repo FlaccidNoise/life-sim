@@ -399,6 +399,14 @@ export class Walls {
       this.prox[i] = dist[i] === -1 ? proxCap : Math.min(proxCap, dist[i]!);
   }
 
+  /** Overall solid fraction of the fine grid (0 when inactive). */
+  solidFraction(): number {
+    if (!this._active) return 0;
+    let n = 0;
+    for (let i = 0; i < this.solid.length; i++) n += this.solid[i]!;
+    return n / this.solid.length;
+  }
+
   /** TEST HELPER: solid fraction of each Voronoi region (distinct generators → distinct densities). */
   regionSolidFractions(): number[] {
     const n = this.regionGen.length;
