@@ -57,6 +57,8 @@ const SPECS: KnobSpec[] = [
   { key: 'predatorFraction', label: 'predator frac', min: 0, max: 0.6, step: 0.05, live: false },
   // Capped at the spatial-hash cell size (2·cellRadius=12): the 3×3 scan can't reach further.
   { key: 'biteRange', label: 'bite range', min: 0, max: 12, step: 1, live: true },
+  // Red Queen (lever E1): predator pays this fraction of prey DAMAGE on a bite. ≥0.5 starves predators.
+  { key: 'counterBiteFraction', label: 'counter-bite', min: 0, max: 0.5, step: 0.05, live: true },
   // Selection-pressure levers (live): basal upkeep per unit of each gene above its center.
   { key: 'maxSpeedCost', label: 'cost· speed', min: 0, max: 0.5, step: 0.01, live: true },
   { key: 'eatRateCost', label: 'cost· eat', min: 0, max: 1, step: 0.01, live: true },

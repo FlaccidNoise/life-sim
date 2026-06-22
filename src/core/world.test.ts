@@ -24,6 +24,21 @@ describe('World — Phase 0 determinism contract', () => {
     expect(a.stateHash()).not.toBe(b.stateHash());
   });
 
+  it('counterBiteFraction OFF is byte-identical to default; ON perturbs the world (lever E1 wired + ablatable)', () => {
+    const baseline = new World(defaultConfig({ seed: 1 }));
+    const off = new World(defaultConfig({ seed: 1, counterBiteFraction: 0 }));
+    const on = new World(defaultConfig({ seed: 1, counterBiteFraction: 0.15 }));
+    for (let t = 0; t < 1000; t++) {
+      baseline.step();
+      off.step();
+      on.step();
+    }
+    // explicit OFF == default → the ablation knob is genuinely off-by-default (safeguard #1)
+    expect(off.stateHash()).toBe(baseline.stateHash());
+    // ON diverges → the counter-bite is actually read by the hot loop, not dead config
+    expect(on.stateHash()).not.toBe(baseline.stateHash());
+  });
+
   it('reset() reproduces the seeded run byte-for-byte', () => {
     const w = new World(defaultConfig({ seed: 7 }));
     for (let t = 0; t < 500; t++) w.step();

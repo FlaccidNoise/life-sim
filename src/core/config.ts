@@ -175,6 +175,18 @@ export interface Config {
    *  itself (prey, not peers) — so similar-diet "guild-mates" are spared, preventing predator-on-
    *  predator drain. Kinship here is the diet gap (the same signal sight uses), not genetic lineage. */
   cannibalism: boolean;
+  /** Red Queen counter-damage (lever E1). When a predator lands a bite it pays back this FRACTION of the
+   *  prey's DAMAGE gene in energy: predatorEnergy −= counterBiteFraction · preyDAMAGE. 0 = OFF (hunt skips
+   *  the subtraction → byte-identical to today). No gene, no RNG — a pure coefficient read in hunt.
+   *  The FIRM effect is a predator-side TAX: biting high-DAMAGE prey costs the attacker, so it raises the
+   *  bar on whom it pays to hunt. The hoped-for prey-side response (prey evolving teeth as a deterrent) is
+   *  UNVERIFIED and may not occur: DAMAGE is upkeep-costed for every creature, a bitten prey dies regardless
+   *  of its own DAMAGE, and a diet-0 prey gets zero offensive income from teeth — so any return is purely an
+   *  indirect kin/group effect (degrading predators that bite neighbours) and individual selection may push
+   *  prey DAMAGE DOWN instead. Treat the arms race as a hypothesis to probe, not a given. Higher fractions
+   *  make hunting less rewarding (net depends on predationGain/realized drain, not a clean threshold); a
+   *  large value starves predators. Safe live-tune ~0.1–0.3. */
+  counterBiteFraction: number;
 
   // ── Density-dependent mortality (lever D — boom-bust) ───────────────────────────────────────────
   /** Energy drained per tick per local neighbor ABOVE crowdThreshold: extraCost = this·max(0, N−crowdThreshold),
@@ -380,6 +392,10 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     herbivoryExp: 1.3, // predators get little from algae → lean on HUNTING (max viable on seeds 1/2;
     // obligate carnivory, exp≥1.6, starves predators at this encounter rate — proven by probe)
     cannibalism: true, // current behavior (bite anyone nearest); flip off to spare same-diet peers
+    // Red Queen counter-damage (lever E1) OFF by default: 0 → hunt skips the counter-bite, byte-identical.
+    // >0 (live-tune ~0.1–0.3) taxes the predator by counterBiteFraction·preyDAMAGE per bite; the prey-side
+    // arms-race response is a hypothesis to probe, not a given (see the interface doc).
+    counterBiteFraction: 0,
     // Density-dependent mortality (lever D) OFF by default: crowdingMortality 0 → metabolize skips the
     // neighbor scan, hash byte-identical. >0 (live-tune ~0.15–0.4) drains the over-dense → boom-bust breathing.
     crowdingMortality: 0,
