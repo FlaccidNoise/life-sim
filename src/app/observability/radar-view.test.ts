@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { OrganismStore } from '../../core/store';
 import { defaultConfig } from '../../core/config';
 import { ScalarGene, SCALAR_GENE_COUNT, SCALAR_GENE_SPECS } from '../../core/genome';
-import { computeRadar, RADAR_AXES } from './radar-view';
+import { computeRadar, CAPABILITY_AXES, LENSES, DEFAULT_LENS } from './radar-view';
 
 const cfg = defaultConfig();
 
@@ -33,7 +33,7 @@ describe('computeRadar', () => {
       'r/K',
       'prov',
     ]);
-    expect(RADAR_AXES).toHaveLength(7);
+    expect(CAPABILITY_AXES).toHaveLength(7);
   });
 
   it('normalizes each spoke against its gene clamp bounds (0..1)', () => {
@@ -73,5 +73,34 @@ describe('computeRadar', () => {
     st = computeRadar(s, cfg, 0);
     expect(st.dietHue).toBeCloseTo(0, 6); // red
     expect(st.guild).toBe('predator');
+  });
+});
+
+describe('radar lenses', () => {
+  it('registers ordered lenses with capability first + default', () => {
+    expect(LENSES.map((l) => l.key)).toEqual(['capability', 'sensesSocial', 'lifeHistory']);
+    expect(DEFAULT_LENS).toBe('capability');
+    expect(LENSES[0]!.axes).toBe(CAPABILITY_AXES);
+  });
+
+  it('every lens has 2..8 axes over real, normalizable genes', () => {
+    for (const lens of LENSES) {
+      expect(lens.axes.length).toBeGreaterThanOrEqual(2);
+      expect(lens.axes.length).toBeLessThanOrEqual(8);
+      for (const ax of lens.axes) {
+        expect(SCALAR_GENE_SPECS[ax.gene]).toBeDefined();
+        expect(ax.label.length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('computeRadar honors an explicit axis-set (the active lens)', () => {
+    const st = computeRadar(centered(), cfg, 0, LENSES[1]!.axes);
+    expect(st.axes.map((a) => a.label)).toEqual(LENSES[1]!.axes.map((a) => a.label));
+  });
+
+  it('defaults to the capability lens when no axis-set is passed', () => {
+    const st = computeRadar(centered(), cfg, 0);
+    expect(st.axes.map((a) => a.label)).toEqual(CAPABILITY_AXES.map((a) => a.label));
   });
 });
