@@ -154,6 +154,10 @@ export interface Config {
   damageCost: number;
   /** Fraction of FOUNDERS seeded as predators (diet ≈ 0.9) so the hunter niche is expressed from t0. */
   predatorFraction: number;
+  /** Founding-protection: seed the predator founders CLUSTERED into the N deepest pockets (instead of
+   *  scattered) so a hunter lineage starts together on a dense prey reservoir and survives the bootstrap —
+   *  the founding lottery is the real gate on big-world predation. 0 = OFF (scattered, byte-identical). */
+  predatorSeedClusters: number;
   /** Bite reach in world units: a predator drains the nearest creature within this radius. */
   biteRange: number;
   /** Big-eats-small gate: a predator can only bite prey at least this many times SMALLER than itself
@@ -356,6 +360,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     damage: 12, // bite-strength center: a kill drains a big chunk (lucrative hunting, energy-CONSERVING)
     damageCost: 0.05, // upkeep per damage above center
     predatorFraction: 0.15,
+    predatorSeedClusters: 0, // OFF: predators scattered (byte-identical); >0 = cluster into N deepest pockets
     biteRange: 16, // reach to land a sight-guided kill (hunt now scans a neighborhood sized to this)
     huntSizeRatio: 1.15, // must be ≥15% bigger than prey to eat it → size is a refuge + a weapon
     predationGain: 1.8, // meat is concentrated: a bite yields 1.8× the drain, so even RARE kills pay

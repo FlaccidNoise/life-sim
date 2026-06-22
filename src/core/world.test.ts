@@ -79,3 +79,72 @@ describe('World — Phase 0 determinism contract', () => {
     expect(w.population).toBeLessThan(cfg.maxOrganisms); // food-limited, not buffer-pegged
   });
 });
+
+describe('World — founding-protection (predator cluster-seeding)', () => {
+  // Pockets that differ in depth (richnessVar>0 → a clear "deepest" nursery), a healthy predator fraction,
+  // on a small fast world.
+  const cfg = (overrides = {}): ReturnType<typeof defaultConfig> =>
+    defaultConfig({
+      seed: 3,
+      worldWidth: 2048,
+      worldHeight: 2048,
+      foodCols: 64,
+      foodRows: 64,
+      initialPopulation: 200,
+      predatorFraction: 0.2, // ~40 predators
+      foodPatchRichness: 2,
+      foodPatchRichnessVar: 0.6,
+      foodMaxFertility: 4,
+      ...overrides,
+    });
+
+  it('clusters every predator founder into the deepest pocket (vs scattered grazers)', () => {
+    const c = cfg({ predatorSeedClusters: 1 }); // single nursery = THE deepest pocket
+    const w = new World(c);
+    const s = w.store;
+    const deepest = [...w.food.patchCenters].sort(
+      (a, b) => w.food.fertilityAt(b.x, b.y) - w.food.fertilityAt(a.x, a.y),
+    )[0]!;
+    const tdist = (ax: number, ay: number, bx: number, by: number): number => {
+      let dx = Math.abs(ax - bx);
+      if (dx > c.worldWidth / 2) dx = c.worldWidth - dx;
+      let dy = Math.abs(ay - by);
+      if (dy > c.worldHeight / 2) dy = c.worldHeight - dy;
+      return Math.hypot(dx, dy);
+    };
+    // Jitter is uniform in ±(pocket radius in world units) per axis → max distance is the diagonal.
+    const bound = Math.hypot(
+      (c.foodPatchRadius * c.worldWidth) / c.foodCols,
+      (c.foodPatchRadius * c.worldHeight) / c.foodRows,
+    );
+    let predCount = 0;
+    let predInNursery = 0;
+    let grazerCount = 0;
+    let grazerOutside = 0;
+    for (let k = 0; k < s.liveCount; k++) {
+      const i = s.liveIndices[k]!;
+      const diet = s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.DIET]!;
+      const d = tdist(s.x[i]!, s.y[i]!, deepest.x, deepest.y);
+      if (diet > 0.5) {
+        predCount++;
+        if (d <= bound + 1e-6) predInNursery++;
+      } else {
+        grazerCount++;
+        if (d > bound) grazerOutside++;
+      }
+    }
+    expect(predCount).toBeGreaterThan(10); // ~40 predators seeded
+    expect(predInNursery).toBe(predCount); // EVERY predator landed in the one nursery pocket
+    expect(grazerOutside).toBeGreaterThan(grazerCount * 0.5); // grazers scattered across the other pockets
+  });
+
+  it('the ON path stays deterministic (same seed → byte-identical)', () => {
+    const a = new World(cfg({ predatorSeedClusters: 2 }));
+    const b = new World(cfg({ predatorSeedClusters: 2 }));
+    for (let t = 0; t < 300; t++) {
+      a.step();
+      b.step();
+    }
+    expect(a.stateHash()).toBe(b.stateHash());
+  });
+});
