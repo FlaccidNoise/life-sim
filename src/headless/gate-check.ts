@@ -1,5 +1,5 @@
-/** One-off determinism gate: prints stateHash at tick 200 + 400 for the ablation OFF baselines. Lever C
- *  (pocketCapVariance) must leave these byte-identical when 0. Expected (pre-C):
+/** Standing determinism gate (safeguard #1): prints stateHash at tick 200 + 400 for the ablation OFF
+ *  baselines. EVERY new system must leave these byte-identical at its OFF default. Baselines (seed 1):
  *    channels=1 @200=82e41dbd @400=1bdaf0bb ; channels=2 @200=7098f748 @400=e1df933e */
 import { defaultConfig, type Config } from '../core/config';
 import { World } from '../core/world';
