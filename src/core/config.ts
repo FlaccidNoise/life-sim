@@ -173,6 +173,11 @@ export interface Config {
 
   /** Gaussian σ spread of founder brain weights around the seed brain (initial behavioral variation). */
   founderSigma: number;
+  /** Founder SIZE-variety spread: founders' SIZE gene is seeded UNIFORMLY in cellRadius·[1−s, 1+s]
+   *  (clamped to the gene range), so distinct body-size niches exist from t0 instead of all clustering
+   *  at the center — raw material for the size-predation + shelter engines. 0 = all at center (ablation).
+   *  NB this is wider AND flatter than founderSigma's gaussian, which still peaks at the center. */
+  founderSizeSpread: number;
   /** Gaussian σ of per-weight brain mutation at birth (the evolutionary step size; live knob). */
   mutationSigma: number;
   /** Gaussian σ of hue-gene drift at birth (how fast lineage colors diverge). */
@@ -304,6 +309,10 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     // pay, so the predator trait does not persist yet (it needs the sight slice to actively target
     // prey). The mechanic + genes + color are in place; sight activates it.
     founderSigma: 0.3,
+    // Seed founders across a wide UNIFORM size band (cellRadius·[0, 2] = ~[2,12]) so big/small body
+    // niches — and the predation refuge + shelter dynamics they drive — exist from t0 rather than having
+    // to evolve out of a monomorphic start. Probe: szSd up, world stays alive. 0 disables (all at center).
+    founderSizeSpread: 1.0,
     mutationSigma: 0.05,
     hueMutationSigma: 0.02,
 
