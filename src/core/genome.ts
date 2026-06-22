@@ -61,8 +61,14 @@ export const ScalarGene = {
   // lineage/kin) into the sight vector, so like-colored creatures herd into visible schools. Costed (no
   // free schooling). Bounded so it can't override fleeing a threat (the appeal term still dominates there).
   COHESION_DRIVE: 16,
+  // Forage gene (lever B): where this creature sits on the two-channel resource axis. 0 = channel-A
+  // specialist … 1 = channel-B specialist, 0.5 = generalist. Read by metabolize (per-channel graze split
+  // + specialization bonus) and senseFood (preference-blended smell) ONLY when cfg.foodChannels===2; with
+  // a single channel the gene is pinned at its center and never drawn from RNG (determinism stays byte-
+  // identical). Appended LAST so the existing genes' RNG draws are unchanged.
+  FORAGE_PREF: 17,
 } as const;
-export const SCALAR_GENE_COUNT = 17;
+export const SCALAR_GENE_COUNT = 18;
 
 /** Minimum reproductive-band width: satiated is read as max(satiatedGene, reproGene + this) so the two
  *  life-history bars can mutate independently without inverting (which would break the learn gate). */
@@ -87,7 +93,8 @@ interface ScalarGeneSpec {
     | 'visionFov'
     | 'visionAcuity'
     | 'shelterDrive'
-    | 'cohesionDrive';
+    | 'cohesionDrive'
+    | 'foragePref';
   /** Config key for the per-unit-above-center basal cost coeff, or null for a non-upkeep gene. */
   costKey:
     | 'maxSpeedCost'
@@ -142,6 +149,11 @@ export const SCALAR_GENE_SPECS: readonly ScalarGeneSpec[] = [
   // COHESION_DRIVE — costed attraction toward same-hue (lineage) creatures → schools. Center > 0 so the
   // gene can mutate; bounded so it stays comparable to the chase/flee appeal rather than swamping it.
   { centerKey: 'cohesionDrive', costKey: 'cohesionDriveCost', min: 0, max: 2 },
+  // FORAGE_PREF (lever B) — position on the two-channel resource axis [0=A specialist … 1=B specialist].
+  // costKey null: there's no upkeep for a preference; the tradeoff is the opportunity cost of NOT eating
+  // the other channel (the specialization bonus in metabolize rewards committing). Appended LAST so the
+  // RNG draws for every prior gene are unchanged; only drawn at all when cfg.foodChannels===2 (see below).
+  { centerKey: 'foragePref', costKey: null, min: 0, max: 1 },
 ];
 
 function clampTo(v: number, min: number, max: number): number {
@@ -156,6 +168,14 @@ export function seedScalarGenes(genes: Float32Array, slot: number, rng: Rng, cfg
   for (let g = 0; g < SCALAR_GENE_COUNT; g++) {
     const spec = SCALAR_GENE_SPECS[g]!;
     const center = cfg[spec.centerKey];
+    // FORAGE_PREF (lever B) is only a live, evolving trait when the second food channel exists. With one
+    // channel it's inert, so pin it at its center WITHOUT drawing from RNG. Because it's the LAST gene,
+    // skipping that one draw leaves the seed RNG stream byte-identical to the pre-lever engine — the
+    // determinism contract holds whenever foodChannels=1 (the ablation gate).
+    if (g === ScalarGene.FORAGE_PREF && cfg.foodChannels !== 2) {
+      genes[base + g] = center;
+      continue;
+    }
     genes[base + g] = clampTo(
       center + rng.gaussian(0, cfg.founderSigma * center),
       spec.min,
@@ -177,6 +197,12 @@ export function mutateScalarGenes(
   for (let g = 0; g < SCALAR_GENE_COUNT; g++) {
     const spec = SCALAR_GENE_SPECS[g]!;
     const center = cfg[spec.centerKey];
+    // FORAGE_PREF: inherit the parent value with NO mutation draw when single-channel (see seedScalarGenes
+    // — keeps the birth RNG stream byte-identical, so reproduction stays deterministic with foodChannels=1).
+    if (g === ScalarGene.FORAGE_PREF && cfg.foodChannels !== 2) {
+      genes[cb + g] = genes[pb + g]!;
+      continue;
+    }
     genes[cb + g] = clampTo(
       genes[pb + g]! + rng.gaussian(0, cfg.mutationSigma * center),
       spec.min,

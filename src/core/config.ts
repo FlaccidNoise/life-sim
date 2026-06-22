@@ -193,6 +193,11 @@ export interface Config {
    *  schools are kin-clumps; true = hue-blind, pull toward ALL neighbors equally, so genetically diverse
    *  prey can herd into one dense school. An off-by-default behavior knob (byte-identical when false). */
   cohesionHueBlind: boolean;
+  /** FORAGE_PREF gene founder CENTER [0,1] (lever B): 0 = channel-A specialist … 1 = channel-B specialist,
+   *  0.5 = generalist. ONLY drawn from RNG (seed + mutation) when foodChannels===2; with one channel the
+   *  gene is pinned here with no draw, so the determinism stream is byte-identical. 0.5 keeps founders
+   *  unbiased so SELECTION drives the niche split rather than a seeded head start. */
+  foragePref: number;
 
   /** Gaussian σ spread of founder brain weights around the seed brain (initial behavioral variation). */
   founderSigma: number;
@@ -360,6 +365,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     cohesionDriveCost: 0.1,
     cohesionGain: 1,
     cohesionHueBlind: false,
+    foragePref: 0.5, // FORAGE_PREF gene center (lever B); unbiased generalist, only drawn when foodChannels===2
     // NB pre-sight, predators hunt by PROXIMITY only — the encounter rate is too low for hunting to
     // pay, so the predator trait does not persist yet (it needs the sight slice to actively target
     // prey). The mechanic + genes + color are in place; sight activates it.
