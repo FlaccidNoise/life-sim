@@ -246,7 +246,8 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     foodPatchRadius: 5, // ~320-unit pockets (5 cells × 64 units) — small + separate, not merged
     foodBaseFertility: 0, // truly dead water between pockets → real isolation, distinct islands
     eatRate: 2,
-    basalCost: 0.2, // lower starvation clock → creatures last longer before dying (owner-requested feel)
+    basalCost: 0.12, // low starvation clock → longer lives + a SOFTER early crash, so predator founders
+    // survive the sparse phase long enough to reach the prey boom (predator-viability fix; was 0.2)
     moveCost: 0.01,
     // Slow breeding (long generation vs the starvation clock) damps the boom-bust toward a sustained,
     // turning-over population instead of an overshoot-to-extinction. Tuned headlessly.
@@ -279,8 +280,9 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     predatorFraction: 0.15,
     biteRange: 16, // reach to land a sight-guided kill (hunt now scans a neighborhood sized to this)
     huntSizeRatio: 1.15, // must be ≥15% bigger than prey to eat it → size is a refuge + a weapon
-    predationGain: 1, // ENERGY-CONSERVING (a bite moves energy prey→predator, never creates it) → no
-    // runaway-to-cap; the "huge energy from hunting" comes from the big per-bite drain (damage), not gain
+    predationGain: 1.8, // meat is concentrated: a bite yields 1.8× the drain, so even RARE kills pay
+    // through sparse stretches → carnivory resists diet-dilution and predators persist (was 1, which left
+    // hunting too marginal at this encounter rate; combined with basalCost 0.12 it rescues 2/3 probe seeds)
     herbivoryExp: 1.3, // predators get little from algae → lean on HUNTING (max viable on seeds 1/2;
     // obligate carnivory, exp≥1.6, starves predators at this encounter rate — proven by probe)
     cannibalism: true, // current behavior (bite anyone nearest); flip off to spare same-diet peers
