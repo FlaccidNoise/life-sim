@@ -3,6 +3,8 @@ import { OrganismStore } from './store';
 import { SpatialHash } from './spatial-hash';
 import { computeRepulsion, integrate } from './physics';
 import { ScalarGene, SCALAR_GENE_COUNT } from './genome';
+import { Walls } from './walls';
+import { defaultConfig } from './config';
 
 const W = 512;
 const H = 512;
@@ -22,7 +24,7 @@ describe('integrate', () => {
     s.vy[i] = -3;
     setMaxSpeed(s, i, 1e9); // ceiling far above → clamp inert
     s.rebuildLive();
-    integrate(s, 1, 1, true, W, H, 6, 0);
+    integrate(s, 1, 1, true, W, H, 6, 0, null);
     expect(s.x[i]).toBeCloseTo(102);
     expect(s.y[i]).toBeCloseTo(97);
   });
@@ -34,7 +36,7 @@ describe('integrate', () => {
     s.vy[i] = 0;
     setMaxSpeed(s, i, 1e9);
     s.rebuildLive();
-    integrate(s, 1, 0.5, true, W, H, 6, 0);
+    integrate(s, 1, 0.5, true, W, H, 6, 0, null);
     expect(s.vx[i]).toBeCloseTo(5);
   });
 
@@ -49,15 +51,15 @@ describe('integrate', () => {
       return s;
     };
     const clamped = make(6);
-    integrate(clamped, 1, 1, true, W, H, 6, 0);
+    integrate(clamped, 1, 1, true, W, H, 6, 0, null);
     expect(Math.hypot(clamped.vx[0]!, clamped.vy[0]!)).toBeCloseTo(6); // clamped to its gene
 
     const faster = make(12);
-    integrate(faster, 1, 1, true, W, H, 6, 0);
+    integrate(faster, 1, 1, true, W, H, 6, 0, null);
     expect(Math.hypot(faster.vx[0]!, faster.vy[0]!)).toBeCloseTo(12); // a faster gene → higher cap
 
     const unclamped = make(6);
-    integrate(unclamped, 1, 1, false, W, H, 6, 0);
+    integrate(unclamped, 1, 1, false, W, H, 6, 0, null);
     expect(Math.hypot(unclamped.vx[0]!, unclamped.vy[0]!)).toBeCloseTo(100); // clamp off → through
   });
 
@@ -70,7 +72,7 @@ describe('integrate', () => {
     setMaxSpeed(s, i, 10); // gene ceiling 10
     s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.SIZE] = 2 * refSize; // twice the reference size
     s.rebuildLive();
-    integrate(s, 1, 1, true, W, H, refSize, 1); // exp 1 → ceiling × (refSize/size) = ×0.5
+    integrate(s, 1, 1, true, W, H, refSize, 1, null); // exp 1 → ceiling × (refSize/size) = ×0.5
     expect(Math.hypot(s.vx[0]!, s.vy[0]!)).toBeCloseTo(5); // 10 × 0.5
   });
 
@@ -82,7 +84,7 @@ describe('integrate', () => {
     setMaxSpeed(s, i, 8);
     s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.SIZE] = 30; // huge, but coupling off
     s.rebuildLive();
-    integrate(s, 1, 1, true, W, H, 6, 0);
+    integrate(s, 1, 1, true, W, H, 6, 0, null);
     expect(Math.hypot(s.vx[0]!, s.vy[0]!)).toBeCloseTo(8); // unaffected
   });
 
@@ -95,9 +97,57 @@ describe('integrate', () => {
     s.vy[i] = -3;
     setMaxSpeed(s, i, 1e9);
     s.rebuildLive();
-    integrate(s, 1, 1, true, W, H, 6, 0);
+    integrate(s, 1, 1, true, W, H, 6, 0, null);
     expect(s.x[i]).toBeCloseTo(2); // wrapped past the right edge
     expect(s.y[i]).toBeCloseTo(H - 2); // wrapped past the top
+  });
+
+  it('a creature cannot move into a solid wall cell (slide-collision)', () => {
+    const cfg = defaultConfig({
+      worldWidth: 1024,
+      worldHeight: 1024,
+      wallCols: 64,
+      wallRows: 64,
+      foodCols: 16,
+      foodRows: 16,
+      foodPatchCount: 0,
+      wallRegionCount: 1,
+      wallDensity: 0.5,
+      seed: 11,
+    });
+    const walls = new Walls(1024, 1024, 64, 64, cfg);
+    const cellW = 1024 / 64;
+    // Find an open fine cell whose right neighbour is solid; aim the creature at it.
+    let oc = -1;
+    let or = -1;
+    for (let r = 0; r < 64 && oc < 0; r++)
+      for (let c = 0; c < 63; c++) {
+        const here = (c + 0.5) * cellW;
+        const next = (c + 1.5) * cellW;
+        const yy = (r + 0.5) * cellW;
+        if (!walls.isSolidAt(here, yy) && walls.isSolidAt(next, yy)) {
+          oc = c;
+          or = r;
+          break;
+        }
+      }
+    expect(oc).toBeGreaterThanOrEqual(0); // density 0.5 guarantees such a pair exists
+
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.x[i] = (oc + 0.5) * cellW;
+    s.y[i] = (or + 0.5) * cellW;
+    s.vx[i] = cellW; // one full cell/tick toward the solid neighbour
+    s.vy[i] = 0;
+    setMaxSpeed(s, i, 1e9); // clamp inert so the move is unimpeded by the speed ceiling
+    s.rebuildLive();
+    integrate(s, 1, 1, true, 1024, 1024, 6, 0, walls);
+    // Every live creature must end on an OPEN cell — the wall blocked the move.
+    for (let k = 0; k < s.liveCount; k++) {
+      const li = s.liveIndices[k]!;
+      expect(walls.isSolidAt(s.x[li]!, s.y[li]!)).toBe(false);
+    }
+    expect(s.vx[i]).toBe(0); // blocked x-component zeroed
   });
 });
 

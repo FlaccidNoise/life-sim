@@ -4,6 +4,7 @@
  */
 import { type OrganismStore } from './store';
 import { type SpatialHash } from './spatial-hash';
+import { type Walls } from './walls';
 import { ScalarGene, SCALAR_GENE_COUNT } from './genome';
 
 /** Shortest signed delta a→b on a torus of the given size (|result| ≤ size/2). */
@@ -12,6 +13,12 @@ function wrapDelta(d: number, size: number): number {
   if (d > h) return d - size;
   if (d < -h) return d + size;
   return d;
+}
+
+/** Positive remainder: wrap a position into [0, size) on the torus. */
+function wrapPos(v: number, size: number): number {
+  const m = v % size;
+  return m < 0 ? m + size : m;
 }
 
 /**
@@ -80,6 +87,7 @@ export function integrate(
   worldHeight: number,
   refSize: number,
   sizeSpeedExp: number,
+  walls: Walls | null,
 ): void {
   const { liveIndices, liveCount, x, y, vx, vy, forceX, forceY, scalarGenes } = store;
   for (let k = 0; k < liveCount; k++) {
@@ -107,6 +115,28 @@ export function integrate(
     vy[i] = nvy;
     let px = x[i]! + nvx * dt;
     let py = y[i]! + nvy * dt;
+    if (walls !== null && walls.active) {
+      // Slide: if the full move lands in a wall, try the x-only then y-only sub-move and zero the
+      // blocked velocity component; if neither sub-move is open, stay put (zero both).
+      if (walls.isSolidAt(wrapPos(px, worldWidth), wrapPos(py, worldHeight))) {
+        const ox = x[i]!;
+        const oy = y[i]!;
+        const xOpen = !walls.isSolidAt(wrapPos(px, worldWidth), wrapPos(oy, worldHeight));
+        const yOpen = !walls.isSolidAt(wrapPos(ox, worldWidth), wrapPos(py, worldHeight));
+        if (xOpen) {
+          py = oy;
+          vy[i] = 0;
+        } else if (yOpen) {
+          px = ox;
+          vx[i] = 0;
+        } else {
+          px = ox;
+          py = oy;
+          vx[i] = 0;
+          vy[i] = 0;
+        }
+      }
+    }
     px %= worldWidth;
     if (px < 0) px += worldWidth;
     py %= worldHeight;
