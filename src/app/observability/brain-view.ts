@@ -76,12 +76,20 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
   const maxTurn = store.scalarGenes[sg + ScalarGene.MAX_TURN]!;
   const maxThrust = store.scalarGenes[sg + ScalarGene.MAX_THRUST]!;
   const eff = store.scalarGenes[sg + ScalarGene.METAB_EFF]!;
-  let turn = turnRaw;
-  if (turn > maxTurn) turn = maxTurn;
-  else if (turn < -maxTurn) turn = -maxTurn;
-  let thrust = thrustRaw;
-  if (thrust < 0) thrust = 0;
-  else if (thrust > maxThrust) thrust = maxThrust;
+  // Same saturation branch as steer() (brain.ts) so the picture matches the sim under either mode.
+  let turn: number;
+  let thrust: number;
+  if (cfg.motorSquash) {
+    turn = maxTurn > 0 ? maxTurn * Math.tanh(turnRaw / maxTurn) : 0;
+    thrust = thrustRaw > 0 && maxThrust > 0 ? maxThrust * Math.tanh(thrustRaw / maxThrust) : 0;
+  } else {
+    turn = turnRaw;
+    if (turn > maxTurn) turn = maxTurn;
+    else if (turn < -maxTurn) turn = -maxTurn;
+    thrust = thrustRaw;
+    if (thrust < 0) thrust = 0;
+    else if (thrust > maxThrust) thrust = maxThrust;
+  }
   thrust *= eff;
 
   let drift = 0;

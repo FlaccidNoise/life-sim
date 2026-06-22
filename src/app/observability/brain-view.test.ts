@@ -35,7 +35,7 @@ describe('computeBrainState', () => {
     const h0 = s.heading[i]!;
     const st = computeBrainState(s, cfg, i);
     // Run the REAL steer (no learning, so eligibility isn't touched) and compare.
-    steer(s, false, cfg.eligLambda);
+    steer(s, false, cfg.eligLambda, cfg.motorSquash);
     const appliedTurn = s.heading[i]! - h0;
     const appliedThrust = Math.hypot(s.forceX[i]!, s.forceY[i]!);
     expect(st.turn).toBeCloseTo(appliedTurn, 10);
@@ -69,5 +69,23 @@ describe('computeBrainState', () => {
     const st = computeBrainState(s, cfg, i);
     expect(st.turn).toBeCloseTo(s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.MAX_TURN]!, 10);
     expect(st.turnRaw).toBeGreaterThan(st.turn); // raw exceeds the clamp
+  });
+
+  it('matches steer() under motorSquash and eases below the limit (ON-mode contract)', () => {
+    const sq = defaultConfig({ motorSquash: true });
+    const s = setup();
+    const i = 0;
+    // Drive turn into the saturation region so the tanh path (not the ~linear toe) is exercised.
+    s.learnedBrain[i * BRAIN_GENES + 4] = 5; // TURN_BIAS
+    const h0 = s.heading[i]!;
+    const st = computeBrainState(s, sq, i);
+    // The picture must match a REAL squashed steer() run — the no-drift contract under the ON mode too.
+    steer(s, false, sq.eligLambda, sq.motorSquash);
+    expect(st.turn).toBeCloseTo(s.heading[i]! - h0, 10);
+    expect(st.thrust).toBeCloseTo(Math.hypot(s.forceX[i]!, s.forceY[i]!), 10);
+    // Squash EASES into the limit (never snaps): raw overshoots maxTurn, applied stays strictly inside it.
+    const maxTurn = s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.MAX_TURN]!;
+    expect(st.turnRaw).toBeGreaterThan(maxTurn);
+    expect(Math.abs(st.turn)).toBeLessThan(maxTurn);
   });
 });

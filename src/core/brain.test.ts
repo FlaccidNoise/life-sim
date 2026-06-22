@@ -30,7 +30,7 @@ describe('steer (per-creature brain)', () => {
     s.senseY[i] = 1; // food gradient toward +y (to the left)
     setBrain(s, i, { LAT_TURN: 1.5 });
     s.rebuildLive();
-    steer(s, false, 0.2);
+    steer(s, false, 0.2, false);
     expect(s.heading[i]).toBeGreaterThan(0); // turned toward the food (left)
   });
 
@@ -43,7 +43,7 @@ describe('steer (per-creature brain)', () => {
       s.senseY[i] = 0;
       setBrain(s, i, { FWD_THRUST: 1.5, THRUST_BIAS: 0.3 });
       s.rebuildLive();
-      steer(s, false, 0.2);
+      steer(s, false, 0.2, false);
       return Math.hypot(s.forceX[0]!, s.forceY[0]!);
     };
     expect(mk(1)).toBeGreaterThan(mk(0)); // food ahead → more thrust than cruise alone
@@ -57,7 +57,7 @@ describe('steer (per-creature brain)', () => {
     s.senseY[i] = 1;
     // brain weights default to 0
     s.rebuildLive();
-    steer(s, false, 0.2);
+    steer(s, false, 0.2, false);
     expect(s.heading[i]).toBe(0.5); // no turn
     expect(s.forceX[i]!).toBe(0);
     expect(s.forceY[i]!).toBe(0);
@@ -72,7 +72,7 @@ describe('steer (per-creature brain)', () => {
     setBrain(s, i, { LAT_TURN: 5 }); // wants a big turn (would be 5 rad unclamped)
     s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.MAX_TURN] = 0.05; // tiny ceiling
     s.rebuildLive();
-    steer(s, false, 0.2);
+    steer(s, false, 0.2, false);
     expect(s.heading[i]).toBeCloseTo(0.05); // clamped to the gene, not 5
   });
 
@@ -85,7 +85,7 @@ describe('steer (per-creature brain)', () => {
     s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.MAX_THRUST] = 0.5; // small ceiling
     s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.METAB_EFF] = 1;
     s.rebuildLive();
-    steer(s, false, 0.2);
+    steer(s, false, 0.2, false);
     expect(Math.hypot(s.forceX[i]!, s.forceY[i]!)).toBeCloseTo(0.5); // clamped to maxThrust·eff(1)
   });
 
@@ -99,7 +99,7 @@ describe('steer (per-creature brain)', () => {
     s.sightY[i] = 0; // sight points +x (toward prey ahead)
     setBrain(s, i, { SIGHT_FWD_THRUST: 2 });
     s.rebuildLive();
-    steer(s, false, 0.2);
+    steer(s, false, 0.2, false);
     expect(Math.hypot(s.forceX[i]!, s.forceY[i]!)).toBeCloseTo(2); // thrust = SIGHT_FWD_THRUST·sFwd·eff
   });
 
@@ -112,7 +112,7 @@ describe('steer (per-creature brain)', () => {
       setBrain(s, i, { FWD_THRUST: 1, THRUST_BIAS: 0.3 }); // thrust output 1.3 (< generous maxThrust 5)
       s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.METAB_EFF] = eff;
       s.rebuildLive();
-      steer(s, false, 0.2);
+      steer(s, false, 0.2, false);
       return Math.hypot(s.forceX[i]!, s.forceY[i]!);
     };
     expect(force(1.5)).toBeCloseTo(1.3 * 1.5); // strong (high-e) body pushes harder
@@ -133,7 +133,7 @@ describe('Baldwin within-life learning (reward-modulated)', () => {
     s.prevEnergy[i] = 50;
     s.energy[i] = 60; // reward +10 (clamped to +5)
     s.rebuildLive();
-    steer(s, true, 0.5); // lay eligibility
+    steer(s, true, 0.5, false); // lay eligibility
     learn(s, 0.2, 0.0, 4, 5);
     const b = i * BRAIN_GENES;
     expect(s.learnedBrain[b + Brain.FWD_THRUST]!).toBeGreaterThan(1.0); // reinforced
@@ -149,7 +149,7 @@ describe('Baldwin within-life learning (reward-modulated)', () => {
     s.prevEnergy[i] = 60;
     s.energy[i] = 50; // reward −10 → the behavior gets UNlearned
     s.rebuildLive();
-    steer(s, true, 0.5);
+    steer(s, true, 0.5, false);
     learn(s, 0.2, 0.0, 4, 5);
     expect(s.learnedBrain[i * BRAIN_GENES + Brain.FWD_THRUST]!).toBeLessThan(1.0); // weakened below instinct
   });
@@ -181,7 +181,7 @@ describe('Baldwin within-life learning (reward-modulated)', () => {
     for (let t = 0; t < 200; t++) {
       s.prevEnergy[i] = 50;
       s.energy[i] = 60; // sustained reward each tick (learn() resets prevEnergy, so re-set it)
-      steer(s, true, 0.5);
+      steer(s, true, 0.5, false);
       learn(s, 1.0, 0.0, 0.5, 5); // hard reinforcement, deviation bound 0.5
     }
     // Can't run off to a saturated controller: it stays within ±0.5 of instinct.
@@ -200,7 +200,7 @@ describe('Baldwin within-life learning (reward-modulated)', () => {
     for (let t = 0; t < 200; t++) {
       s.prevEnergy[i] = 50;
       s.energy[i] = 60;
-      steer(s, true, 0.5);
+      steer(s, true, 0.5, false);
       learn(s, 1.0, 0.0, 0.5, 5);
     }
     // Biases stay at instinct no matter how hard/long we reinforce (Float32-exact equality to the seed).
@@ -217,12 +217,82 @@ describe('Baldwin within-life learning (reward-modulated)', () => {
     s.prevEnergy[i] = 50;
     s.energy[i] = 60;
     s.rebuildLive();
-    steer(s, true, 0.5);
+    steer(s, true, 0.5, false);
     learn(s, 0.2, 0.0, 4, 5);
     const b = i * BRAIN_GENES;
     expect(s.learnedBrain[b + Brain.FWD_THRUST]!).not.toBeCloseTo(1.0); // it drifted
     s.resetLearned(i); // simulate the child's birth-time reset
     expect(s.learnedBrain[b + Brain.FWD_THRUST]!).toBe(1.0); // snapped back to the genome
     expect(s.elig[b + Brain.FWD_THRUST]!).toBe(0); // traces cleared
+  });
+});
+
+describe('motorSquash (smooth tanh saturation — the legibility knob)', () => {
+  // Off (default) = hard clamp (every test above passes `false`). On = out = max·tanh(raw/max): a strong
+  // signal EASES into the per-creature limit instead of snapping to it (kills the saturated-rudder spin).
+  it('a strong turn signal SNAPS to MAX_TURN when off, but eases in when on', () => {
+    const headingAfter = (squash: boolean): number => {
+      const s = new OrganismStore(4);
+      const i = s.alloc();
+      s.heading[i] = 0; // facing +x → lateral gradient is the +y component
+      s.senseX[i] = 0;
+      s.senseY[i] = 1; // lat = 1
+      setBrain(s, i, { LAT_TURN: 2 }); // turnRaw = 2 (overshoots the limit)
+      s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.MAX_TURN] = 1; // limit M = 1
+      s.rebuildLive();
+      steer(s, false, 0.2, squash);
+      return s.heading[i]!;
+    };
+    expect(headingAfter(false)).toBeCloseTo(1.0); // hard clamp: snaps to MAX_TURN
+    expect(headingAfter(true)).toBeCloseTo(Math.tanh(2)); // squash: 1·tanh(2) ≈ 0.964 — below the limit
+    expect(headingAfter(true)).toBeLessThan(headingAfter(false)); // graded, not bang-bang
+    expect(headingAfter(true)).toBeGreaterThan(0);
+  });
+
+  it('a sub-limit signal is ~unchanged by squash (slope→1 near zero, so it does not distort)', () => {
+    const headingAfter = (squash: boolean): number => {
+      const s = new OrganismStore(4);
+      const i = s.alloc();
+      s.heading[i] = 0;
+      s.senseX[i] = 0;
+      s.senseY[i] = 1;
+      setBrain(s, i, { LAT_TURN: 0.1 }); // turnRaw = 0.1, well below the limit
+      s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.MAX_TURN] = 1;
+      s.rebuildLive();
+      steer(s, false, 0.2, squash);
+      return s.heading[i]!;
+    };
+    expect(headingAfter(true)).toBeCloseTo(headingAfter(false), 2); // ≈ identical for small signals
+  });
+
+  it('thrust eases into MAX_THRUST under squash instead of clamping', () => {
+    const force = (squash: boolean): number => {
+      const s = new OrganismStore(4);
+      const i = s.alloc();
+      s.heading[i] = 0;
+      s.senseX[i] = 1; // fwd = 1
+      setBrain(s, i, { FWD_THRUST: 3 }); // thrustRaw = 3 (overshoots)
+      s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.MAX_THRUST] = 1; // limit 1
+      s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.METAB_EFF] = 1;
+      s.rebuildLive();
+      steer(s, false, 0.2, squash);
+      return Math.hypot(s.forceX[i]!, s.forceY[i]!);
+    };
+    expect(force(false)).toBeCloseTo(1.0); // clamped to MAX_THRUST
+    expect(force(true)).toBeCloseTo(Math.tanh(3)); // 1·tanh(3) ≈ 0.995, eased below the limit
+    expect(force(true)).toBeLessThan(force(false));
+  });
+
+  it('negative thrust stays floored at 0 under squash (no reverse thrust)', () => {
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.heading[i] = 0;
+    s.senseX[i] = 1;
+    setBrain(s, i, { FWD_THRUST: -3 }); // thrustRaw = −3 (would be reverse)
+    s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.MAX_THRUST] = 1;
+    s.rebuildLive();
+    steer(s, false, 0.2, true);
+    expect(s.forceX[i]!).toBe(0); // floored, not negative
+    expect(s.forceY[i]!).toBe(0);
   });
 });
