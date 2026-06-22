@@ -5,6 +5,8 @@
 import { type OrganismStore } from './store';
 import { type SpatialHash } from './spatial-hash';
 import { type Walls } from './walls';
+import { type FlowField } from './flow-field';
+import { type Config } from './config';
 import { ScalarGene, SCALAR_GENE_COUNT } from './genome';
 
 /** Shortest signed delta a→b on a torus of the given size (|result| ≤ size/2). */
@@ -63,6 +65,26 @@ export function computeRepulsion(
     }
     forceX[i] = forceX[i]! + fx;
     forceY[i] = forceY[i]! + fy;
+  }
+}
+
+/**
+ * Add the local current as a force, scaled DOWN by body size via (cellRadius/size)^flowPushSizeExp so big
+ * bodies resist and small/slow ones get carried (flow-riding). ACCUMULATES (+=) onto the force buffer steer
+ * just reset, so it runs AFTER steer and BEFORE computeRepulsion. flowPushStrength≤0 ⇒ no-op (byte-identical).
+ * Pure kinematic read of the flow field (no RNG); ascending live-slot order; allocation-free.
+ */
+export function applyFlowForce(store: OrganismStore, flow: FlowField, cfg: Config): void {
+  if (cfg.flowPushStrength <= 0) return;
+  const { liveIndices, liveCount, x, y, forceX, forceY, scalarGenes } = store;
+  const k = cfg.flowPushStrength;
+  for (let n = 0; n < liveCount; n++) {
+    const i = liveIndices[n]!;
+    const size = scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.SIZE]!;
+    const susceptibility =
+      cfg.flowPushSizeExp > 0 ? (cfg.cellRadius / size) ** cfg.flowPushSizeExp : 1;
+    forceX[i] = forceX[i]! + k * susceptibility * flow.sampleX(x[i]!, y[i]!);
+    forceY[i] = forceY[i]! + k * susceptibility * flow.sampleY(x[i]!, y[i]!);
   }
 }
 
