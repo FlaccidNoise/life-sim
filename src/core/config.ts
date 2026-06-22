@@ -217,6 +217,15 @@ export interface Config {
    *  plasticity entirely (their constant input makes Hebbian learning a positive-feedback runaway). */
   maxLearnDeviation: number;
 
+  // ── Steering output shaping (ablation knob; OFF by default = byte-identical to the hard clamp) ─────
+  /** Motor-output saturation mode. false = HARD clamp turn/thrust to the per-creature MAX_TURN/MAX_THRUST
+   *  genes (bang-bang: a strong signal snaps to the limit → the visible spin/vibrate pathology when a
+   *  saturated controller pins the rudder). true = smooth tanh squash: out = max·tanh(raw/max), so small
+   *  signals steer ~linearly and large ones ease into the limit (graded, legible motion). It shapes ONLY
+   *  the applied motor output — the eligibility trace still uses the pre-shaping raw signal, so within-life
+   *  learning is unchanged. OFF by default so the determinism hash is byte-identical until you opt in. */
+  motorSquash: boolean;
+
   // ── Observation hooks (optional; OFF by default — pure instrumentation, never affects the sim) ────
   /** Fired once per successful birth inside reproduce(), in ascending parent-slot order, BEFORE the
    *  tick counter advances. Read-only by contract: it must not touch the store, RNG, or iteration —
@@ -356,6 +365,10 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     eligLambda: 0.2,
     weightDecay: 0.002,
     maxLearnDeviation: 0.5,
+
+    // Steering output shaping: OFF = hard clamp (current behavior, byte-identical hash). Flip on to
+    // smoothly tanh-squash turn/thrust → graded, legible steering (kills the motor-saturation spin).
+    motorSquash: false,
     ...overrides,
   };
 }

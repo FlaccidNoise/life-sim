@@ -24,7 +24,12 @@ import { Brain, BRAIN_GENES, ScalarGene, SCALAR_GENE_COUNT } from './genome';
  * per-synapse eligibility trace (pre·post, blended by `eligLambda`) for the later weight update — the
  * trace bridges the gap between a steering decision and the energy reward it earns ticks later.
  */
-export function steer(store: OrganismStore, learn: boolean, eligLambda: number): void {
+export function steer(
+  store: OrganismStore,
+  learn: boolean,
+  eligLambda: number,
+  motorSquash: boolean,
+): void {
   const { liveIndices, liveCount, heading, senseX, senseY, sightX, sightY, forceX, forceY } = store;
   const { learnedBrain, elig } = store;
   const genes = store.scalarGenes;
@@ -61,15 +66,26 @@ export function steer(store: OrganismStore, learn: boolean, eligLambda: number):
       learnedBrain[b + Brain.SIGHT_FWD_THRUST]! * sFwd +
       learnedBrain[b + Brain.THRUST_BIAS]!;
 
-    let turn = turnRaw;
-    if (turn > maxTurn) turn = maxTurn;
-    else if (turn < -maxTurn) turn = -maxTurn;
+    let turn: number;
+    let thrust: number;
+    if (motorSquash) {
+      // Smooth saturation: out = max·tanh(raw/max). Slope→1 near 0 (small signals steer ~linearly), eases
+      // asymptotically into ±max — no bang-bang snap to the limit (the saturated-rudder spin). Guard the
+      // max≤0 edge: tanh(raw/0) is ±1/NaN, so a zero gene would otherwise poison the output → force 0.
+      turn = maxTurn > 0 ? maxTurn * Math.tanh(turnRaw / maxTurn) : 0;
+      thrust = thrustRaw > 0 && maxThrust > 0 ? maxThrust * Math.tanh(thrustRaw / maxThrust) : 0;
+    } else {
+      // Hard clamp (default): a strong signal snaps to the per-creature limit. Byte-identical to the
+      // pre-shaping behavior, so the determinism hash is unchanged when motorSquash is off.
+      turn = turnRaw;
+      if (turn > maxTurn) turn = maxTurn;
+      else if (turn < -maxTurn) turn = -maxTurn;
+      thrust = thrustRaw;
+      if (thrust < 0) thrust = 0;
+      else if (thrust > maxThrust) thrust = maxThrust;
+    }
     const nh = h + turn;
     heading[i] = nh;
-
-    let thrust = thrustRaw;
-    if (thrust < 0) thrust = 0;
-    else if (thrust > maxThrust) thrust = maxThrust;
     thrust *= efficiency; // metabolic-efficiency tradeoff: thrifty (low-e) bodies produce less push
     forceX[i] = thrust * Math.cos(nh);
     forceY[i] = thrust * Math.sin(nh);
