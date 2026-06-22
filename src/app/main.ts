@@ -72,6 +72,7 @@ let speed = 1; // sim ticks per animation frame; <1 = slow-mo (interpolated for 
 let showFood = true; // food heatmap overlay (toggle with 'f')
 let showWalls = true; // wall slate layer (toggle with 'w')
 let showOverlay = true; // per-creature debug overlay on the selection (toggle with 'o')
+let showFlow = false; // flow-field current arrows (toggle with 'v')
 let colorMode: ColorMode = ColorMode.LINEAGE; // dot hue source (cycle with 'c'): lineage → diet → energy
 let selected: { slot: number; gen: number } | null = null;
 // Scratch for the selected creature's overlay line vertices ([x,y,r,g,b] per vertex; gl.LINES).
@@ -82,6 +83,10 @@ const TRAIL_LEN = 400;
 const trailX: number[] = [];
 const trailY: number[] = [];
 const trailScratch = new Float32Array(TRAIL_LEN * 2 * 5);
+// Flow-field current arrows ('v'): one line per sampled flow cell on a coarse sub-grid. Sized once for
+// the worst case (every cell of the largest flow grid) so it never reallocates across resets.
+const FLOW_STRIDE = 4; // sample every Nth flow cell → ~32×32 arrows over a 128² grid (legible, not saturated)
+const flowScratch = new Float32Array(world.flow.cols * world.flow.rows * 2 * 5);
 function pushTrail(x: number, y: number): void {
   trailX.push(x);
   trailY.push(y);
@@ -234,11 +239,12 @@ globalThis.addEventListener('mouseup', (e) => {
 
 globalThis.addEventListener('resize', () => renderer.resize());
 
-// 'f' food heatmap · 'w' wall layer · 'o' creature overlay · 'c' cycle dot color-mode · 'l' lock follow-cam + record.
+// 'f' food heatmap · 'w' wall layer · 'o' creature overlay · 'v' flow arrows · 'c' cycle dot color-mode · 'l' lock follow-cam + record.
 globalThis.addEventListener('keydown', (e) => {
   if (e.key === 'f' || e.key === 'F') showFood = !showFood;
   if (e.key === 'w' || e.key === 'W') showWalls = !showWalls;
   if (e.key === 'o' || e.key === 'O') showOverlay = !showOverlay;
+  if (e.key === 'v' || e.key === 'V') showFlow = !showFlow;
   if (e.key === 'c' || e.key === 'C') {
     colorMode = ((colorMode + 1) % 3) as ColorMode;
     legend.setColorMode(colorMode);
@@ -356,6 +362,37 @@ function frame(): void {
       }
     }
     renderer.drawLines(trailScratch, v);
+  }
+  // Flow-field current arrows ('v'): coarse sub-grid sample of world.flow drawn as cell-centre→centre+v·scale
+  // line pairs (dim cyan). scale=8·dt maps the CFL-max velocity (0.25·cellW/dt) to a ~2-cell arrow, so the
+  // arrows stay visibly sized whatever the flow strength. Pure render — no sim/determinism impact.
+  if (showFlow && world.flow) {
+    const flow = world.flow;
+    const cellW = config.worldWidth / flow.cols;
+    const cellH = config.worldHeight / flow.rows;
+    const scale = 8 * config.dt;
+    let v = 0;
+    for (let r = 0; r < flow.rows; r += FLOW_STRIDE) {
+      const cy = (r + 0.5) * cellH;
+      for (let c = 0; c < flow.cols; c += FLOW_STRIDE) {
+        const cx = (c + 0.5) * cellW;
+        const vx = flow.sampleX(cx, cy);
+        const vy = flow.sampleY(cx, cy);
+        flowScratch[v * 5] = cx;
+        flowScratch[v * 5 + 1] = cy;
+        flowScratch[v * 5 + 2] = 0.2;
+        flowScratch[v * 5 + 3] = 0.7;
+        flowScratch[v * 5 + 4] = 0.8;
+        v++;
+        flowScratch[v * 5] = cx + vx * scale;
+        flowScratch[v * 5 + 1] = cy + vy * scale;
+        flowScratch[v * 5 + 2] = 0.2;
+        flowScratch[v * 5 + 3] = 0.7;
+        flowScratch[v * 5 + 4] = 0.8;
+        v++;
+      }
+    }
+    renderer.drawLines(flowScratch, v);
   }
   // Per-creature debug overlay on the live selection (drawn on top; reads true current state, so at
   // slow-mo it sits at the un-interpolated position — a non-issue at speed ≥ 1).
