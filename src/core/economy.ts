@@ -56,6 +56,7 @@ function wrapDelta(d: number, size: number): number {
  */
 export function hunt(store: OrganismStore, hash: SpatialHash, cfg: Config): void {
   const { biteRange, worldWidth, worldHeight, cannibalism, predationGain, huntSizeRatio } = cfg;
+  const { counterBiteFraction } = cfg;
   const { liveIndices, liveCount, x, y, energy, scalarGenes } = store;
   const { cols, rows, bucketStart, sorted } = hash;
   const range2 = biteRange * biteRange;
@@ -109,6 +110,15 @@ export function hunt(store: OrganismStore, hash: SpatialHash, cfg: Config): void
     // deliberately CREATES energy (not strictly conserved) so hunting is a big payoff vs. grazing — the
     // incentive to seek prey instead of sitting on the food field.
     energy[i] = energy[i]! + drain * predationGain;
+    // Red Queen counter-bite (lever E1): the prey bites back — the predator pays back counterBiteFraction
+    // of the prey's DAMAGE gene. The drain already landed (a costly bite is still a bite) and the prey is
+    // NOT spared, so this is purely a predator-side tax: biting high-DAMAGE prey hurts the attacker. Whether
+    // prey actually evolve teeth in response is unverified (DAMAGE is upkeep-costed and gives diet-0 prey no
+    // individual benefit — see the config doc). Gated so the OFF path is byte-identical; no RNG.
+    if (counterBiteFraction > 0)
+      energy[i] =
+        energy[i]! -
+        counterBiteFraction * scalarGenes[best * SCALAR_GENE_COUNT + ScalarGene.DAMAGE]!;
   }
 }
 

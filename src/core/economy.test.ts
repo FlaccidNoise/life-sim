@@ -470,6 +470,52 @@ describe('hunt (predation)', () => {
     expect(s.energy[pred]).toBe(20);
     expect(s.energy[prey]).toBe(30);
   });
+
+  describe('Red Queen counter-bite (lever E1)', () => {
+    // A predator (diet 1, damage 5) and an armed herbivore (diet 0, DAMAGE 8) 4 units apart. The bite
+    // drains 5 from the prey and the predator absorbs 5×predationGain; with counter-bite ON the predator
+    // then pays back counterBiteFraction × the prey's DAMAGE gene.
+    const setup = (preyDamage: number): { s: OrganismStore; pred: number; prey: number } => {
+      const s = new OrganismStore(4);
+      const pred = s.alloc();
+      const prey = s.alloc();
+      s.x[pred] = 50;
+      s.y[pred] = 50;
+      s.energy[pred] = 20;
+      s.x[prey] = 54;
+      s.y[prey] = 50;
+      s.energy[prey] = 30;
+      genes(s, pred, cfg, { [ScalarGene.DIET]: 1, [ScalarGene.DAMAGE]: 5, [ScalarGene.SIZE]: 10 });
+      genes(s, prey, cfg, {
+        [ScalarGene.DIET]: 0,
+        [ScalarGene.DAMAGE]: preyDamage,
+        [ScalarGene.SIZE]: 5,
+      });
+      s.rebuildLive();
+      return { s, pred, prey };
+    };
+
+    it('counterBiteFraction 0 (OFF) → predator pays no counter-cost (byte-identical bite)', () => {
+      const { s, pred, prey } = setup(8);
+      hunt(s, mkHash(s), { ...cfg, counterBiteFraction: 0 });
+      expect(s.energy[prey]).toBeCloseTo(25); // drained 5
+      expect(s.energy[pred]).toBeCloseTo(20 + 5 * cfg.predationGain); // pure gain, no counter
+    });
+
+    it('counterBiteFraction > 0 → predator pays counterBiteFraction × prey DAMAGE', () => {
+      const { s, pred, prey } = setup(8);
+      hunt(s, mkHash(s), { ...cfg, counterBiteFraction: 0.15 });
+      expect(s.energy[prey]).toBeCloseTo(25); // prey still loses exactly the drain
+      // gain 5×gain, then counter-bite 0.15×8 = 1.2 back out → biting an armed prey costs the attacker
+      expect(s.energy[pred]).toBeCloseTo(20 + 5 * cfg.predationGain - 0.15 * 8);
+    });
+
+    it('a toothless prey (DAMAGE 0) imposes no counter-cost even when ON (defense scales with the gene)', () => {
+      const { s, pred } = setup(0);
+      hunt(s, mkHash(s), { ...cfg, counterBiteFraction: 0.15 });
+      expect(s.energy[pred]).toBeCloseTo(20 + 5 * cfg.predationGain); // 0.15×0 = 0 → same as OFF
+    });
+  });
 });
 
 describe('cullDead', () => {
