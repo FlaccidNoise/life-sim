@@ -119,9 +119,27 @@ export function hunt(store: OrganismStore, hash: SpatialHash, cfg: Config): void
  * above-baseline "more-is-costly" genes — together the selection pressure on the traits. Ascending
  * order so depletion is deterministic when organisms share a cell. Mutates energy.
  */
-export function metabolize(store: OrganismStore, food: FoodField, cfg: Config): void {
+export function metabolize(
+  store: OrganismStore,
+  food: FoodField,
+  hash: SpatialHash,
+  cfg: Config,
+): void {
   const { liveIndices, liveCount, x, y, vx, vy, energy, age, scalarGenes } = store;
   const { basalCost, moveCost } = cfg;
+  const { crowdingMortality, crowdThreshold, crowdRadius, worldWidth, worldHeight } = cfg;
+  // Lever D (density-dependent mortality): when crowdingMortality>0 each creature pays an energy drain
+  // per local neighbor above crowdThreshold, counted in the post-MOVE hash (the same one hunt uses). The
+  // scan covers crowdRadius; loop-invariant scan params are precomputed here, and the whole per-creature
+  // block below is SKIPPED when OFF so the energy arithmetic stays byte-identical. RNG-free → deterministic.
+  const { cols, rows, bucketStart, sorted } = hash;
+  const crowdR2 = crowdRadius * crowdRadius;
+  let crowdR = 1;
+  if (crowdingMortality > 0) {
+    const cellSize = Math.min(worldWidth / cols, worldHeight / rows);
+    const halfGrid = Math.floor((Math.min(cols, rows) - 1) / 2);
+    crowdR = Math.min(halfGrid, Math.max(1, Math.ceil(crowdRadius / cellSize)));
+  }
   for (let k = 0; k < liveCount; k++) {
     const i = liveIndices[k]!;
     const sg = i * SCALAR_GENE_COUNT;
@@ -161,6 +179,33 @@ export function metabolize(store: OrganismStore, food: FoodField, cfg: Config): 
     }
     const upkeep = basalCost * efficiency + geneUpkeep(scalarGenes, i, cfg);
     energy[i] = energy[i]! + gained - upkeep - moveCost * moveFactor * speed2;
+    // Lever D: pay the local-crowding drain ON TOP (skipped entirely when OFF → byte-identical). Count
+    // live neighbors within crowdRadius via the post-MOVE hash, then drain crowdingMortality per neighbor
+    // above the free band. Ascending order + integer count + RNG-free, so the tick stays reproducible.
+    if (crowdingMortality > 0) {
+      const xi = x[i]!;
+      const yi = y[i]!;
+      const ci = hash.colOf(xi);
+      const cj = hash.rowOf(yi);
+      let neighbors = 0;
+      for (let dy = -crowdR; dy <= crowdR; dy++) {
+        const by = (cj + dy + rows) % rows;
+        for (let dx = -crowdR; dx <= crowdR; dx++) {
+          const bx = (ci + dx + cols) % cols;
+          const b = by * cols + bx;
+          const end = bucketStart[b + 1]!;
+          for (let idx = bucketStart[b]!; idx < end; idx++) {
+            const j = sorted[idx]!;
+            if (j === i) continue;
+            const ddx = wrapDelta(xi - x[j]!, worldWidth);
+            const ddy = wrapDelta(yi - y[j]!, worldHeight);
+            if (ddx * ddx + ddy * ddy <= crowdR2) neighbors++;
+          }
+        }
+      }
+      const over = neighbors - crowdThreshold;
+      if (over > 0) energy[i] = energy[i]! - crowdingMortality * over;
+    }
     age[i] = (age[i]! + 1) >>> 0;
   }
 }
