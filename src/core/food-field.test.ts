@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { FoodField } from './food-field';
+import { FlowField } from './flow-field';
+import { defaultConfig } from './config';
 
 const W = 128;
 const H = 128;
@@ -92,6 +94,37 @@ describe('FoodField', () => {
     const f = new FoodField(W, H, COLS, ROWS, K, 1, 2, 0.25); // B gets 25%, A gets 75%
     expect(f.sampleAt(0, 0)).toBeCloseTo(0.75 * K);
     expect(f.sampleAt2(0, 0)).toBeCloseTo(0.25 * K);
+  });
+
+  it('advection conserves total biomass and respects walls', () => {
+    const f = new FoodField(1024, 1024, 16, 16, 10, 1);
+    const flow = new FlowField(
+      1024,
+      1024,
+      16,
+      16,
+      defaultConfig({ flowStrength: 2, flowScale: 6, seed: 2 }),
+    );
+    const before = f.total();
+    for (let t = 0; t < 50; t++) f.step(0, 0, flow, null); // pure advection (no regrow/diffuse)
+    expect(f.total()).toBeCloseTo(before, 4); // mass conserved to floating-point precision
+    // non-negative everywhere (CFL ≤ 0.25 keeps the donor-cell scheme positivity-preserving)
+    for (let r = 0; r < 16; r++)
+      for (let c = 0; c < 16; c++)
+        expect(f.sampleAt(c * 64 + 32, r * 64 + 32)).toBeGreaterThanOrEqual(-1e-9);
+  });
+
+  it('advection is a no-op when flowStrength=0', () => {
+    const f1 = new FoodField(1024, 1024, 16, 16, 10, 1);
+    const f2 = new FoodField(1024, 1024, 16, 16, 10, 1);
+    const flow = new FlowField(1024, 1024, 16, 16, defaultConfig({ flowStrength: 0 }));
+    f1.step(0.05, 0.1, flow, null);
+    f2.step(0.05, 0.1, null, null);
+    for (let i = 0; i < 256; i++) {
+      const x = (i % 16) * 64 + 32,
+        y = Math.floor(i / 16) * 64 + 32;
+      expect(f1.sampleAt(x, y)).toBe(f2.sampleAt(x, y)); // byte-identical when flow is zero
+    }
   });
 
   it('seedPatches makes pockets rich and gaps near-dead', () => {

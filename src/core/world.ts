@@ -202,7 +202,7 @@ export class World {
     this.food.step(
       cfg.foodRegen,
       cfg.foodDiffuse,
-      null,
+      cfg.flowStrength > 0 ? this.flow : null,
       this.walls.active ? this.walls.foodBlockedMask() : null,
     );
     this.tick++;
