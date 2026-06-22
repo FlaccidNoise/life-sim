@@ -1,10 +1,11 @@
 /**
  * Brain view — a live node-link diagram of a selected creature's controller, so you can WATCH it think.
- * The brain is a single-layer LINEAR map (genome.ts / brain.ts): five sensory inputs in the heading
- * frame — forward & lateral food gradient, forward & lateral sight, and a constant bias — fan out to
- * two motor outputs (turn, thrust) through ten weights. This panel draws the inputs (lit by their live
- * value), the weighted edges (sign = color, |weight| = thickness, live activity = brightness), and the
- * resulting outputs, updating every frame.
+ * The brain is a single-layer LINEAR map (genome.ts / brain.ts): nine sensory inputs in the heading
+ * frame — forward & lateral food gradient, forward & lateral sight, forward & lateral wall-avoidance,
+ * forward & lateral flow, and a constant bias — fan out to two motor outputs (turn, thrust) through
+ * eighteen weights. This panel draws the inputs (lit by their live value), the weighted edges
+ * (sign = color, |weight| = thickness, live activity = brightness), and the resulting outputs,
+ * updating every frame.
  *
  * computeBrainState() recomputes the inputs/outputs with the SAME math as steer(); a test pins it to an
  * actual steer() run so the picture can never drift from what the sim really does. BrainView only draws.
@@ -23,12 +24,13 @@ export interface BrainInputNode {
 }
 
 export interface BrainState {
-  inputs: BrainInputNode[]; // 5, fixed order: food fwd, food lat, sight fwd, sight lat, bias
+  // 9, fixed order: food fwd/lat, sight fwd/lat, wall fwd/lat, flow fwd/lat, bias
+  inputs: BrainInputNode[];
   turnRaw: number; // pre-clamp network sum → turn
   thrustRaw: number; // pre-clamp network sum → thrust
   turn: number; // applied turn (clamped to ±maxTurn gene)
   thrust: number; // applied thrust (clamped [0,maxThrust], ×metabolic efficiency)
-  drift: number; // Σ|learned − instinct| over all 10 weights (within-life learning so far)
+  drift: number; // Σ|learned − instinct| over all 18 weights (within-life learning so far)
 }
 
 /** Recompute one creature's brain I/O with steer()'s exact math (read-only). */
@@ -48,6 +50,14 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
   const vy = store.sightY[slot]!;
   const sFwd = vx * dx + vy * dy;
   const sLat = -vx * dy + vy * dx;
+  const wx = store.wallSenseX[slot]!;
+  const wy = store.wallSenseY[slot]!;
+  const wFwd = wx * dx + wy * dy;
+  const wLat = -wx * dy + wy * dx;
+  const fx = store.flowSenseX[slot]!;
+  const fy = store.flowSenseY[slot]!;
+  const flFwd = fx * dx + fy * dy;
+  const flLat = -fx * dy + fy * dx;
 
   const node = (label: string, value: number, turnG: number, thrustG: number): BrainInputNode => ({
     label,
@@ -63,6 +73,10 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
     node('food lat', lat, Brain.LAT_TURN, Brain.LAT_THRUST),
     node('sight fwd', sFwd, Brain.SIGHT_FWD_TURN, Brain.SIGHT_FWD_THRUST),
     node('sight lat', sLat, Brain.SIGHT_LAT_TURN, Brain.SIGHT_LAT_THRUST),
+    node('wall fwd', wFwd, Brain.WALL_FWD_TURN, Brain.WALL_FWD_THRUST),
+    node('wall lat', wLat, Brain.WALL_LAT_TURN, Brain.WALL_LAT_THRUST),
+    node('flow fwd', flFwd, Brain.FLOW_FWD_TURN, Brain.FLOW_FWD_THRUST),
+    node('flow lat', flLat, Brain.FLOW_LAT_TURN, Brain.FLOW_LAT_THRUST),
     node('bias', 1, Brain.TURN_BIAS, Brain.THRUST_BIAS),
   ];
 
