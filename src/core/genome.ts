@@ -239,8 +239,17 @@ export const Brain = {
   SIGHT_FWD_TURN: 7, // forward sight vector → turn
   SIGHT_LAT_THRUST: 8, // lateral sight → thrust
   SIGHT_FWD_THRUST: 9, // forward sight → thrust (chase prey / flee predators)
+  // Interoceptive HUNGER input (lever E2): the creature senses its own energy deficit and can steer on it.
+  // These two synapses, and their seed/mutation RNG, are LIVE only when cfg.hungerSense is on (else the
+  // weights stay 0 and consume no RNG — see seedGenome/mutateGenome). HUNGER_TURN/THRUST must stay last so
+  // the senses-core layout (g < HUNGER_TURN) is unchanged and the OFF path is byte-identical to pre-E2.
+  HUNGER_TURN: 10, // hunger scalar → turn (e.g. wander/cast more when starving)
+  HUNGER_THRUST: 11, // hunger scalar → thrust (e.g. forage harder when starving)
 } as const;
-export const BRAIN_GENES = 10;
+/** Senses-core brain weights (food + sight) — the count present pre-E2 and the RNG-draw count on the
+ *  hungerSense-OFF path. The 2 hunger synapses extend the array to BRAIN_GENES but draw RNG only when on. */
+export const BRAIN_CORE_GENES = 10;
+export const BRAIN_GENES = 12;
 
 /** Founder brain ≈ the hand-tuned chemotaxis controller (turn toward lateral food, thrust up-gradient,
  *  gentle cruise) + ACTIVE sight: turn toward & thrust along the appeal-signed sight vector. Because that
@@ -248,24 +257,35 @@ export const BRAIN_GENES = 10;
  *  weights gives chase AND flee from birth — so vision drives behavior immediately instead of waiting
  *  for the sight weights to evolve up from 0. Founders seed near this + noise. Layout order = Brain enum:
  *  [LAT_TURN, FWD_TURN, LAT_THRUST, FWD_THRUST, TURN_BIAS, THRUST_BIAS,
- *   SIGHT_LAT_TURN, SIGHT_FWD_TURN, SIGHT_LAT_THRUST, SIGHT_FWD_THRUST]. */
-const FOUNDER_BRAIN: readonly number[] = [1.2, 0, 0, 1.5, 0, 0.3, 1.0, 0, 0, 1.2];
+ *   SIGHT_LAT_TURN, SIGHT_FWD_TURN, SIGHT_LAT_THRUST, SIGHT_FWD_THRUST, HUNGER_TURN, HUNGER_THRUST].
+ *  The two hunger weights seed at 0 so hunger starts neutral and evolves (like sight). */
+const FOUNDER_BRAIN: readonly number[] = [1.2, 0, 0, 1.5, 0, 0.3, 1.0, 0, 0, 1.2, 0, 0];
 
-/** Seed a founder's genome: founder brain + Gaussian spread, random hue (lineage colors diverge). */
+/** Seed a founder's genome: founder brain + Gaussian spread, random hue (lineage colors diverge).
+ *  hungerSense (lever E2) gates the 2 hunger synapses: when ON they draw founder noise like any weight;
+ *  when OFF they are written to their founder value (0) WITHOUT consuming RNG, so the draw sequence — and
+ *  thus every downstream rng.state — is byte-identical to the pre-E2 sim (the ablation safeguard). */
 export function seedGenome(
   brain: Float32Array,
   hue: Float32Array,
   slot: number,
   rng: Rng,
   founderSigma: number,
+  hungerSense: boolean,
 ): void {
   const base = slot * BRAIN_GENES;
-  for (let g = 0; g < BRAIN_GENES; g++)
-    brain[base + g] = FOUNDER_BRAIN[g]! + rng.gaussian(0, founderSigma);
+  const n = hungerSense ? BRAIN_GENES : BRAIN_CORE_GENES;
+  for (let g = 0; g < n; g++) brain[base + g] = FOUNDER_BRAIN[g]! + rng.gaussian(0, founderSigma);
+  if (!hungerSense) {
+    brain[base + Brain.HUNGER_TURN] = FOUNDER_BRAIN[Brain.HUNGER_TURN]!;
+    brain[base + Brain.HUNGER_THRUST] = FOUNDER_BRAIN[Brain.HUNGER_THRUST]!;
+  }
   hue[slot] = rng.float();
 }
 
-/** Copy a parent's genome to a child with Gaussian mutation (the only source of variation). */
+/** Copy a parent's genome to a child with Gaussian mutation (the only source of variation). hungerSense
+ *  (lever E2) gates the 2 hunger synapses exactly as in seedGenome: when OFF they are COPIED from the
+ *  parent (their 0) without drawing, so the RNG sequence is byte-identical to the pre-E2 sim. */
 export function mutateGenome(
   brain: Float32Array,
   hue: Float32Array,
@@ -274,10 +294,16 @@ export function mutateGenome(
   rng: Rng,
   sigma: number,
   hueSigma: number,
+  hungerSense: boolean,
 ): void {
   const cb = child * BRAIN_GENES;
   const pb = parent * BRAIN_GENES;
-  for (let g = 0; g < BRAIN_GENES; g++) brain[cb + g] = brain[pb + g]! + rng.gaussian(0, sigma);
+  const n = hungerSense ? BRAIN_GENES : BRAIN_CORE_GENES;
+  for (let g = 0; g < n; g++) brain[cb + g] = brain[pb + g]! + rng.gaussian(0, sigma);
+  if (!hungerSense) {
+    brain[cb + Brain.HUNGER_TURN] = brain[pb + Brain.HUNGER_TURN]!;
+    brain[cb + Brain.HUNGER_THRUST] = brain[pb + Brain.HUNGER_THRUST]!;
+  }
   let h = hue[parent]! + rng.gaussian(0, hueSigma);
   h -= Math.floor(h); // wrap into [0,1)
   hue[child] = h;

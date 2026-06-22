@@ -116,7 +116,7 @@ export class World {
       s.vx[i] = Math.cos(angle) * driftSpeed;
       s.vy[i] = Math.sin(angle) * driftSpeed;
       s.heading[i] = angle;
-      seedGenome(s.brain, s.hue, i, this.rng, this.config.founderSigma);
+      seedGenome(s.brain, s.hue, i, this.rng, this.config.founderSigma, this.config.hungerSense);
       seedScalarGenes(s.scalarGenes, i, this.rng, this.config); // incl. life-history + trophic genes
       // Bimodal DIET seed: the first predatorFraction of founders are hunters (diet 0.9), rest grazers
       // (diet 0). This expresses the predator niche from t0 (it won't bootstrap from an all-grazer start).
