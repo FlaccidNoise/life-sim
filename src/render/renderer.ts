@@ -10,6 +10,7 @@
  */
 import { type OrganismStore } from '../core/store';
 import { type FoodField } from '../core/food-field';
+import { type Walls } from '../core/walls';
 import { ScalarGene, SCALAR_GENE_COUNT, SCALAR_GENE_SPECS, MIN_BAND } from '../core/genome';
 import {
   dietShape,
@@ -126,6 +127,17 @@ void main() {
   outColor = vec4(col, 1.0);
 }`;
 
+const WALL_FRAG = `#version 300 es
+precision mediump float;
+in vec2 v_uv;
+uniform sampler2D u_tex;
+out vec4 outColor;
+void main() {
+  float s = texture(u_tex, v_uv).r;          // 0 open, 1 solid
+  if (s < 0.5) discard;                        // open cells show the food layer beneath
+  outColor = vec4(0.16, 0.18, 0.22, 1.0);      // slate rock
+}`;
+
 // Debug overlay lines: a flat [x, y, r, g, b] vertex stream drawn as gl.LINES, sharing the camera.
 const LINE_VERT = `#version 300 es
 in vec2 a_pos;
@@ -219,6 +231,12 @@ export class Renderer {
   private readonly foodTex: WebGLTexture;
   private foodTexData: Uint8Array = new Uint8Array(0);
   private foodTexInit = false;
+  // wall overlay (mirrors the food layer; NEAREST so the 0/1 mask stays crisp)
+  private readonly wallProgram: WebGLProgram;
+  private readonly aWallCorner: number;
+  private readonly wallTex: WebGLTexture;
+  private wallTexData: Uint8Array = new Uint8Array(0);
+  private wallTexInit = false;
   // Camera: centre in world units + zoom (1 = whole world fits the viewport). Set via setCamera().
   private camX: number;
   private camY: number;
@@ -238,6 +256,7 @@ export class Renderer {
 
     this.dotProgram = link(gl, DOT_VERT, DOT_FRAG);
     this.foodProgram = link(gl, FOOD_VERT, FOOD_FRAG);
+    this.wallProgram = link(gl, FOOD_VERT, WALL_FRAG);
     this.lineProgram = link(gl, LINE_VERT, LINE_FRAG);
     this.aPos = gl.getAttribLocation(this.dotProgram, 'a_pos');
     this.aHue = gl.getAttribLocation(this.dotProgram, 'a_hue');
@@ -248,6 +267,7 @@ export class Renderer {
     this.aShape = gl.getAttribLocation(this.dotProgram, 'a_shape');
     this.aEfrac = gl.getAttribLocation(this.dotProgram, 'a_efrac');
     this.aCorner = gl.getAttribLocation(this.foodProgram, 'a_corner');
+    this.aWallCorner = gl.getAttribLocation(this.wallProgram, 'a_corner');
     this.aLinePos = gl.getAttribLocation(this.lineProgram, 'a_pos');
     this.aLineCol = gl.getAttribLocation(this.lineProgram, 'a_col');
 
@@ -262,6 +282,7 @@ export class Renderer {
     const quadBuffer = gl.createBuffer();
     const lineBuffer = gl.createBuffer();
     const foodTex = gl.createTexture();
+    const wallTex = gl.createTexture();
     if (
       !dotBuffer ||
       !hueBuffer ||
@@ -273,7 +294,8 @@ export class Renderer {
       !efracBuffer ||
       !quadBuffer ||
       !lineBuffer ||
-      !foodTex
+      !foodTex ||
+      !wallTex
     )
       throw new Error('GL resource alloc failed');
     this.visBuffer = visBuffer;
@@ -287,6 +309,7 @@ export class Renderer {
     this.quadBuffer = quadBuffer;
     this.lineBuffer = lineBuffer;
     this.foodTex = foodTex;
+    this.wallTex = wallTex;
     this.dotScratch = new Float32Array(capacity * 2);
     this.hueScratch = new Float32Array(capacity);
     this.sizeScratch = new Float32Array(capacity);
@@ -306,6 +329,13 @@ export class Renderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1); // R8 rows aren't 4-byte aligned
+
+    // NEAREST so the binary wall mask stays crisp (LINEAR would blur the discard edge into fringe).
+    gl.bindTexture(gl.TEXTURE_2D, wallTex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
     this.resize();
   }
@@ -362,7 +392,9 @@ export class Renderer {
   draw(
     store: OrganismStore,
     food: FoodField | null,
+    walls: Walls | null,
     showFood: boolean,
+    showWalls: boolean,
     interp?: {
       prevX: Float64Array;
       prevY: Float64Array;
@@ -415,6 +447,48 @@ export class Renderer {
       gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer);
       gl.enableVertexAttribArray(this.aCorner);
       gl.vertexAttribPointer(this.aCorner, 2, gl.FLOAT, false, 0, 0);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    }
+
+    // ── Walls (over the food, under the dots) ──
+    if (walls && showWalls && walls.active) {
+      const cells = walls.cols * walls.rows;
+      if (this.wallTexData.length !== cells) this.wallTexData = new Uint8Array(cells);
+      walls.fillTexture(this.wallTexData);
+      gl.useProgram(this.wallProgram);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, this.wallTex);
+      if (!this.wallTexInit) {
+        gl.texImage2D(
+          gl.TEXTURE_2D,
+          0,
+          gl.R8,
+          walls.cols,
+          walls.rows,
+          0,
+          gl.RED,
+          gl.UNSIGNED_BYTE,
+          this.wallTexData,
+        );
+        this.wallTexInit = true;
+      } else {
+        gl.texSubImage2D(
+          gl.TEXTURE_2D,
+          0,
+          0,
+          0,
+          walls.cols,
+          walls.rows,
+          gl.RED,
+          gl.UNSIGNED_BYTE,
+          this.wallTexData,
+        );
+      }
+      gl.uniform1i(gl.getUniformLocation(this.wallProgram, 'u_tex'), 0);
+      this.setCommonUniforms(this.wallProgram, sc);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer);
+      gl.enableVertexAttribArray(this.aWallCorner);
+      gl.vertexAttribPointer(this.aWallCorner, 2, gl.FLOAT, false, 0, 0);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     }
 

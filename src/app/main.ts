@@ -70,6 +70,7 @@ const recorder = new FollowRecorder();
 let running = false;
 let speed = 1; // sim ticks per animation frame; <1 = slow-mo (interpolated for fluid motion)
 let showFood = true; // food heatmap overlay (toggle with 'f')
+let showWalls = true; // wall slate layer (toggle with 'w')
 let showOverlay = true; // per-creature debug overlay on the selection (toggle with 'o')
 let colorMode: ColorMode = ColorMode.LINEAGE; // dot hue source (cycle with 'c'): lineage → diet → energy
 let selected: { slot: number; gen: number } | null = null;
@@ -233,9 +234,10 @@ globalThis.addEventListener('mouseup', (e) => {
 
 globalThis.addEventListener('resize', () => renderer.resize());
 
-// 'f' food heatmap · 'o' creature overlay · 'c' cycle dot color-mode · 'l' lock follow-cam + record.
+// 'f' food heatmap · 'w' wall layer · 'o' creature overlay · 'c' cycle dot color-mode · 'l' lock follow-cam + record.
 globalThis.addEventListener('keydown', (e) => {
   if (e.key === 'f' || e.key === 'F') showFood = !showFood;
+  if (e.key === 'w' || e.key === 'W') showWalls = !showWalls;
   if (e.key === 'o' || e.key === 'O') showOverlay = !showOverlay;
   if (e.key === 'c' || e.key === 'C') {
     colorMode = ((colorMode + 1) % 3) as ColorMode;
@@ -327,7 +329,7 @@ function frame(): void {
     camY = world.store.y[recorder.followedSlot]!;
   }
   renderer.setCamera(camX, camY, zoom);
-  renderer.draw(world.store, world.food, showFood, interp, colorMode);
+  renderer.draw(world.store, world.food, world.walls, showFood, showWalls, interp, colorMode);
   // Path trail of the followed creature (fading old→new; seam-crossing segments skipped so toroidal
   // wraps don't streak). A tight loop = spinning in place; a directed line = foraging.
   if (showOverlay && recorder.following && trailX.length > 1) {
