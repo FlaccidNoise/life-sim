@@ -29,27 +29,46 @@ function wrapDelta(d: number, size: number): number {
  * half-step). A longer range smells biomass further off but blurs fine structure; a shorter range reads
  * the local gradient sharply — so the best range depends on the food's spatial scale (selection acts).
  */
-export function senseFood(
-  store: OrganismStore,
-  food: FoodField,
-  worldWidth: number,
-  worldHeight: number,
-): void {
+export function senseFood(store: OrganismStore, food: FoodField, cfg: Config): void {
   const { liveIndices, liveCount, x, y, senseX, senseY, scalarGenes } = store;
+  const { worldWidth, worldHeight } = cfg;
+  const twoChannel = cfg.foodChannels === 2;
   for (let k = 0; k < liveCount; k++) {
     const i = liveIndices[k]!;
     const step = scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.SENSE_RANGE]!;
     const inv = 1 / (2 * step);
     const xi = x[i]!;
     const yi = y[i]!;
-    senseX[i] =
-      (food.sampleAt(wrap(xi + step, worldWidth), yi) -
-        food.sampleAt(wrap(xi - step, worldWidth), yi)) *
-      inv;
-    senseY[i] =
-      (food.sampleAt(xi, wrap(yi + step, worldHeight)) -
-        food.sampleAt(xi, wrap(yi - step, worldHeight))) *
-      inv;
+    if (twoChannel) {
+      // Smell a PREFERENCE-BLENDED gradient (lever B): a B-specialist (FORAGE_PREF→1) is pulled toward
+      // channel-B-rich cells, an A-specialist toward channel A — so each creature navigates to its own
+      // niche instead of all chasing one resource. grad = (1−pref)·∇A + pref·∇B.
+      const pref = scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.FORAGE_PREF]!;
+      const wA = 1 - pref;
+      const wB = pref;
+      const xp = wrap(xi + step, worldWidth);
+      const xm = wrap(xi - step, worldWidth);
+      const yp = wrap(yi + step, worldHeight);
+      const ym = wrap(yi - step, worldHeight);
+      senseX[i] =
+        (wA * (food.sampleAt(xp, yi) - food.sampleAt(xm, yi)) +
+          wB * (food.sampleAt2(xp, yi) - food.sampleAt2(xm, yi))) *
+        inv;
+      senseY[i] =
+        (wA * (food.sampleAt(xi, yp) - food.sampleAt(xi, ym)) +
+          wB * (food.sampleAt2(xi, yp) - food.sampleAt2(xi, ym))) *
+        inv;
+    } else {
+      // Single channel (byte-identical original).
+      senseX[i] =
+        (food.sampleAt(wrap(xi + step, worldWidth), yi) -
+          food.sampleAt(wrap(xi - step, worldWidth), yi)) *
+        inv;
+      senseY[i] =
+        (food.sampleAt(xi, wrap(yi + step, worldHeight)) -
+          food.sampleAt(xi, wrap(yi - step, worldHeight))) *
+        inv;
+    }
   }
 }
 

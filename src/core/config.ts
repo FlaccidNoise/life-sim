@@ -64,6 +64,13 @@ export interface Config {
   /** Channel-B's share of each cell's carrying capacity, [0,1] (channel A gets 1−this). Only used when
    *  foodChannels===2. 0.5 = symmetric two-resource cell; lower makes B scarcer (sharpens specialization). */
   foodChannelRatio: number;
+  /** Specialization CONVERSION bonus (lever B, two-channel only): a committed forager (FORAGE_PREF→0 or 1)
+   *  converts grazed biomass into spec=1+this·(2·|pref−0.5|) energy, vs 1× for a generalist (pref=0.5).
+   *  This is the disruptive pressure that splits one FORAGE_PREF cloud into two niches — no biomass is
+   *  created (the field still depletes by what's grazed; specialists are just MORE EFFICIENT at their
+   *  channel). 0 = ablation (no specialization incentive; income ceiling = single-channel, so the only
+   *  difference left is the split resource pool itself). Only read when foodChannels===2. */
+  forageSpecBonus: number;
   /** Max biomass an organism ingests per tick from its current cell (→ energy 1:1). */
   eatRate: number;
   /** Basal metabolic cost per tick (the starvation clock — high enough that not-eating kills). */
@@ -293,6 +300,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     foodBaseFertility: 0, // truly dead water between pockets → real isolation, distinct islands
     foodChannels: 1, // single resource (byte-identical OFF state); 2 = niche-partitioning second channel
     foodChannelRatio: 0.5, // symmetric A/B split when channels===2 (total per-cell cap unchanged)
+    forageSpecBonus: 0.5, // specialists convert up to 1.5× energy (the disruptive niche-split pressure)
     eatRate: 2,
     basalCost: 0.12, // low starvation clock → longer lives + a SOFTER early crash, so predator founders
     // survive the sparse phase long enough to reach the prey boom (predator-viability fix; was 0.2)

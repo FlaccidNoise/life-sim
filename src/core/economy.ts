@@ -134,7 +134,24 @@ export function metabolize(store: OrganismStore, food: FoodField, cfg: Config): 
     // keeps a real fallback so predators survive the sparse stretches between kills (pure herbivore unaffected).
     const satiated = satiatedBar(scalarGenes, i, cfg);
     const herbivory = (1 - diet) ** cfg.herbivoryExp;
-    const gained = energy[i]! >= satiated ? 0 : food.grazeAt(x[i]!, y[i]!, eatRate * herbivory);
+    let gained: number;
+    if (energy[i]! >= satiated) {
+      gained = 0; // full → stop grazing (leave biomass; peak learning + breed at the top)
+    } else if (cfg.foodChannels === 2) {
+      // TWO-CHANNEL niche split (lever B): spend the eat budget across the two resources by FORAGE_PREF
+      // (a B-specialist puts ~all of it on channel B), then convert at the specialization rate. spec ∈
+      // [1, 1+forageSpecBonus]: committing to one channel converts grazed biomass into MORE energy than a
+      // generalist. No biomass is created — the field depletes by exactly (takeA+takeB); the bonus is a
+      // conversion efficiency. This is the disruptive pressure that pulls FORAGE_PREF apart into two niches.
+      const pref = scalarGenes[sg + ScalarGene.FORAGE_PREF]!;
+      const spec = 1 + cfg.forageSpecBonus * (2 * Math.abs(pref - 0.5));
+      const budget = eatRate * herbivory;
+      const takeA = food.grazeAt(x[i]!, y[i]!, budget * (1 - pref));
+      const takeB = food.grazeAt2(x[i]!, y[i]!, budget * pref);
+      gained = (takeA + takeB) * spec;
+    } else {
+      gained = food.grazeAt(x[i]!, y[i]!, eatRate * herbivory); // single channel (byte-identical original)
+    }
     const speed2 = vx[i]! * vx[i]! + vy[i]! * vy[i]!;
     // Bigger bodies are costlier to move (mass): the speed² cost scales by (size/cellRadius)^sizeMoveCostExp.
     let moveFactor = 1;

@@ -107,6 +107,70 @@ describe('metabolize', () => {
   });
 });
 
+describe('metabolize two-channel niche split (lever B)', () => {
+  // foodChannels=2: the eat budget splits across channels A/B by FORAGE_PREF, then converts at the
+  // specialization rate spec=1+forageSpecBonus·(2·|pref−0.5|). Costs zeroed so energy delta == income.
+  const cfg = defaultConfig({
+    basalCost: 0,
+    moveCost: 0,
+    satiatedThreshold: 1000,
+    foodChannels: 2,
+    forageSpecBonus: 0.5,
+  });
+  // K=10 split 0.5/0.5 → each channel's cap = 5, both full. eatRate 2 = center → no gene upkeep.
+  const dualFood = (): FoodField => new FoodField(W, H, 16, 16, 10, 1, 2, 0.5);
+
+  it('a generalist (pref 0.5) grazes BOTH channels equally at base conversion (spec=1)', () => {
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.x[i] = 10;
+    s.y[i] = 10;
+    s.energy[i] = 5;
+    genes(s, i, cfg, { [ScalarGene.EAT_RATE]: 2, [ScalarGene.FORAGE_PREF]: 0.5 });
+    s.rebuildLive();
+    const food = dualFood();
+    metabolize(s, food, cfg);
+    expect(s.energy[i]).toBeCloseTo(5 + 2); // take 1 from A + 1 from B, spec=1 → gained 2
+    expect(food.sampleAt(10, 10)).toBeCloseTo(5 - 1);
+    expect(food.sampleAt2(10, 10)).toBeCloseTo(5 - 1);
+  });
+
+  it('a hard B-specialist (pref 1) eats only channel B and converts at the 1.5× bonus', () => {
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.x[i] = 10;
+    s.y[i] = 10;
+    s.energy[i] = 5;
+    genes(s, i, cfg, { [ScalarGene.EAT_RATE]: 2, [ScalarGene.FORAGE_PREF]: 1 });
+    s.rebuildLive();
+    const food = dualFood();
+    metabolize(s, food, cfg);
+    expect(s.energy[i]).toBeCloseTo(5 + 3); // takeB 2, spec=1.5 → gained 3
+    expect(food.sampleAt(10, 10)).toBeCloseTo(5); // channel A untouched
+    expect(food.sampleAt2(10, 10)).toBeCloseTo(5 - 2); // channel B depleted by 2
+  });
+
+  it('forageSpecBonus=0 removes the windfall: a specialist earns the single-channel ceiling', () => {
+    const cfg0 = defaultConfig({
+      basalCost: 0,
+      moveCost: 0,
+      satiatedThreshold: 1000,
+      foodChannels: 2,
+      forageSpecBonus: 0,
+    });
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.x[i] = 10;
+    s.y[i] = 10;
+    s.energy[i] = 5;
+    genes(s, i, cfg0, { [ScalarGene.EAT_RATE]: 2, [ScalarGene.FORAGE_PREF]: 1 });
+    s.rebuildLive();
+    const food = dualFood();
+    metabolize(s, food, cfg0);
+    expect(s.energy[i]).toBeCloseTo(5 + 2); // takeB 2, spec=1 → gained 2 (no specialization bonus)
+  });
+});
+
 describe('satiatedBar (size-scaled energy reserve)', () => {
   it('scales the full bar with body size — a 2×-size body has a 2× reserve (exp 1)', () => {
     const cfg = defaultConfig({ cellRadius: 6, sizeStoreExp: 1 });
