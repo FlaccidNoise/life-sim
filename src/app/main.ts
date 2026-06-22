@@ -189,6 +189,7 @@ const rightPanel = el('right');
 function syncMobileBar(): void {
   mbarPlay.textContent = running ? '⏸ pause' : '▶ play';
   mbarPlay.classList.toggle('active', running);
+  mbarPlay.setAttribute('aria-pressed', String(running));
 }
 
 // Open at most one sheet at a time (or none); the other closes so the canvas is never double-covered.
@@ -205,7 +206,6 @@ function openSheet(which: 'left' | 'right' | null): void {
 
 function applyMode(mobile: boolean): void {
   document.body.classList.toggle('mode-mobile', mobile);
-  document.body.classList.toggle('mode-desktop', !mobile);
   modeToggle.textContent = mobile ? '🖥 desktop' : '📱 mobile';
   if (!mobile) openSheet(null); // leaving mobile clears any open sheet so the desktop panels show normally
   syncMobileBar();
