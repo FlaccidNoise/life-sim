@@ -151,6 +151,26 @@
         display: block;
         border-radius: 5px;
       }
+      #legend {
+        font-size: 11px;
+        line-height: 1.7;
+      }
+      #legend b {
+        color: var(--text);
+      }
+      .lg-sw {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        border-radius: 2px;
+        vertical-align: middle;
+      }
+      .lg-herb {
+        background: hsl(122, 80%, 55%);
+      }
+      .lg-pred {
+        background: hsl(0, 80%, 55%);
+      }
       #inspector .row {
         display: flex;
         justify-content: space-between;
@@ -182,6 +202,16 @@
     </div>
 
     <div id="right" class="panel">
+      <h2>legend</h2>
+      <div id="legend" class="muted">
+        <div>
+          <b>hue</b> green = herbivore → red = predator <span class="lg-sw lg-herb"></span
+          ><span class="lg-sw lg-pred"></span>
+        </div>
+        <div><b>size</b> = body size (radius)</div>
+        <div><b>saturation</b> = vision — vivid = sharp eyes, grey = near-blind</div>
+        <div><b>brightness</b> = speed — bright = active/hunting, dim = idle/jiggling</div>
+      </div>
       <h2>population</h2>
       <canvas id="graph"></canvas>
       <h2>distributions</h2>
