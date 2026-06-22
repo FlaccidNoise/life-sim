@@ -54,6 +54,34 @@ describe('FoodField', () => {
     expect(f.sampleAt(0, 0)).toBe(K);
   });
 
+  it('single channel (default) ignores B2: sampleAt2/grazeAt2 are inert', () => {
+    const f = new FoodField(W, H, COLS, ROWS, K, 1); // channels defaults to 1
+    expect(f.sampleAt2(0, 0)).toBe(0); // no second channel
+    expect(f.grazeAt2(0, 0, 5)).toBe(0); // grazing B2 does nothing
+    expect(f.sampleAt(0, 0)).toBe(K); // channel A is the full cap (unchanged by the split)
+  });
+
+  it('two channels split the cap A/B and regrow/graze independently', () => {
+    const f = new FoodField(W, H, COLS, ROWS, K, 1, 2, 0.5); // channels=2, symmetric split
+    // Each channel starts at its share of the cap (initFraction 1): A=B=K/2.
+    expect(f.sampleAt(0, 0)).toBeCloseTo(K / 2);
+    expect(f.sampleAt2(0, 0)).toBeCloseTo(K / 2);
+    // Grazing one channel leaves the other untouched.
+    expect(f.grazeAt2(0, 0, 2)).toBe(2);
+    expect(f.sampleAt2(0, 0)).toBeCloseTo(K / 2 - 2);
+    expect(f.sampleAt(0, 0)).toBeCloseTo(K / 2); // channel A unaffected
+    // Each channel regrows toward its OWN cap (K/2), not the global K.
+    for (let i = 0; i < 1000; i++) f.step(0.1, 0);
+    expect(f.sampleAt(0, 0)).toBeCloseTo(K / 2, 3);
+    expect(f.sampleAt2(0, 0)).toBeCloseTo(K / 2, 3);
+  });
+
+  it('asymmetric ratio gives channel B a smaller share', () => {
+    const f = new FoodField(W, H, COLS, ROWS, K, 1, 2, 0.25); // B gets 25%, A gets 75%
+    expect(f.sampleAt(0, 0)).toBeCloseTo(0.75 * K);
+    expect(f.sampleAt2(0, 0)).toBeCloseTo(0.25 * K);
+  });
+
   it('seedPatches makes pockets rich and gaps near-dead', () => {
     const f = new FoodField(256, 256, 64, 64, K, 1);
     f.seedPatches(
