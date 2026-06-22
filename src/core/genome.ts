@@ -53,8 +53,12 @@ export const ScalarGene = {
   VISION_RANGE: 12, // how far it can see other creatures (world units)
   VISION_FOV: 13, // half-angle of the vision cone (rad): narrow tunnel ahead ↔ wide all-around
   VISION_ACUITY: 14, // sight clarity — multiplies the strength of the sight signal into the brain
+  // Social gene: shelter-seeking. Weights an attraction toward LARGER, SIMILAR-diet creatures into the
+  // sight vector (sense.senseCreatures), so small prey cluster around big herbivores. Costed (no free
+  // herding instinct). Diet-similarity gates it so prey shelter near big grazers but still flee predators.
+  SHELTER_DRIVE: 15,
 } as const;
-export const SCALAR_GENE_COUNT = 15;
+export const SCALAR_GENE_COUNT = 16;
 
 /** Minimum reproductive-band width: satiated is read as max(satiatedGene, reproGene + this) so the two
  *  life-history bars can mutate independently without inverting (which would break the learn gate). */
@@ -77,7 +81,8 @@ interface ScalarGeneSpec {
     | 'damage'
     | 'visionRange'
     | 'visionFov'
-    | 'visionAcuity';
+    | 'visionAcuity'
+    | 'shelterDrive';
   /** Config key for the per-unit-above-center basal cost coeff, or null for a non-upkeep gene. */
   costKey:
     | 'maxSpeedCost'
@@ -90,6 +95,7 @@ interface ScalarGeneSpec {
     | 'visionRangeCost'
     | 'visionFovCost'
     | 'visionAcuityCost'
+    | 'shelterDriveCost'
     | null;
   /** Hard clamp range the gene value is kept within (at seed and at every mutation). */
   min: number;
@@ -124,6 +130,9 @@ export const SCALAR_GENE_SPECS: readonly ScalarGeneSpec[] = [
   { centerKey: 'visionRange', costKey: 'visionRangeCost', min: 0, max: 256 },
   { centerKey: 'visionFov', costKey: 'visionFovCost', min: 0.1, max: 3.14159 },
   { centerKey: 'visionAcuity', costKey: 'visionAcuityCost', min: 0, max: 3 },
+  // SHELTER_DRIVE — costed social attraction toward bigger same-guild creatures (no free herding).
+  // Center > 0 so the center-relative mutation step isn't frozen; weakly ON from birth, selection tunes.
+  { centerKey: 'shelterDrive', costKey: 'shelterDriveCost', min: 0, max: 0.4 },
 ];
 
 function clampTo(v: number, min: number, max: number): number {

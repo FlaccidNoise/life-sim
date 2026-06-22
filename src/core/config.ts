@@ -154,6 +154,16 @@ export interface Config {
   /** Basal upkeep per unit of VISION_ACUITY above its center (sharper vision costs more). */
   visionAcuityCost: number;
 
+  // ── Social: shelter-seeking ────────────────────────────────────────────────────────────────────
+  /** SHELTER_DRIVE gene center — how strongly a creature is pulled toward LARGER, similar-diet creatures
+   *  (folded into the sight vector). Center > 0 so the center-relative mutation isn't frozen. */
+  shelterDrive: number;
+  /** Basal upkeep per unit of SHELTER_DRIVE above its center (a strong herding instinct costs more). */
+  shelterDriveCost: number;
+  /** Global multiplier on the shelter term (ablation knob + live tuning). 0 = shelter OFF (proves it
+   *  earns its keep); 1 = full strength. Does not touch the gene, so the gene still evolves under it. */
+  shelterGain: number;
+
   /** Gaussian σ spread of founder brain weights around the seed brain (initial behavioral variation). */
   founderSigma: number;
   /** Gaussian σ of per-weight brain mutation at birth (the evolutionary step size; live knob). */
@@ -268,6 +278,12 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     visionRangeCost: 0.002, // lowered 10× so the now-large range isn't instantly taxed away by upkeep
     visionFovCost: 0.15,
     visionAcuityCost: 0.2,
+    // Shelter-seeking. Center 0.06 so the term (gene × sizeDiff[≤14] × dietSim[≤1]) is ~0.8 at founder
+    // strength — comparable to the chase/flee appeal (≤1), so the behavior is visible but not dominant.
+    // Modest cost so selection shapes it; gain 1 = on (ablate with 0).
+    shelterDrive: 0.06,
+    shelterDriveCost: 0.5,
+    shelterGain: 1,
     // NB pre-sight, predators hunt by PROXIMITY only — the encounter rate is too low for hunting to
     // pay, so the predator trait does not persist yet (it needs the sight slice to actively target
     // prey). The mechanic + genes + color are in place; sight activates it.
