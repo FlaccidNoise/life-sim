@@ -1,6 +1,7 @@
 import { type Config } from './config';
 import { Rng } from './rng';
 import { FoodField } from './food-field';
+import { carveNoise } from './wall-gen/noise';
 
 /**
  * Indestructible terrain on a FINE occupancy grid (decoupled from the coarse food grid). Static,
@@ -183,44 +184,10 @@ export class Walls {
     }
     const rng = new Rng((cfg.seed ^ SALT) >>> 0);
     // Increment 1: a single periodic-noise field over the whole grid (regions arrive in Inc 7).
-    this.carveNoise(rng, cfg.wallDensity, cfg.flowScale > 0 ? cfg.flowScale : 12);
+    carveNoise(this.solid, this.cols, this.rows, cfg.wallDensity, rng);
     this.openPockets(cfg);
     this.connectPockets(cfg);
     this.deriveMasks(cfg);
-  }
-
-  /** Periodic value noise thresholded to ~density solid. Toroidal (lattice indices wrap). */
-  private carveNoise(rng: Rng, density: number, wavelengthCells: number): void {
-    const { cols, rows } = this;
-    const latW = Math.max(2, Math.round(cols / wavelengthCells));
-    const latH = Math.max(2, Math.round(rows / wavelengthCells));
-    const lat = new Float32Array(latW * latH);
-    for (let i = 0; i < lat.length; i++) lat[i] = rng.float();
-    const field = new Float32Array(cols * rows);
-    for (let r = 0; r < rows; r++) {
-      const fy = (r / rows) * latH;
-      const r0 = Math.floor(fy) % latH;
-      const r1 = (r0 + 1) % latH;
-      const ty = fy - Math.floor(fy);
-      for (let c = 0; c < cols; c++) {
-        const fx = (c / cols) * latW;
-        const c0 = Math.floor(fx) % latW;
-        const c1 = (c0 + 1) % latW;
-        const tx = fx - Math.floor(fx);
-        const v00 = lat[r0 * latW + c0]!;
-        const v10 = lat[r0 * latW + c1]!;
-        const v01 = lat[r1 * latW + c0]!;
-        const v11 = lat[r1 * latW + c1]!;
-        const top = v00 + (v10 - v00) * tx;
-        const bot = v01 + (v11 - v01) * tx;
-        field[r * cols + c] = top + (bot - top) * ty;
-      }
-    }
-    // Threshold at the density-th quantile so exactly ~density of cells become solid.
-    const sortedCopy = Float32Array.from(field).sort();
-    const threshold =
-      sortedCopy[Math.min(sortedCopy.length - 1, Math.floor(density * sortedCopy.length))]!;
-    for (let i = 0; i < field.length; i++) this.solid[i] = field[i]! < threshold ? 1 : 0;
   }
 
   /** Force food-pocket cells open. Cave regions (none yet in Inc 1) keep only a small core; Inc 1 opens
