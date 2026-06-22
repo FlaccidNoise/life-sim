@@ -7,7 +7,7 @@ import { computeBrainState } from './brain-view';
 
 const cfg = defaultConfig();
 
-/** One creature with centered genes + a chosen brain, sense, and sight. */
+/** One creature with centered genes + a chosen brain, sense, sight, wall, and flow. */
 function setup(): OrganismStore {
   const s = new OrganismStore(8);
   const i = s.alloc();
@@ -16,6 +16,10 @@ function setup(): OrganismStore {
   s.senseY[i] = -0.2;
   s.sightX[i] = 0.6;
   s.sightY[i] = 0.1;
+  s.wallSenseX[i] = -0.3;
+  s.wallSenseY[i] = 0.5;
+  s.flowSenseX[i] = 0.2;
+  s.flowSenseY[i] = -0.4;
   const base = i * SCALAR_GENE_COUNT;
   for (let g = 0; g < SCALAR_GENE_COUNT; g++)
     s.scalarGenes[base + g] = cfg[SCALAR_GENE_SPECS[g]!.centerKey];
@@ -42,7 +46,7 @@ describe('computeBrainState', () => {
     expect(st.thrust).toBeCloseTo(appliedThrust, 10); // brain-view thrust already includes ×efficiency
   });
 
-  it('exposes 5 inputs in the documented order with their live values', () => {
+  it('exposes 9 inputs in the documented order with their live values', () => {
     const s = setup();
     const st = computeBrainState(s, cfg, 0);
     expect(st.inputs.map((n) => n.label)).toEqual([
@@ -50,9 +54,13 @@ describe('computeBrainState', () => {
       'food lat',
       'sight fwd',
       'sight lat',
+      'wall fwd',
+      'wall lat',
+      'flow fwd',
+      'flow lat',
       'bias',
     ]);
-    expect(st.inputs[4]!.value).toBe(1); // bias is constant 1
+    expect(st.inputs[8]!.value).toBe(1); // bias is constant 1
   });
 
   it('reports learning drift = Σ|learned − instinct|', () => {
