@@ -10,14 +10,14 @@ const fraction = (solid: Uint8Array): number => {
 
 describe('carveCA', () => {
   // CA smoothing erodes specks, so the final fraction settles BELOW the input density. At input 0.45
-  // the measured fraction across seeds lands ~0.26-0.34; the band is widened to absorb seed variance
-  // while staying inside the contract's sane [0.25, 0.65] range and non-vacuous.
-  it('lands in a sane solid-fraction band after smoothing', () => {
+  // the measured fraction across seeds lands ~0.26-0.34. The upper bound is 0.4 (< the 0.45 input) so the
+  // test PROVES the smoothing eroded the fill — a no-op smoothing pass would land ~0.45 and FAIL here.
+  it('lands in a sane solid-fraction band BELOW the input after smoothing', () => {
     const solid = new Uint8Array(64 * 64);
     carveCA(solid, 64, 64, 0.45, new Rng(1));
     const f = fraction(solid);
     expect(f).toBeGreaterThan(0.2);
-    expect(f).toBeLessThan(0.5);
+    expect(f).toBeLessThan(0.4);
   });
 
   it('is deterministic from the same Rng seed', () => {
