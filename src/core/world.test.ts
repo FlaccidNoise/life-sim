@@ -142,4 +142,31 @@ describe('World — Phase 0 determinism contract', () => {
       }
     }
   });
+
+  it('ablation: env fully OFF ⇒ the 8 env-sense brain genes are NEVER drawn (stay exactly 0)', () => {
+    // The gated-draw contract (Task 6.2): with walls AND flow off, seedGenome/mutateGenome set each
+    // env-sense weight to its founder value (0) WITHOUT consuming RNG. So after a long run every live
+    // creature — founders and all offspring — keeps WALL_LAT_TURN..FLOW_FWD_THRUST byte-identically 0,
+    // and the organism RNG stream is unperturbed by the env feature.
+    const cfg = defaultConfig({
+      seed: 13,
+      wallRegionCount: 0,
+      flowStrength: 0,
+      flowPushStrength: 0,
+    });
+    const w = new World(cfg);
+    expect(w.walls.active).toBe(false); // env off: no wall field
+    expect(w.flow.flowX.every((v) => v === 0)).toBe(true); // env off: flow field not generated
+
+    for (let t = 0; t < 500; t++) w.step();
+
+    const s = w.store;
+    expect(s.liveCount).toBeGreaterThan(0); // non-vacuity: the assertion loop runs over real creatures
+    for (let k = 0; k < s.liveCount; k++) {
+      const base = s.liveIndices[k]! * BRAIN_GENES;
+      for (let g = Brain.WALL_LAT_TURN; g <= Brain.FLOW_FWD_THRUST; g++) {
+        expect(s.brain[base + g]!).toBe(0);
+      }
+    }
+  });
 });
