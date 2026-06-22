@@ -16,6 +16,7 @@ import { Controls } from './observability/controls';
 import { Knobs } from './observability/knobs';
 import { Inspector } from './observability/inspector';
 import { BrainView } from './observability/brain-view';
+import { RadarView } from './observability/radar-view';
 import { Distributions } from './observability/distributions';
 import { FollowRecorder } from './observability/follow-recorder';
 import { TimeSeriesGraph } from './observability/graph';
@@ -48,6 +49,7 @@ const graph = new TimeSeriesGraph(el<HTMLCanvasElement>('graph'), [
 ]);
 const inspector = new Inspector(el('inspector'));
 const brainView = new BrainView(el<HTMLCanvasElement>('brain'));
+const radar = new RadarView(el<HTMLCanvasElement>('radar'));
 const distributions = new Distributions(el<HTMLCanvasElement>('dist'));
 const recorder = new FollowRecorder();
 
@@ -141,6 +143,7 @@ function rebuild(): void {
   selected = null;
   inspector.clear();
   brainView.clear();
+  radar.clear();
   recorder.clear();
   clearTrail();
   controls.setFollow(-1, 0, false);
@@ -168,6 +171,7 @@ function selectAt(clientX: number, clientY: number): void {
     selected = { slot: best, gen: s.genId[best]! };
     inspector.select(best, selected.gen);
     brainView.select(best, selected.gen);
+    radar.select(best, selected.gen);
   }
 }
 
@@ -340,6 +344,7 @@ function frame(): void {
   }
   inspector.render(world.store, config);
   brainView.render(world.store, config);
+  radar.render(world.store, config);
 
   const now = performance.now();
   if (now - lastT >= 500) {
@@ -366,6 +371,7 @@ function frame(): void {
   if (selected && !world.store.isAlive(selected.slot, selected.gen)) {
     inspector.clear();
     brainView.clear();
+    radar.clear();
   }
 
   requestAnimationFrame(frame);
