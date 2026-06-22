@@ -35,6 +35,11 @@ export class World {
   readonly food: FoodField;
   readonly walls: Walls;
   readonly flow: FlowField;
+  /** Whether the env-sense brain genes are LIVE this run — captured at construction (from the presence
+   *  of walls / flow), so live-tuning a strength to 0 mid-run never changes the genome draw COUNT and the
+   *  determinism contract holds. With both false the organism RNG stream is byte-identical to a pre-env world. */
+  readonly wallSenseGenes: boolean;
+  readonly flowSenseGenes: boolean;
   tick = 0;
   /** Per-tick + cumulative vital rates (telemetry — drives the population graph and the gate). */
   lastBirths = 0;
@@ -76,6 +81,10 @@ export class World {
       config.foodRows,
       config,
     );
+    // Capture once: env-sense genes are live iff the world has walls / flow. Fixed for the run's lifetime
+    // so the genome draw count can't shift if a strength is live-tuned to 0 mid-run.
+    this.wallSenseGenes = config.wallRegionCount > 0;
+    this.flowSenseGenes = config.flowStrength > 0 || config.flowPushStrength > 0;
     this.setup();
   }
 
@@ -132,7 +141,15 @@ export class World {
       s.vx[i] = Math.cos(angle) * driftSpeed;
       s.vy[i] = Math.sin(angle) * driftSpeed;
       s.heading[i] = angle;
-      seedGenome(s.brain, s.hue, i, this.rng, this.config.founderSigma);
+      seedGenome(
+        s.brain,
+        s.hue,
+        i,
+        this.rng,
+        this.config.founderSigma,
+        this.wallSenseGenes,
+        this.flowSenseGenes,
+      );
       seedScalarGenes(s.scalarGenes, i, this.rng, this.config); // incl. life-history + trophic genes
       // Bimodal DIET seed: the first predatorFraction of founders are hunters (diet 0.9), rest grazers
       // (diet 0). This expresses the predator niche from t0 (it won't bootstrap from an all-grazer start).
@@ -196,7 +213,7 @@ export class World {
     if (cfg.learningEnabled)
       learn(s, cfg.learningRate, cfg.weightDecay, cfg.maxLearnDeviation, cfg.learnRewardClamp);
     this.lastDeaths = cullDead(s);
-    this.lastBirths = reproduce(s, this.rng, cfg);
+    this.lastBirths = reproduce(s, this.rng, cfg, this.wallSenseGenes, this.flowSenseGenes);
     this.totalBirths += this.lastBirths;
     this.totalDeaths += this.lastDeaths;
     s.rebuildLive();

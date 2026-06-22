@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { Rng } from './rng';
 import { defaultConfig } from './config';
 import {
+  Brain,
   BRAIN_GENES,
   seedGenome,
   mutateGenome,
@@ -18,7 +19,7 @@ describe('genome', () => {
     const brain = new Float32Array(10 * BRAIN_GENES);
     const hue = new Float32Array(10);
     const rng = new Rng(1);
-    for (let s = 0; s < 10; s++) seedGenome(brain, hue, s, rng, 0.3);
+    for (let s = 0; s < 10; s++) seedGenome(brain, hue, s, rng, 0.3, false, false);
     // founders differ from one another (not all identical)
     const firstGene = (s: number): number => brain[s * BRAIN_GENES]!;
     const allSame = Array.from({ length: 10 }, (_, s) => firstGene(s)).every(
@@ -39,7 +40,7 @@ describe('genome', () => {
     // parent (slot 0) with known weights
     for (let g = 0; g < BRAIN_GENES; g++) brain[g] = g + 1;
     hue[0] = 0.5;
-    mutateGenome(brain, hue, 1, 0, rng, 0.05, 0.02); // child = slot 1
+    mutateGenome(brain, hue, 1, 0, rng, 0.05, 0.02, true, true); // child = slot 1 (env genes ON → all drift)
     for (let g = 0; g < BRAIN_GENES; g++) {
       const diff = Math.abs(brain[BRAIN_GENES + g]! - brain[g]!);
       expect(diff).toBeLessThan(0.5); // close to parent (small σ)
@@ -56,10 +57,35 @@ describe('genome', () => {
     hue[0] = 0.99;
     // large hue σ so it likely crosses the 1.0 boundary; result must still be in range
     for (let t = 0; t < 50; t++) {
-      mutateGenome(brain, hue, 1, 0, new Rng(t), 0.05, 0.5);
+      mutateGenome(brain, hue, 1, 0, new Rng(t), 0.05, 0.5, false, false);
       expect(hue[1]!).toBeGreaterThanOrEqual(0);
       expect(hue[1]!).toBeLessThan(1);
     }
+  });
+});
+
+describe('env-sense brain genes (wall + flow — RNG-gated)', () => {
+  it('env-sense weights are 0 and consume NO rng when gated off', () => {
+    const brain = new Float32Array(BRAIN_GENES);
+    const hue = new Float32Array(1);
+    const a = new Rng(5);
+    const b = new Rng(5);
+    seedGenome(brain, hue, 0, a, 0.3, false, false); // off
+    for (let g = Brain.WALL_LAT_TURN; g <= Brain.FLOW_FWD_THRUST; g++) expect(brain[g]).toBe(0);
+    // a parallel rng that draws only the 10 base weights + hue must end in the SAME state.
+    for (let g = 0; g < 10; g++) b.gaussian(0, 0.3);
+    b.float();
+    expect(a.state).toBe(b.state); // byte-identical stream when off
+  });
+
+  it('env-sense weights ARE drawn when gated on', () => {
+    const brain = new Float32Array(BRAIN_GENES);
+    const hue = new Float32Array(1);
+    seedGenome(brain, hue, 0, new Rng(5), 0.3, true, true);
+    let nonzero = 0;
+    for (let g = Brain.WALL_LAT_TURN; g <= Brain.FLOW_FWD_THRUST; g++)
+      if (brain[g] !== 0) nonzero++;
+    expect(nonzero).toBeGreaterThan(0);
   });
 });
 
