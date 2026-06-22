@@ -42,3 +42,10 @@ Full rationale: `docs/superpowers/specs/2026-06-15-life-sim-design.md` (§4).
 **Alternatives considered:** Biome archetypes / climate gradient (owner picked random dials); tightening/world-size for density (rejected — see above). Predation split to a separate economic track.
 **Spec:** docs/superpowers/specs/2026-06-22-heterogeneous-pockets-design.md
 ---
+
+### [APPROVED] Ship predation as an OFF-by-default bundle; accept the engine's hollow-hunting ceiling
+**Date:** 2026-06-22
+**Context:** Exhaustive multi-seed predation investigation (`diversity-sweep.ts` / `fixb-stability.ts`) — density, economy, and founding all characterized.
+**Decision:** Ship founding-protection (`predatorSeedClusters`, commit 3cb1ba3) + the combo-mild economy (`herbivoryExp` 1.0 / `predationGain` 3 / `biteRange` 24) as OFF-by-default knobs (now UI sliders). Accept that this engine's predation is intrinsically low-contact (predEnc never >0.06, hollows out): durable predator/prey COEXISTENCE is reachable but vigorous sustained HUNTING is not without a predation-contact/economy rewrite. Stop predation tuning; pivot to making the diversity aquarium visible/tunable. Detail in the `predation-engine-ceiling` memory.
+**Alternatives considered:** density/geometry (dead — NND a red herring); economy-alone (amplifies the founding lottery, can't create predators, overtunes to a cap-pegged shark takeover); more founding tuning (diminishing returns — the hollow-out is engine-deep).
+---
