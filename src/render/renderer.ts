@@ -17,7 +17,8 @@ in vec2 a_pos;
 in float a_hue;                 // genome hue gene [0,1) → per-creature SHADE within the role's color band
 in float a_size;                // per-creature point size in device px (from the size gene)
 in float a_diet;                // diet gene [0,1] → trophic-role hue: 0 green (herbivore) … 1 red (predator)
-in float a_body;                // body size, normalized [0,1] → brightness (size legible even when zoomed out)
+in float a_vis;                 // vision range, normalized [0,1] → SATURATION (sharp-eyed vivid ↔ blind gray)
+in float a_spd;                 // current speed, normalized [0,1] → BRIGHTNESS (active bright ↔ idle/jiggling dim)
 uniform vec2 u_cam;             // camera centre in world units (pan)
 uniform vec2 u_canvas;
 uniform float u_scale;          // device px per world unit (base fit × zoom)
@@ -30,14 +31,14 @@ void main() {
   vec2 px = (a_pos - u_cam) * u_scale + u_canvas * 0.5;
   gl_Position = vec4(px.x / u_canvas.x * 2.0 - 1.0, 1.0 - px.y / u_canvas.y * 2.0, 0.0, 1.0);
   gl_PointSize = a_size;
-  // THREE gene axes in the dot's color: trophic ROLE = hue (green herbivore → red predator), LINEAGE =
-  // a small hue tint from the hue gene (so lineages within a role read as distinct shades), and body
-  // SIZE = brightness (big = bright, small = dim) so the size structure is visible even zoomed all the
-  // way out, where the radius collapses to a couple of pixels.
-  float baseHue = mix(0.34, 0.0, clamp(a_diet, 0.0, 1.0)); // 0.34 green … 0.0 red
-  float hue = baseHue + (a_hue - 0.5) * 0.10;              // ±0.05 lineage tint
-  float val = 0.55 + 0.45 * clamp(a_body, 0.0, 1.0);       // small (dim) … big (bright)
-  v_color = hsv2rgb(hue, 0.85, val);
+  // FOUR gene/behavior axes per dot (see the on-screen legend): trophic ROLE = hue (green herbivore →
+  // red predator) with a small lineage tint from the hue gene; PERCEPTION = saturation (sharp-eyed
+  // vivid ↔ near-blind washed-out grey); ACTIVITY = brightness (moving/hunting bright ↔ idle/jiggling
+  // dim). Body SIZE is the dot's radius (gl_PointSize).
+  float baseHue = mix(0.34, 0.0, clamp(a_diet, 0.0, 1.0)) + (a_hue - 0.5) * 0.08;
+  float sat = 0.25 + 0.70 * clamp(a_vis, 0.0, 1.0);        // low vision → greyish, sharp eyes → vivid
+  float val = 0.50 + 0.50 * clamp(a_spd, 0.0, 1.0);        // idle → dim, fast → bright
+  v_color = hsv2rgb(baseHue, sat, val);
 }`;
 
 const DOT_FRAG = `#version 300 es
@@ -136,17 +137,20 @@ export class Renderer {
   private readonly hueBuffer: WebGLBuffer;
   private readonly sizeBuffer: WebGLBuffer;
   private readonly dietBuffer: WebGLBuffer;
-  private readonly bodyBuffer: WebGLBuffer;
+  private readonly visBuffer: WebGLBuffer;
+  private readonly spdBuffer: WebGLBuffer;
   private readonly dotScratch: Float32Array;
   private readonly hueScratch: Float32Array;
   private readonly sizeScratch: Float32Array;
   private readonly dietScratch: Float32Array;
-  private readonly bodyScratch: Float32Array;
+  private readonly visScratch: Float32Array;
+  private readonly spdScratch: Float32Array;
   private readonly aPos: number;
   private readonly aHue: number;
   private readonly aSize: number;
   private readonly aDiet: number;
-  private readonly aBody: number;
+  private readonly aVis: number;
+  private readonly aSpd: number;
   // debug overlay lines
   private readonly lineProgram: WebGLProgram;
   private readonly lineBuffer: WebGLBuffer;
@@ -183,7 +187,8 @@ export class Renderer {
     this.aHue = gl.getAttribLocation(this.dotProgram, 'a_hue');
     this.aSize = gl.getAttribLocation(this.dotProgram, 'a_size');
     this.aDiet = gl.getAttribLocation(this.dotProgram, 'a_diet');
-    this.aBody = gl.getAttribLocation(this.dotProgram, 'a_body');
+    this.aVis = gl.getAttribLocation(this.dotProgram, 'a_vis');
+    this.aSpd = gl.getAttribLocation(this.dotProgram, 'a_spd');
     this.aCorner = gl.getAttribLocation(this.foodProgram, 'a_corner');
     this.aLinePos = gl.getAttribLocation(this.lineProgram, 'a_pos');
     this.aLineCol = gl.getAttribLocation(this.lineProgram, 'a_col');
@@ -192,7 +197,8 @@ export class Renderer {
     const hueBuffer = gl.createBuffer();
     const sizeBuffer = gl.createBuffer();
     const dietBuffer = gl.createBuffer();
-    const bodyBuffer = gl.createBuffer();
+    const visBuffer = gl.createBuffer();
+    const spdBuffer = gl.createBuffer();
     const quadBuffer = gl.createBuffer();
     const lineBuffer = gl.createBuffer();
     const foodTex = gl.createTexture();
@@ -201,13 +207,15 @@ export class Renderer {
       !hueBuffer ||
       !sizeBuffer ||
       !dietBuffer ||
-      !bodyBuffer ||
+      !visBuffer ||
+      !spdBuffer ||
       !quadBuffer ||
       !lineBuffer ||
       !foodTex
     )
       throw new Error('GL resource alloc failed');
-    this.bodyBuffer = bodyBuffer;
+    this.visBuffer = visBuffer;
+    this.spdBuffer = spdBuffer;
     this.dotBuffer = dotBuffer;
     this.hueBuffer = hueBuffer;
     this.sizeBuffer = sizeBuffer;
@@ -219,7 +227,8 @@ export class Renderer {
     this.hueScratch = new Float32Array(capacity);
     this.sizeScratch = new Float32Array(capacity);
     this.dietScratch = new Float32Array(capacity);
-    this.bodyScratch = new Float32Array(capacity);
+    this.visScratch = new Float32Array(capacity);
+    this.spdScratch = new Float32Array(capacity);
 
     // Unit quad as a triangle strip: (0,0)(1,0)(0,1)(1,1).
     gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
@@ -349,8 +358,9 @@ export class Renderer {
       const hsc = this.hueScratch;
       const zsc = this.sizeScratch;
       const dsc = this.dietScratch;
-      const bsc = this.bodyScratch;
-      const { liveIndices, x, y, hue, genId, scalarGenes } = store;
+      const vsc = this.visScratch;
+      const ssc = this.spdScratch;
+      const { liveIndices, x, y, vx, vy, hue, genId, scalarGenes } = store;
       const useInterp = interp != null && interp.alpha < 1;
       const a = useInterp ? interp.alpha : 0;
       const ww = this.worldWidth;
@@ -370,7 +380,9 @@ export class Renderer {
         const size = scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.SIZE]!;
         zsc[k] = Math.max(2, 2 * size * sc);
         dsc[k] = scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.DIET]!; // green→red trophic hue
-        bsc[k] = (size - 2) / 14; // SIZE_MIN 2 … SIZE_MAX 16 → [0,1] brightness
+        vsc[k] = scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.VISION_RANGE]! / 256; // → saturation
+        const speed = Math.hypot(vx[i]!, vy[i]!);
+        ssc[k] = speed > 6 ? 1 : speed / 6; // normalized by ~maxSpeed → brightness (activity)
       }
       gl.useProgram(this.dotProgram);
       gl.bindBuffer(gl.ARRAY_BUFFER, this.dotBuffer);
@@ -389,10 +401,14 @@ export class Renderer {
       gl.bufferData(gl.ARRAY_BUFFER, dsc.subarray(0, n), gl.DYNAMIC_DRAW);
       gl.enableVertexAttribArray(this.aDiet);
       gl.vertexAttribPointer(this.aDiet, 1, gl.FLOAT, false, 0, 0);
-      gl.bindBuffer(gl.ARRAY_BUFFER, this.bodyBuffer);
-      gl.bufferData(gl.ARRAY_BUFFER, bsc.subarray(0, n), gl.DYNAMIC_DRAW);
-      gl.enableVertexAttribArray(this.aBody);
-      gl.vertexAttribPointer(this.aBody, 1, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.visBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, vsc.subarray(0, n), gl.DYNAMIC_DRAW);
+      gl.enableVertexAttribArray(this.aVis);
+      gl.vertexAttribPointer(this.aVis, 1, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.spdBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, ssc.subarray(0, n), gl.DYNAMIC_DRAW);
+      gl.enableVertexAttribArray(this.aSpd);
+      gl.vertexAttribPointer(this.aSpd, 1, gl.FLOAT, false, 0, 0);
       this.setCommonUniforms(this.dotProgram, sc);
       gl.drawArrays(gl.POINTS, 0, n);
     }

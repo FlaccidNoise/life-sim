@@ -246,8 +246,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     senseRangeCost: 0.004,
     maxTurnCost: 0.4,
     maxThrustCost: 0.2,
-    sizeCost: 0.025, // upkeep per size unit above center — low enough to keep BOTH big & small viable
-    // (probe: 0.02→best size+trophic diversity, 0.04→predators too scarce); bounds the size arms race
+    sizeCost: 0.015, // low upkeep → wider SIZE variance (probe szSd↑); still bounds the size arms race
     // Trophic / predation. ~15% of founders start as hunters (diet≈0.9); damage above its center costs
     // upkeep so predators evolve teeth at a price; bite reach ≈ 2·cellRadius (the collision cutoff).
     diet: 0.5,
@@ -258,7 +257,8 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     huntSizeRatio: 1.15, // must be ≥15% bigger than prey to eat it → size is a refuge + a weapon
     predationGain: 1, // ENERGY-CONSERVING (a bite moves energy prey→predator, never creates it) → no
     // runaway-to-cap; the "huge energy from hunting" comes from the big per-bite drain (damage), not gain
-    herbivoryExp: 1.2, // predators keep a plant fallback but lean on hunting (1 = linear, full fallback)
+    herbivoryExp: 1.3, // predators get little from algae → lean on HUNTING (max viable on seeds 1/2;
+    // obligate carnivory, exp≥1.6, starves predators at this encounter rate — proven by probe)
     cannibalism: true, // current behavior (bite anyone nearest); flip off to spare same-diet peers
     // Vision. Founders seed with modest eyes (range ~14, ~57° half-cone, acuity 1); all costed so
     // predators evolve long focused sight and prey evolve wide all-around sight, each paying for it.
