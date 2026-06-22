@@ -2,6 +2,12 @@ import { type Config } from './config';
 import { Rng } from './rng';
 import { FoodField } from './food-field';
 import { carveNoise } from './wall-gen/noise';
+import { carveCA } from './wall-gen/ca';
+import { carveRooms } from './wall-gen/rooms';
+
+// Generator palette, indexed by genType. CA (caves) is the pocket-eroding biome (genType 1).
+const GENERATORS = [carveNoise, carveCA, carveRooms] as const;
+const ERODING_GEN = 1; // CA caves erode food pockets to a small core; noise/rooms keep the full footprint
 
 /**
  * Indestructible terrain on a FINE occupancy grid (decoupled from the coarse food grid). Static,
@@ -38,6 +44,8 @@ export class Walls {
   private readonly proxCap: number;
   private readonly _active: boolean;
   private pocketCells: number[] = []; // fine-cell index of each food-pocket centroid (cached in generate)
+  private region: Int32Array = new Int32Array(0); // fine-cell → Voronoi region index (built in generate)
+  private regionGen: Int32Array = new Int32Array(0); // region index → genType (which generator carved it)
 
   constructor(
     private readonly worldWidth: number,
@@ -183,15 +191,56 @@ export class Walls {
       return;
     }
     const rng = new Rng((cfg.seed ^ SALT) >>> 0);
-    // Increment 1: a single periodic-noise field over the whole grid (regions arrive in Inc 7).
-    carveNoise(this.solid, this.cols, this.rows, cfg.wallDensity, rng);
+    // Inc 7: partition into Voronoi biome regions, carve each by a different generator, composite
+    // toroidally. region[i] → regionGen[region[i]] picks which generator's full-grid pattern wins at i.
+    this.buildRegions(cfg, rng);
+    const { cols, rows } = this;
+    const patterns: Uint8Array[] = GENERATORS.map((gen) => {
+      const p = new Uint8Array(cols * rows);
+      gen(p, cols, rows, cfg.wallDensity, rng); // each consumes rng in a fixed order → deterministic
+      return p;
+    });
+    for (let i = 0; i < this.solid.length; i++)
+      this.solid[i] = patterns[this.regionGen[this.region[i]!]!]![i]!;
     this.openPockets(cfg);
     this.connectPockets(cfg);
     this.deriveMasks(cfg);
   }
 
-  /** Force food-pocket cells open. Cave regions (none yet in Inc 1) keep only a small core; Inc 1 opens
-   *  the full pocket footprint. Recomputes the pocket fertility map via FoodField.seedPatches. */
+  /** Scatter `wallRegionCount` seeds (wall Rng), assign each fine cell to its nearest seed by toroidal
+   *  distance → region map, and give each region a generator (cycled by index). */
+  private buildRegions(cfg: Config, rng: Rng): void {
+    const { cols, rows } = this;
+    const n = cfg.wallRegionCount;
+    const seedC = new Float64Array(n);
+    const seedR = new Float64Array(n);
+    for (let k = 0; k < n; k++) {
+      seedC[k] = rng.float() * cols;
+      seedR[k] = rng.float() * rows;
+    }
+    this.regionGen = new Int32Array(n);
+    for (let k = 0; k < n; k++) this.regionGen[k] = k % GENERATORS.length;
+    this.region = new Int32Array(cols * rows);
+    for (let r = 0; r < rows; r++)
+      for (let c = 0; c < cols; c++) {
+        let best = 0;
+        let bestD = Infinity;
+        for (let k = 0; k < n; k++) {
+          const dc = wrapDelta(c - seedC[k]!, cols);
+          const dr = wrapDelta(r - seedR[k]!, rows);
+          const d = dc * dc + dr * dr;
+          if (d < bestD) {
+            bestD = d;
+            best = k;
+          }
+        }
+        this.region[r * cols + c] = best;
+      }
+  }
+
+  /** Force food-pocket cells open. Region-dependent (Inc 7): cells in pocket-eroding biomes (CA caves)
+   *  stay walled by the footprint pass and only a `wallPocketCoreRadius` core around each pocket centre is
+   *  opened; non-eroding biomes open the full footprint. Uses the pocket fertility map via seedPatches. */
   private openPockets(cfg: Config): void {
     if (cfg.foodPatchCount <= 0) return;
     const fert = this.pocketFertility(cfg);
@@ -199,10 +248,30 @@ export class Walls {
     for (let r = 0; r < rows; r++) {
       const fr = Math.min(foodRows - 1, Math.floor((r / rows) * foodRows));
       for (let c = 0; c < cols; c++) {
+        const i = r * cols + c;
+        if (this.regionErodes(i)) continue; // eroding biome: footprint stays walled, core opened below
         const fc = Math.min(foodCols - 1, Math.floor((c / cols) * foodCols));
-        if (fert[fr * foodCols + fc]! > 0.3) this.solid[r * cols + c] = 0;
+        if (fert[fr * foodCols + fc]! > 0.3) this.solid[i] = 0;
       }
     }
+    // Eroding regions: open just a small core disc around each pocket centre so the pocket isn't sealed.
+    const core = cfg.wallPocketCoreRadius;
+    for (const p of this.pocketCentroids(cfg)) {
+      const cc = this.colOf(p.x);
+      const cr = this.rowOf(p.y);
+      if (!this.regionErodes(cr * cols + cc)) continue;
+      for (let rr = -core; rr <= core; rr++)
+        for (let dc = -core; dc <= core; dc++)
+          if (rr * rr + dc * dc <= core * core) {
+            const oc = (cc + dc + cols) % cols;
+            const or = (cr + rr + rows) % rows;
+            this.solid[or * cols + oc] = 0;
+          }
+    }
+  }
+
+  private regionErodes(cellIdx: number): boolean {
+    return this.regionGen[this.region[cellIdx]!] === ERODING_GEN;
   }
 
   /** Reproduce the food fertility map deterministically (same SALT-free seed path as the food field). */
@@ -328,6 +397,19 @@ export class Walls {
     }
     for (let i = 0; i < n; i++)
       this.prox[i] = dist[i] === -1 ? proxCap : Math.min(proxCap, dist[i]!);
+  }
+
+  /** TEST HELPER: solid fraction of each Voronoi region (distinct generators → distinct densities). */
+  regionSolidFractions(): number[] {
+    const n = this.regionGen.length;
+    const solidN = new Array<number>(n).fill(0);
+    const total = new Array<number>(n).fill(0);
+    for (let i = 0; i < this.region.length; i++) {
+      const k = this.region[i]!;
+      total[k]!++;
+      if (this.solid[i]) solidN[k]!++;
+    }
+    return solidN.map((s, k) => (total[k]! > 0 ? s / total[k]! : 0));
   }
 
   /** TEST HELPER: are all food-pocket centroids in one connected open component? */

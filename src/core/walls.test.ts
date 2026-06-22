@@ -88,4 +88,54 @@ describe('Walls', () => {
     const w = new Walls(1024, 1024, 64, 64, c);
     expect(w.allPocketsConnected()).toBe(true);
   });
+
+  it('partitions into biome regions carved by distinct generators (variable solid density)', () => {
+    // 3 regions cycle through noise/CA/rooms; the generators carve at measurably different local solid
+    // fractions, so the per-region densities are NOT all identical (a single-generator map would be).
+    const w = new Walls(
+      1024,
+      1024,
+      64,
+      64,
+      cfg({ wallRegionCount: 3, wallDensity: 0.35, seed: 11 }),
+    );
+    const frac = w.regionSolidFractions();
+    expect(frac.length).toBe(3);
+    const spread = Math.max(...frac) - Math.min(...frac);
+    expect(spread).toBeGreaterThan(0.05); // distinct biomes, not one uniform texture
+  });
+
+  it('multi-region map keeps food pockets reachable (connectivity survives compositing)', () => {
+    const c = defaultConfig({
+      wallCols: 64,
+      wallRows: 64,
+      foodCols: 16,
+      foodRows: 16,
+      foodPatchCount: 3,
+      foodPatchRadius: 2,
+      foodBaseFertility: 0,
+      wallRegionCount: 3,
+      wallDensity: 0.4,
+      wallPocketCoreRadius: 2,
+      seed: 7,
+    });
+    const w = new Walls(1024, 1024, 64, 64, c);
+    expect(w.allPocketsConnected()).toBe(true);
+  });
+
+  it('multi-region composite lands near the target density band', () => {
+    const w = new Walls(
+      1024,
+      1024,
+      64,
+      64,
+      cfg({ wallRegionCount: 3, wallDensity: 0.35, seed: 5 }),
+    );
+    let solid = 0;
+    const total = 64 * 64;
+    for (let r = 0; r < 64; r++)
+      for (let c = 0; c < 64; c++) if (w.isSolidAt(c * 16 + 8, r * 16 + 8)) solid++;
+    expect(solid / total).toBeGreaterThan(0.15);
+    expect(solid / total).toBeLessThan(0.55);
+  });
 });
