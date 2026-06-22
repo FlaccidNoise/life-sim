@@ -36,6 +36,13 @@ export class OrganismStore {
   readonly sightX: Float64Array;
   readonly sightY: Float64Array;
 
+  // Transient per-tick ENVIRONMENT senses (world frame): the wall-proximity gradient (points away from
+  // walls) and the local flow vector. Recomputed each tick by senseEnv; not hashed (derived).
+  readonly wallSenseX: Float64Array;
+  readonly wallSenseY: Float64Array;
+  readonly flowSenseX: Float64Array;
+  readonly flowSenseY: Float64Array;
+
   // Genome (heritable, mutated at birth): the brain weights (BRAIN_GENES per slot) + the hue gene
   // + the scalar genes (SCALAR_GENE_COUNT per slot — see genome.ScalarGene).
   readonly brain: Float32Array;
@@ -78,6 +85,10 @@ export class OrganismStore {
     this.senseY = new Float64Array(capacity);
     this.sightX = new Float64Array(capacity);
     this.sightY = new Float64Array(capacity);
+    this.wallSenseX = new Float64Array(capacity);
+    this.wallSenseY = new Float64Array(capacity);
+    this.flowSenseX = new Float64Array(capacity);
+    this.flowSenseY = new Float64Array(capacity);
     this.brain = new Float32Array(capacity * BRAIN_GENES);
     this.hue = new Float32Array(capacity);
     this.scalarGenes = new Float32Array(capacity * SCALAR_GENE_COUNT);

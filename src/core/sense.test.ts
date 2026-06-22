@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { OrganismStore } from './store';
 import { FoodField } from './food-field';
 import { SpatialHash } from './spatial-hash';
-import { senseFood, senseCreatures } from './sense';
+import { senseFood, senseCreatures, senseEnv } from './sense';
 import { Walls } from './walls';
 import { defaultConfig } from './config';
 import { ScalarGene, SCALAR_GENE_COUNT } from './genome';
@@ -39,6 +39,23 @@ describe('senseFood', () => {
     senseFood(s, f, W, H);
     expect(s.senseX[i]!).toBeGreaterThan(0); // points toward +x (more food)
     expect(Math.abs(s.senseY[i]!)).toBeLessThan(Math.abs(s.senseX[i]!)); // ~no y component
+  });
+});
+
+describe('senseEnv', () => {
+  it('leaves all 4 transients at 0 when both features are off', () => {
+    const s = new OrganismStore(1);
+    const i = s.alloc();
+    s.rebuildLive();
+    s.wallSenseX[i] = 9;
+    s.wallSenseY[i] = 9;
+    s.flowSenseX[i] = 9;
+    s.flowSenseY[i] = 9;
+    senseEnv(s, null, null, defaultConfig({ wallRegionCount: 0, flowStrength: 0 }));
+    expect(s.wallSenseX[i]).toBe(0);
+    expect(s.wallSenseY[i]).toBe(0);
+    expect(s.flowSenseX[i]).toBe(0);
+    expect(s.flowSenseY[i]).toBe(0);
   });
 });
 

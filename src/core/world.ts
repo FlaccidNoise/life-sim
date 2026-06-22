@@ -6,7 +6,7 @@ import { applyFlowForce, computeRepulsion, integrate } from './physics';
 import { FoodField } from './food-field';
 import { Walls } from './walls';
 import { FlowField } from './flow-field';
-import { senseFood, senseCreatures } from './sense';
+import { senseFood, senseCreatures, senseEnv } from './sense';
 import { steer, learn } from './brain';
 import {
   seedGenome,
@@ -169,6 +169,7 @@ export class World {
     // SENSE → THINK/ACT: perceive the food gradient (per-creature sense range) + SIGHT (nearby creatures
     // within the vision cone; uses the start-of-tick hash), then steer (per-creature genes; sets thrust).
     senseFood(s, this.food, cfg.worldWidth, cfg.worldHeight);
+    senseEnv(s, this.walls, cfg.flowStrength > 0 ? this.flow : null, cfg);
     senseCreatures(s, this.hash, cfg, this.walls);
     steer(s, cfg.learningEnabled, cfg.eligLambda, cfg.motorSquash);
     // MOVE: flow push (size-scaled current) then repulsion add onto the thrust force, then integrate.
