@@ -229,15 +229,15 @@ function run(label: string, overrides: Partial<Config>): { label: string; m: Met
 // VARIETY sweep: wider founder spread + slower/richer food vs the current baseline, seeds 1/5. Want
 // MORE size/trophic variety (szSd, diet) and predators present, while staying alive (pop>0). Slower
 // regen → boom-bust that rewards migration; wider founderSigma → more raw material from t0.
+// SIZE-SEEDING ablation: founderSizeSpread 0 (all founders at center) vs 1.0 (wide uniform band),
+// seeds 1/2/5. Want szSd higher with spread on AND world alive (pop>0). Food + social defaults active.
 const CASES: { label: string; o: Partial<Config> }[] = [
-  { label: 'base        s1', o: {} },
-  { label: 'fSig.6      s1', o: { founderSigma: 0.6 } },
-  { label: 'regen.04    s1', o: { foodRegen: 0.04 } },
-  { label: 'regen.04cap20 s1', o: { foodRegen: 0.04, foodCap: 20 } },
-  { label: 'base        s5', o: { seed: 5 } },
-  { label: 'fSig.6      s5', o: { founderSigma: 0.6, seed: 5 } },
-  { label: 'regen.04    s5', o: { foodRegen: 0.04, seed: 5 } },
-  { label: 'regen.04cap20 s5', o: { foodRegen: 0.04, foodCap: 20, seed: 5 } },
+  { label: 'sizeSpread 0  s1', o: { founderSizeSpread: 0 } },
+  { label: 'sizeSpread 1  s1', o: { founderSizeSpread: 1 } },
+  { label: 'sizeSpread 0  s2', o: { founderSizeSpread: 0, seed: 2 } },
+  { label: 'sizeSpread 1  s2', o: { founderSizeSpread: 1, seed: 2 } },
+  { label: 'sizeSpread 0  s5', o: { founderSizeSpread: 0, seed: 5 } },
+  { label: 'sizeSpread 1  s5', o: { founderSizeSpread: 1, seed: 5 } },
 ];
 
 console.log(`=== density + ablation probe: ${ticks} ticks, seed ${seed}, world 8192² ===\n`);
