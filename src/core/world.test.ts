@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { World } from './world';
 import { defaultConfig } from './config';
-import { ScalarGene, SCALAR_GENE_COUNT } from './genome';
+import { Brain, BRAIN_GENES, ScalarGene, SCALAR_GENE_COUNT } from './genome';
 
 describe('World — Phase 0 determinism contract', () => {
   it('same (config, seed) → byte-identical hash after N ticks', () => {
@@ -77,6 +77,46 @@ describe('World — Phase 0 determinism contract', () => {
     expect(w.totalDeaths).toBeGreaterThan(0);
     expect(w.population).toBeGreaterThan(0); // not extinct
     expect(w.population).toBeLessThan(cfg.maxOrganisms); // food-limited, not buffer-pegged
+  });
+
+  it('full env stack (walls+flow+advection+push) is deterministic AND non-vacuous', () => {
+    // Reproducibility with the WHOLE env feature set live, including the size-scaled flow PUSH that is
+    // off in the shipped config (flowPushStrength 0). Two worlds, same (config, seed) → identical hash.
+    const make = () => new World(defaultConfig({ seed: 11, flowPushStrength: 1 }));
+    const a = make();
+    const b = make();
+    for (let t = 0; t < 1000; t++) {
+      a.step();
+      b.step();
+    }
+    expect(a.stateHash()).toBe(b.stateHash());
+
+    // Non-vacuity: prove the env features are actually DOING something, so the determinism above isn't
+    // trivially holding over an inert sim. A regression that silently disables an env feature should
+    // fail one of these. (Brief requires ≥2; all three asserted.)
+
+    // 1. Neural env-sensing is live: env-sense genes were drawn + mutated → some weight is non-zero.
+    const s = a.store;
+    let envSenseWired = false;
+    for (let k = 0; k < s.liveCount && !envSenseWired; k++) {
+      const base = s.liveIndices[k]! * BRAIN_GENES;
+      for (let g = Brain.WALL_LAT_TURN; g <= Brain.FLOW_FWD_THRUST; g++) {
+        if (s.brain[base + g]! !== 0) {
+          envSenseWired = true;
+          break;
+        }
+      }
+    }
+    expect(envSenseWired).toBe(true);
+
+    // 2. Walls are present and shaping the food field (at least one cell dammed).
+    expect(a.walls.active).toBe(true);
+    expect(a.walls.solidFraction()).toBeGreaterThan(0);
+    expect(a.walls.foodBlockedMask().some((v) => v === 1)).toBe(true);
+
+    // 3. The economy is turning over: births AND deaths both happened.
+    expect(a.totalBirths).toBeGreaterThan(0);
+    expect(a.totalDeaths).toBeGreaterThan(0);
   });
 
   it('no live creature ever occupies a solid wall cell (births relocate out of walls)', () => {
