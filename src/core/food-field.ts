@@ -6,6 +6,11 @@
  *   regrow:  B += r·B·(1 − B/K)            (logistic — recovers after grazing)
  *   diffuse: B ← B + d·(avg4 − B)          (slow inter-cell spread)
  *
+ * WALLS DAM THE FIELD: when a `blocked` mask is passed (food-resolution, 1=rock), blocked cells are
+ * forced to B=0 each step and the diffusion stencil treats a blocked neighbour as no-flux (it contributes
+ * the cell's OWN value), so biomass can't leak into/through rock and pools against it. blocked=null is the
+ * walls-OFF path — byte-identical to the legacy field (the ablation contract).
+ *
  * Diffusion is the producer-extinction fix: pure logistic has an absorbing state at B=0, exactly how
  * the old engine's producers went permanently extinct. Diffusion reseeds grazed-empty cells from
  * neighbors, so global extinction needs EVERY cell at zero at once. Toroidal, double-buffered.
@@ -20,6 +25,8 @@
  * gene) can then partition the resource. With channels===1 (default) B2 is never allocated and every code
  * path is byte-identical to the single-resource field (the ablation OFF state).
  */
+import { type FlowField } from './flow-field';
+
 export class FoodField {
   readonly cols: number;
   readonly rows: number;
@@ -189,24 +196,33 @@ export class FoodField {
   }
 
   /** Logistic regrowth (toward each cell's K = capShare·fertility) + toroidal diffusion, per channel.
-   *  regen=0 = inert. Channel A uses the fracA share (=1 when single-channel → byte-identical). */
-  step(regen: number, diffuse: number): void {
-    this.stepChannel(this.B, this.fracA, regen, diffuse, false);
-    if (this.B2) this.stepChannel(this.B2, this.ratio, regen, diffuse, true);
+   *  regen=0 = inert. Channel A uses the fracA share (=1 when single-channel → byte-identical).
+   *  `blocked` (food-resolution, 1=rock) dams the field; null = walls-OFF (byte-identical legacy path).
+   *  `flow` advects biomass along the current; null = no advection (body lands in a later task). */
+  step(regen: number, diffuse: number, flow: FlowField | null, blocked: Uint8Array | null): void {
+    this.stepChannel(this.B, this.fracA, regen, diffuse, false, blocked);
+    if (this.B2) this.stepChannel(this.B2, this.ratio, regen, diffuse, true, blocked);
+    if (flow !== null) this.advect(flow, blocked);
   }
 
   /** One channel's logistic regrowth + diffusion. `capFrac` is this channel's share of cap·fertility;
-   *  `second` selects the B2/scratch2 buffers (vs B/scratch) for the double-buffered diffusion swap. */
+   *  `second` selects the B2/scratch2 buffers (vs B/scratch) for the double-buffered diffusion swap.
+   *  `blocked` dams the channel: blocked cells are forced to 0 and diffusion is no-flux at walls. */
   private stepChannel(
     field: Float64Array,
     capFrac: number,
     regen: number,
     diffuse: number,
     second: boolean,
+    blocked: Uint8Array | null,
   ): void {
     const { cols, rows, cap, fertility } = this;
     if (regen > 0) {
       for (let i = 0; i < field.length; i++) {
+        if (blocked !== null && blocked[i] === 1) {
+          field[i] = 0; // rock grows nothing
+          continue;
+        }
         const k = cap * fertility[i]! * capFrac;
         const b = field[i]!;
         let nb: number;
@@ -226,11 +242,21 @@ export class FoodField {
         const dn = ((r + 1) % rows) * cols;
         const cur = r * cols;
         for (let c = 0; c < cols; c++) {
+          const self = field[cur + c]!;
+          if (blocked !== null && blocked[cur + c] === 1) {
+            out[cur + c] = 0; // rock holds no biomass
+            continue;
+          }
           const l = (c - 1 + cols) % cols;
           const rt = (c + 1) % cols;
-          const avg4 =
-            (field[up + c]! + field[dn + c]! + field[cur + l]! + field[cur + rt]!) * 0.25;
-          out[cur + c] = field[cur + c]! + diffuse * (avg4 - field[cur + c]!);
+          // A blocked neighbour is no-flux: it contributes the cell's OWN value, so biomass can't leak
+          // into/through rock and pools against the wall.
+          const vU = blocked !== null && blocked[up + c] === 1 ? self : field[up + c]!;
+          const vD = blocked !== null && blocked[dn + c] === 1 ? self : field[dn + c]!;
+          const vL = blocked !== null && blocked[cur + l] === 1 ? self : field[cur + l]!;
+          const vR = blocked !== null && blocked[cur + rt] === 1 ? self : field[cur + rt]!;
+          const avg4 = (vU + vD + vL + vR) * 0.25;
+          out[cur + c] = self + diffuse * (avg4 - self);
         }
       }
       if (second) {
@@ -241,6 +267,12 @@ export class FoodField {
         this.scratch = field;
       }
     }
+  }
+
+  /** Advect biomass along the flow current (donor-cell). Empty until the advection task lands. */
+  private advect(flow: FlowField, blocked: Uint8Array | null): void {
+    void flow;
+    void blocked;
   }
 
   /** Mix the field into a deterministic state hash (food is part of sim state). Channel B is mixed in
