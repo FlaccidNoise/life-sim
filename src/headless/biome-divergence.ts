@@ -1,18 +1,24 @@
 /**
  * Lever C ablation probe (one-off experiment, not a standing job). Tests ALLOPATRIC DIVERGENCE: with
- * per-pocket carrying-capacity variance (config.pocketCapVariance), lean islands should select for
- * smaller/cheaper bodies while rich islands tolerate bigger, greedier ones — so the per-pocket MEAN of a
- * trait diverges ACROSS the archipelago. The dead water + low diffusion already isolate the pockets, so
- * gene flow can't homogenize them.
+ * per-pocket carrying-capacity variance (config.pocketCapVariance), do isolated islands of different K
+ * evolve different trait optima? The dead water + low diffusion isolate the pockets, so gene flow can't
+ * homogenize them.
  *
- * Metric = CROSS-POCKET VARIANCE of a per-pocket trait mean (SIZE is the primary K-responsive axis; DIET
- * and FORAGE_PREF are secondary — FORAGE_PREF is inert here because the probe runs single-channel). Each
- * live creature is assigned to its nearest pocket centre (toroidal), then per-pocket means are taken over
- * inhabited pockets and we report Var_p(mean_p) and the spread (max−min).
+ * METRIC — a DIRECTED correlation, not a variance. A first cut measured the cross-pocket VARIANCE of the
+ * per-pocket trait mean (expecting ≈0 at v=0, large at v>0); it FAILED because isolated small-population
+ * islands drift genetically even at v=0, so the v=0 variance floor is high and noisy and swamps the K
+ * signal. The drift confound is removed by asking, directly: do the pockets that are actually RICH hold
+ * (e.g.) more K-strategist life histories? We read each pocket's K (capacityAt its centre) and report the
+ * Pearson r of (pocket K → pocket mean trait) across inhabited pockets. At v=0, K is uniform → no signal
+ * to correlate with (r is noise); a robust r of consistent sign across seeds at v>0 IS the divergence,
+ * independent of the absolute drift level.
  *
- * EXPECTED: at variance=0 the per-pocket means are statistically indistinguishable → Var_p ≈ sampling
- * noise (≈0); at variance>0 it is materially larger (target ≥2× the v=0 floor). SECONDARY GATE: no pocket
- * goes extinct (min per-pocket pop > 0) — if a lean island depopulates, the variance is too high.
+ * WHICH TRAITS. The textbook K-responsive axis is LIFE HISTORY (r/K selection): rich, stable pockets favor
+ * K-strategists (few well-provisioned offspring → high birthEnergy + high reproduction bars); lean pockets
+ * favor r-strategists (many cheap offspring → low). So reproThreshold / satiatedThreshold / birthEnergy are
+ * the primary axes. SIZE and DIET are reported too but are NOT expected to track K (size's payoffs — deep
+ * reserves, predation refuge, bite — don't scale with local food abundance). FORAGE_PREF is omitted (pinned
+ * under the single channel this probe runs). SECONDARY GATE: no pocket goes extinct (minPop>0).
  * Run: pnpm tsx src/headless/biome-divergence.ts [ticks]
  */
 import { World } from '../core/world';
@@ -23,18 +29,43 @@ const ticks = Number(process.argv[2] ?? 30000);
 const SEEDS = [1, 2, 5];
 const VARIANCES = [0, 0.25, 0.5];
 
-interface CrossStat {
-  varOfMeans: number;
-  spread: number;
-}
+// Traits to correlate against per-pocket K. Life-history first (the r/K axis), then size/diet for context.
+const TRAITS: { key: string; gene: number }[] = [
+  { key: 'repro', gene: ScalarGene.REPRO_THRESHOLD },
+  { key: 'satiat', gene: ScalarGene.SATIATED_THRESHOLD },
+  { key: 'birthE', gene: ScalarGene.BIRTH_ENERGY },
+  { key: 'size', gene: ScalarGene.SIZE },
+  { key: 'diet', gene: ScalarGene.DIET },
+];
+
 interface PocketStats {
   pop: number;
-  pockets: number;
   inhabited: number;
+  pockets: number;
   minPop: number;
-  size: CrossStat;
-  diet: CrossStat;
-  pref: CrossStat;
+  kMin: number;
+  kMax: number;
+  corr: Record<string, number>; // trait key → Pearson r of (pocket K, pocket mean trait)
+}
+
+/** Pearson correlation of paired samples; 0 when either side has no spread (degenerate). */
+function pearson(xs: number[], ys: number[]): number {
+  const n = xs.length;
+  if (n < 2) return 0;
+  const mx = xs.reduce((a, b) => a + b, 0) / n;
+  const my = ys.reduce((a, b) => a + b, 0) / n;
+  let sxy = 0;
+  let sxx = 0;
+  let syy = 0;
+  for (let i = 0; i < n; i++) {
+    const dx = xs[i]! - mx;
+    const dy = ys[i]! - my;
+    sxy += dx * dy;
+    sxx += dx * dx;
+    syy += dy * dy;
+  }
+  if (sxx === 0 || syy === 0) return 0;
+  return sxy / Math.sqrt(sxx * syy);
 }
 
 function pocketStats(world: World): PocketStats {
@@ -45,9 +76,9 @@ function pocketStats(world: World): PocketStats {
   const ww = world.config.worldWidth;
   const wh = world.config.worldHeight;
   const cnt = new Array<number>(P).fill(0);
-  const sumSize = new Array<number>(P).fill(0);
-  const sumDiet = new Array<number>(P).fill(0);
-  const sumPref = new Array<number>(P).fill(0);
+  // Per-trait per-pocket sums.
+  const sums: Record<string, number[]> = {};
+  for (const t of TRAITS) sums[t.key] = new Array<number>(P).fill(0);
   for (let k = 0; k < liveCount; k++) {
     const i = liveIndices[k]!;
     const x = s.x[i]!;
@@ -69,34 +100,32 @@ function pocketStats(world: World): PocketStats {
     if (bp < 0) continue;
     const sg = i * SCALAR_GENE_COUNT;
     cnt[bp]!++;
-    sumSize[bp]! += scalarGenes[sg + ScalarGene.SIZE]!;
-    sumDiet[bp]! += scalarGenes[sg + ScalarGene.DIET]!;
-    sumPref[bp]! += scalarGenes[sg + ScalarGene.FORAGE_PREF]!;
+    for (const t of TRAITS) sums[t.key]![bp]! += scalarGenes[sg + t.gene]!;
   }
-  // Cross-pocket variance + spread of the per-pocket means, over INHABITED pockets only.
-  const crossVar = (sum: number[]): CrossStat => {
-    const means: number[] = [];
-    for (let p = 0; p < P; p++) if (cnt[p]! > 0) means.push(sum[p]! / cnt[p]!);
-    const n = means.length;
-    if (n < 2) return { varOfMeans: 0, spread: 0 };
-    const mu = means.reduce((a, b) => a + b, 0) / n;
-    const v = means.reduce((a, b) => a + (b - mu) ** 2, 0) / n;
-    return { varOfMeans: v, spread: Math.max(...means) - Math.min(...means) };
-  };
+  // Paired (K_p, mean trait_p) over INHABITED pockets — the directed divergence test.
+  const kp: number[] = [];
+  const means: Record<string, number[]> = {};
+  for (const t of TRAITS) means[t.key] = [];
   let inhabited = 0;
   let minPop = Infinity;
   for (let p = 0; p < P; p++) {
-    if (cnt[p]! > 0) inhabited++;
-    if (cnt[p]! < minPop) minPop = cnt[p]!;
+    const c = cnt[p]!;
+    if (c < minPop) minPop = c;
+    if (c === 0) continue;
+    inhabited++;
+    kp.push(world.food.capacityAt(centres[p]!.x, centres[p]!.y));
+    for (const t of TRAITS) means[t.key]!.push(sums[t.key]![p]! / c);
   }
+  const corr: Record<string, number> = {};
+  for (const t of TRAITS) corr[t.key] = pearson(kp, means[t.key]!);
   return {
     pop: liveCount,
-    pockets: P,
     inhabited,
+    pockets: P,
     minPop: minPop === Infinity ? 0 : minPop,
-    size: crossVar(sumSize),
-    diet: crossVar(sumDiet),
-    pref: crossVar(sumPref),
+    kMin: kp.length ? Math.min(...kp) : 0,
+    kMax: kp.length ? Math.max(...kp) : 0,
+    corr,
   };
 }
 
@@ -111,12 +140,14 @@ console.log(
   `=== lever C biome-divergence probe: ${ticks} ticks, seeds ${SEEDS.join('/')}, world 8192² ===`,
 );
 console.log(
-  'cross-pocket Var of per-pocket trait MEAN — expect ≈0 at v=0, materially >0 at v>0; minPop>0 = no island died\n',
+  'corr = Pearson r of (pocket K → pocket mean trait). r≈0 at v=0 (K uniform); a consistent-sign r across\n' +
+    'seeds at v>0 = K drives that trait. repro/satiat/birthE are the r/K life-history axes (primary).\n' +
+    'kMin/kMax = per-pocket K range (confirms the lever varies K). minPop>0 = no island died.\n',
 );
 const header =
-  'variance'.padEnd(10) +
-  'seed'.padStart(6) +
-  ['pop', 'inhab/P', 'minPop', 'sizeVar', 'sizeSpr', 'dietVar', 'prefVar']
+  'variance'.padEnd(9) +
+  'seed'.padStart(5) +
+  ['pop', 'minPop', 'kMin', 'kMax', ...TRAITS.map((t) => `${t.key}~K`)]
     .map((h) => h.padStart(10))
     .join('');
 console.log(header);
@@ -126,15 +157,13 @@ for (const variance of VARIANCES) {
     const m = run(seed, variance);
     const cells = [
       `${m.pop}`,
-      `${m.inhabited}/${m.pockets}`,
       `${m.minPop}`,
-      m.size.varOfMeans.toFixed(3),
-      m.size.spread.toFixed(2),
-      m.diet.varOfMeans.toFixed(4),
-      m.pref.varOfMeans.toFixed(4),
+      m.kMin.toFixed(1),
+      m.kMax.toFixed(1),
+      ...TRAITS.map((t) => m.corr[t.key]!.toFixed(3)),
     ];
     console.log(
-      `${variance}`.padEnd(10) + `${seed}`.padStart(6) + cells.map((v) => v.padStart(10)).join(''),
+      `${variance}`.padEnd(9) + `${seed}`.padStart(5) + cells.map((v) => v.padStart(10)).join(''),
     );
   }
   console.log('-'.repeat(header.length));
