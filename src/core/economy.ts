@@ -272,7 +272,16 @@ export function reproduce(store: OrganismStore, rng: Rng, cfg: Config): number {
     heading[child] = heading[p]!;
     // Inherit the genome with mutation FIRST (brain + hue, then scalar genes) so the child's
     // BIRTH_ENERGY gene is known before we provision it. RNG drawn in a fixed order per child.
-    mutateGenome(store.brain, store.hue, child, p, rng, cfg.mutationSigma, cfg.hueMutationSigma);
+    mutateGenome(
+      store.brain,
+      store.hue,
+      child,
+      p,
+      rng,
+      cfg.mutationSigma,
+      cfg.hueMutationSigma,
+      cfg.hungerSense,
+    );
     mutateScalarGenes(store.scalarGenes, child, p, rng, cfg);
     // No-Lamarck: the child's runtime brain starts from its freshly-mutated GENOME, not the parent's
     // learned weights. Learning never crosses the generation boundary.

@@ -39,6 +39,21 @@ describe('World — Phase 0 determinism contract', () => {
     expect(on.stateHash()).not.toBe(baseline.stateHash());
   });
 
+  it('hungerSense OFF is byte-identical to default; ON perturbs the world (lever E2 RNG-safe + wired)', () => {
+    const baseline = new World(defaultConfig({ seed: 1 }));
+    const off = new World(defaultConfig({ seed: 1, hungerSense: false }));
+    const on = new World(defaultConfig({ seed: 1, hungerSense: true }));
+    for (let t = 0; t < 1000; t++) {
+      baseline.step();
+      off.step();
+      on.step();
+    }
+    // explicit OFF == default → the 2 hunger synapses consume NO RNG when off (the E2 draw-order gotcha)
+    expect(off.stateHash()).toBe(baseline.stateHash());
+    // ON diverges → the extra founder/mutation draws actually happen when on (the layout is live, not dead)
+    expect(on.stateHash()).not.toBe(baseline.stateHash());
+  });
+
   it('reset() reproduces the seeded run byte-for-byte', () => {
     const w = new World(defaultConfig({ seed: 7 }));
     for (let t = 0; t < 500; t++) w.step();

@@ -289,6 +289,14 @@ export interface Config {
    *  learning is unchanged. OFF by default so the determinism hash is byte-identical until you opt in. */
   motorSquash: boolean;
 
+  // ── Interoceptive hunger brain input (lever E2 — ablation knob; OFF by default = byte-identical) ───
+  /** Adds a HUNGER sense to the brain: a creature feels its own energy deficit (1 − energy/satiatedBar,
+   *  clamped to [0,1]) as an extra input wired to two evolvable synapses (HUNGER_TURN, HUNGER_THRUST), so
+   *  steering can become state-dependent (e.g. cast/forage harder when starving, cruise when full). false =
+   *  OFF: the two synapses are never seeded/mutated with RNG and never read, so the sim is byte-identical to
+   *  pre-E2 (safeguard #1). true = the weights seed near 0 and EVOLVE; behavior couples to internal state. */
+  hungerSense: boolean;
+
   // ── Observation hooks (optional; OFF by default — pure instrumentation, never affects the sim) ────
   /** Fired once per successful birth inside reproduce(), in ascending parent-slot order, BEFORE the
    *  tick counter advances. Read-only by contract: it must not touch the store, RNG, or iteration —
@@ -448,6 +456,9 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     // Steering output shaping: OFF = hard clamp (current behavior, byte-identical hash). Flip on to
     // smoothly tanh-squash turn/thrust → graded, legible steering (kills the motor-saturation spin).
     motorSquash: false,
+    // Interoceptive hunger brain input (lever E2): OFF = byte-identical (hunger synapses unseeded/unread).
+    // Flip on to give the brain its own energy-deficit sense, evolving from a neutral 0.
+    hungerSense: false,
     ...overrides,
   };
 }

@@ -74,6 +74,7 @@ const SPECS: KnobSpec[] = [
 /** Live boolean toggles (checkboxes), e.g. the Baldwin learning master switch. */
 const TOGGLES: { key: keyof Config; label: string }[] = [
   { key: 'learningEnabled', label: 'learning on' },
+  { key: 'hungerSense', label: 'hunger sense' },
 ];
 
 export class Knobs {
