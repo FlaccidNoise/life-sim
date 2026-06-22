@@ -20,7 +20,9 @@ export function carveRooms(
 ): void {
   solid.fill(1);
   const total = cols * rows;
-  const targetOpen = Math.round((1 - density) * total);
+  // Clamp to [0,total]: a no-op for density∈[0,1], but guards the loop against an out-of-range density
+  // (density<0 would make targetOpen>total → the open<target loop could never terminate).
+  const targetOpen = Math.max(0, Math.min(total, Math.round((1 - density) * total)));
   let open = 0;
 
   const carve = (x: number, y: number): void => {
