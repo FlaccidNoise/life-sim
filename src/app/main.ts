@@ -16,7 +16,7 @@ import { Controls } from './observability/controls';
 import { Knobs } from './observability/knobs';
 import { Inspector } from './observability/inspector';
 import { BrainView } from './observability/brain-view';
-import { RadarView } from './observability/radar-view';
+import { RadarView, LENSES, DEFAULT_LENS } from './observability/radar-view';
 import { Distributions } from './observability/distributions';
 import { FollowRecorder } from './observability/follow-recorder';
 import { TimeSeriesGraph } from './observability/graph';
@@ -50,6 +50,17 @@ const graph = new TimeSeriesGraph(el<HTMLCanvasElement>('graph'), [
 const inspector = new Inspector(el('inspector'));
 const brainView = new BrainView(el<HTMLCanvasElement>('brain'));
 const radar = new RadarView(el<HTMLCanvasElement>('radar'));
+// Lens selector: switches which heritable-trait axis-set the radar draws (Capability / Senses & Social
+// / Life-history). Options come from the LENSES registry so the list lives in one place.
+const lensSelect = el<HTMLSelectElement>('radar-lens');
+for (const lens of LENSES) {
+  const opt = document.createElement('option');
+  opt.value = lens.key;
+  opt.textContent = lens.name;
+  lensSelect.appendChild(opt);
+}
+lensSelect.value = DEFAULT_LENS;
+lensSelect.addEventListener('change', () => radar.setLens(lensSelect.value));
 const distributions = new Distributions(el<HTMLCanvasElement>('dist'));
 const recorder = new FollowRecorder();
 

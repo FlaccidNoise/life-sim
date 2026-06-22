@@ -25,10 +25,10 @@ interface RadarAxisDef {
   color: string; // accent color for the spoke label + vertex dot
 }
 
-/** The seven spokes, clockwise from the top. Ordered so predator-capability genes (diet, bite, speed,
- *  size) cluster on one side and the life-history/sensory genes (smell, r/K, provisioning) on the other,
- *  making a predator and a plant pull toward opposite halves of the chart. */
-export const RADAR_AXES: readonly RadarAxisDef[] = [
+/** CAPABILITY lens — the default seven spokes, clockwise from the top. Ordered so predator-capability
+ *  genes (diet, bite, speed, size) cluster on one side and the life-history/sensory genes (smell, r/K,
+ *  provisioning) on the other, making a predator and a plant pull toward opposite halves of the chart. */
+export const CAPABILITY_AXES: readonly RadarAxisDef[] = [
   { gene: ScalarGene.DIET, label: 'diet', color: '#d98b6a' },
   { gene: ScalarGene.DAMAGE, label: 'bite', color: '#e0566a' },
   { gene: ScalarGene.MAX_SPEED, label: 'spd', color: '#5fd9e8' },
@@ -37,6 +37,50 @@ export const RADAR_AXES: readonly RadarAxisDef[] = [
   { gene: ScalarGene.REPRO_THRESHOLD, label: 'r/K', color: '#e88fb0' },
   { gene: ScalarGene.BIRTH_ENERGY, label: 'prov', color: '#e8cf7a' },
 ];
+
+/** SENSES & SOCIAL lens — perception + grouping genes (all existing today). The vision spokes are kept
+ *  here knowing some may census FLAT at the live scale (see the variance gate / roadmap); Phase 2 prunes
+ *  what doesn't vary and adds the boldness/trail genes here as they land. */
+export const SENSES_SOCIAL_AXES: readonly RadarAxisDef[] = [
+  { gene: ScalarGene.VISION_RANGE, label: 'vis·rng', color: '#5f9de8' },
+  { gene: ScalarGene.VISION_FOV, label: 'vis·fov', color: '#7f8fe0' },
+  { gene: ScalarGene.VISION_ACUITY, label: 'vis·acu', color: '#9f7fe0' },
+  { gene: ScalarGene.SENSE_RANGE, label: 'smell', color: '#b6d957' },
+  { gene: ScalarGene.COHESION_DRIVE, label: 'school', color: '#8a7fe8' },
+  { gene: ScalarGene.SHELTER_DRIVE, label: 'shelter', color: '#7fb0e8' },
+];
+
+/** LIFE-HISTORY lens — reproductive strategy, metabolism, and body-plan genes (all existing today).
+ *  Longevity and dispersal join here in Phases 3-4 as they're built. */
+export const LIFE_HISTORY_AXES: readonly RadarAxisDef[] = [
+  { gene: ScalarGene.REPRO_THRESHOLD, label: 'r/K', color: '#e88fb0' },
+  { gene: ScalarGene.BIRTH_ENERGY, label: 'prov', color: '#e8cf7a' },
+  { gene: ScalarGene.METAB_EFF, label: 'econ', color: '#5fc9b0' },
+  { gene: ScalarGene.EAT_RATE, label: 'eat', color: '#9fd97f' },
+  { gene: ScalarGene.MAX_TURN, label: 'agility', color: '#e0b15f' },
+  { gene: ScalarGene.MAX_THRUST, label: 'burst', color: '#e07fa0' },
+  { gene: ScalarGene.SIZE, label: 'size', color: '#9aa7b4' },
+];
+
+export interface RadarLens {
+  key: string; // stable id used by the UI <select>
+  name: string; // human label
+  axes: readonly RadarAxisDef[];
+}
+
+/** The swappable radar lenses (the display decision: one ≤8-spoke radar, selectable axis-sets). Order is
+ *  the <select> order; the first is the default. New genes append spokes to the relevant lens. */
+export const LENSES: readonly RadarLens[] = [
+  { key: 'capability', name: 'Capability', axes: CAPABILITY_AXES },
+  { key: 'sensesSocial', name: 'Senses & Social', axes: SENSES_SOCIAL_AXES },
+  { key: 'lifeHistory', name: 'Life-history', axes: LIFE_HISTORY_AXES },
+];
+
+export const DEFAULT_LENS = 'capability';
+
+function lensAxes(key: string): readonly RadarAxisDef[] {
+  return (LENSES.find((l) => l.key === key) ?? LENSES[0]!).axes;
+}
 
 export interface RadarAxis {
   key: number; // ScalarGene id
@@ -57,10 +101,16 @@ function clamp01(v: number): number {
   return v < 0 ? 0 : v > 1 ? 1 : v;
 }
 
-/** Read one creature's seven radar spokes (read-only; no allocation beyond the returned object). */
-export function computeRadar(store: OrganismStore, _cfg: Config, slot: number): RadarState {
+/** Read one creature's radar spokes for the given axis-set (read-only; no allocation beyond the returned
+ *  object). Defaults to the Capability lens so existing callers are unaffected. */
+export function computeRadar(
+  store: OrganismStore,
+  _cfg: Config,
+  slot: number,
+  axisSet: readonly RadarAxisDef[] = CAPABILITY_AXES,
+): RadarState {
   const sg = slot * SCALAR_GENE_COUNT;
-  const axes: RadarAxis[] = RADAR_AXES.map((def) => {
+  const axes: RadarAxis[] = axisSet.map((def) => {
     const spec = SCALAR_GENE_SPECS[def.gene]!;
     const value = store.scalarGenes[sg + def.gene]!;
     const norm = clamp01((value - spec.min) / (spec.max - spec.min));
@@ -78,6 +128,7 @@ export class RadarView {
   private readonly ctx: CanvasRenderingContext2D;
   private slot = -1;
   private gen = 0;
+  private lensKey = DEFAULT_LENS;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d');
@@ -88,6 +139,11 @@ export class RadarView {
   select(slot: number, gen: number): void {
     this.slot = slot;
     this.gen = gen;
+  }
+
+  /** Switch which axis-set the radar draws (driven by the lens <select>). */
+  setLens(key: string): void {
+    this.lensKey = key;
   }
 
   clear(): void {
@@ -117,7 +173,7 @@ export class RadarView {
       return;
     }
 
-    const st = computeRadar(store, cfg, this.slot);
+    const st = computeRadar(store, cfg, this.slot, lensAxes(this.lensKey));
     const n = st.axes.length;
     const cx = w / 2;
     const cy = h / 2 + 6 * dpr; // nudge down to leave room for the guild caption up top
