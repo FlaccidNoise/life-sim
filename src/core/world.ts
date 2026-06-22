@@ -73,6 +73,11 @@ export class World {
         cfg.foodPatchRadius,
         cfg.foodBaseFertility,
         this.rng,
+        cfg.pocketCapVariance,
+        // Lever C draws per-pocket K scales from a FORKED substream (does NOT consume this.rng), so the
+        // archipelago LAYOUT — pocket centres + the main-RNG draws here — is identical across variance;
+        // only each island's K changes (founders then rejection-sample onto the re-weighted biomass).
+        this.rng.fork(0xc),
       );
     } else {
       this.food.reset();

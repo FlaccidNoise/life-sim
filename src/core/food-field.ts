@@ -96,19 +96,36 @@ export class FoodField {
    * Carve `count` Gaussian fertility pockets (radius `radiusCells`, in grid cells) over a near-dead
    * baseline — the archipelago. Deterministic via the provided RNG. Refills biomass to the new map.
    * Both channels share the SAME fertility map (a pocket is rich in both resources).
+   *
+   * Lever C (per-pocket K variance): with `variance > 0` (and a `forkedRng`), each pocket draws an
+   * independent richness scale s ∈ [1−variance, 1+variance] from the FORKED stream, and the per-cell
+   * carrying capacity Kcell is built from the SCALED Gaussian sum (kAccum) rather than the [0,1]-clamped
+   * fertility map — so a rich pocket reaches cap·(1+variance) and a lean one cap·(1−variance). The
+   * fertility map itself is left UNSCALED (it still feeds the world's "in a pocket" founder test + each
+   * channel's biomass share). With `variance === 0` no scale is drawn and Kcell is rebuilt via recomputeK
+   * (= cap·fertility, float32 read) so the field is byte-identical to a no-variance world.
    */
   seedPatches(
     count: number,
     radiusCells: number,
     baseFertility: number,
     rng: { float(): number },
+    variance = 0,
+    forkedRng?: { float(): number },
   ): void {
     const { cols, rows, fertility } = this;
     fertility.fill(baseFertility);
     const twoSigma2 = 2 * radiusCells * radiusCells;
+    // Only build the scaled-K accumulator when variance is active; otherwise the v=0 path stays exactly
+    // the legacy fertility-only accumulation (→ recomputeK → byte-identical).
+    const useVar = variance > 0 && !!forkedRng;
+    const kAccum = useVar ? new Float64Array(cols * rows) : null;
     for (let p = 0; p < count; p++) {
       const pc = rng.float() * cols;
       const pr = rng.float() * rows;
+      // Per-pocket carrying-capacity scale s_p ∈ [1−variance, 1+variance], from the FORKED stream so the
+      // MAIN rng (placement) is identical to the v=0 run. s_p ≡ 1 when variance is off (no draw).
+      const sp = useVar ? 1 - variance + forkedRng!.float() * (2 * variance) : 1;
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
           // toroidal cell distance to the patch centre
@@ -120,10 +137,23 @@ export class FoodField {
           const i = r * cols + c;
           const v = fertility[i]! + g;
           fertility[i] = v > 1 ? 1 : v;
+          if (kAccum) kAccum[i] = kAccum[i]! + g * sp; // scaled K accumulation (parallel to fertility)
         }
       }
     }
-    this.recomputeK();
+    if (kAccum) {
+      // Build Kcell from the scaled Gaussian sum, clamped to [0, cap·(1+variance)]: dead water stays at
+      // cap·baseFertility and a pocket peak reaches up to cap·(1+variance).
+      const upper = 1 + variance;
+      for (let i = 0; i < kAccum.length; i++) {
+        let f = baseFertility + kAccum[i]!;
+        if (f < 0) f = 0;
+        else if (f > upper) f = upper;
+        this.Kcell[i] = this.cap * f;
+      }
+    } else {
+      this.recomputeK(); // v=0: byte-identical cap·fertility (reads the float32 fertility map)
+    }
     this.refill();
   }
 
