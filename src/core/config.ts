@@ -67,6 +67,10 @@ export interface Config {
   /** Hard clamp on per-cell fertility after pockets are summed. 1 = legacy (K never exceeds cap). Raise it
    *  to let deep pockets exceed K=cap (needed for foodPatchRichness>1 to actually deepen the reservoir). */
   foodMaxFertility: number;
+  /** Dead-water tax: extra per-tick energy drain ∝ (1−fertility) under a creature — max in the dead gaps
+   *  between pockets, 0 inside a pocket — so crossing the open water is risky and residents stay home long
+   *  enough for local communities to diverge. The ISOLATION lever. 0 = OFF (byte-identical). */
+  deadWaterCost: number;
   /** Number of independent food channels (lever B, niche partitioning). 1 = a single biomass field,
    *  byte-identical to a one-resource world (the ablation OFF state). 2 = a second logistic channel B2
    *  sharing the same fertility map; each cell's cap is split A/B so total biomass is unchanged. This is
@@ -307,6 +311,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     foodPatchRichness: 1, // legacy depth (peak fertility 1 → K=cap); >1 = deep reservoirs (the spike lever)
     foodPatchRichnessVar: 0, // OFF: uniform pockets, NO extra RNG draw → byte-identical to legacy
     foodMaxFertility: 1, // legacy clamp (K never exceeds cap); raise with richness>1 to deepen reservoirs
+    deadWaterCost: 0, // OFF: no dead-water tax → byte-identical; >0 = isolation (residents stay in pockets)
     foodChannels: 1, // single resource (byte-identical OFF state); 2 = niche-partitioning second channel
     foodChannelRatio: 0.5, // symmetric A/B split when channels===2 (total per-cell cap unchanged)
     eatRate: 2,

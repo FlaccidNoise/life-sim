@@ -105,6 +105,37 @@ describe('metabolize', () => {
     metabolize(s, food, cfg);
     expect(s.energy[i]).toBeCloseTo(50 - 0.4 * 0.5); // basal halved, no gene upkeep
   });
+
+  it('deadWaterCost adds an energy drain in dead water (the isolation lever), OFF at 0', () => {
+    // One pocket → dead water (fertility 0) fills the rest of the field.
+    const food = new FoodField(W, H, 16, 16, 10, 1);
+    food.seedPatches(1, 2, 0, new Rng(2));
+    // locate a dead-water cell (fertility ≈ 0, so no graze income to confound the cost)
+    let dx = -1;
+    let dy = -1;
+    for (let yy = 4; yy < H && dx < 0; yy += 8)
+      for (let xx = 4; xx < W; xx += 8)
+        if (food.fertilityAt(xx, yy) < 1e-6) {
+          dx = xx;
+          dy = yy;
+          break;
+        }
+    expect(dx).toBeGreaterThanOrEqual(0); // found dead water
+
+    const lossAt = (deadWaterCost: number): number => {
+      const s = new OrganismStore(4);
+      const i = s.alloc();
+      s.x[i] = dx;
+      s.y[i] = dy;
+      s.energy[i] = 50;
+      genes(s, i, cfg); // herbivore, centred genes → no gene upkeep, efficiency 1
+      s.rebuildLive();
+      metabolize(s, food, defaultConfig({ basalCost: 0.4, moveCost: 0, deadWaterCost }));
+      return 50 - s.energy[i];
+    };
+    expect(lossAt(0)).toBeCloseTo(0.4); // OFF: just basal (no food in dead water → no graze income)
+    expect(lossAt(2)).toBeCloseTo(0.4 + 2); // basal + deadWaterCost·(1−fertility=0)
+  });
 });
 
 describe('satiatedBar (size-scaled energy reserve)', () => {

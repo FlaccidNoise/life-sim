@@ -195,4 +195,15 @@ describe('FoodField per-pocket richness (SP1)', () => {
 
     expect(vSpread).toBeGreaterThan(uSpread * 2); // variation creates real depth spread
   });
+
+  it('fertilityAt reports per-cell fertility (pocket high, dead water ~0) — for the dead-water tax', () => {
+    const f = new FoodField(256, 256, 64, 64, K, 1);
+    f.seedPatches(2, 5, 0, new StubRng(3), 1, 0, 1);
+    const c = f.patchCenters[0]!;
+    expect(f.fertilityAt(c.x, c.y)).toBeGreaterThan(0.5); // inside a pocket
+    let minFert = Infinity;
+    for (let y = 4; y < 256; y += 8)
+      for (let x = 4; x < 256; x += 8) minFert = Math.min(minFert, f.fertilityAt(x, y));
+    expect(minFert).toBeLessThan(0.05); // dead water between pockets
+  });
 });

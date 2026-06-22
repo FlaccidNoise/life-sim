@@ -151,6 +151,12 @@ export class FoodField {
     return this.B2 ? this.B2[this.idx(x, y)]! : 0;
   }
 
+  /** Per-cell FERTILITY at a world position — the stable "is this a pocket" signal (unlike biomass, which
+   *  dips when grazed). Pockets ≥ ~1 (deep ones >1), dead water ≈ baseFertility. For the dead-water tax. */
+  fertilityAt(x: number, y: number): number {
+    return this.fertility[this.idx(x, y)]!;
+  }
+
   /** Remove up to `amount` biomass at a position (channel A); returns the amount actually taken. */
   grazeAt(x: number, y: number, amount: number): number {
     const i = this.idx(x, y);
