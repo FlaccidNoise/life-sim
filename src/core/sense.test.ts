@@ -3,6 +3,7 @@ import { OrganismStore } from './store';
 import { FoodField } from './food-field';
 import { SpatialHash } from './spatial-hash';
 import { senseFood, senseCreatures } from './sense';
+import { Walls } from './walls';
 import { defaultConfig } from './config';
 import { ScalarGene, SCALAR_GENE_COUNT } from './genome';
 
@@ -77,20 +78,20 @@ describe('senseCreatures (sight)', () => {
 
   it('a predator’s sight points TOWARD a nearby herbivore (chase)', () => {
     const s = pair(1, 0); // viewer carnivore, other herbivore
-    senseCreatures(s, hashOf(s), cfg);
+    senseCreatures(s, hashOf(s), cfg, null);
     expect(s.sightX[0]!).toBeGreaterThan(0); // pulled toward +x where the prey is
   });
 
   it('a herbivore’s sight points AWAY from a nearby predator (flee)', () => {
     const s = pair(0, 1); // viewer herbivore, other carnivore
-    senseCreatures(s, hashOf(s), cfg);
+    senseCreatures(s, hashOf(s), cfg, null);
     expect(s.sightX[0]!).toBeLessThan(0); // pushed away from +x where the predator is
   });
 
   it('sees nothing outside its vision range', () => {
     const s = pair(1, 0);
     setVision(s, 0, { range: 5, fov: 1.5, acuity: 1, diet: 1 }); // prey is 10u away > range 5
-    senseCreatures(s, hashOf(s), cfg);
+    senseCreatures(s, hashOf(s), cfg, null);
     expect(s.sightX[0]!).toBe(0);
     expect(s.sightY[0]!).toBe(0);
   });
@@ -99,7 +100,7 @@ describe('senseCreatures (sight)', () => {
     const s = pair(1, 0);
     s.heading[0] = Math.PI; // facing −x, away from the prey at +x
     setVision(s, 0, { range: 24, fov: 0.3, acuity: 1, diet: 1 }); // narrow cone, prey behind
-    senseCreatures(s, hashOf(s), cfg);
+    senseCreatures(s, hashOf(s), cfg, null);
     expect(s.sightX[0]!).toBe(0);
     expect(s.sightY[0]!).toBe(0); // no leak on either axis
   });
@@ -107,7 +108,7 @@ describe('senseCreatures (sight)', () => {
   it('a blind creature (acuity 0) sees nothing', () => {
     const s = pair(1, 0);
     setVision(s, 0, { range: 24, fov: 1.5, acuity: 0, diet: 1 });
-    senseCreatures(s, hashOf(s), cfg);
+    senseCreatures(s, hashOf(s), cfg, null);
     expect(s.sightX[0]!).toBe(0);
   });
 
@@ -115,7 +116,7 @@ describe('senseCreatures (sight)', () => {
     const s = pair(1, 0);
     s.x[1] = s.x[0]!; // co-locate the prey on the predator → d === 0
     s.y[1] = s.y[0]!;
-    senseCreatures(s, hashOf(s), cfg);
+    senseCreatures(s, hashOf(s), cfg, null);
     expect(Number.isFinite(s.sightX[0]!)).toBe(true);
     expect(Number.isFinite(s.sightY[0]!)).toBe(true);
     expect(s.sightX[0]!).toBe(0); // the d===0 contributor is skipped, not NaN
@@ -135,7 +136,7 @@ describe('senseCreatures (sight)', () => {
     setSize(s, 0, 4); // viewer small
     setSize(s, 1, 12); // neighbor much bigger
     setShelter(s, 0, 0.2);
-    senseCreatures(s, hashOf(s), cfg);
+    senseCreatures(s, hashOf(s), cfg, null);
     expect(s.sightX[0]!).toBeGreaterThan(0); // drawn toward the big neighbor at +x
   });
 
@@ -144,7 +145,7 @@ describe('senseCreatures (sight)', () => {
     setSize(s, 0, 4);
     setSize(s, 1, 12); // predator is bigger, but shelter must not draw prey into it
     setShelter(s, 0, 0.2);
-    senseCreatures(s, hashOf(s), cfg);
+    senseCreatures(s, hashOf(s), cfg, null);
     expect(s.sightX[0]!).toBeLessThan(0); // still flees the predator
   });
 
@@ -153,7 +154,7 @@ describe('senseCreatures (sight)', () => {
     setSize(s, 0, 12); // viewer big
     setSize(s, 1, 4); // neighbor smaller → sizeDiff < 0 → no shelter term
     setShelter(s, 0, 0.2);
-    senseCreatures(s, hashOf(s), cfg);
+    senseCreatures(s, hashOf(s), cfg, null);
     expect(s.sightX[0]!).toBe(0); // appeal 0 and no shelter → neutral
   });
 
@@ -163,7 +164,7 @@ describe('senseCreatures (sight)', () => {
     setSize(s, 0, 4);
     setSize(s, 1, 12);
     setShelter(s, 0, 0.2);
-    senseCreatures(s, hashOf(s), cfg0);
+    senseCreatures(s, hashOf(s), cfg0, null);
     expect(s.sightX[0]!).toBe(0); // same setup as the shelter test, but the global gain zeroes it
   });
 
@@ -179,7 +180,7 @@ describe('senseCreatures (sight)', () => {
     s.hue[0] = 0.3;
     s.hue[1] = 0.3;
     setCohesion(s, 0, 0.5);
-    senseCreatures(s, hashOf(s), cfg);
+    senseCreatures(s, hashOf(s), cfg, null);
     expect(s.sightX[0]!).toBeGreaterThan(0); // drawn toward the neighbor at +x
   });
 
@@ -188,7 +189,7 @@ describe('senseCreatures (sight)', () => {
     s.hue[0] = 0;
     s.hue[1] = 0.5; // maximally distant hue — irrelevant under hue-blind
     setCohesion(s, 0, 0.5);
-    senseCreatures(s, hashOf(s), cfg);
+    senseCreatures(s, hashOf(s), cfg, null);
     expect(s.sightX[0]!).toBeGreaterThan(0); // lineage ignored → still schools
   });
 
@@ -197,7 +198,7 @@ describe('senseCreatures (sight)', () => {
     s.hue[0] = 0;
     s.hue[1] = 0.5; // maximally distant hue → similarity 0
     setCohesion(s, 0, 0.5);
-    senseCreatures(s, hashOf(s), cfgKin);
+    senseCreatures(s, hashOf(s), cfgKin, null);
     expect(s.sightX[0]!).toBe(0); // appeal 0 and hueSim 0 → neutral
   });
 
@@ -206,7 +207,7 @@ describe('senseCreatures (sight)', () => {
     s.hue[0] = 0.3;
     s.hue[1] = 0.3; // identical lineage color → full similarity
     setCohesion(s, 0, 0.5);
-    senseCreatures(s, hashOf(s), cfgKin);
+    senseCreatures(s, hashOf(s), cfgKin, null);
     expect(s.sightX[0]!).toBeGreaterThan(0); // kin attract
   });
 
@@ -215,7 +216,7 @@ describe('senseCreatures (sight)', () => {
     s.hue[0] = 0.3;
     s.hue[1] = 0.3; // same lineage color, but it wants to eat me
     setCohesion(s, 0, 0.5); // founder center — bounded below the flee appeal (−1)
-    senseCreatures(s, hashOf(s), cfg);
+    senseCreatures(s, hashOf(s), cfg, null);
     expect(s.sightX[0]!).toBeLessThan(0); // still flees
   });
 
@@ -225,7 +226,75 @@ describe('senseCreatures (sight)', () => {
     s.hue[0] = 0.3;
     s.hue[1] = 0.3;
     setCohesion(s, 0, 0.5);
-    senseCreatures(s, hashOf(s), cfg0);
+    senseCreatures(s, hashOf(s), cfg0, null);
     expect(s.sightX[0]!).toBe(0);
+  });
+
+  // ── wall occlusion (line-of-sight blocking) ──────────────────────────────────────────────────────
+  // A dense Walls over the small world; scan for a viewer→target pair that is in-cone, in-range, AND
+  // has a solid cell strictly between them — the fixture the occlusion guard must act on.
+  const dense = defaultConfig({
+    worldWidth: W,
+    worldHeight: H,
+    wallCols: 128,
+    wallRows: 128,
+    wallRegionCount: 1,
+    wallDensity: 0.6,
+    flowScale: 6, // short noise wavelength → fine solid features a 10u segment can cross
+    foodPatchCount: 0, // no pockets to carve open → solids stay where the noise put them
+    seed: 7,
+  });
+  /** Find a (viewer, target) 10u apart, viewer facing the target, with a wall on the segment. */
+  const occludedFixture = (
+    walls: Walls,
+  ): { vx: number; vy: number; tx: number; ty: number } | null => {
+    for (let vx = 20; vx < W - 20; vx += 4) {
+      for (let vy = 20; vy < H - 20; vy += 4) {
+        const tx = vx + 10;
+        const ty = vy;
+        if (walls.isSolidAt(vx, vy) || walls.isSolidAt(tx, ty)) continue; // both ends must be open
+        if (walls.losBlocked(vx, vy, tx, ty)) return { vx, vy, tx, ty };
+      }
+    }
+    return null;
+  };
+  const occludedPair = (fx: { vx: number; vy: number; tx: number; ty: number }): OrganismStore => {
+    const s = new OrganismStore(4);
+    const a = s.alloc();
+    const b = s.alloc();
+    s.x[a] = fx.vx;
+    s.y[a] = fx.vy;
+    s.heading[a] = 0; // facing +x toward the target
+    s.x[b] = fx.tx;
+    s.y[b] = fx.ty;
+    setVision(s, a, { range: 24, fov: 1.5, acuity: 1, diet: 1 });
+    setVision(s, b, { range: 24, fov: 1.5, acuity: 1, diet: 0 });
+    s.rebuildLive();
+    return s;
+  };
+
+  it('a wall between viewer and target removes the target from the sight vector', () => {
+    const walls = new Walls(W, H, dense.wallCols, dense.wallRows, dense);
+    const fx = occludedFixture(walls);
+    expect(fx).not.toBeNull(); // the dense field must contain an occluded in-cone pair
+    const s = occludedPair(fx!);
+    const h = hashOf(s);
+    // Sanity: with NO wall the target is clearly seen (non-zero pull toward +x).
+    senseCreatures(s, h, cfg, null);
+    expect(Math.abs(s.sightX[0]!)).toBeGreaterThan(0);
+    // With occlusion ON the wall hides the target → sight collapses to ~0.
+    senseCreatures(s, h, cfg, walls);
+    expect(s.sightX[0]!).toBe(0);
+    expect(s.sightY[0]!).toBe(0);
+  });
+
+  it('wallOccludesVision:false ignores walls (target still seen behind a wall)', () => {
+    const walls = new Walls(W, H, dense.wallCols, dense.wallRows, dense);
+    const fx = occludedFixture(walls);
+    expect(fx).not.toBeNull();
+    const s = occludedPair(fx!);
+    const cfgNoOcc = defaultConfig({ worldWidth: W, worldHeight: H, wallOccludesVision: false });
+    senseCreatures(s, hashOf(s), cfgNoOcc, walls);
+    expect(Math.abs(s.sightX[0]!)).toBeGreaterThan(0); // ablation off → wall ignored, target seen
   });
 });

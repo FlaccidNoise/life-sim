@@ -160,7 +160,7 @@ export class World {
     // SENSE → THINK/ACT: perceive the food gradient (per-creature sense range) + SIGHT (nearby creatures
     // within the vision cone; uses the start-of-tick hash), then steer (per-creature genes; sets thrust).
     senseFood(s, this.food, cfg.worldWidth, cfg.worldHeight);
-    senseCreatures(s, this.hash, cfg);
+    senseCreatures(s, this.hash, cfg, this.walls);
     steer(s, cfg.learningEnabled, cfg.eligLambda, cfg.motorSquash);
     // MOVE: repulsion adds onto the thrust force, then integrate (per-creature maxSpeed gene).
     computeRepulsion(s, this.hash, cfg.cellRadius, cfg.repulsion, cfg.worldWidth, cfg.worldHeight);
