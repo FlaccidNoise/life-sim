@@ -55,6 +55,8 @@ export class World {
       config.foodRows,
       config.foodCap,
       config.foodInit,
+      config.foodChannels,
+      config.foodChannelRatio,
     );
     this.setup();
   }

@@ -56,6 +56,14 @@ export interface Config {
   foodPatchRadius: number;
   /** Fertility of the dead water between pockets, [0,1] (small → near-dead gaps that isolate pockets). */
   foodBaseFertility: number;
+  /** Number of independent food channels (lever B, niche partitioning). 1 = a single biomass field,
+   *  byte-identical to a one-resource world (the ablation OFF state). 2 = a second logistic channel B2
+   *  sharing the same fertility map; each cell's cap is split A/B so total biomass is unchanged. This is
+   *  the gate for the FORAGE_PREF gene: with 1, that gene is never drawn from RNG (hash unchanged). */
+  foodChannels: number;
+  /** Channel-B's share of each cell's carrying capacity, [0,1] (channel A gets 1−this). Only used when
+   *  foodChannels===2. 0.5 = symmetric two-resource cell; lower makes B scarcer (sharpens specialization). */
+  foodChannelRatio: number;
   /** Max biomass an organism ingests per tick from its current cell (→ energy 1:1). */
   eatRate: number;
   /** Basal metabolic cost per tick (the starvation clock — high enough that not-eating kills). */
@@ -181,6 +189,10 @@ export interface Config {
   cohesionDriveCost: number;
   /** Global multiplier on the cohesion term (ablation knob + live tuning). 0 = schooling OFF. */
   cohesionGain: number;
+  /** Schooling SELECTIVITY: false (default) = pull only toward SIMILAR-hue (lineage) neighbors, so
+   *  schools are kin-clumps; true = hue-blind, pull toward ALL neighbors equally, so genetically diverse
+   *  prey can herd into one dense school. An off-by-default behavior knob (byte-identical when false). */
+  cohesionHueBlind: boolean;
 
   /** Gaussian σ spread of founder brain weights around the seed brain (initial behavioral variation). */
   founderSigma: number;
@@ -274,6 +286,8 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     foodPatchCount: 14, // distinct island communities scattered across the archipelago
     foodPatchRadius: 5, // ~320-unit pockets (5 cells × 64 units) — small + separate, not merged
     foodBaseFertility: 0, // truly dead water between pockets → real isolation, distinct islands
+    foodChannels: 1, // single resource (byte-identical OFF state); 2 = niche-partitioning second channel
+    foodChannelRatio: 0.5, // symmetric A/B split when channels===2 (total per-cell cap unchanged)
     eatRate: 2,
     basalCost: 0.12, // low starvation clock → longer lives + a SOFTER early crash, so predator founders
     // survive the sparse phase long enough to reach the prey boom (predator-viability fix; was 0.2)
@@ -345,6 +359,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     cohesionDrive: 0.15,
     cohesionDriveCost: 0.1,
     cohesionGain: 1,
+    cohesionHueBlind: false,
     // NB pre-sight, predators hunt by PROXIMITY only — the encounter rate is too low for hunting to
     // pay, so the predator trait does not persist yet (it needs the sight slice to actively target
     // prey). The mechanic + genes + color are in place; sight activates it.
