@@ -1,6 +1,6 @@
 import { type OrganismStore } from '../../core/store';
 import { ScalarGene, SCALAR_GENE_COUNT, SCALAR_GENE_SPECS } from '../../core/genome';
-import { hsv2rgb, type RGB } from '../palette';
+import { hsv2rgb, metabSaturation, type RGB } from '../palette';
 
 export type { RGB };
 
@@ -56,8 +56,7 @@ export function buildDerived(genes: GeneView): Derived {
   const diet = genes.diet;
   const fear = clamp01(diet * 1.15);
   const cute = 1 - fear;
-  const metab = genes.raw(ScalarGene.METAB_EFF);
-  const sat = clamp01((fear > 0.5 ? 0.85 : 0.72) * (0.6 + 0.4 * ((metab - 0.5) * 2)));
+  const sat = metabSaturation(genes.raw(ScalarGene.METAB_EFF), fear);
   const base = hsv2rgb(genes.hue - Math.floor(genes.hue), sat, lerp(0.92, 0.82, fear));
   const h = genes.heading;
   return {

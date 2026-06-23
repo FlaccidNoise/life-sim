@@ -11,7 +11,7 @@
 import { type OrganismStore } from '../core/store';
 import { type FoodField } from '../core/food-field';
 import { type Walls } from '../core/walls';
-import { ScalarGene, SCALAR_GENE_COUNT, SCALAR_GENE_SPECS, MIN_BAND } from '../core/genome';
+import { ScalarGene, SCALAR_GENE_COUNT, MIN_BAND } from '../core/genome';
 import {
   dietShape,
   DIET_HUE_HERB,
@@ -20,14 +20,13 @@ import {
   ENERGY_HUE_STARVING,
   ENERGY_HUE_REPRO,
   ENERGY_HUE_SATIATED,
+  METAB_MIN,
+  METAB_MAX,
 } from './palette';
 
 /** Canvas color-by mode (cycled with 'c'): which gene/state drives dot hue. */
 export const ColorMode = { LINEAGE: 0, DIET: 1, ENERGY: 2 } as const;
 export type ColorMode = (typeof ColorMode)[keyof typeof ColorMode];
-
-/** Vision-range cap → saturation normalizer (sourced from the gene spec, not a magic literal). */
-const VISION_MAX = SCALAR_GENE_SPECS[ScalarGene.VISION_RANGE]!.max;
 
 /** Format a JS number as a GLSL float literal (always has a decimal point, so `mix()` stays float). */
 const glf = (n: number): string => (Number.isInteger(n) ? `${n}.0` : `${n}`);
@@ -37,16 +36,18 @@ in vec2 a_pos;
 in float a_hue;                 // genome hue gene [0,1) → LINEAGE identity (full wheel in lineage mode)
 in float a_size;                // per-creature point size in device px (from the size gene)
 in float a_diet;                // diet gene [0,1] → trophic-role hue (diet mode) AND the SHAPE bucket
-in float a_vis;                 // vision range, normalized [0,1] → SATURATION (sharp-eyed vivid ↔ blind gray)
 in float a_spd;                 // current speed, normalized [0,1] → BRIGHTNESS (active bright ↔ idle/jiggling dim)
 in float a_shape;               // 0 herbivore (circle) · 1 omnivore (diamond) · 2 predator (triangle)
 in float a_efrac;               // energy band fraction [0,1] → hue in energy color-mode
+in float a_heading;             // heading in radians → glyph rotation (face heading)
+in float a_metab;               // normalized METAB_EFF [0,1] → SATURATION (efficient vivid ↔ inefficient grey)
 uniform vec2 u_cam;             // camera centre in world units (pan)
 uniform vec2 u_canvas;
 uniform float u_scale;          // device px per world unit (base fit × zoom)
 uniform int u_colorMode;        // 0 = lineage · 1 = diet · 2 = energy (cycled with 'c')
 out vec3 v_color;
 flat out float v_shape;
+flat out float v_heading;
 vec3 hsv2rgb(float h, float s, float v) {
   vec3 p = abs(fract(vec3(h) + vec3(1.0, 2.0/3.0, 1.0/3.0)) * 6.0 - 3.0);
   return v * mix(vec3(1.0), clamp(p - 1.0, 0.0, 1.0), s);
@@ -70,7 +71,9 @@ void main() {
   // Channels per dot: trophic ROLE = SHAPE (stable, life-constant); COLOR = the active color-mode
   // (lineage kin-identity / diet / energy); PERCEPTION = saturation (sharp-eyed vivid ↔ near-blind
   // grey); ACTIVITY = brightness (moving bright ↔ idle dim); body SIZE = the dot's radius.
-  float sat = 0.25 + 0.70 * clamp(a_vis, 0.0, 1.0);        // low vision → greyish, sharp eyes → vivid
+  float fear = clamp(a_diet * 1.15, 0.0, 1.0);
+  float satCeil = fear > 0.5 ? 0.85 : 0.72;
+  float sat = clamp(satCeil * (0.6 + 0.4 * (a_metab * 2.0)), 0.0, 1.0); // METAB_EFF → vivid ↔ grey
   float val = 0.50 + 0.50 * clamp(a_spd, 0.0, 1.0);        // idle → dim, fast → bright
   if (u_colorMode == 1) {
     v_color = hsv2rgb(dietHue(a_diet), sat, val);          // diet: green herbivore → red predator
@@ -80,6 +83,7 @@ void main() {
     v_color = hsv2rgb(fract(a_hue), sat, val);             // lineage: hue gene over the full wheel
   }
   v_shape = a_shape;
+  v_heading = a_heading;
 }`;
 
 // Per-role glyph by signed-distance discard in the point's [0,1]² coord: circle (herbivore),
@@ -88,17 +92,25 @@ const DOT_FRAG = `#version 300 es
 precision mediump float;
 in vec3 v_color;
 flat in float v_shape;
+flat in float v_heading;
 out vec4 outColor;
 void main() {
   vec2 c = gl_PointCoord - vec2(0.5);   // [-0.5,0.5]², origin at the point centre (y down)
-  if (v_shape > 1.5) {                  // predator: upward triangle
-    float y = -c.y;                     // flip so the apex points up on screen
-    if (y > 0.5 || y < -0.4 || abs(c.x) > (0.5 - y) * 0.62) discard;
+  // rotate so local +x aligns with the heading direction (screen y-down)
+  vec2 cr = vec2(cos(v_heading) * c.x - sin(v_heading) * c.y,
+                 sin(v_heading) * c.x + cos(v_heading) * c.y);
+  bool keep;
+  if (v_shape > 1.5) {                  // predator: triangle, apex toward +x (front)
+    float x = cr.x;
+    keep = !(x > 0.5 || x < -0.4 || abs(cr.y) > (0.5 - x) * 0.62);
   } else if (v_shape > 0.5) {           // omnivore: diamond (L1 ball)
-    if (abs(c.x) + abs(c.y) > 0.5) discard;
+    keep = (abs(cr.x) + abs(cr.y) <= 0.5);
   } else {                              // herbivore: circle
-    if (dot(c, c) > 0.25) discard;
+    keep = (dot(cr, cr) <= 0.25);
   }
+  // heading nub: a small dot at the front (+x) so even a circle shows facing
+  bool nub = distance(cr, vec2(0.42, 0.0)) < 0.13;
+  if (!keep && !nub) discard;
   outColor = vec4(v_color, 1.0);
 }`;
 
@@ -199,26 +211,29 @@ export class Renderer {
   private readonly hueBuffer: WebGLBuffer;
   private readonly sizeBuffer: WebGLBuffer;
   private readonly dietBuffer: WebGLBuffer;
-  private readonly visBuffer: WebGLBuffer;
   private readonly spdBuffer: WebGLBuffer;
   private readonly shapeBuffer: WebGLBuffer;
   private readonly efracBuffer: WebGLBuffer;
+  private readonly headingBuffer: WebGLBuffer;
+  private readonly metabBuffer: WebGLBuffer;
   private readonly dotScratch: Float32Array;
   private readonly hueScratch: Float32Array;
   private readonly sizeScratch: Float32Array;
   private readonly dietScratch: Float32Array;
-  private readonly visScratch: Float32Array;
   private readonly spdScratch: Float32Array;
   private readonly shapeScratch: Float32Array;
   private readonly efracScratch: Float32Array;
+  private readonly headingScratch: Float32Array;
+  private readonly metabScratch: Float32Array;
   private readonly aPos: number;
   private readonly aHue: number;
   private readonly aSize: number;
   private readonly aDiet: number;
-  private readonly aVis: number;
   private readonly aSpd: number;
   private readonly aShape: number;
   private readonly aEfrac: number;
+  private readonly aHeading: number;
+  private readonly aMetab: number;
   // debug overlay lines
   private readonly lineProgram: WebGLProgram;
   private readonly lineBuffer: WebGLBuffer;
@@ -262,10 +277,11 @@ export class Renderer {
     this.aHue = gl.getAttribLocation(this.dotProgram, 'a_hue');
     this.aSize = gl.getAttribLocation(this.dotProgram, 'a_size');
     this.aDiet = gl.getAttribLocation(this.dotProgram, 'a_diet');
-    this.aVis = gl.getAttribLocation(this.dotProgram, 'a_vis');
     this.aSpd = gl.getAttribLocation(this.dotProgram, 'a_spd');
     this.aShape = gl.getAttribLocation(this.dotProgram, 'a_shape');
     this.aEfrac = gl.getAttribLocation(this.dotProgram, 'a_efrac');
+    this.aHeading = gl.getAttribLocation(this.dotProgram, 'a_heading');
+    this.aMetab = gl.getAttribLocation(this.dotProgram, 'a_metab');
     this.aCorner = gl.getAttribLocation(this.foodProgram, 'a_corner');
     this.aWallCorner = gl.getAttribLocation(this.wallProgram, 'a_corner');
     this.aLinePos = gl.getAttribLocation(this.lineProgram, 'a_pos');
@@ -275,10 +291,11 @@ export class Renderer {
     const hueBuffer = gl.createBuffer();
     const sizeBuffer = gl.createBuffer();
     const dietBuffer = gl.createBuffer();
-    const visBuffer = gl.createBuffer();
     const spdBuffer = gl.createBuffer();
     const shapeBuffer = gl.createBuffer();
     const efracBuffer = gl.createBuffer();
+    const headingBuffer = gl.createBuffer();
+    const metabBuffer = gl.createBuffer();
     const quadBuffer = gl.createBuffer();
     const lineBuffer = gl.createBuffer();
     const foodTex = gl.createTexture();
@@ -288,20 +305,22 @@ export class Renderer {
       !hueBuffer ||
       !sizeBuffer ||
       !dietBuffer ||
-      !visBuffer ||
       !spdBuffer ||
       !shapeBuffer ||
       !efracBuffer ||
+      !headingBuffer ||
+      !metabBuffer ||
       !quadBuffer ||
       !lineBuffer ||
       !foodTex ||
       !wallTex
     )
       throw new Error('GL resource alloc failed');
-    this.visBuffer = visBuffer;
     this.spdBuffer = spdBuffer;
     this.shapeBuffer = shapeBuffer;
     this.efracBuffer = efracBuffer;
+    this.headingBuffer = headingBuffer;
+    this.metabBuffer = metabBuffer;
     this.dotBuffer = dotBuffer;
     this.hueBuffer = hueBuffer;
     this.sizeBuffer = sizeBuffer;
@@ -314,10 +333,11 @@ export class Renderer {
     this.hueScratch = new Float32Array(capacity);
     this.sizeScratch = new Float32Array(capacity);
     this.dietScratch = new Float32Array(capacity);
-    this.visScratch = new Float32Array(capacity);
     this.spdScratch = new Float32Array(capacity);
     this.shapeScratch = new Float32Array(capacity);
     this.efracScratch = new Float32Array(capacity);
+    this.headingScratch = new Float32Array(capacity);
+    this.metabScratch = new Float32Array(capacity);
 
     // Unit quad as a triangle strip: (0,0)(1,0)(0,1)(1,1).
     gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
@@ -499,11 +519,12 @@ export class Renderer {
       const hsc = this.hueScratch;
       const zsc = this.sizeScratch;
       const dsc = this.dietScratch;
-      const vsc = this.visScratch;
       const ssc = this.spdScratch;
       const psc = this.shapeScratch;
       const esc = this.efracScratch;
-      const { liveIndices, x, y, vx, vy, hue, genId, scalarGenes, energy } = store;
+      const hdsc = this.headingScratch;
+      const mtsc = this.metabScratch;
+      const { liveIndices, x, y, vx, vy, hue, heading, genId, scalarGenes, energy } = store;
       const useInterp = interp != null && interp.alpha < 1;
       const a = useInterp ? interp.alpha : 0;
       const ww = this.worldWidth;
@@ -525,7 +546,6 @@ export class Renderer {
         const diet = scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.DIET]!;
         dsc[k] = diet; // green→red trophic hue (diet color-mode)
         psc[k] = dietShape(diet); // 0 circle / 1 diamond / 2 triangle (trophic role glyph)
-        vsc[k] = scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.VISION_RANGE]! / VISION_MAX; // → saturation
         const speed = Math.hypot(vx[i]!, vy[i]!);
         ssc[k] = speed > 6 ? 1 : speed / 6; // normalized by ~maxSpeed → brightness (activity)
         // Energy band fraction for the energy color-mode: 0..0.5 = SURVIVAL (below repro bar),
@@ -542,6 +562,10 @@ export class Renderer {
               : repro > 0
                 ? (0.5 * e) / repro
                 : 0;
+        hdsc[k] = heading[i]!; // radians → glyph rotation (face heading)
+        mtsc[k] =
+          (scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.METAB_EFF]! - METAB_MIN) /
+          (METAB_MAX - METAB_MIN); // normalized [0,1] → saturation (efficient vivid ↔ inefficient grey)
       }
       gl.useProgram(this.dotProgram);
       gl.bindBuffer(gl.ARRAY_BUFFER, this.dotBuffer);
@@ -560,10 +584,6 @@ export class Renderer {
       gl.bufferData(gl.ARRAY_BUFFER, dsc.subarray(0, n), gl.DYNAMIC_DRAW);
       gl.enableVertexAttribArray(this.aDiet);
       gl.vertexAttribPointer(this.aDiet, 1, gl.FLOAT, false, 0, 0);
-      gl.bindBuffer(gl.ARRAY_BUFFER, this.visBuffer);
-      gl.bufferData(gl.ARRAY_BUFFER, vsc.subarray(0, n), gl.DYNAMIC_DRAW);
-      gl.enableVertexAttribArray(this.aVis);
-      gl.vertexAttribPointer(this.aVis, 1, gl.FLOAT, false, 0, 0);
       gl.bindBuffer(gl.ARRAY_BUFFER, this.spdBuffer);
       gl.bufferData(gl.ARRAY_BUFFER, ssc.subarray(0, n), gl.DYNAMIC_DRAW);
       gl.enableVertexAttribArray(this.aSpd);
@@ -576,6 +596,14 @@ export class Renderer {
       gl.bufferData(gl.ARRAY_BUFFER, esc.subarray(0, n), gl.DYNAMIC_DRAW);
       gl.enableVertexAttribArray(this.aEfrac);
       gl.vertexAttribPointer(this.aEfrac, 1, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.headingBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, hdsc.subarray(0, n), gl.DYNAMIC_DRAW);
+      gl.enableVertexAttribArray(this.aHeading);
+      gl.vertexAttribPointer(this.aHeading, 1, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.metabBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, mtsc.subarray(0, n), gl.DYNAMIC_DRAW);
+      gl.enableVertexAttribArray(this.aMetab);
+      gl.vertexAttribPointer(this.aMetab, 1, gl.FLOAT, false, 0, 0);
       this.setCommonUniforms(this.dotProgram, sc);
       gl.uniform1i(gl.getUniformLocation(this.dotProgram, 'u_colorMode'), colorMode);
       gl.drawArrays(gl.POINTS, 0, n);
