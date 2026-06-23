@@ -56,6 +56,10 @@ const GENE_LABELS: readonly string[] = [
   'shelterDrive',
   'cohesionDrive',
   'foragePref',
+  'foragePrefC',
+  'senseRangeB',
+  'senseRangeC',
+  'pheroDeposit',
 ];
 if (GENE_LABELS.length !== SCALAR_GENE_COUNT) {
   throw new Error(

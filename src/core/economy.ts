@@ -305,6 +305,7 @@ export function reproduce(
       wallSenseGenes,
       flowSenseGenes,
       cfg.hungerSense,
+      cfg.pheromoneEnabled,
     );
     mutateScalarGenes(store.scalarGenes, child, p, rng, cfg);
     // No-Lamarck: the child's runtime brain starts from its freshly-mutated GENOME, not the parent's

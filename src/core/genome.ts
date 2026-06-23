@@ -67,8 +67,17 @@ export const ScalarGene = {
   // a single channel the gene is pinned at its center and never drawn from RNG (determinism stays byte-
   // identical). Appended LAST so the existing genes' RNG draws are unchanged.
   FORAGE_PREF: 17,
+  // F1 multi-resource (gated cfg.foodChannels>=3): a 3-way resource simplex needs a SECOND preference DOF,
+  // plus per-channel smell ranges (channel A reuses SENSE_RANGE at slot 2 — no SENSE_RANGE_A, to avoid a
+  // double-taxed unused gene). All appended at the TAIL so every prior gene's RNG draw is unchanged; each
+  // skips its whole draw when foodChannels<3, keeping the stream byte-identical for the N<=2 ablation.
+  FORAGE_PREF_C: 18, // with FORAGE_PREF, a barycentric position over {A,B,C}
+  SENSE_RANGE_B: 19, // smell range for channel B (tradeoff vs A/C; costed)
+  SENSE_RANGE_C: 20, // smell range for channel C
+  // F2 pheromone (gated cfg.pheromoneEnabled): how strongly this creature deposits into the pheromone field.
+  PHERO_DEPOSIT: 21,
 } as const;
-export const SCALAR_GENE_COUNT = 18;
+export const SCALAR_GENE_COUNT = 22;
 
 /** Minimum reproductive-band width: satiated is read as max(satiatedGene, reproGene + this) so the two
  *  life-history bars can mutate independently without inverting (which would break the learn gate). */
@@ -94,7 +103,9 @@ interface ScalarGeneSpec {
     | 'visionAcuity'
     | 'shelterDrive'
     | 'cohesionDrive'
-    | 'foragePref';
+    | 'foragePref'
+    | 'foragePrefC'
+    | 'pheroDeposit';
   /** Config key for the per-unit-above-center basal cost coeff, or null for a non-upkeep gene. */
   costKey:
     | 'maxSpeedCost'
@@ -109,6 +120,7 @@ interface ScalarGeneSpec {
     | 'visionAcuityCost'
     | 'shelterDriveCost'
     | 'cohesionDriveCost'
+    | 'pheroDepositCost'
     | null;
   /** Hard clamp range the gene value is kept within (at seed and at every mutation). */
   min: number;
@@ -154,7 +166,30 @@ export const SCALAR_GENE_SPECS: readonly ScalarGeneSpec[] = [
   // the other channel (the specialization bonus in metabolize rewards committing). Appended LAST so the
   // RNG draws for every prior gene are unchanged; only drawn at all when cfg.foodChannels===2 (see below).
   { centerKey: 'foragePref', costKey: null, min: 0, max: 1 },
+  // F1: 2nd preference DOF (null cost, like FORAGE_PREF) + channel B/C smell ranges (costed like SENSE_RANGE).
+  { centerKey: 'foragePrefC', costKey: null, min: 0, max: 1 },
+  { centerKey: 'senseStep', costKey: 'senseRangeCost', min: 8, max: 256 },
+  { centerKey: 'senseStep', costKey: 'senseRangeCost', min: 8, max: 256 },
+  // F2: pheromone deposit strength — costed (no free chemical broadcast); the tradeoff for signalling.
+  { centerKey: 'pheroDeposit', costKey: 'pheroDepositCost', min: 0, max: 5 },
 ];
+
+/** Tail-gated scalar genes: each takes its founder CENTER (seed) / parent value (mutate) WITHOUT drawing
+ *  RNG when its gate is off, so the draw stream is byte-identical for any OFF subset (the FORAGE_PREF
+ *  pattern generalized). Every gated gene lives at the tail (17..21) after all always-drawn genes; the
+ *  gates are monotonic in foodChannels so widening FORAGE_PREF's gate from `!==2` to `<2` preserves the
+ *  channels=1 (skip) and channels=2 (draw) streams exactly. */
+export function scalarGeneGatedOff(g: number, cfg: Config): boolean {
+  if (g === ScalarGene.FORAGE_PREF) return cfg.foodChannels < 2;
+  if (
+    g === ScalarGene.FORAGE_PREF_C ||
+    g === ScalarGene.SENSE_RANGE_B ||
+    g === ScalarGene.SENSE_RANGE_C
+  )
+    return cfg.foodChannels < 3;
+  if (g === ScalarGene.PHERO_DEPOSIT) return !cfg.pheromoneEnabled;
+  return false;
+}
 
 function clampTo(v: number, min: number, max: number): number {
   if (v < min) return min;
@@ -168,11 +203,10 @@ export function seedScalarGenes(genes: Float32Array, slot: number, rng: Rng, cfg
   for (let g = 0; g < SCALAR_GENE_COUNT; g++) {
     const spec = SCALAR_GENE_SPECS[g]!;
     const center = cfg[spec.centerKey];
-    // FORAGE_PREF (lever B) is only a live, evolving trait when the second food channel exists. With one
-    // channel it's inert, so pin it at its center WITHOUT drawing from RNG. Because it's the LAST gene,
-    // skipping that one draw leaves the seed RNG stream byte-identical to the pre-lever engine — the
-    // determinism contract holds whenever foodChannels=1 (the ablation gate).
-    if (g === ScalarGene.FORAGE_PREF && cfg.foodChannels !== 2) {
+    // Tail-gated genes (FORAGE_PREF, the F1 multi-resource genes, PHERO_DEPOSIT) are pinned at their center
+    // WITHOUT drawing RNG when their feature is off — keeping the seed stream byte-identical (see
+    // scalarGeneGatedOff). They live at the tail so skipping their draw never shifts an earlier gene.
+    if (scalarGeneGatedOff(g, cfg)) {
       genes[base + g] = center;
       continue;
     }
@@ -197,9 +231,9 @@ export function mutateScalarGenes(
   for (let g = 0; g < SCALAR_GENE_COUNT; g++) {
     const spec = SCALAR_GENE_SPECS[g]!;
     const center = cfg[spec.centerKey];
-    // FORAGE_PREF: inherit the parent value with NO mutation draw when single-channel (see seedScalarGenes
-    // — keeps the birth RNG stream byte-identical, so reproduction stays deterministic with foodChannels=1).
-    if (g === ScalarGene.FORAGE_PREF && cfg.foodChannels !== 2) {
+    // Tail-gated genes inherit the parent value with NO mutation draw when their feature is off (mirrors
+    // seedScalarGenes — keeps the birth RNG stream byte-identical for any OFF subset).
+    if (scalarGeneGatedOff(g, cfg)) {
       genes[cb + g] = genes[pb + g]!;
       continue;
     }
@@ -258,11 +292,18 @@ export const Brain = {
   // pre-feature stream, byte-identical to legacy.
   HUNGER_TURN: 18, // hunger scalar → turn (e.g. wander/cast more when starving)
   HUNGER_THRUST: 19, // hunger scalar → thrust (e.g. forage harder when starving)
+  // F2 pheromone-sense weights: the pheromone gradient ∇P (lateral, forward) in the heading frame → turn +
+  // thrust. Gated on pheroSenseGenes; seed at 0 so evolution picks the SIGN — flee a crowd or aggregate.
+  // Kept LAST so each gated block (wall/flow/hunger/phero) draws RNG only when on; OFF stream byte-identical.
+  PHERO_LAT_TURN: 20,
+  PHERO_FWD_TURN: 21,
+  PHERO_LAT_THRUST: 22,
+  PHERO_FWD_THRUST: 23,
 } as const;
 /** Senses-core brain weights (food + sight) — the count present before walls/flow/hunger, and the RNG-draw
- *  count when all three gated blocks are off. Each gated block extends the array but draws RNG only when on. */
+ *  count when all gated blocks are off. Each gated block extends the array but draws RNG only when on. */
 export const BRAIN_CORE_GENES = 10;
-export const BRAIN_GENES = 20;
+export const BRAIN_GENES = 24;
 
 /** Founder brain ≈ the hand-tuned chemotaxis controller (turn toward lateral food, thrust up-gradient,
  *  gentle cruise) + ACTIVE sight: turn toward & thrust along the appeal-signed sight vector. Because that
@@ -274,9 +315,10 @@ export const BRAIN_GENES = 20;
  *  [LAT_TURN, FWD_TURN, LAT_THRUST, FWD_THRUST, TURN_BIAS, THRUST_BIAS,
  *   SIGHT_LAT_TURN, SIGHT_FWD_TURN, SIGHT_LAT_THRUST, SIGHT_FWD_THRUST,
  *   WALL_LAT_TURN, WALL_FWD_TURN, WALL_LAT_THRUST, WALL_FWD_THRUST,
- *   FLOW_LAT_TURN, FLOW_FWD_TURN, FLOW_LAT_THRUST, FLOW_FWD_THRUST, HUNGER_TURN, HUNGER_THRUST]. */
+ *   FLOW_LAT_TURN, FLOW_FWD_TURN, FLOW_LAT_THRUST, FLOW_FWD_THRUST, HUNGER_TURN, HUNGER_THRUST,
+ *   PHERO_LAT_TURN, PHERO_FWD_TURN, PHERO_LAT_THRUST, PHERO_FWD_THRUST]. The 4 phero weights seed at 0. */
 const FOUNDER_BRAIN: readonly number[] = [
-  1.2, 0, 0, 1.5, 0, 0.3, 1.0, 0, 0, 1.2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  1.2, 0, 0, 1.5, 0, 0.3, 1.0, 0, 0, 1.2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 ];
 
 /** Seed a founder's genome: founder brain + Gaussian spread, random hue (lineage colors diverge).
@@ -293,13 +335,20 @@ export function seedGenome(
   wallSenseGenes: boolean,
   flowSenseGenes: boolean,
   hungerSense: boolean,
+  pheroSenseGenes: boolean,
 ): void {
   const base = slot * BRAIN_GENES;
   for (let g = 0; g < BRAIN_GENES; g++) {
     const isWall = g >= Brain.WALL_LAT_TURN && g <= Brain.WALL_FWD_THRUST;
     const isFlow = g >= Brain.FLOW_LAT_TURN && g <= Brain.FLOW_FWD_THRUST;
     const isHunger = g >= Brain.HUNGER_TURN && g <= Brain.HUNGER_THRUST;
-    if ((isWall && !wallSenseGenes) || (isFlow && !flowSenseGenes) || (isHunger && !hungerSense)) {
+    const isPhero = g >= Brain.PHERO_LAT_TURN && g <= Brain.PHERO_FWD_THRUST;
+    if (
+      (isWall && !wallSenseGenes) ||
+      (isFlow && !flowSenseGenes) ||
+      (isHunger && !hungerSense) ||
+      (isPhero && !pheroSenseGenes)
+    ) {
       brain[base + g] = FOUNDER_BRAIN[g]!; // 0, no draw
       continue;
     }
@@ -323,6 +372,7 @@ export function mutateGenome(
   wallSenseGenes: boolean,
   flowSenseGenes: boolean,
   hungerSense: boolean,
+  pheroSenseGenes: boolean,
 ): void {
   const cb = child * BRAIN_GENES;
   const pb = parent * BRAIN_GENES;
@@ -330,7 +380,13 @@ export function mutateGenome(
     const isWall = g >= Brain.WALL_LAT_TURN && g <= Brain.WALL_FWD_THRUST;
     const isFlow = g >= Brain.FLOW_LAT_TURN && g <= Brain.FLOW_FWD_THRUST;
     const isHunger = g >= Brain.HUNGER_TURN && g <= Brain.HUNGER_THRUST;
-    if ((isWall && !wallSenseGenes) || (isFlow && !flowSenseGenes) || (isHunger && !hungerSense)) {
+    const isPhero = g >= Brain.PHERO_LAT_TURN && g <= Brain.PHERO_FWD_THRUST;
+    if (
+      (isWall && !wallSenseGenes) ||
+      (isFlow && !flowSenseGenes) ||
+      (isHunger && !hungerSense) ||
+      (isPhero && !pheroSenseGenes)
+    ) {
       brain[cb + g] = brain[pb + g]!; // inherit, no draw
       continue;
     }

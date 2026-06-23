@@ -64,6 +64,47 @@ describe('World — Phase 0 determinism contract', () => {
     expect(on.stateHash()).not.toBe(baseline.stateHash());
   });
 
+  it('pheromoneEnabled OFF is byte-identical to default; ON perturbs the world (F2 gene-gate)', () => {
+    const baseline = new World(defaultConfig({ seed: 1 }));
+    const off = new World(defaultConfig({ seed: 1, pheromoneEnabled: false }));
+    const on = new World(defaultConfig({ seed: 1, pheromoneEnabled: true }));
+    for (let t = 0; t < 1000; t++) {
+      baseline.step();
+      off.step();
+      on.step();
+    }
+    // OFF == default → the 4 PHERO brain genes + PHERO_DEPOSIT scalar gene consume NO RNG when off.
+    expect(off.stateHash()).toBe(baseline.stateHash());
+    // ON diverges → the extra founder/mutation draws happen (the gene layout is live).
+    expect(on.stateHash()).not.toBe(baseline.stateHash());
+  });
+
+  it('pheromoneEnabled OFF: the 4 PHERO brain genes stay exactly 0 after a long run (ablation)', () => {
+    const w = new World(defaultConfig({ seed: 13, pheromoneEnabled: false }));
+    for (let t = 0; t < 500; t++) w.step();
+    const s = w.store;
+    expect(s.liveCount).toBeGreaterThan(0);
+    for (let k = 0; k < s.liveCount; k++) {
+      const base = s.liveIndices[k]! * BRAIN_GENES;
+      for (let g = Brain.PHERO_LAT_TURN; g <= Brain.PHERO_FWD_THRUST; g++) {
+        expect(s.brain[base + g]!).toBe(0);
+      }
+    }
+  });
+
+  it('foodChannels=3 is deterministic and diverges from the default (F1 gene-gate)', () => {
+    const a = new World(defaultConfig({ seed: 3, foodChannels: 3 }));
+    const b = new World(defaultConfig({ seed: 3, foodChannels: 3 }));
+    const def = new World(defaultConfig({ seed: 3 }));
+    for (let t = 0; t < 800; t++) {
+      a.step();
+      b.step();
+      def.step();
+    }
+    expect(a.stateHash()).toBe(b.stateHash()); // same (config, seed) → byte-identical
+    expect(a.stateHash()).not.toBe(def.stateHash()); // the F1 genes draw → diverges from 1-channel default
+  });
+
   it('reset() reproduces the seeded run byte-for-byte', () => {
     const w = new World(defaultConfig({ seed: 7 }));
     for (let t = 0; t < 500; t++) w.step();

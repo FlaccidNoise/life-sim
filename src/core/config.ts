@@ -266,6 +266,38 @@ export interface Config {
    *  unbiased so SELECTION drives the niche split rather than a seeded head start. */
   foragePref: number;
 
+  // ── F1 multi-resource (3-channel niche partitioning by place; OFF default foodChannels<3 = byte-identical) ──
+  /** FORAGE_PREF_C gene center [0,1]: the 2nd preference DOF for a 3-way {A,B,C} resource simplex. Only drawn
+   *  when foodChannels>=3 (the tail-gated draw); 0.5 = unbiased. */
+  foragePrefC: number;
+  /** How the food pockets are assigned a resource channel when foodChannels===3 (couples diet to place):
+   *  0 = legacy (all pockets grow channel A — N>=3 stays a single-resource world, used to ablate the
+   *  spatial-partition mechanic); 1 = round-robin by pocket index (deterministic, RNG-free) so distinct
+   *  islands grow distinct resources. Byte-identical at foodChannels<3 (the field never splits). */
+  foodPocketChannelMode: number;
+
+  // ── F2 pheromones (a diffusing deposit-and-sense field; OFF default pheromoneEnabled=false = byte-identical) ──
+  /** Master switch for the pheromone field + the 4 PHERO brain genes + PHERO_DEPOSIT scalar gene. false =
+   *  the field is never allocated, the genes never draw RNG, and the sim is byte-identical to pre-feature. */
+  pheromoneEnabled: boolean;
+  /** PHERO_DEPOSIT gene center: baseline deposit strength a creature broadcasts. Only drawn when enabled. */
+  pheroDeposit: number;
+  /** Per-unit-above-center upkeep for PHERO_DEPOSIT (no free chemical broadcast). */
+  pheroDepositCost: number;
+  /** Inter-cell diffusion of the pheromone field per tick [0,0.25] — sets how FAR the signal carries (the
+   *  density-wall crossing) and, with decay, the DELAY that makes it candidate breathing feedback. */
+  pheroDiffuse: number;
+  /** Pheromone decay per tick (0,1] — the field forgets at this rate. Low + diffuse = long-memory delayed feedback. */
+  pheroDecay: number;
+  /** Default deposit source = on-graze (ubiquitous, so the field actually populates at 8192² where bites are
+   *  rare). true = a grazing creature deposits PHERO_DEPOSIT·pheroGrazeStrength into its cell. */
+  pheroDepositOnGraze: boolean;
+  /** Scale on the on-graze deposit. */
+  pheroGrazeStrength: number;
+  /** Secondary alarm-on-bite deposit (a bitten prey emits). Default 0 — bites are too rare at scale to be the
+   *  primary source, but kept as an evolvable flavor channel. */
+  pheroAlarmStrength: number;
+
   /** Gaussian σ spread of founder brain weights around the seed brain (initial behavioral variation). */
   founderSigma: number;
   /** Founder SIZE-variety spread: founders' SIZE gene is seeded UNIFORMLY in cellRadius·[1−s, 1+s]
@@ -483,7 +515,19 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     cohesionDriveCost: 0.1,
     cohesionGain: 1,
     cohesionHueBlind: true,
-    foragePref: 0.5, // FORAGE_PREF gene center (lever B); unbiased generalist, only drawn when foodChannels===2
+    foragePref: 0.5, // FORAGE_PREF gene center (lever B); unbiased generalist, only drawn when foodChannels>=2
+    // F1 multi-resource (OFF default: foodChannels stays 1/2 → these are byte-identical no-ops).
+    foragePrefC: 0.5, // 2nd preference DOF center; only drawn when foodChannels>=3
+    foodPocketChannelMode: 0, // 0 = all pockets channel A (no spatial split); 1 = round-robin distinct islands
+    // F2 pheromones (OFF default: pheromoneEnabled=false → field never allocated, genes never draw → no-op).
+    pheromoneEnabled: false,
+    pheroDeposit: 1.0, // PHERO_DEPOSIT gene center
+    pheroDepositCost: 0.01, // upkeep per unit above center
+    pheroDiffuse: 0.2, // carries the signal ~64-91u in 10-20 ticks (crosses the ~40u pocket NND)
+    pheroDecay: 0.02, // slow forget → long-memory delayed feedback (the breathing candidate)
+    pheroDepositOnGraze: true, // ubiquitous deposit source so the field populates at scale
+    pheroGrazeStrength: 1,
+    pheroAlarmStrength: 0, // alarm-on-bite secondary (bites too rare at scale to lead with)
     // NB pre-sight, predators hunt by PROXIMITY only — the encounter rate is too low for hunting to
     // pay, so the predator trait does not persist yet (it needs the sight slice to actively target
     // prey). The mechanic + genes + color are in place; sight activates it.

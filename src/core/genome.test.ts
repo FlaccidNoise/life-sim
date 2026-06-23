@@ -12,6 +12,7 @@ import {
   SCALAR_GENE_SPECS,
   seedScalarGenes,
   mutateScalarGenes,
+  scalarGeneGatedOff,
   geneUpkeep,
 } from './genome';
 
@@ -20,7 +21,7 @@ describe('genome', () => {
     const brain = new Float32Array(10 * BRAIN_GENES);
     const hue = new Float32Array(10);
     const rng = new Rng(1);
-    for (let s = 0; s < 10; s++) seedGenome(brain, hue, s, rng, 0.3, false, false, false);
+    for (let s = 0; s < 10; s++) seedGenome(brain, hue, s, rng, 0.3, false, false, false, false);
     // founders differ from one another (not all identical)
     const firstGene = (s: number): number => brain[s * BRAIN_GENES]!;
     const allSame = Array.from({ length: 10 }, (_, s) => firstGene(s)).every(
@@ -42,7 +43,7 @@ describe('genome', () => {
     for (let g = 0; g < BRAIN_GENES; g++) brain[g] = g + 1;
     hue[0] = 0.5;
     // all gates ON → every brain gene (core + wall + flow + hunger) drifts, so the assertion below holds
-    mutateGenome(brain, hue, 1, 0, rng, 0.05, 0.02, true, true, true);
+    mutateGenome(brain, hue, 1, 0, rng, 0.05, 0.02, true, true, true, true);
     for (let g = 0; g < BRAIN_GENES; g++) {
       const diff = Math.abs(brain[BRAIN_GENES + g]! - brain[g]!);
       expect(diff).toBeLessThan(0.5); // close to parent (small σ)
@@ -61,7 +62,7 @@ describe('genome', () => {
     const b = new Rng(7);
     const brain = new Float32Array(BRAIN_GENES);
     const hue = new Float32Array(1);
-    seedGenome(brain, hue, 0, a, 0.3, false, false, false);
+    seedGenome(brain, hue, 0, a, 0.3, false, false, false, false);
     for (let g = 0; g < BRAIN_CORE_GENES; g++) b.gaussian(0, 0.3);
     b.float();
     expect(a.state).toBe(b.state);
@@ -75,7 +76,7 @@ describe('genome', () => {
     const b = new Rng(11);
     const brain = new Float32Array(2 * BRAIN_GENES);
     const hue = new Float32Array(2);
-    mutateGenome(brain, hue, 1, 0, a, 0.05, 0.02, false, false, false);
+    mutateGenome(brain, hue, 1, 0, a, 0.05, 0.02, false, false, false, false);
     for (let g = 0; g < BRAIN_CORE_GENES; g++) b.gaussian(0, 0.05);
     b.gaussian(0, 0.02); // hue mutation draw
     expect(a.state).toBe(b.state);
@@ -87,7 +88,7 @@ describe('genome', () => {
     hue[0] = 0.99;
     // large hue σ so it likely crosses the 1.0 boundary; result must still be in range
     for (let t = 0; t < 50; t++) {
-      mutateGenome(brain, hue, 1, 0, new Rng(t), 0.05, 0.5, false, false, false);
+      mutateGenome(brain, hue, 1, 0, new Rng(t), 0.05, 0.5, false, false, false, false);
       expect(hue[1]!).toBeGreaterThanOrEqual(0);
       expect(hue[1]!).toBeLessThan(1);
     }
@@ -100,7 +101,7 @@ describe('env-sense brain genes (wall + flow — RNG-gated)', () => {
     const hue = new Float32Array(1);
     const a = new Rng(5);
     const b = new Rng(5);
-    seedGenome(brain, hue, 0, a, 0.3, false, false, false); // all gated off
+    seedGenome(brain, hue, 0, a, 0.3, false, false, false, false); // all gated off
     for (let g = Brain.WALL_LAT_TURN; g <= Brain.FLOW_FWD_THRUST; g++) expect(brain[g]).toBe(0);
     // a parallel rng that draws only the 10 base weights + hue must end in the SAME state.
     for (let g = 0; g < 10; g++) b.gaussian(0, 0.3);
@@ -111,7 +112,7 @@ describe('env-sense brain genes (wall + flow — RNG-gated)', () => {
   it('env-sense weights ARE drawn when gated on', () => {
     const brain = new Float32Array(BRAIN_GENES);
     const hue = new Float32Array(1);
-    seedGenome(brain, hue, 0, new Rng(5), 0.3, true, true, false);
+    seedGenome(brain, hue, 0, new Rng(5), 0.3, true, true, false, false);
     let nonzero = 0;
     for (let g = Brain.WALL_LAT_TURN; g <= Brain.FLOW_FWD_THRUST; g++)
       if (brain[g] !== 0) nonzero++;
@@ -208,12 +209,13 @@ describe('FORAGE_PREF gene (lever B — two-channel niche axis, RNG-gated)', () 
     // Every founder's FORAGE_PREF is EXACTLY the center — no gaussian → no spread.
     for (let s = 0; s < N; s++)
       expect(g[s * SCALAR_GENE_COUNT + ScalarGene.FORAGE_PREF]).toBe(single.foragePref);
-    // The RNG advanced by exactly (SCALAR_GENE_COUNT − 1) gaussians per founder — the SAME stream as the
-    // pre-FORAGE_PREF engine. This is what makes foodChannels=1 byte-identical to before the gene existed.
+    // The RNG advanced by exactly one gaussian per NON-gated gene per founder — the SAME stream as the
+    // pre-feature engine. At foodChannels=1 every tail-gated gene (FORAGE_PREF + the F1/F2 genes) is skipped,
+    // which is what makes single-channel byte-identical to before those genes existed.
     const ref = new Rng(7);
     for (let s = 0; s < N; s++)
       for (let gi = 0; gi < SCALAR_GENE_COUNT; gi++)
-        if (gi !== ScalarGene.FORAGE_PREF) ref.gaussian(0, 1);
+        if (!scalarGeneGatedOff(gi, single)) ref.gaussian(0, 1);
     expect(rng.state).toBe(ref.state);
   });
 
@@ -228,8 +230,8 @@ describe('FORAGE_PREF gene (lever B — two-channel niche axis, RNG-gated)', () 
     expect(g[SCALAR_GENE_COUNT + ScalarGene.FORAGE_PREF]).toBe(g[ScalarGene.FORAGE_PREF]);
     const ref = new Rng(4);
     for (let gi = 0; gi < SCALAR_GENE_COUNT; gi++)
-      if (gi !== ScalarGene.FORAGE_PREF) ref.gaussian(0, 1);
-    expect(rng.state).toBe(ref.state); // one fewer draw than the gene count
+      if (!scalarGeneGatedOff(gi, single)) ref.gaussian(0, 1);
+    expect(rng.state).toBe(ref.state); // tail-gated genes draw nothing at foodChannels=1
   });
 
   it('evolves when two-channel: seeded with spread and mutates around the parent', () => {
