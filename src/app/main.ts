@@ -88,6 +88,7 @@ let showFood = true; // food heatmap overlay (toggle with 'f')
 let showWalls = true; // wall slate layer (toggle with 'w')
 let showOverlay = true; // per-creature debug overlay on the selection (toggle with 'o')
 let showFlow = false; // flow-field current arrows (toggle with 'v')
+let showCone = false; // vision cones on the detail overlay (toggle with 'e')
 let colorMode: ColorMode = ColorMode.LINEAGE; // dot hue source (cycle with 'c'): lineage → diet → energy
 let selected: { slot: number; gen: number } | null = null;
 // Scratch for the selected creature's overlay line vertices ([x,y,r,g,b] per vertex; gl.LINES).
@@ -313,12 +314,16 @@ globalThis.addEventListener('resize', () => {
   overlay.resize();
 });
 
-// 'f' food heatmap · 'w' wall layer · 'o' creature overlay · 'v' flow arrows · 'c' cycle dot color-mode · 'l' lock follow-cam + record.
+// 'f' food heatmap · 'w' wall layer · 'o' creature overlay · 'v' flow arrows · 'e' vision cones · 'c' cycle dot color-mode · 'l' lock follow-cam + record.
 globalThis.addEventListener('keydown', (e) => {
   if (e.key === 'f' || e.key === 'F') showFood = !showFood;
   if (e.key === 'w' || e.key === 'W') showWalls = !showWalls;
   if (e.key === 'o' || e.key === 'O') showOverlay = !showOverlay;
   if (e.key === 'v' || e.key === 'V') showFlow = !showFlow;
+  if (e.key === 'e' || e.key === 'E') {
+    showCone = !showCone;
+    overlay.setShowCone(showCone);
+  }
   if (e.key === 'c' || e.key === 'C') {
     colorMode = ((colorMode + 1) % 3) as ColorMode;
     legend.setColorMode(colorMode);
