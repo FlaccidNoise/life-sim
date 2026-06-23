@@ -79,6 +79,36 @@ describe('World — Phase 0 determinism contract', () => {
     expect(on.stateHash()).not.toBe(baseline.stateHash());
   });
 
+  it('ageStages OFF is byte-identical to default; ON perturbs the world (age-stages gene-gate)', () => {
+    const baseline = new World(defaultConfig({ seed: 1 }));
+    const off = new World(defaultConfig({ seed: 1, ageStages: false }));
+    const on = new World(defaultConfig({ seed: 1, ageStages: true }));
+    for (let t = 0; t < 1000; t++) {
+      baseline.step();
+      off.step();
+      on.step();
+    }
+    // OFF == default → the 2 tail genes (MATURITY_AGE, SENESCENCE_AGE) consume NO RNG when off.
+    expect(off.stateHash()).toBe(baseline.stateHash());
+    // ON diverges → the 2 gene draws (+ senescence tax + maturity gate) actually move the world.
+    expect(on.stateHash()).not.toBe(baseline.stateHash());
+  });
+
+  it('ageStages OFF: MATURITY_AGE/SENESCENCE_AGE stay exactly at their centers after a long run (ablation)', () => {
+    // The tail-gated-draw contract: with ageStages off, seed/mutateScalarGenes pin both genes to their
+    // config centers WITHOUT drawing RNG — so after a long run every live creature (founders + all
+    // offspring) keeps them byte-identically at center, and the organism RNG stream is unperturbed.
+    const w = new World(defaultConfig({ seed: 13, ageStages: false }));
+    for (let t = 0; t < 500; t++) w.step();
+    const s = w.store;
+    expect(s.liveCount).toBeGreaterThan(0); // non-vacuity: the loop runs over real creatures
+    for (let k = 0; k < s.liveCount; k++) {
+      const base = s.liveIndices[k]! * SCALAR_GENE_COUNT;
+      expect(s.scalarGenes[base + ScalarGene.MATURITY_AGE]!).toBe(w.config.maturityAge);
+      expect(s.scalarGenes[base + ScalarGene.SENESCENCE_AGE]!).toBe(w.config.senescenceAge);
+    }
+  });
+
   it('parcelsEnabled OFF is byte-identical to default; ON perturbs the world (sight-only food gate)', () => {
     const baseline = new World(defaultConfig({ seed: 1 }));
     const off = new World(defaultConfig({ seed: 1, parcelsEnabled: false }));

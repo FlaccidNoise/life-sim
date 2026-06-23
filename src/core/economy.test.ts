@@ -848,3 +848,133 @@ describe('reproduce (breed at the per-creature satiated bar)', () => {
     }
   });
 });
+
+describe('metabolize senescence tax (age stages)', () => {
+  // basal 0.4, empty food, no movement → the energy delta is exactly the (basal + senescence) cost.
+  // senescenceAgeCost 0 isolates the elder TAX from the longevity UPKEEP; gene at center 100 → no upkeep anyway.
+  const cfg = defaultConfig({
+    basalCost: 0.4,
+    moveCost: 0,
+    satiatedThreshold: 1000,
+    ageStages: true,
+    senescenceRate: 0.01,
+    senescenceAge: 100,
+    senescenceAgeCost: 0,
+    worldWidth: W,
+    worldHeight: H,
+  });
+  const lossAtAge = (age: number, c: Config = cfg): number => {
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.x[i] = 10;
+    s.y[i] = 10;
+    s.energy[i] = 50;
+    genes(s, i, c, { [ScalarGene.SENESCENCE_AGE]: 100 });
+    s.age[i] = age;
+    s.rebuildLive();
+    const food = new FoodField(W, H, 16, 16, 10, 0); // empty → isolate the costs
+    metabolize(s, food, hashOf(s), c, null);
+    return 50 - s.energy[i]!;
+  };
+
+  it('a young adult (age < SENESCENCE_AGE) pays only basal', () => {
+    expect(lossAtAge(50)).toBeCloseTo(0.4); // 50 < 100 → no tax
+  });
+
+  it('an elder (age past SENESCENCE_AGE) pays basal·(1 + rate·over)', () => {
+    // age 300 → over = 300 − 100 = 200; basal 0.4·(1 + 0.01·200) = 0.4·3 = 1.2 (death-of-old-age clock)
+    expect(lossAtAge(300)).toBeCloseTo(1.2);
+  });
+
+  it('the tax reads age at/above SENESCENCE_AGE only (exactly at the threshold → over 0, no tax)', () => {
+    expect(lossAtAge(100)).toBeCloseTo(0.4); // age == senescenceAge → over 0 → basal only
+  });
+
+  it('senescenceRate 0 → no tax even for an elder (senescence-only ablation within ageStages on)', () => {
+    expect(lossAtAge(300, defaultConfig({ ...cfg, senescenceRate: 0 }))).toBeCloseTo(0.4);
+  });
+
+  it('ageStages false → no tax even for an elder (master OFF = byte-identical)', () => {
+    expect(lossAtAge(300, defaultConfig({ ...cfg, ageStages: false }))).toBeCloseTo(0.4);
+  });
+});
+
+describe('metabolize SENESCENCE_AGE longevity cost (geneUpkeep)', () => {
+  // senescenceRate 0 → the elder tax is off, isolating the per-tick UPKEEP a durable body pays for its
+  // SENESCENCE_AGE gene above center (the disposable-soma tradeoff). Young (age 0) → no tax confound.
+  const cfg = defaultConfig({
+    basalCost: 0.4,
+    moveCost: 0,
+    satiatedThreshold: 1000,
+    ageStages: true,
+    senescenceRate: 0,
+    senescenceAge: 400,
+    senescenceAgeCost: 0.0005,
+    worldWidth: W,
+    worldHeight: H,
+  });
+  const lossWithGene = (senAge: number): number => {
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.x[i] = 10;
+    s.y[i] = 10;
+    s.energy[i] = 50;
+    genes(s, i, cfg, { [ScalarGene.SENESCENCE_AGE]: senAge });
+    s.age[i] = 0;
+    s.rebuildLive();
+    const food = new FoodField(W, H, 16, 16, 10, 0); // empty
+    metabolize(s, food, hashOf(s), cfg, null);
+    return 50 - s.energy[i]!;
+  };
+
+  it('SENESCENCE_AGE above center adds over·senescenceAgeCost basal upkeep', () => {
+    // 600 − 400 = 200 above center; upkeep = basal 0.4 + 200·0.0005 = 0.4 + 0.1 = 0.5
+    expect(lossWithGene(600)).toBeCloseTo(0.5);
+  });
+
+  it('SENESCENCE_AGE at center adds no upkeep (longevity below baseline is free)', () => {
+    expect(lossWithGene(400)).toBeCloseTo(0.4);
+  });
+});
+
+describe('reproduce maturity gate (age stages)', () => {
+  // Satiated bar = SATIATED_THRESHOLD gene 60 (SIZE at center → no size-scaling). Energy 100 ≫ 60, so the
+  // ONLY thing that can stop a breed is the juvenile gate. breedCooldown 0 (default) → cooldown never fires.
+  const cfg = defaultConfig({
+    reproThreshold: 40,
+    satiatedThreshold: 60,
+    birthEnergy: 25,
+    reproOverhead: 15,
+    mutationSigma: 0,
+    hueMutationSigma: 0,
+    offspringOffset: 8,
+    ageStages: true,
+    maturityAge: 100,
+    worldWidth: W,
+    worldHeight: H,
+  });
+  const breedsAtAge = (age: number, c: Config = cfg): number => {
+    const s = new OrganismStore(4);
+    const p = s.alloc();
+    s.x[p] = 50;
+    s.y[p] = 50;
+    s.energy[p] = 100; // well above the satiated bar 60
+    genes(s, p, c, { [ScalarGene.MATURITY_AGE]: 100 });
+    s.age[p] = age;
+    s.rebuildLive();
+    return reproduce(s, new Rng(1), c, false, false, null);
+  };
+
+  it('a juvenile (age < MATURITY_AGE) at the satiated bar does NOT breed', () => {
+    expect(breedsAtAge(50)).toBe(0);
+  });
+
+  it('an adult (age ≥ MATURITY_AGE) breeds', () => {
+    expect(breedsAtAge(100)).toBe(1); // age == maturity → mature → breeds
+    expect(breedsAtAge(150)).toBe(1);
+  });
+
+  it('ageStages false → a young creature breeds as today (byte-identical OFF path)', () => {
+    expect(breedsAtAge(50, defaultConfig({ ...cfg, ageStages: false }))).toBe(1);
+  });
+});

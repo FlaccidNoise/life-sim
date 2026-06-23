@@ -245,7 +245,15 @@ export function metabolize(
       const size = scalarGenes[sg + ScalarGene.SIZE]!;
       moveFactor = (size / cfg.cellRadius) ** cfg.sizeMoveCostExp;
     }
-    const upkeep = basalCost * efficiency + geneUpkeep(scalarGenes, i, cfg);
+    // Senescence (death-of-old-age): past its SENESCENCE_AGE gene a creature's basal cost climbs with age,
+    // so an elder eventually can't break even and starves → the EXISTING cull reaps it (no new death path).
+    // Gated on ageStages && senescenceRate>0 so the OFF path leaves basal exactly basalCost → byte-identical.
+    let basal = basalCost;
+    if (cfg.ageStages && cfg.senescenceRate > 0) {
+      const over = age[i]! - scalarGenes[sg + ScalarGene.SENESCENCE_AGE]!;
+      if (over > 0) basal = basalCost * (1 + cfg.senescenceRate * over);
+    }
+    const upkeep = basal * efficiency + geneUpkeep(scalarGenes, i, cfg);
     energy[i] = energy[i]! + gained - upkeep - moveCost * moveFactor * speed2;
     // Dead-water tax (isolation lever): extra drain where fertility is low — max in the dead gaps, 0 inside
     // a pocket — so crossing the open water is risky and residents stay home. Gated so OFF (0) skips the
@@ -342,11 +350,16 @@ export function reproduce(
   // here), but children land in freed slots — iterating a fixed count avoids touching them anyway.
   const parents = store.liveIndices;
   const n = store.liveCount;
-  const { x, y, vx, vy, heading, energy, scalarGenes } = store;
+  const { x, y, vx, vy, heading, energy, scalarGenes, age } = store;
   let births = 0;
   for (let k = 0; k < n; k++) {
     const p = parents[k]!;
     if (!store.isAlive(p)) continue; // died in the cull this tick
+    // Maturity gate (age stages): a juvenile (younger than its MATURITY_AGE gene) cannot breed yet. The skip
+    // is BEFORE alloc/RNG (like the cooldown/satiated checks below), so it consumes no RNG; gated on ageStages
+    // so the OFF path never reads age/gene and stays byte-identical. A juvenile's breedCooldownLeft is 0, so
+    // sitting ahead of the cooldown decrement is harmless (a not-yet-bred creature has nothing to cool down).
+    if (cfg.ageStages && age[p]! < scalarGenes[p * SCALAR_GENE_COUNT + ScalarGene.MATURITY_AGE]!) continue;
     // Breeding refractory (the satiation-dwell lever): a creature still cooling from a recent birth ticks
     // its counter down and skips — it can be FULL yet NOT breed, which is exactly the "well-fed but idle"
     // state the hunger-gate turns into wandering. Gated on breedCooldown>0 so the OFF path never touches the

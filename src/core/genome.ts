@@ -76,8 +76,12 @@ export const ScalarGene = {
   SENSE_RANGE_C: 20, // smell range for channel C
   // F2 pheromone (gated cfg.pheromoneEnabled): how strongly this creature deposits into the pheromone field.
   PHERO_DEPOSIT: 21,
+  // Age / life stages (gated cfg.ageStages): the juvenile→adult and adult→elder age boundaries, in ticks.
+  // Tail-gated like FORAGE_PREF/PHERO_DEPOSIT → drawn only when ageStages, so the OFF stream is byte-identical.
+  MATURITY_AGE: 22, // below this age a creature can't breed (juvenile); uncosted (cost = delayed breeding)
+  SENESCENCE_AGE: 23, // at/above this age the basal senescence tax begins (elder); costed (longevity tradeoff)
 } as const;
-export const SCALAR_GENE_COUNT = 22;
+export const SCALAR_GENE_COUNT = 24;
 
 /** Minimum reproductive-band width: satiated is read as max(satiatedGene, reproGene + this) so the two
  *  life-history bars can mutate independently without inverting (which would break the learn gate). */
@@ -105,7 +109,9 @@ interface ScalarGeneSpec {
     | 'cohesionDrive'
     | 'foragePref'
     | 'foragePrefC'
-    | 'pheroDeposit';
+    | 'pheroDeposit'
+    | 'maturityAge'
+    | 'senescenceAge';
   /** Config key for the per-unit-above-center basal cost coeff, or null for a non-upkeep gene. */
   costKey:
     | 'maxSpeedCost'
@@ -121,6 +127,7 @@ interface ScalarGeneSpec {
     | 'shelterDriveCost'
     | 'cohesionDriveCost'
     | 'pheroDepositCost'
+    | 'senescenceAgeCost'
     | null;
   /** Hard clamp range the gene value is kept within (at seed and at every mutation). */
   min: number;
@@ -172,6 +179,11 @@ export const SCALAR_GENE_SPECS: readonly ScalarGeneSpec[] = [
   { centerKey: 'senseStep', costKey: 'senseRangeCost', min: 8, max: 256 },
   // F2: pheromone deposit strength — costed (no free chemical broadcast); the tradeoff for signalling.
   { centerKey: 'pheroDeposit', costKey: 'pheroDepositCost', min: 0, max: 5 },
+  // Age / life stages — MATURITY_AGE uncosted (its cost is the opportunity cost of delayed breeding);
+  // SENESCENCE_AGE costed (senescenceAgeCost) so a durable long-lived body pays upkeep — longevity is a real
+  // tradeoff, not free upward drift. Appended at the TAIL so every prior gene's RNG draw is unchanged.
+  { centerKey: 'maturityAge', costKey: null, min: 0, max: 800 },
+  { centerKey: 'senescenceAge', costKey: 'senescenceAgeCost', min: 50, max: 4000 },
 ];
 
 /** Tail-gated scalar genes: each takes its founder CENTER (seed) / parent value (mutate) WITHOUT drawing
@@ -188,6 +200,7 @@ export function scalarGeneGatedOff(g: number, cfg: Config): boolean {
   )
     return cfg.foodChannels < 3;
   if (g === ScalarGene.PHERO_DEPOSIT) return !cfg.pheromoneEnabled;
+  if (g === ScalarGene.MATURITY_AGE || g === ScalarGene.SENESCENCE_AGE) return !cfg.ageStages;
   return false;
 }
 
