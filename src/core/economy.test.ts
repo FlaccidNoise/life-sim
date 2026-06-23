@@ -700,6 +700,34 @@ describe('reproduce (breed at the per-creature satiated bar)', () => {
     expect(s.energy[child]!).toBeCloseTo(25); // provisioned to its birthEnergy gene
   });
 
+  it('breedCooldown blocks repeat breeding for the refractory period, then allows it again', () => {
+    // The satiation-dwell lever: a fresh creature breeds, then is blocked for breedCooldown ticks even while
+    // energy-rich, then breeds again. Energy kept far above the bar to ISOLATE the cooldown from the bar.
+    // (Each reproduce() = one tick over the SAME single live parent — we don't rebuildLive, so children
+    // never enter the parent set; only the parent's cooldown is exercised.)
+    const c = defaultConfig({
+      reproThreshold: 40,
+      satiatedThreshold: 60,
+      birthEnergy: 25,
+      reproOverhead: 15,
+      mutationSigma: 0,
+      breedCooldown: 3,
+      worldWidth: W,
+      worldHeight: H,
+    });
+    const s = new OrganismStore(16);
+    const p = s.alloc();
+    s.x[p] = 50;
+    s.y[p] = 50;
+    s.energy[p] = 100000; // far above the bar — stays breeding-eligible on energy through every call
+    genes(s, p, c);
+    s.rebuildLive(); // liveIndices = [p]; not rebuilt again, so p is the only parent considered
+    const rng = new Rng(1);
+    const seq = [0, 1, 2, 3, 4].map(() => reproduce(s, rng, c, false, false, null));
+    // first breed (newborn starts ready), then 3 blocked ticks, then breeds again
+    expect(seq).toEqual([1, 0, 0, 0, 1]);
+  });
+
   it('does not reproduce below the per-creature satiated bar', () => {
     const s = new OrganismStore(4);
     const p = s.alloc();
