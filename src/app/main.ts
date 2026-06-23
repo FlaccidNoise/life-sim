@@ -31,18 +31,24 @@ function el<T extends HTMLElement>(id: string): T {
 const canvas = el<HTMLCanvasElement>('view');
 const hudBody = el('hud-body');
 
-// Live demo = the FULL PACKAGE (the three guardrail-verified pillars). defaultConfig keeps every feature
-// OFF so headless/tests stay byte-identical to the pre-feature engine; the demo opts in here. Each flip
-// was confirmed to keep the world alive (births>0, not extinct, not buffer-pegged) at 8k ticks × 2 seeds:
-//   • walls + flow      — spatial structure: 5 vision-occluding/food-damming biome regions + drift current
-//   • motorSquash       — legibility: graded tanh steering (kills the motor-saturation spin/vibrate)
-//   • foodChannels = 2  — diversity: a second resource axis so specialists beat generalists
-// counterBiteFraction stays OFF (predator-fragile, unproven payoff) — exposed as a live knob to tune.
+// Live demo = the FULL LIVING-WORLD PACKAGE. defaultConfig keeps every feature OFF so headless/tests stay
+// byte-identical to the pre-feature engine; the demo opts in here. Every knob is live-tunable in the panel:
+//   • walls + flow         — spatial structure: 5 vision-occluding/food-damming biome regions + drift current
+//   • motorSquash          — legibility: graded tanh steering (kills the motor-saturation spin/vibrate)
+//   • foodChannels 3 +     — multi-resource: 3 resources, each grown in its OWN pockets (round-robin), so diet
+//     pocketChannelMode 1     couples to PLACE — a specialist must live in its resource's island (allopatry).
+//   • pheromoneEnabled     — a diffusing deposit-and-sense field (on-graze); the delayed-feedback substrate.
+//   • flowPushStrength     — mixing: the current carries bodies between pockets.
+//   • bioluminescence      — render glow (set below). NB the 3-channel world runs SPARSER + loses predators
+//     vs ch2 (food is segregated); it stays alive on all tested seeds. Tune live across seeds to taste.
 let config: Config = defaultConfig({
   wallRegionCount: 5,
   flowStrength: 0.15,
   motorSquash: true,
-  foodChannels: 2,
+  foodChannels: 3,
+  foodPocketChannelMode: 1,
+  pheromoneEnabled: true,
+  flowPushStrength: 0.25,
 });
 let world = new World(config);
 
@@ -53,6 +59,9 @@ try {
   hudBody.textContent = `Renderer init failed: ${err instanceof Error ? err.message : String(err)}`;
   throw err;
 }
+// F4 bioluminescence ON by default — the deep-sea aesthetic (creatures glow by activity/role). Pure render,
+// zero sim impact; toggle live with 'g'.
+renderer.setGlow(true, 1);
 
 const graph = new TimeSeriesGraph(el<HTMLCanvasElement>('graph'), [
   { label: 'pop', color: '#8ad9f2' }, // cyan
@@ -313,6 +322,7 @@ globalThis.addEventListener('keydown', (e) => {
   if (e.key === 'w' || e.key === 'W') showWalls = !showWalls;
   if (e.key === 'o' || e.key === 'O') showOverlay = !showOverlay;
   if (e.key === 'v' || e.key === 'V') showFlow = !showFlow;
+  if (e.key === 'g' || e.key === 'G') renderer.setGlow(!renderer.glow, 1); // bioluminescence
   if (e.key === 'c' || e.key === 'C') {
     colorMode = ((colorMode + 1) % 3) as ColorMode;
     legend.setColorMode(colorMode);

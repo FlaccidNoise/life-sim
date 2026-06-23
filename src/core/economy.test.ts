@@ -138,7 +138,13 @@ describe('metabolize', () => {
       s.energy[i] = 50;
       genes(s, i, cfg); // herbivore, centred genes → no gene upkeep, efficiency 1
       s.rebuildLive();
-      metabolize(s, food, hashOf(s), defaultConfig({ basalCost: 0.4, moveCost: 0, deadWaterCost }), null);
+      metabolize(
+        s,
+        food,
+        hashOf(s),
+        defaultConfig({ basalCost: 0.4, moveCost: 0, deadWaterCost }),
+        null,
+      );
       return 50 - s.energy[i];
     };
     expect(lossAt(0)).toBeCloseTo(0.4); // OFF: just basal (no food in dead water → no graze income)
@@ -355,7 +361,7 @@ describe('metabolize three-channel place-coupled niche (F1)', () => {
     expect(food.sampleAt(pA.x, pA.y)).toBeGreaterThan(5); // the A resource it can't use is untouched
   });
 
-  it('a generalist (pref 0.5, prefC 0.5) splits the budget A/B/C and earns the uniform-mix income', () => {
+  it('a generalist (pref 0.5, prefC 0.5) in a C-pocket grazes the FULL budget on C (availability-weighted)', () => {
     const food = tripleFood();
     const pC = food.patchCenters[2]!;
     const s = new OrganismStore(4);
@@ -363,7 +369,9 @@ describe('metabolize three-channel place-coupled niche (F1)', () => {
     s.x[i] = pC.x;
     s.y[i] = pC.y;
     s.energy[i] = 5;
-    // pref 0.5, prefC 0.5 → wC=0.5, wB=0.25, wA=0.25. In a C-pocket only the wC share finds food.
+    // pref 0.5, prefC 0.5 → wC=0.5, wB=0.25, wA=0.25. In a C-pocket only channel C has biomass, so the
+    // availability weighting (e_ch = w_ch·avail_ch, renormalized) routes the WHOLE budget to C — a generalist
+    // does NOT starve here; it just forgoes the specialization bonus.
     genes(s, i, cfg, {
       [ScalarGene.EAT_RATE]: 2,
       [ScalarGene.FORAGE_PREF]: 0.5,
@@ -371,9 +379,9 @@ describe('metabolize three-channel place-coupled niche (F1)', () => {
     });
     s.rebuildLive();
     metabolize(s, food, hashOf(s), cfg, null);
-    // maxW = 0.5 → spec = 1+0.5·((0.5−1/3)/(2/3)) = 1.125. Only channel C has food → takeC = budget·0.5 = 1.
-    // gained = 1·1.125 = 1.125. (A/B shares graze 0 — those resources aren't in this pocket.)
-    expect(s.energy[i]).toBeCloseTo(5 + 1.125);
+    // Only C present → eSum = wC·avC, so takeC = budget·(eC/eSum) = budget = 2. maxW = 0.5 → spec = 1.125.
+    // gained = 2·1.125 = 2.25 (vs the old waste-the-A/B-share model's 1.125).
+    expect(s.energy[i]).toBeCloseTo(5 + 2.25);
   });
 });
 

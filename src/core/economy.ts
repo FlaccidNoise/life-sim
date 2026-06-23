@@ -194,11 +194,13 @@ export function metabolize(
       const takeB = food.grazeAt2(x[i]!, y[i]!, budget * pref);
       gained = (takeA + takeB) * spec;
     } else if (cfg.foodChannels === 3) {
-      // THREE place-coupled channels: split the eat budget across {A,B,C} by the barycentric preference
-      // (same wA/wB/wC as sense.ts), graze each channel via grazeAt/2/3, then convert at the specialization
-      // rate. spec ∈ [1, 1+forageSpecBonus] keyed on the dominant weight (uniform 1/3 → no bonus, pure
-      // specialist → full): committing to one resource pays more, the disruptive pressure for the niche split.
-      // No biomass is created — the field depletes by exactly (takeA+takeB+takeC).
+      // THREE place-coupled channels {A,B,C} with per-pocket segregation. Preference is a barycentric weight
+      // (same wA/wB/wC as sense.ts), but the eat budget is allocated by preference WEIGHTED BY LOCAL
+      // AVAILABILITY (pref·biomass, renormalized) so a creature spends its FULL budget on whatever resource is
+      // actually present rather than wasting the share aimed at an absent channel: a generalist in a mono-A
+      // pocket grazes A at full rate (no starvation), while a mismatched specialist (e.g. a B-eater in an
+      // A-pocket) finds little of its resource and goes hungry — the pressure to specialize AND settle in the
+      // matching island. spec ∈ [1, 1+forageSpecBonus] rewards commitment. No biomass is created.
       const pref = scalarGenes[sg + ScalarGene.FORAGE_PREF]!;
       const prefC = scalarGenes[sg + ScalarGene.FORAGE_PREF_C]!;
       const wC = prefC;
@@ -207,10 +209,23 @@ export function metabolize(
       const maxW = wA > wB ? (wA > wC ? wA : wC) : wB > wC ? wB : wC;
       const spec = 1 + cfg.forageSpecBonus * ((maxW - 1 / 3) / (2 / 3));
       const budget = eatRate * herbivory;
-      const takeA = food.grazeAt(x[i]!, y[i]!, budget * wA);
-      const takeB = food.grazeAt2(x[i]!, y[i]!, budget * wB);
-      const takeC = food.grazeAt3(x[i]!, y[i]!, budget * wC);
-      gained = (takeA + takeB + takeC) * spec;
+      // Availability-weighted split: e_ch = w_ch · localBiomass_ch, renormalized so Σ = budget. The budget
+      // flows to present-and-preferred resources; nothing is wasted on an empty channel.
+      const avA = food.sampleAt(x[i]!, y[i]!);
+      const avB = food.sampleAt2(x[i]!, y[i]!);
+      const avC = food.sampleAt3(x[i]!, y[i]!);
+      const eA = wA * avA;
+      const eB = wB * avB;
+      const eC = wC * avC;
+      const eSum = eA + eB + eC;
+      if (eSum > 0) {
+        const takeA = food.grazeAt(x[i]!, y[i]!, (budget * eA) / eSum);
+        const takeB = food.grazeAt2(x[i]!, y[i]!, (budget * eB) / eSum);
+        const takeC = food.grazeAt3(x[i]!, y[i]!, (budget * eC) / eSum);
+        gained = (takeA + takeB + takeC) * spec;
+      } else {
+        gained = 0; // no preferred resource present here
+      }
     } else {
       gained = food.grazeAt(x[i]!, y[i]!, eatRate * herbivory); // single channel (byte-identical original)
     }
