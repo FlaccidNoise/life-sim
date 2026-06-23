@@ -35,13 +35,49 @@ export function senseFood(store: OrganismStore, food: FoodField, cfg: Config): v
   const { liveIndices, liveCount, x, y, senseX, senseY, scalarGenes } = store;
   const { worldWidth, worldHeight } = cfg;
   const twoChannel = cfg.foodChannels === 2;
+  const threeChannel = cfg.foodChannels === 3;
   for (let k = 0; k < liveCount; k++) {
     const i = liveIndices[k]!;
-    const step = scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.SENSE_RANGE]!;
+    const sg = i * SCALAR_GENE_COUNT;
+    const step = scalarGenes[sg + ScalarGene.SENSE_RANGE]!;
     const inv = 1 / (2 * step);
     const xi = x[i]!;
     const yi = y[i]!;
-    if (twoChannel) {
+    if (threeChannel) {
+      // THREE place-coupled channels: a barycentric preference over {A,B,C} from FORAGE_PREF + FORAGE_PREF_C
+      // (wA+wB+wC=1), each channel smelled at its OWN evolved range (A=SENSE_RANGE, B=SENSE_RANGE_B,
+      // C=SENSE_RANGE_C) so a C-specialist navigates up its own resource's gradient. grad = Σ w_ch·∇ch.
+      const pref = scalarGenes[sg + ScalarGene.FORAGE_PREF]!;
+      const prefC = scalarGenes[sg + ScalarGene.FORAGE_PREF_C]!;
+      const wC = prefC;
+      const wB = pref * (1 - prefC);
+      const wA = (1 - pref) * (1 - prefC);
+      const stepB = scalarGenes[sg + ScalarGene.SENSE_RANGE_B]!;
+      const stepC = scalarGenes[sg + ScalarGene.SENSE_RANGE_C]!;
+      const invB = 1 / (2 * stepB);
+      const invC = 1 / (2 * stepC);
+      // Channel A at SENSE_RANGE (step), B at SENSE_RANGE_B (stepB), C at SENSE_RANGE_C (stepC).
+      const axp = wrap(xi + step, worldWidth);
+      const axm = wrap(xi - step, worldWidth);
+      const ayp = wrap(yi + step, worldHeight);
+      const aym = wrap(yi - step, worldHeight);
+      const bxp = wrap(xi + stepB, worldWidth);
+      const bxm = wrap(xi - stepB, worldWidth);
+      const byp = wrap(yi + stepB, worldHeight);
+      const bym = wrap(yi - stepB, worldHeight);
+      const cxp = wrap(xi + stepC, worldWidth);
+      const cxm = wrap(xi - stepC, worldWidth);
+      const cyp = wrap(yi + stepC, worldHeight);
+      const cym = wrap(yi - stepC, worldHeight);
+      senseX[i] =
+        wA * (food.sampleAt(axp, yi) - food.sampleAt(axm, yi)) * inv +
+        wB * (food.sampleAt2(bxp, yi) - food.sampleAt2(bxm, yi)) * invB +
+        wC * (food.sampleAt3(cxp, yi) - food.sampleAt3(cxm, yi)) * invC;
+      senseY[i] =
+        wA * (food.sampleAt(xi, ayp) - food.sampleAt(xi, aym)) * inv +
+        wB * (food.sampleAt2(xi, byp) - food.sampleAt2(xi, bym)) * invB +
+        wC * (food.sampleAt3(xi, cyp) - food.sampleAt3(xi, cym)) * invC;
+    } else if (twoChannel) {
       // Smell a PREFERENCE-BLENDED gradient (lever B): a B-specialist (FORAGE_PREF→1) is pulled toward
       // channel-B-rich cells, an A-specialist toward channel A — so each creature navigates to its own
       // niche instead of all chasing one resource. grad = (1−pref)·∇A + pref·∇B.

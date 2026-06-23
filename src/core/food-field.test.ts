@@ -378,3 +378,91 @@ describe('FoodField — per-pocket carrying-capacity variance (lever C)', () => 
     expect(rich).toBeGreaterThan(lean); // the two islands have genuinely diverged in K
   });
 });
+
+describe('FoodField three-channel place-coupling (F1)', () => {
+  it('channels<3: sampleAt3/grazeAt3 are inert (byte-identical N<=2 paths keep B3 null)', () => {
+    const one = new FoodField(W, H, COLS, ROWS, K, 1); // channels defaults to 1
+    expect(one.sampleAt3(0, 0)).toBe(0);
+    expect(one.grazeAt3(0, 0, 5)).toBe(0);
+    const two = new FoodField(W, H, COLS, ROWS, K, 1, 2, 0.5); // channels=2
+    expect(two.sampleAt3(0, 0)).toBe(0);
+    expect(two.grazeAt3(0, 0, 5)).toBe(0);
+  });
+
+  it('mode 1 assigns pockets to channels A/B/C round-robin: each pocket grows ONLY its channel', () => {
+    // Three well-separated pockets at cells (16,16),(48,48),(80,80) on a 128² / 128-cell grid → channels
+    // A,B,C respectively (p%3). Each pocket holds biomass in exactly one channel, ~zero in the other two.
+    const f = new FoodField(1024, 1024, 128, 128, K, 1, 3, 0.5, 1); // channels=3, mode 1
+    const mainRng = new QueueRng([0.125, 0.125, 0.375, 0.375, 0.625, 0.625]);
+    f.seedPatches(3, 5, 0, mainRng);
+    const [pA, pB, pC] = f.patchCenters as { x: number; y: number }[];
+    // Pocket 0 → channel A: A-biomass present, B and C empty there.
+    expect(f.sampleAt(pA!.x, pA!.y)).toBeGreaterThan(0.5 * K);
+    expect(f.sampleAt2(pA!.x, pA!.y)).toBeLessThan(0.05 * K);
+    expect(f.sampleAt3(pA!.x, pA!.y)).toBeLessThan(0.05 * K);
+    // Pocket 1 → channel B.
+    expect(f.sampleAt2(pB!.x, pB!.y)).toBeGreaterThan(0.5 * K);
+    expect(f.sampleAt(pB!.x, pB!.y)).toBeLessThan(0.05 * K);
+    expect(f.sampleAt3(pB!.x, pB!.y)).toBeLessThan(0.05 * K);
+    // Pocket 2 → channel C (the inert-C bug guard: C must actually carry biomass IN a C-pocket).
+    expect(f.sampleAt3(pC!.x, pC!.y)).toBeGreaterThan(0.5 * K);
+    expect(f.sampleAt(pC!.x, pC!.y)).toBeLessThan(0.05 * K);
+    expect(f.sampleAt2(pC!.x, pC!.y)).toBeLessThan(0.05 * K);
+  });
+
+  it('mode 0 (ablation): ALL pockets grow channel A only — B and C stay inert everywhere', () => {
+    const f = new FoodField(1024, 1024, 128, 128, K, 1, 3, 0.5, 0); // channels=3, mode 0
+    const mainRng = new QueueRng([0.125, 0.125, 0.375, 0.375, 0.625, 0.625]);
+    f.seedPatches(3, 5, 0, mainRng);
+    for (const p of f.patchCenters as { x: number; y: number }[]) {
+      expect(f.sampleAt(p.x, p.y)).toBeGreaterThan(0.5 * K); // channel A is the only resource
+      expect(f.sampleAt2(p.x, p.y)).toBe(0);
+      expect(f.sampleAt3(p.x, p.y)).toBe(0);
+    }
+  });
+
+  it('grazeAt3 removes channel-C biomass independently; regrows toward its OWN cell K', () => {
+    const f = new FoodField(1024, 1024, 128, 128, K, 1, 3, 0.5, 1);
+    const mainRng = new QueueRng([0.125, 0.125, 0.375, 0.375, 0.625, 0.625]);
+    f.seedPatches(3, 5, 0, mainRng);
+    const pC = (f.patchCenters as { x: number; y: number }[])[2]!;
+    const before = f.sampleAt3(pC.x, pC.y);
+    const took = f.grazeAt3(pC.x, pC.y, before * 0.5);
+    expect(took).toBeGreaterThan(0);
+    expect(f.sampleAt3(pC.x, pC.y)).toBeCloseTo(before - took, 6);
+    // regrow: channel C recovers toward its cell's K (it's a C-pocket cell), A/B stay empty there.
+    for (let i = 0; i < 200; i++) f.step(0.2, 0, null, null);
+    expect(f.sampleAt3(pC.x, pC.y)).toBeGreaterThan(before * 0.9);
+    expect(f.sampleAt(pC.x, pC.y)).toBeLessThan(0.05 * K);
+  });
+
+  it('hashInto mixes channel C: a grazed C-pocket changes the hash (3rd channel is live state)', () => {
+    const make = (): FoodField => {
+      const f = new FoodField(1024, 1024, 128, 128, K, 1, 3, 0.5, 1);
+      f.seedPatches(3, 5, 0, new QueueRng([0.125, 0.125, 0.375, 0.375, 0.625, 0.625]));
+      return f;
+    };
+    const hashOf = (f: FoodField): number => {
+      let h = 2166136261 >>> 0;
+      const sink = {
+        f: (v: number) => {
+          // FNV-1a over the float's byte view → C-channel changes are visible in the digest.
+          const buf = new Float64Array([v]);
+          const bytes = new Uint8Array(buf.buffer);
+          for (let b = 0; b < 8; b++) {
+            h ^= bytes[b]!;
+            h = Math.imul(h, 16777619) >>> 0;
+          }
+        },
+      };
+      f.hashInto(sink);
+      return h >>> 0;
+    };
+    const a = make();
+    const b = make();
+    expect(hashOf(a)).toBe(hashOf(b)); // same construction → same hash (deterministic)
+    const pC = (b.patchCenters as { x: number; y: number }[])[2]!;
+    b.grazeAt3(pC.x, pC.y, b.sampleAt3(pC.x, pC.y)); // drain channel C in its pocket
+    expect(hashOf(b)).not.toBe(hashOf(a)); // NON-VACUITY: B3 is genuinely mixed into the state hash
+  });
+});

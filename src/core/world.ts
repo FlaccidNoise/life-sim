@@ -67,6 +67,7 @@ export class World {
       config.foodInit,
       config.foodChannels,
       config.foodChannelRatio,
+      config.foodPocketChannelMode,
     );
     this.walls = new Walls(
       config.worldWidth,
