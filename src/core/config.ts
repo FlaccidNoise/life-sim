@@ -441,6 +441,26 @@ export interface Config {
    *  Set ≤0 for the raw-linear gate (drive = hunger). Unused when hungerGatesFood is off. */
   foodGateThreshold: number;
 
+  // ── Age / life stages (juvenile/adult/elder; OFF by default = byte-identical) ─────────────────────
+  /** Master switch for age-dependent metabolism + life stages. false = the two age genes (MATURITY_AGE,
+   *  SENESCENCE_AGE) draw NO RNG and neither the senescence tax nor the maturity gate is consulted, so the
+   *  sim is byte-identical to pre-feature (the OFF golden contract). true = the genes seed/mutate and `age`
+   *  becomes a real life axis: a juvenile breeding lock + an elder metabolic decline + a costed longevity gene. */
+  ageStages: boolean;
+  /** Senescence tax slope (per tick past SENESCENCE_AGE): an elder's basal cost is scaled by
+   *  (1 + senescenceRate·(age − SENESCENCE_AGE)), so upkeep climbs with age until the creature can no longer
+   *  break even and starves — death of old age, reaped by the EXISTING cull (no new death path). Only read
+   *  when ageStages; 0 → no tax (the senescence-only ablation within an ageStages-on world). */
+  senescenceRate: number;
+  /** MATURITY_AGE gene founder CENTER (ticks): below this age a creature cannot breed (juvenile). */
+  maturityAge: number;
+  /** SENESCENCE_AGE gene founder CENTER (ticks): at/above this age the senescence tax begins (elder). */
+  senescenceAge: number;
+  /** Basal upkeep per unit of SENESCENCE_AGE gene above its center: a durable (long-lived) body costs more
+   *  to run every tick (disposable-soma / antagonistic-pleiotropy), so longevity is a genuine tradeoff —
+   *  a balanced polymorphism rather than free upward drift toward immortality. */
+  senescenceAgeCost: number;
+
   // ── Observation hooks (optional; OFF by default — pure instrumentation, never affects the sim) ────
   /** Fired once per successful birth inside reproduce(), in ascending parent-slot order, BEFORE the
    *  tick counter advances. Read-only by contract: it must not touch the store, RNG, or iteration —
@@ -658,6 +678,14 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     // Flip on so a full creature stops climbing the food gradient and drifts on its other drives.
     hungerGatesFood: false,
     foodGateThreshold: 0.4, // ease off food-seeking only in the top ~40% of the energy range (unused when gate off)
+    // Age / life stages (OFF default: ageStages false → the 2 age genes never draw, neither the senescence
+    // tax nor the maturity gate fires → byte-identical). Flip on to make `age` a real axis: juvenile breeding
+    // lock + elder senescence decline + a costed longevity gene. Rate/cost/centers tuned via life-history probe.
+    ageStages: false,
+    senescenceRate: 0.01, // elder basal-tax slope per tick past SENESCENCE_AGE (only read when ageStages)
+    maturityAge: 100, // MATURITY_AGE gene center (ticks): ≈ under the first-breed median → the gate bites
+    senescenceAge: 400, // SENESCENCE_AGE gene center (ticks): ≈ mean lifespan → only the long tail gets capped
+    senescenceAgeCost: 0.0005, // basal upkeep per unit SENESCENCE_AGE above center (the longevity tradeoff)
     ...overrides,
   };
 }
