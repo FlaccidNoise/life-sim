@@ -41,7 +41,7 @@ export class Legend {
         <span class="lg-gl">◆</span> omnivore
         <span class="lg-gl lg-tri">▲</span> predator</div>
       <div class="lg-row"><b>color</b> = <span class="lg-cl"></span><div class="lg-bar lg-cbar"></div></div>
-      <div class="lg-row lg-satrow"><b>saturation</b> = vision <span class="muted">(grey blind → vivid sharp)</span>
+      <div class="lg-row lg-satrow"><b>saturation</b> = metabolism <span class="muted">(grey thrifty → vivid efficient)</span>
         <div class="lg-bar lg-satbar"></div></div>
       <div class="lg-row lg-valrow"><b>brightness</b> = speed <span class="muted">(dim idle → bright active)</span>
         <div class="lg-bar lg-valbar"></div></div>
@@ -63,7 +63,7 @@ export class Legend {
     const info = COLOR_INFO[mode];
     this.colorLabel.textContent = info.label;
     this.colorBar.style.background = info.ramp;
-    // In energy mode the shader fixes saturation + brightness, so vision/speed aren't encoded —
+    // In energy mode the shader fixes saturation + brightness, so metabolism/speed aren't encoded —
     // strike those rows so the legend never claims an encoding the dots don't show.
     const na = mode === ColorMode.ENERGY;
     this.satRow.classList.toggle('lg-na', na);
