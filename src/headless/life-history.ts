@@ -167,6 +167,8 @@ export const DEMO_OVERRIDES: Partial<Config> = {
   basalCost: 0.08,
   hungerGatesFood: true,
   breedCooldown: 150,
+  // Age / life stages (life-sim-bd8a): juvenile breed-lock + elder senescence tax + costed longevity gene.
+  ageStages: true,
 };
 
 // ── One seed: run the sim, observe every tick, build the per-seed report, return structured stats ──────
