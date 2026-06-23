@@ -79,6 +79,56 @@ describe('World — Phase 0 determinism contract', () => {
     expect(on.stateHash()).not.toBe(baseline.stateHash());
   });
 
+  it('parcelsEnabled OFF is byte-identical to default; ON perturbs the world (sight-only food gate)', () => {
+    const baseline = new World(defaultConfig({ seed: 1 }));
+    const off = new World(defaultConfig({ seed: 1, parcelsEnabled: false }));
+    // ON needs flow for the parcels to drift, but flow itself is OFF in the baseline — so compare ON
+    // against a flow-only world (no parcels) to isolate that PARCELS, not flow, cause the divergence.
+    const flowOnly = new World(defaultConfig({ seed: 1, flowStrength: 0.15 }));
+    const on = new World(defaultConfig({ seed: 1, flowStrength: 0.15, parcelsEnabled: true }));
+    for (let t = 0; t < 300; t++) {
+      baseline.step();
+      off.step();
+      flowOnly.step();
+      on.step();
+    }
+    // OFF == default → the parcel pool is never allocated, the forked spawn RNG never runs, sense/eat skip it.
+    expect(off.stateHash()).toBe(baseline.stateHash());
+    // ON diverges → parcels are spawned, drift, get hashed, and (when intercepted) feed energy.
+    expect(on.stateHash()).not.toBe(flowOnly.stateHash());
+  });
+
+  it('parcelsEnabled ON leaves the ORGANISM RNG stream byte-identical (dedicated forked parcelRng)', () => {
+    // The cardinal determinism guarantee: parcel randomness is on its OWN forked Rng, so turning parcels
+    // on must NOT advance world.rng or shift any organism draw. Verify by comparing the organism state of an
+    // OFF world to an ON world AT THE SAME TICK — identical means no organism draw moved (only parcel sim
+    // state, which lives in the separate pool, differs). flow OFF on both so the only variable is parcels.
+    // parcelAppeal 0 → parcels are spawned + hashed but contribute ZERO to the sight vector (no steering
+    // change); parcelEatRange 0 → never eaten (no energy payoff). So the only difference an ON world carries
+    // is the separate parcel pool — the organism kinematics/energy must be bit-for-bit identical to OFF.
+    const off = new World(defaultConfig({ seed: 7, parcelsEnabled: false }));
+    const on = new World(
+      defaultConfig({ seed: 7, parcelsEnabled: true, parcelAppeal: 0, parcelEatRange: 0 }),
+    );
+    for (let t = 0; t < 300; t++) {
+      off.step();
+      on.step();
+    }
+    expect(on.rng.state).toBe(off.rng.state); // world.rng untouched by the parcel path
+    expect(on.store.liveCount).toBe(off.store.liveCount);
+    const a = off.store;
+    const b = on.store;
+    for (let k = 0; k < a.liveCount; k++) {
+      const i = a.liveIndices[k]!;
+      const j = b.liveIndices[k]!;
+      expect(j).toBe(i); // same slots live (same births/deaths in the same order)
+      expect(b.x[j]).toBe(a.x[i]);
+      expect(b.y[j]).toBe(a.y[i]);
+      expect(b.energy[j]).toBe(a.energy[i]);
+      expect(b.genId[j]).toBe(a.genId[i]);
+    }
+  });
+
   it('pheromoneEnabled OFF: the 4 PHERO brain genes stay exactly 0 after a long run (ablation)', () => {
     const w = new World(defaultConfig({ seed: 13, pheromoneEnabled: false }));
     for (let t = 0; t < 500; t++) w.step();
