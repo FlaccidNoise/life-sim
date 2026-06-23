@@ -11,6 +11,7 @@ import { type OrganismStore } from './store';
 import { type FoodField } from './food-field';
 import { type PheroField } from './phero-field';
 import { type SpatialHash } from './spatial-hash';
+import { type Parcels } from './parcels';
 import { type Rng } from './rng';
 import { type Config } from './config';
 import { type Walls } from './walls';
@@ -281,6 +282,27 @@ export function metabolize(
       if (over > 0) energy[i] = energy[i]! - crowdingMortality * over;
     }
     age[i] = (age[i]! + 1) >>> 0;
+  }
+}
+
+/**
+ * EAT DRIFTING PARCELS — each creature within `parcelEatRange` of a live, sight-only food parcel consumes
+ * the nearest one for a big `parcelEnergy` payoff and frees it. This is the reward that makes vision pay:
+ * eyes steer the creature onto the parcel (sense.senseCreatures), and this pass cashes the intercept. Reads
+ * only parcel position/energy — never lineage/score (the cardinal rule). Ascending live-slot order so the
+ * claim on a contested parcel is deterministic (the lowest-slot creature in reach wins it); RNG-free. Gated
+ * by the caller passing a non-null pool → byte-identical OFF.
+ */
+export function eatParcels(store: OrganismStore, parcels: Parcels, cfg: Config): void {
+  const { liveIndices, liveCount, x, y, energy } = store;
+  const range = cfg.parcelEatRange;
+  const payoff = cfg.parcelEnergy;
+  for (let k = 0; k < liveCount; k++) {
+    const i = liveIndices[k]!;
+    const slot = parcels.nearestTo(x[i]!, y[i]!, range);
+    if (slot < 0) continue; // none in reach
+    parcels.consume(slot);
+    energy[i] = energy[i]! + payoff;
   }
 }
 

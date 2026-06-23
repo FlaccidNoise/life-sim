@@ -7,6 +7,7 @@ import { FoodField } from './food-field';
 import { Walls } from './walls';
 import { FlowField } from './flow-field';
 import { PheroField } from './phero-field';
+import { Parcels } from './parcels';
 import { senseFood, senseCreatures, senseEnv } from './sense';
 import { steer, learn } from './brain';
 import {
@@ -16,7 +17,7 @@ import {
   SCALAR_GENE_COUNT,
   SCALAR_GENE_SPECS,
 } from './genome';
-import { metabolize, hunt, cullDead, reproduce } from './economy';
+import { metabolize, hunt, eatParcels, cullDead, reproduce } from './economy';
 import { Hasher } from './hash';
 
 /**
@@ -40,6 +41,11 @@ export class World {
    *  cfg.pheromoneEnabled; null otherwise, so the OFF path never deposits/senses/steps/hashes and stays
    *  byte-identical. */
   readonly phero: PheroField | null;
+  /** Drifting SIGHT-ONLY food parcels — discrete, smell-less, high-value motes that only the sight system
+   *  perceives (giving the VISION genes a payoff). Allocated ONLY when cfg.parcelsEnabled; null otherwise,
+   *  so the OFF path never spawns/drifts/senses/eats/hashes parcels and stays byte-identical. All parcel
+   *  randomness is on the pool's own forked Rng — world.rng is never touched on the parcel path. */
+  readonly parcels: Parcels | null;
   /** Whether the env-sense brain genes are LIVE this run — captured at construction (from the presence
    *  of walls / flow), so live-tuning a strength to 0 mid-run never changes the genome draw COUNT and the
    *  determinism contract holds. With both false the organism RNG stream is byte-identical to a pre-env world. */
@@ -94,6 +100,9 @@ export class World {
     this.phero = config.pheromoneEnabled
       ? new PheroField(config.worldWidth, config.worldHeight, config.foodCols, config.foodRows)
       : null;
+    // Parcels built ONLY when enabled → null is the byte-identical OFF path. Its forked spawn RNG is
+    // created here (cfg.seed ^ SALT), independent of world.rng.
+    this.parcels = config.parcelsEnabled ? new Parcels(config) : null;
     // Capture once: env-sense genes are live iff the world has walls / flow. Fixed for the run's lifetime
     // so the genome draw count can't shift if a strength is live-tuned to 0 mid-run.
     this.wallSenseGenes = config.wallRegionCount > 0;
@@ -244,9 +253,15 @@ export class World {
     this.hash.build(s);
     // SENSE → THINK/ACT: perceive the food gradient (per-creature sense range) + SIGHT (nearby creatures
     // within the vision cone; uses the start-of-tick hash), then steer (per-creature genes; sets thrust).
+    // Drifting sight-only parcels: spawn (forked RNG) + advect on the flow BEFORE the sight scan, so the
+    // perception below reads this tick's parcel positions. Gated (null = OFF, no-op, byte-identical).
+    if (this.parcels !== null) {
+      this.parcels.maybeSpawn(this.tick);
+      this.parcels.step(cfg.flowStrength > 0 ? this.flow : null, cfg.dt);
+    }
     senseFood(s, this.food, cfg);
     senseEnv(s, this.walls, cfg.flowStrength > 0 ? this.flow : null, this.phero, cfg);
-    senseCreatures(s, this.hash, cfg, this.walls);
+    senseCreatures(s, this.hash, cfg, this.walls, this.parcels);
     steer(s, cfg.learningEnabled, cfg.eligLambda, cfg.motorSquash, cfg);
     // MOVE: flow push (size-scaled current) then repulsion add onto the thrust force, then integrate.
     if (cfg.flowPushStrength > 0) applyFlowForce(s, this.flow, cfg);
@@ -266,6 +281,9 @@ export class World {
     // bites use where creatures actually are this tick.
     this.hash.build(s);
     hunt(s, this.hash, cfg, this.phero);
+    // EAT PARCELS: a creature that its sight steered onto a parcel now cashes the intercept (post-MOVE
+    // positions, ascending live-slot order, RNG-free). Gated (null = OFF, byte-identical).
+    if (this.parcels !== null) eatParcels(s, this.parcels, cfg);
     // METABOLIZE → LEARN → REPRO/DIE. Energy (the band the creature is in) is known after metabolize,
     // so the energy-gated within-life consolidation runs here (eligibility traces were laid in steer).
     metabolize(s, this.food, this.hash, cfg, this.phero);
@@ -308,6 +326,7 @@ export class World {
     this.tick = 0;
     this.lastBirths = this.lastDeaths = this.totalBirths = this.totalDeaths = 0;
     if (this.phero !== null) this.phero.reset();
+    if (this.parcels !== null) this.parcels.reset();
     this.setup();
   }
 
@@ -337,6 +356,8 @@ export class World {
     this.food.hashInto(h); // food is part of the sim state
     // The pheromone field is part of sim state ONLY when active (after food, gated) → byte-identical when off.
     if (this.phero !== null) this.phero.hashInto(h);
+    // Parcels are part of sim state ONLY when active (after the field hashes, gated) → byte-identical OFF.
+    if (this.parcels !== null) this.parcels.hashInto(h);
     return h.hex();
   }
 }

@@ -383,6 +383,35 @@ export interface Config {
   /** Susceptibility exponent: push ×= (cellRadius/size)^this (big bodies resist). */
   flowPushSizeExp: number;
 
+  // ── Drifting SIGHT-ONLY food parcels (gives the VISION genes a reason to exist) ─────────────────────
+  /** Master switch for drifting sight-only food parcels: discrete, high-value, perishable food motes that
+   *  emit NO smell (not in the FoodField gradient) and are perceived ONLY by the sight system, so a
+   *  creature with working eyes can intercept them for a big payoff — making VISION_RANGE/FOV/ACUITY (+ the
+   *  SIGHT brain weights) pay. false (default) = the parcel pool is never allocated, the spawn RNG never
+   *  advances, sense/eat skip the parcel block entirely → byte-identical to pre-feature (the OFF contract).
+   *  All randomness is on a DEDICATED forked Rng (cfg.seed ^ SALT), so even ON it never perturbs the
+   *  organism RNG stream (seeding + reproduction stay byte-identical). */
+  parcelsEnabled: boolean;
+  /** Parcel pool capacity (max simultaneous live parcels). Only allocated when parcelsEnabled. */
+  parcelCapacity: number;
+  /** Spawn a parcel every this-many ticks, up to capacity (one parcelRng draw-pair per spawn). 0 = never. */
+  parcelSpawnInterval: number;
+  /** Energy payoff for eating a parcel — deliberately BIG (a sight-guided intercept is the reward that
+   *  makes eyes worth their upkeep). */
+  parcelEnergy: number;
+  /** Parcel lifetime in ticks before it expires (perishable → eyes must act fast, and the pool turns over). */
+  parcelLifetime: number;
+  /** Per-tick energy decay of a live parcel (a second perishability channel; expire when energy ≤ 0). */
+  parcelDecay: number;
+  /** Advection strength: a parcel drifts by parcelDriftMult × the local flow velocity each tick. 0 = static
+   *  (parcels sit still; only decay/age). Needs flow active to actually move. */
+  parcelDriftMult: number;
+  /** Appeal weight folded into the SIGHT vector per perceived parcel (the pull strength toward a parcel,
+   *  the analogue of the creature-appeal term — positive = attractive). */
+  parcelAppeal: number;
+  /** Eat radius (world units): a creature within this of a live parcel consumes it for parcelEnergy. */
+  parcelEatRange: number;
+
   // ── Interoceptive hunger brain input (lever E2 — ablation knob; OFF by default = byte-identical) ───
   /** Adds a HUNGER sense to the brain: a creature feels its own energy deficit (1 − energy/satiatedBar,
    *  clamped to [0,1]) as an extra input wired to two evolvable synapses (HUNGER_TURN, HUNGER_THRUST), so
@@ -587,6 +616,19 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     flowScale: 18,
     flowPushStrength: 0,
     flowPushSizeExp: 1,
+    // Drifting sight-only food parcels: OFF by default (pool never allocated, spawn RNG never advances,
+    // sense/eat skip the parcel block) → byte-identical. Flip on to give the VISION genes a payoff: discrete,
+    // high-value, perishable, smell-less motes that only eyes can find + intercept. All randomness is on a
+    // dedicated forked RNG, so even ON the organism stream stays byte-identical (only the sim state diverges).
+    parcelsEnabled: false,
+    parcelCapacity: 64, // up to 64 simultaneous motes drifting across the archipelago
+    parcelSpawnInterval: 10, // one new parcel every 10 ticks (up to the cap)
+    parcelEnergy: 60, // a big payoff — ~a full repro-bar's worth, so a sight-guided intercept clearly pays
+    parcelLifetime: 400, // perishable: a parcel persists ~400 ticks then vanishes (the pool turns over)
+    parcelDecay: 0.1, // slow energy bleed (also expires it if lifetime is long)
+    parcelDriftMult: 1, // drift at the full local flow velocity (needs flowStrength>0 to actually move)
+    parcelAppeal: 1, // sight pull toward a parcel (≈ the creature-appeal scale)
+    parcelEatRange: 8, // intercept reach to consume a parcel
     // Interoceptive hunger brain input (lever E2): OFF = byte-identical (hunger synapses unseeded/unread).
     // Flip on to give the brain its own energy-deficit sense, evolving from a neutral 0.
     hungerSense: false,

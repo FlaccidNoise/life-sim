@@ -12,6 +12,7 @@ import { type Config } from './config';
 import { type Walls } from './walls';
 import { type FlowField } from './flow-field';
 import { type PheroField } from './phero-field';
+import { type Parcels } from './parcels';
 import { ScalarGene, SCALAR_GENE_COUNT } from './genome';
 
 function wrap(v: number, size: number): number {
@@ -175,6 +176,7 @@ export function senseCreatures(
   hash: SpatialHash,
   cfg: Config,
   walls: Walls | null,
+  parcels: Parcels | null,
 ): void {
   const { liveIndices, liveCount, x, y, heading, hue, sightX, sightY, scalarGenes } = store;
   const occludes = walls !== null && walls.active && cfg.wallOccludesVision;
@@ -265,6 +267,34 @@ export function senseCreatures(
           sx += ux * w;
           sy += uy * w;
         }
+      }
+    }
+    // SIGHT-ONLY DRIFTING PARCELS: discrete, smell-less, high-value food motes — perceived ONLY here (the
+    // FoodField gradient never carries them), so working eyes are what find them. Each live parcel within
+    // this creature's VISION_RANGE (+ FOV cone, + wall LOS when occlusion is on) adds an attractive pull
+    // unit(self→parcel)·parcelAppeal·(1−d/range)·acuity into the SAME sight vector the brain already steers
+    // along — so the existing VISION_*/SIGHT_* genes drive the chase. Reads only parcel position (never
+    // lineage/score). Gated: parcels===null (disabled) skips this entirely → byte-identical OFF. A simple
+    // ascending linear scan over the small pool; deterministic. The blind early-continue above already
+    // excludes range<=0 / acuity<=0 creatures, so a blind creature can't perceive a parcel.
+    if (parcels !== null) {
+      const appeal = cfg.parcelAppeal;
+      const { alive: pAlive, x: px, y: py, capacity: pCap } = parcels;
+      for (let pi = 0; pi < pCap; pi++) {
+        if (pAlive[pi] === 0) continue;
+        const ddx = wrapDelta(px[pi]! - xi, ww); // self → parcel
+        const ddy = wrapDelta(py[pi]! - yi, wh);
+        const d2 = ddx * ddx + ddy * ddy;
+        if (d2 >= range2 || d2 === 0) continue;
+        const d = Math.sqrt(d2);
+        const inv = 1 / d;
+        const ux = ddx * inv;
+        const uy = ddy * inv;
+        if (ux * hx + uy * hy < cosFov) continue; // outside the vision cone
+        if (occludes && walls.losBlocked(xi, yi, px[pi]!, py[pi]!)) continue; // hidden behind a wall
+        const w = appeal * (1 - d / range) * acuity;
+        sx += ux * w;
+        sy += uy * w;
       }
     }
     sightX[i] = sx;
