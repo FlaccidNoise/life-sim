@@ -49,4 +49,14 @@ describe('OrganismStore', () => {
     expect(s.liveCount).toBe(0);
     expect(s.alloc()).toBe(0);
   });
+
+  it('alloc resets breedCooldownLeft so a recycled slot is breeding-ready', () => {
+    const s = new OrganismStore(2);
+    const a = s.alloc();
+    s.breedCooldownLeft[a] = 99; // simulate a creature mid-refractory
+    s.free(a);
+    const b = s.alloc(); // LIFO → reuses the same slot
+    expect(b).toBe(a);
+    expect(s.breedCooldownLeft[b]!).toBe(0); // the new occupant starts ready, not inheriting stale cooldown
+  });
 });
