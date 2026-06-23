@@ -74,6 +74,12 @@ let config: Config = defaultConfig({
   basalCost: 0.08,
   hungerGatesFood: true,
   breedCooldown: 150,
+  // Age / life stages (life-sim-bd8a): juvenile (can't breed) → adult → elder (senescence tax = death of
+  // old age). Tail-gated genes MATURITY_AGE/SENESCENCE_AGE evolve in-life. Measured under this demo config
+  // (4000t seed1): the immortal tail is capped (max lifespan 3832→2455), the population thrives (54% bred),
+  // and the genes stay bounded (SENESCENCE_AGE settles ~480, not railed). senescenceRate is a live knob —
+  // crank it in the panel for a more dramatic elder die-off.
+  ageStages: true,
 });
 let world = new World(config);
 
