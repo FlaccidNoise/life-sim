@@ -466,3 +466,119 @@ describe('FoodField three-channel place-coupling (F1)', () => {
     expect(hashOf(b)).not.toBe(hashOf(a)); // NON-VACUITY: B3 is genuinely mixed into the state hash
   });
 });
+
+describe('FoodField ch2 differentiated channels (wall-tied A + drifting B)', () => {
+  // Six well-separated pockets on a 128² / 128-cell grid (cellW=8). QueueRng feeds x,y per pocket.
+  const SIX_POCKETS = (): number[] => [
+    0.1, 0.1, 0.25, 0.25, 0.4, 0.4, 0.55, 0.55, 0.7, 0.7, 0.85, 0.85,
+  ];
+
+  it('channels===2 mode 1 assigns A/B pockets round-robin: each pocket grows ONLY its channel', () => {
+    // Two channels (no C), place-coupled via mode 1: pocket 0→A, pocket 1→B, pocket 2→A …
+    const f = new FoodField(1024, 1024, 128, 128, K, 1, 2, 0.5, 1); // channels=2, mode 1
+    f.seedPatches(3, 5, 0, new QueueRng([0.125, 0.125, 0.375, 0.375, 0.625, 0.625]));
+    const [pA, pB, pA2] = f.patchCenters as { x: number; y: number }[];
+    // Pocket 0 → channel A.
+    expect(f.sampleAt(pA!.x, pA!.y)).toBeGreaterThan(0.5 * K);
+    expect(f.sampleAt2(pA!.x, pA!.y)).toBeLessThan(0.05 * K);
+    // Pocket 1 → channel B.
+    expect(f.sampleAt2(pB!.x, pB!.y)).toBeGreaterThan(0.5 * K);
+    expect(f.sampleAt(pB!.x, pB!.y)).toBeLessThan(0.05 * K);
+    // Pocket 2 → channel A again (p%2). No B3 ever (channels===2).
+    expect(f.sampleAt(pA2!.x, pA2!.y)).toBeGreaterThan(0.5 * K);
+    expect(f.sampleAt3(pA2!.x, pA2!.y)).toBe(0);
+  });
+
+  it('wall-tied OFF places the same pocket centres as legacy (placement is RNG-order-stable)', () => {
+    // Same channels/mode, wallTied off vs on — the pocket CENTRES (main-rng draws) must be identical;
+    // only the channel ASSIGNMENT differs. Proves the wall-tie pre-pass did not shift the RNG order.
+    const off = new FoodField(1024, 1024, 128, 128, K, 1, 2, 0.5, 1, false); // wallTied=false
+    off.seedPatches(6, 4, 0, new QueueRng(SIX_POCKETS()));
+    const on = new FoodField(1024, 1024, 128, 128, K, 1, 2, 0.5, 1, true); // wallTied=true
+    // A proximity fn that returns increasing distance with x → near-wall = low x.
+    on.seedPatches(6, 4, 0, new QueueRng(SIX_POCKETS()), 1, 0, 1, 0, undefined, (x) => x);
+    expect(on.patchCenters).toHaveLength(6);
+    for (let p = 0; p < 6; p++) {
+      expect(on.patchCenters[p]!.x).toBe(off.patchCenters[p]!.x);
+      expect(on.patchCenters[p]!.y).toBe(off.patchCenters[p]!.y);
+    }
+  });
+
+  it('wall-tied ON puts channel-A pockets at LOWER mean wall-proximity than channel-B pockets', () => {
+    const f = new FoodField(1024, 1024, 128, 128, K, 1, 2, 0.5, 1, true); // wallTied=true
+    // proximity = x-coordinate: low-x pockets are "near a wall", high-x are "open water".
+    const proximityFn = (x: number): number => x;
+    f.seedPatches(6, 4, 0, new QueueRng(SIX_POCKETS()), 1, 0, 1, 0, undefined, proximityFn);
+    // Classify each pocket centre by which channel actually carries biomass there.
+    let sumProxA = 0;
+    let nA = 0;
+    let sumProxB = 0;
+    let nB = 0;
+    for (const p of f.patchCenters as { x: number; y: number }[]) {
+      const a = f.sampleAt(p.x, p.y);
+      const b = f.sampleAt2(p.x, p.y);
+      if (a > b) {
+        sumProxA += proximityFn(p.x);
+        nA++;
+      } else {
+        sumProxB += proximityFn(p.x);
+        nB++;
+      }
+    }
+    expect(nA).toBeGreaterThan(0);
+    expect(nB).toBeGreaterThan(0);
+    expect(sumProxA / nA).toBeLessThan(sumProxB / nB); // A clusters near walls, B in open water
+  });
+
+  it('drift OFF (mult 1) is byte-identical to uniform advection of both channels', () => {
+    const cfg = defaultConfig();
+    const flow = new FlowField(W, H, COLS, ROWS, { ...cfg, flowStrength: 0.15, flowScale: 4 });
+    const make = (mult: number): FoodField => {
+      const f = new FoodField(W, H, COLS, ROWS, K, 1, 2, 0.5, 1, false, mult);
+      f.seedPatches(2, 3, 0, new QueueRng([0.25, 0.25, 0.75, 0.75]));
+      return f;
+    };
+    const a = make(1);
+    const b = make(1);
+    for (let i = 0; i < 30; i++) {
+      a.step(0.05, 0.02, flow, null);
+      b.step(0.05, 0.02, flow, null);
+    }
+    for (let y = 2; y < H; y += 9)
+      for (let x = 2; x < W; x += 9) {
+        expect(a.sampleAt2(x, y)).toBe(b.sampleAt2(x, y));
+        expect(a.sampleAt(x, y)).toBe(b.sampleAt(x, y));
+      }
+  });
+
+  it('drift ON (mult>1) advects channel B further downstream than channel A', () => {
+    const cfg = defaultConfig();
+    const flow = new FlowField(W, H, COLS, ROWS, { ...cfg, flowStrength: 0.2, flowScale: 4 });
+    // Identical pockets, but B advected at 3× → its biomass centroid drifts further than A's.
+    const f = new FoodField(W, H, COLS, ROWS, K, 1, 2, 0.5, 1, false, 3); // driftMult=3
+    f.seedPatches(2, 3, 0, new QueueRng([0.25, 0.25, 0.75, 0.75]));
+    // Record the initial channel-A biomass centroid (B starts co-located with A's pockets, mode-1 split).
+    const centroidShift = (sample: (x: number, y: number) => number): number => {
+      let sw = 0;
+      let swx = 0;
+      let swy = 0;
+      for (let r = 0; r < ROWS; r++)
+        for (let c = 0; c < COLS; c++) {
+          const x = (c + 0.5) * (W / COLS);
+          const y = (r + 0.5) * (H / ROWS);
+          const w = sample(x, y);
+          sw += w;
+          swx += w * x;
+          swy += w * y;
+        }
+      return sw > 0 ? Math.hypot(swx / sw, swy / sw) : 0;
+    };
+    const a0 = centroidShift((x, y) => f.sampleAt(x, y));
+    const b0 = centroidShift((x, y) => f.sampleAt2(x, y));
+    for (let i = 0; i < 40; i++) f.step(0.02, 0.0, flow, null);
+    const a1 = centroidShift((x, y) => f.sampleAt(x, y));
+    const b1 = centroidShift((x, y) => f.sampleAt2(x, y));
+    // Channel B's centroid moved further than channel A's over the same flow (the drifting-plume effect).
+    expect(Math.abs(b1 - b0)).toBeGreaterThan(Math.abs(a1 - a0));
+  });
+});

@@ -138,4 +138,40 @@ describe('Walls', () => {
     expect(solid / total).toBeGreaterThan(0.15);
     expect(solid / total).toBeLessThan(0.55);
   });
+
+  it('proximityAt returns 0 ON a solid cell and grows with distance from walls', () => {
+    const w = new Walls(1024, 1024, 64, 64, cfg({ wallRegionCount: 1, wallDensity: 0.5, seed: 1 }));
+    const cellW = 1024 / 64;
+    // Find a solid cell: prox there must be 0 (it IS a wall).
+    let solidX = -1;
+    let solidY = -1;
+    for (let r = 0; r < 64 && solidX < 0; r++)
+      for (let c = 0; c < 64; c++) {
+        const x = (c + 0.5) * cellW;
+        const y = (r + 0.5) * cellW;
+        if (w.isSolidAt(x, y)) {
+          solidX = x;
+          solidY = y;
+          break;
+        }
+      }
+    expect(solidX).toBeGreaterThanOrEqual(0);
+    expect(w.proximityAt(solidX, solidY)).toBe(0);
+    // The max proximity over the grid must exceed 0 (open cells away from walls read farther).
+    let maxProx = 0;
+    for (let r = 0; r < 64; r++)
+      for (let c = 0; c < 64; c++)
+        maxProx = Math.max(maxProx, w.proximityAt((c + 0.5) * cellW, (r + 0.5) * cellW));
+    expect(maxProx).toBeGreaterThan(0);
+  });
+
+  it('proximityAt is uniformly far (flat) when walls are inactive', () => {
+    const w = new Walls(1024, 1024, 64, 64, cfg({ wallRegionCount: 0 }));
+    expect(w.active).toBe(false);
+    const p0 = w.proximityAt(0, 0);
+    expect(p0).toBeGreaterThan(0);
+    // No walls → every position reads the same proxCap (flat field).
+    for (let r = 0; r < 64; r += 7)
+      for (let c = 0; c < 64; c += 7) expect(w.proximityAt(c * 16 + 8, r * 16 + 8)).toBe(p0);
+  });
 });

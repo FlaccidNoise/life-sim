@@ -275,6 +275,20 @@ export interface Config {
    *  spatial-partition mechanic); 1 = round-robin by pocket index (deterministic, RNG-free) so distinct
    *  islands grow distinct resources. Byte-identical at foodChannels<3 (the field never splits). */
   foodPocketChannelMode: number;
+  /** ch2-diff (wall-tied channel A): when true AND a per-pocket channel split is active (foodPocketChannelMode
+   *  ===1 with foodChannels>=2), channel-A pockets are biased toward NEAR-WALL cells (a stable structural
+   *  resource that clusters against the biome walls) and channel-B pockets toward OPEN WATER — split at the
+   *  median wall-proximity of the pockets. Deterministic + RNG-order-stable (a pure read of the wall field
+   *  after each centre is drawn). false (default) = legacy round-robin p%channels assignment → byte-identical.
+   *  Needs walls (wallRegionCount>0) to have a meaningful proximity signal; with no walls every pocket reads
+   *  the same "far" proximity so the split degrades gracefully to all-A. */
+  foodChannelAWallTied: boolean;
+  /** ch2-diff (drifting channel B): per-channel advection multiplier for channel B — channel B's biomass is
+   *  advected by the flow at this× the rate of channels A/C, so it smears DOWNSTREAM into a mobile plume a
+   *  forager must chase while A stays put. 1 (default) = uniform advection across channels → byte-identical.
+   *  Only has an effect when flow is active (flowStrength>0) and B2 exists (foodChannels>=2). Keep ≲3: a
+   *  large value pushes the moved fraction past the CFL=0.25 ceiling and the upwind scheme can go negative. */
+  foodChannelBDriftMult: number;
 
   // ── F2 pheromones (a diffusing deposit-and-sense field; OFF default pheromoneEnabled=false = byte-identical) ──
   /** Master switch for the pheromone field + the 4 PHERO brain genes + PHERO_DEPOSIT scalar gene. false =
@@ -519,6 +533,8 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     // F1 multi-resource (OFF default: foodChannels stays 1/2 → these are byte-identical no-ops).
     foragePrefC: 0.5, // 2nd preference DOF center; only drawn when foodChannels>=3
     foodPocketChannelMode: 0, // 0 = all pockets channel A (no spatial split); 1 = round-robin distinct islands
+    foodChannelAWallTied: false, // ch2-diff OFF: legacy round-robin channel assignment → byte-identical
+    foodChannelBDriftMult: 1, // ch2-diff OFF: uniform advection across channels → byte-identical
     // F2 pheromones (OFF default: pheromoneEnabled=false → field never allocated, genes never draw → no-op).
     pheromoneEnabled: false,
     pheroDeposit: 1.0, // PHERO_DEPOSIT gene center
