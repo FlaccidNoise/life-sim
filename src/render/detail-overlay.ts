@@ -6,6 +6,8 @@
  */
 import { type OrganismStore } from '../core/store';
 import { SCALAR_GENE_COUNT, ScalarGene } from '../core/genome';
+import { GeneView, buildDerived, type VisualOpts } from './detail/gene-view';
+import { dispatch } from './detail/registry';
 
 export class DetailOverlay {
   private readonly canvas: HTMLCanvasElement;
@@ -13,6 +15,7 @@ export class DetailOverlay {
   private camX: number;
   private camY: number;
   private zoom = 1;
+  private opts: VisualOpts = { showCone: false };
 
   constructor(
     private readonly host: HTMLCanvasElement,
@@ -52,6 +55,10 @@ export class DetailOverlay {
       this.canvas.width = w;
       this.canvas.height = h;
     }
+  }
+
+  setShowCone(v: boolean): void {
+    this.opts.showCone = v;
   }
 
   setCamera(x: number, y: number, zoom: number): void {
@@ -99,14 +106,16 @@ export class DetailOverlay {
       if (tier === 0) continue; // far swarm stays on the WebGL pass
       const sp = this.worldToScreen(x[i]!, y[i]!);
       if (sp.x < -R || sp.x > W + R || sp.y < -R || sp.y > H + R) continue; // off-screen cull
-      // Debug marker (Task 1 only): a hollow ring at the creature centre to verify alignment.
       ctx.save();
       ctx.translate(sp.x, sp.y);
+      // grounding flat shadow (drawn unrotated, before the body rotates)
+      ctx.fillStyle = 'rgba(0,0,0,0.28)';
       ctx.beginPath();
-      ctx.arc(0, 0, R, 0, Math.PI * 2);
-      ctx.strokeStyle = tier === 2 ? 'rgba(255,80,80,0.9)' : 'rgba(80,160,255,0.9)';
-      ctx.lineWidth = 2;
-      ctx.stroke();
+      ctx.ellipse(0, R * 0.5, R * 0.92, R * 0.3, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.rotate(store.heading[i]!);
+      const genes = new GeneView(store, i);
+      dispatch({ ctx, R, tier, genes, derived: buildDerived(genes), opts: this.opts });
       ctx.restore();
     }
   }
