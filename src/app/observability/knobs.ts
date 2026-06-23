@@ -32,12 +32,12 @@ const SPECS: KnobSpec[] = [
   { key: 'reproOverhead', label: 'repro overhead', min: 0, max: 40, step: 1, live: true },
   { key: 'mutationSigma', label: 'mutation σ', min: 0, max: 0.3, step: 0.005, live: true },
   // Gene CENTERS (seed-time): the founder value for each evolvable scalar gene.
-  { key: 'maxSpeed', label: 'gene· max speed', min: 1, max: 15, step: 0.5, live: false },
+  { key: 'maxSpeed', label: 'gene· max speed', min: 1, max: 20, step: 0.5, live: false },
   { key: 'eatRate', label: 'gene· eat rate', min: 0.2, max: 6, step: 0.1, live: false },
-  { key: 'senseStep', label: 'gene· sense range', min: 8, max: 200, step: 4, live: false },
-  { key: 'cellRadius', label: 'gene· size', min: 2, max: 14, step: 0.5, live: false },
-  { key: 'maxTurn', label: 'gene· max turn', min: 0.05, max: 1, step: 0.05, live: false },
-  { key: 'maxThrust', label: 'gene· max thrust', min: 0.1, max: 3, step: 0.1, live: false },
+  { key: 'senseStep', label: 'gene· sense range', min: 8, max: 256, step: 4, live: false },
+  { key: 'cellRadius', label: 'gene· size', min: 2, max: 32, step: 0.5, live: false },
+  { key: 'maxTurn', label: 'gene· max turn', min: 0.05, max: 1.2, step: 0.05, live: false },
+  { key: 'maxThrust', label: 'gene· max thrust', min: 0.1, max: 4, step: 0.1, live: false },
   {
     key: 'metabolicEfficiency',
     label: 'gene· metab eff',
@@ -50,13 +50,14 @@ const SPECS: KnobSpec[] = [
   { key: 'satiatedThreshold', label: 'gene· satiated', min: 40, max: 220, step: 5, live: false },
   { key: 'birthEnergy', label: 'gene· birth energy', min: 8, max: 90, step: 1, live: false },
   { key: 'damage', label: 'gene· damage', min: 0, max: 20, step: 0.5, live: false },
-  { key: 'visionRange', label: 'gene· vis range', min: 0, max: 24, step: 1, live: false },
+  { key: 'visionRange', label: 'gene· vis range', min: 0, max: 256, step: 2, live: false },
   { key: 'visionFov', label: 'gene· vis FOV', min: 0.1, max: 3.14, step: 0.05, live: false },
   { key: 'visionAcuity', label: 'gene· vis acuity', min: 0, max: 3, step: 0.1, live: false },
   // Trophic / predation knobs.
   { key: 'predatorFraction', label: 'predator frac', min: 0, max: 0.6, step: 0.05, live: false },
-  // Capped at the spatial-hash cell size (2·cellRadius=12): the 3×3 scan can't reach further.
-  { key: 'biteRange', label: 'bite range', min: 0, max: 12, step: 1, live: true },
+  // hunt scans a neighbourhood sized to biteRange (economy.ts), so it can exceed one hash cell; the
+  // default is 16, so the slider reaches 24 to keep the seeded value representable.
+  { key: 'biteRange', label: 'bite range', min: 0, max: 24, step: 1, live: true },
   // ── Aquarium: diversity pockets (seed-time *) + the predator bundle ────────────────────────────────
   // Deep predator-haven vs shallow grazer-refuge pockets → distinct island communities (reset to apply).
   { key: 'foodPatchRichness', label: 'pocket richness', min: 1, max: 4, step: 0.5, live: false },
@@ -75,8 +76,9 @@ const SPECS: KnobSpec[] = [
   { key: 'predationGain', label: 'predation gain', min: 1, max: 6, step: 0.5, live: true },
   { key: 'herbivoryExp', label: 'herbivory exp', min: 1, max: 2, step: 0.05, live: true },
   { key: 'predatorSeedClusters', label: 'pred nurseries', min: 0, max: 6, step: 1, live: false },
-  // Red Queen (lever E1): predator pays this fraction of prey DAMAGE on a bite. ≥0.5 starves predators.
-  { key: 'counterBiteFraction', label: 'counter-bite', min: 0, max: 0.5, step: 0.05, live: true },
+  // Red Queen (lever E1): predator pays this fraction of prey DAMAGE on a bite. Capped at 0.3 — the
+  // documented safe band (≥0.5 starves predators).
+  { key: 'counterBiteFraction', label: 'counter-bite', min: 0, max: 0.3, step: 0.05, live: true },
   // Selection-pressure levers (live): basal upkeep per unit of each gene above its center.
   { key: 'maxSpeedCost', label: 'cost· speed', min: 0, max: 0.5, step: 0.01, live: true },
   { key: 'eatRateCost', label: 'cost· eat', min: 0, max: 1, step: 0.01, live: true },
