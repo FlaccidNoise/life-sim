@@ -73,6 +73,8 @@ export class World {
       config.foodChannels,
       config.foodChannelRatio,
       config.foodPocketChannelMode,
+      config.foodChannelAWallTied,
+      config.foodChannelBDriftMult,
     );
     this.walls = new Walls(
       config.worldWidth,
@@ -120,6 +122,10 @@ export class World {
         // archipelago LAYOUT — pocket centres + the main-RNG draws here — is identical across variance;
         // only each island's K changes (founders then rejection-sample onto the re-weighted biomass).
         this.rng.fork(0xc),
+        // ch2-diff wall-tied placement: a pure read of the wall proximity field (built before setup) so
+        // near-wall pockets get channel A. Only consulted when foodChannelAWallTied is ON; passing it
+        // unconditionally is harmless (the food field ignores it on the legacy path → byte-identical).
+        (x, y) => this.walls.proximityAt(x, y),
       );
     } else {
       this.food.reset();

@@ -162,6 +162,15 @@ export class Walls {
     return { x: cx, y: cy, blockedX, blockedY };
   }
 
+  /** PUBLIC read-only proximity accessor: clamped hop-distance (in fine cells, [0, proxCap]) from the
+   *  nearest solid wall cell to the world position (x,y). 0 = on/at a wall, proxCap = "far"/no wall near.
+   *  When walls are inactive the whole field is proxCap (uniformly far). Pure read — no state change.
+   *  Used by the food field's wall-tied channel placement to bias channel-A pockets toward walls. */
+  proximityAt(x: number, y: number): number {
+    if (!this._active) return this.proxCap;
+    return this.prox[this.cellIdx(this.colOf(x), this.rowOf(y))]!;
+  }
+
   /** Central difference of the proximity field (points AWAY from walls). Zero when inactive. */
   proxGradAt(x: number, y: number, step: number): { gx: number; gy: number } {
     if (!this._active) return { gx: 0, gy: 0 };

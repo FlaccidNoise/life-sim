@@ -61,6 +61,12 @@ export class FoodField {
   private scratch3: Float64Array | null = null;
   private channelMask: Uint8Array | null = null;
   private advectScratch: Float64Array | null = null; // reused flux-accumulation buffer (lazy)
+  // ch2-diff levers. wallTied: when true (and a mask is active), bias channel-A pockets toward near-wall
+  // cells and channel-B pockets toward open water (deterministic, RNG-free). driftMult: per-channel-B
+  // advection multiplier (channel B is advected at driftMult× the others → a mobile downstream plume).
+  // Both default to the byte-identical OFF state (false / 1).
+  private readonly wallTied: boolean;
+  private readonly driftMult: number;
 
   constructor(
     private readonly worldWidth: number,
@@ -72,6 +78,8 @@ export class FoodField {
     channels = 1,
     channelRatio = 0.5,
     pocketChannelMode = 0,
+    wallTied = false,
+    driftMult = 1,
   ) {
     this.cols = cols;
     this.rows = rows;
@@ -81,6 +89,8 @@ export class FoodField {
     this.channels = channels;
     this.ratio = channelRatio;
     this.pocketChannelMode = pocketChannelMode;
+    this.wallTied = wallTied;
+    this.driftMult = driftMult;
     this.fertility = new Float32Array(cols * rows).fill(1); // uniform full world by default
     this.Kcell = new Float64Array(cols * rows);
     this.B = new Float64Array(cols * rows);
@@ -88,6 +98,10 @@ export class FoodField {
     if (channels === 2) {
       this.B2 = new Float64Array(cols * rows);
       this.scratch2 = new Float64Array(cols * rows);
+      // ch2-diff: with pocketChannelMode===1 the two channels become PLACE-COUPLED (each pocket grows only
+      // its assigned channel, like the channels===3 path), so allocate the per-cell channel mask. Mode 0
+      // (the default) leaves the mask null → the legacy SHARED-fertility two-channel path is byte-identical.
+      if (pocketChannelMode === 1) this.channelMask = new Uint8Array(cols * rows);
     }
     if (channels === 3) {
       // Three place-coupled channels: all three biomass buffers + the per-cell channel-assignment mask.
@@ -120,17 +134,18 @@ export class FoodField {
    *  per-cell capacity Kcell (= cap·fertility at the v=0 baseline) so it stays byte-identical to the old
    *  `cap·fertility·frac·init` while letting lever C vary K per pocket. */
   private refill(): void {
-    if (this.channels === 3) {
-      // Place-coupled: each cell's full Kcell is seeded into ONLY its assigned channel (mask), the other
-      // two start empty there. So an A-pocket holds biomass only in channel A. The mask gates this entirely.
-      const mask = this.channelMask!;
+    if (this.channelMask) {
+      // Place-coupled (channels===3, OR channels===2 with pocketChannelMode===1): each cell's full Kcell is
+      // seeded into ONLY its assigned channel (mask), the others start empty there. So an A-pocket holds
+      // biomass only in channel A. The mask gates this entirely. B3 is absent at channels===2 (mask ∈ {0,1}).
+      const mask = this.channelMask;
       const init = this.initFraction;
       for (let i = 0; i < this.B.length; i++) {
         const k = this.Kcell[i]! * init;
         const m = mask[i]!;
         this.B[i] = m === 0 ? k : 0;
         this.B2![i] = m === 1 ? k : 0;
-        this.B3![i] = m === 2 ? k : 0;
+        if (this.B3) this.B3[i] = m === 2 ? k : 0;
       }
       return;
     }
@@ -166,6 +181,10 @@ export class FoodField {
     // Lever C per-pocket K variance (scale Kcell; forked-rng draw, gated on variance):
     variance = 0,
     forkedRng?: { float(): number },
+    // ch2-diff: when wall-tied placement is active, this returns the hop-distance from a world (x,y) to the
+    // nearest wall (smaller = nearer a wall). Only read when this.wallTied && a mask is active; the draw
+    // order is unaffected (pure read after the centre is drawn). undefined → legacy index-based assignment.
+    proximityFn?: (x: number, y: number) => number,
   ): void {
     const { cols, rows, fertility } = this;
     fertility.fill(baseFertility);
@@ -177,24 +196,55 @@ export class FoodField {
     const useVar = variance > 0 && !!forkedRng;
     this.varianceUsed = useVar ? variance : 0;
     const kAccum = useVar ? new Float64Array(cols * rows) : null;
-    // F1 place-coupled channels (channels===3 ONLY → N<=2 never allocates this, byte-identical): each pocket
-    // is assigned a channel deterministically (mode 1 → p%3; mode 0 → all channel A) and each cell is tagged
-    // with the channel of its DOMINANT (closest, largest-g) pocket. `bestG` tracks that dominance per cell.
-    // RNG-free. Reset to all-A first so dead water (no pocket) defaults to channel A.
-    const mask = this.channels === 3 ? this.channelMask! : null;
+    // Place-coupled channels (channels===3 always; channels===2 ONLY when pocketChannelMode===1 → mask
+    // allocated; N<=2 mode 0 never allocates this, byte-identical): each pocket is assigned a channel and
+    // each cell is tagged with the channel of its DOMINANT (closest, largest-g) pocket. `bestG` tracks that
+    // dominance per cell. RNG-free. Reset to all-A first so dead water (no pocket) defaults to channel A.
+    const mask = this.channelMask;
     const bestG = mask ? new Float32Array(cols * rows) : null;
     if (mask) mask.fill(0);
+    // PRE-PASS: draw all pocket centres (+ optional peak) up front, in the SAME main-rng order as the legacy
+    // single loop (pc, pr, then peak per pocket), recording each. This lets the wall-tied split decide a
+    // pocket's channel from GLOBAL info (its wall-proximity rank) without changing the RNG draw sequence.
+    const pcs = new Float64Array(count);
+    const prs = new Float64Array(count);
+    const peaks = new Float64Array(count);
+    const prox = new Float64Array(count);
+    const useWallTie = !!mask && this.wallTied && this.pocketChannelMode === 1 && !!proximityFn;
     for (let p = 0; p < count; p++) {
-      const pocketChannel = mask && this.pocketChannelMode === 1 ? p % 3 : 0;
       const pc = rng.float() * cols;
       const pr = rng.float() * rows;
-      this.patchCenters.push({ x: pc * this.cellW, y: pr * this.cellH });
-      this.patchCentres.push({ x: pc * this.cellW, y: pr * this.cellH });
+      pcs[p] = pc;
+      prs[p] = pr;
+      const wx = pc * this.cellW;
+      const wy = pr * this.cellH;
+      this.patchCenters.push({ x: wx, y: wy });
+      this.patchCentres.push({ x: wx, y: wy });
       // SP1 per-pocket peak amplitude. With richnessVar===0 we draw NOTHING extra (peak = richness), so when
       // richness===1 + maxFertility===1 the loop is byte-identical to legacy (+g, clamp 1). Only when
       // variation is on do we consume one MAIN-rng draw per pocket — kept here, before creatures are seeded.
-      const peak =
-        richnessVar > 0 ? richness * (1 + richnessVar * (2 * rng.float() - 1)) : richness;
+      peaks[p] = richnessVar > 0 ? richness * (1 + richnessVar * (2 * rng.float() - 1)) : richness;
+      if (useWallTie) prox[p] = proximityFn!(wx, wy);
+    }
+    // Per-pocket channel assignment. Wall-tied: split pockets at the MEDIAN wall-proximity — the near-wall
+    // half → channel A (wall-tied structural resource), the open-water half → channel B (the drifter). Pure
+    // read of prox[], deterministic, RNG-free. Legacy: round-robin p%channels (mode 1) / all-A (mode 0).
+    const pocketChannels = new Int32Array(count);
+    if (mask) {
+      if (useWallTie) {
+        const sortedProx = Array.from(prox.subarray(0, count)).sort((a, b) => a - b);
+        const median = count > 0 ? sortedProx[Math.floor(count / 2)]! : 0;
+        for (let p = 0; p < count; p++) pocketChannels[p] = prox[p]! < median ? 0 : 1;
+      } else if (this.pocketChannelMode === 1) {
+        for (let p = 0; p < count; p++) pocketChannels[p] = p % this.channels;
+      }
+      // else mode 0: all-A (Int32Array already zero-initialised)
+    }
+    for (let p = 0; p < count; p++) {
+      const pocketChannel = mask ? pocketChannels[p]! : 0;
+      const pc = pcs[p]!;
+      const pr = prs[p]!;
+      const peak = peaks[p]!;
       // Lever C per-pocket carrying-capacity scale s_p ∈ [1−variance, 1+variance], from the FORKED stream so
       // the MAIN rng (placement + peak) is identical to the v=0 run. s_p ≡ 1 when variance is off (no draw).
       const sp = useVar ? 1 - variance + forkedRng!.float() * (2 * variance) : 1;
@@ -207,8 +257,8 @@ export class FoodField {
           if (dr > rows / 2) dr = rows - dr;
           const g = Math.exp(-(dc * dc + dr * dr) / twoSigma2);
           const i = r * cols + c;
-          // F1: tag this cell with the channel of its dominant (largest-g) pocket. Only runs when channels===3
-          // (mask!=null); N<=2 skips it entirely so those paths stay byte-identical.
+          // Tag this cell with the channel of its dominant (largest-g) pocket. Only runs when a mask is
+          // active; N<=2 mode 0 skips it entirely so those paths stay byte-identical.
           if (mask && g > bestG![i]!) {
             bestG![i] = g;
             mask[i] = pocketChannel;
@@ -402,12 +452,13 @@ export class FoodField {
    *  `blocked` (food-resolution, 1=rock) dams the field; null = walls-OFF (byte-identical legacy path).
    *  `flow` advects biomass along the current; null = no advection (body lands in a later task). */
   step(regen: number, diffuse: number, flow: FlowField | null, blocked: Uint8Array | null): void {
-    if (this.channels === 3) {
-      // Place-coupled: each channel's per-cell K is the full Kcell where the mask selects it, else 0. The
-      // three buffers regrow/diffuse independently over the SAME fertility map but in disjoint cells.
+    if (this.channelMask) {
+      // Place-coupled (channels===3, OR channels===2 mode 1): each channel's per-cell K is the full Kcell
+      // where the mask selects it, else 0. The buffers regrow/diffuse independently over the SAME fertility
+      // map but in disjoint cells. channels===2 has no B3 (mask ∈ {0,1}); skip the third step there.
       this.stepChannel3(this.B, 0, regen, diffuse, 0, blocked);
       this.stepChannel3(this.B2!, 1, regen, diffuse, 1, blocked);
-      this.stepChannel3(this.B3!, 2, regen, diffuse, 2, blocked);
+      if (this.B3) this.stepChannel3(this.B3, 2, regen, diffuse, 2, blocked);
       if (flow !== null) this.advect(flow, blocked);
       return;
     }
@@ -553,9 +604,13 @@ export class FoodField {
    *  (enforced by FlowField) keeps it positivity-preserving with 4 outflow faces. */
   private advect(flow: FlowField, blocked: Uint8Array | null): void {
     const { cols, rows, cellW, cellH } = this;
-    this.advectChannel(this.B, flow, blocked, cols, rows, cellW, cellH);
-    if (this.B2) this.advectChannel(this.B2, flow, blocked, cols, rows, cellW, cellH);
-    if (this.B3) this.advectChannel(this.B3, flow, blocked, cols, rows, cellW, cellH);
+    // Channels A/C advect at 1× (unchanged). Channel B advects at driftMult× — multiplying its flux velocity
+    // smears its biomass downstream into a mobile plume while A stays put (the niche-partition lever). With
+    // driftMult===1 (the OFF default) every channel uses 1× → byte-identical.
+    this.advectChannel(this.B, flow, blocked, cols, rows, cellW, cellH, 1);
+    if (this.B2)
+      this.advectChannel(this.B2, flow, blocked, cols, rows, cellW, cellH, this.driftMult);
+    if (this.B3) this.advectChannel(this.B3, flow, blocked, cols, rows, cellW, cellH, 1);
   }
 
   private advectChannel(
@@ -566,13 +621,17 @@ export class FoodField {
     rows: number,
     cellW: number,
     cellH: number,
+    driftMult: number,
   ): void {
     const out = this.advectScratch ?? (this.advectScratch = new Float64Array(B.length));
     out.set(B);
     const { flowX, flowY } = flow;
-    // Per-axis 1/cell: +x divides by cellW, +y by cellH (they differ on a non-square food grid).
-    const invX = 1 / cellW;
-    const invY = 1 / cellH;
+    // Per-axis 1/cell: +x divides by cellW, +y by cellH (they differ on a non-square food grid). The drift
+    // multiplier folds into the per-axis inverse so it scales the moved fraction (flux velocity) directly.
+    // NB driftMult>1 raises the moved fraction above the CFL=0.25 ceiling the flow field enforces at 1×; the
+    // upwind donor cell can still go negative if driftMult·|v|/cell > 1, so keep driftMult modest (≲3).
+    const invX = driftMult / cellW;
+    const invY = driftMult / cellH;
     for (let r = 0; r < rows; r++) {
       const cur = r * cols;
       const dn = ((r + 1) % rows) * cols;
