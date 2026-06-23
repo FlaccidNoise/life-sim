@@ -47,7 +47,7 @@ describe('metabolize', () => {
     genes(s, i, cfg, { [ScalarGene.EAT_RATE]: 2 });
     s.rebuildLive();
     const food = new FoodField(W, H, 16, 16, 10, 1); // cell full (B=10)
-    metabolize(s, food, hashOf(s), cfg);
+    metabolize(s, food, hashOf(s), cfg, null);
     expect(s.energy[i]).toBeCloseTo(5 + 2 - 0.4); // eat 2, basal 0.4·eff(1), no movement, no gene cost
     expect(food.sampleAt(10, 10)).toBeCloseTo(8); // 2 grazed
     expect(s.age[i]!).toBe(1);
@@ -63,7 +63,7 @@ describe('metabolize', () => {
     genes(s, i, cfgSat, { [ScalarGene.EAT_RATE]: 2 });
     s.rebuildLive();
     const food = new FoodField(W, H, 16, 16, 10, 1);
-    metabolize(s, food, hashOf(s), cfgSat);
+    metabolize(s, food, hashOf(s), cfgSat, null);
     expect(food.sampleAt(10, 10)).toBeCloseTo(10); // nothing grazed
     expect(s.energy[i]).toBeCloseTo(100 - 0.4); // still pays basal
   });
@@ -79,7 +79,7 @@ describe('metabolize', () => {
     genes(s, i, cfg, { [ScalarGene.EAT_RATE]: 2 });
     s.rebuildLive();
     const food = new FoodField(W, H, 16, 16, 10, 0); // empty → no eat income
-    metabolize(s, food, hashOf(s), cfg);
+    metabolize(s, food, hashOf(s), cfg, null);
     expect(s.energy[i]).toBeCloseTo(50 - 0.4 - 0.01 * 25);
   });
 
@@ -96,7 +96,7 @@ describe('metabolize', () => {
     });
     s.rebuildLive();
     const food = new FoodField(W, H, 16, 16, 10, 0); // empty → isolate the costs
-    metabolize(s, food, hashOf(s), cfg);
+    metabolize(s, food, hashOf(s), cfg, null);
     // upkeep = basal(0.4)·eff(1) + 4·maxSpeedCost(0.05) + 2·eatRateCost(0.15) = 0.4 + 0.2 + 0.3 = 0.9
     expect(s.energy[i]).toBeCloseTo(50 - 0.9);
   });
@@ -110,7 +110,7 @@ describe('metabolize', () => {
     genes(s, i, cfg, { [ScalarGene.METAB_EFF]: 0.5 }); // half-efficiency metabolism
     s.rebuildLive();
     const food = new FoodField(W, H, 16, 16, 10, 0); // empty
-    metabolize(s, food, hashOf(s), cfg);
+    metabolize(s, food, hashOf(s), cfg, null);
     expect(s.energy[i]).toBeCloseTo(50 - 0.4 * 0.5); // basal halved, no gene upkeep
   });
 
@@ -138,7 +138,7 @@ describe('metabolize', () => {
       s.energy[i] = 50;
       genes(s, i, cfg); // herbivore, centred genes → no gene upkeep, efficiency 1
       s.rebuildLive();
-      metabolize(s, food, hashOf(s), defaultConfig({ basalCost: 0.4, moveCost: 0, deadWaterCost }));
+      metabolize(s, food, hashOf(s), defaultConfig({ basalCost: 0.4, moveCost: 0, deadWaterCost }), null);
       return 50 - s.energy[i];
     };
     expect(lossAt(0)).toBeCloseTo(0.4); // OFF: just basal (no food in dead water → no graze income)
@@ -178,21 +178,21 @@ describe('metabolize density-dependent crowding drain (lever D)', () => {
   it('crowdingMortality=0 → no drain even when densely packed (the byte-identical OFF path)', () => {
     const cfg = defaultConfig({ ...base, crowdingMortality: 0 });
     const { s, focal } = cluster(cfg, 9); // focal + 8 neighbors
-    metabolize(s, empty(), hashOf(s), cfg);
+    metabolize(s, empty(), hashOf(s), cfg, null);
     expect(s.energy[focal]).toBeCloseTo(50); // OFF → unchanged (gained 0, costs 0)
   });
 
   it('drains crowdingMortality per neighbor above crowdThreshold', () => {
     const cfg = defaultConfig({ ...base, crowdingMortality: 0.3 });
     const { s, focal } = cluster(cfg, 9); // focal sees 8 neighbors; over = 8 − 6 = 2
-    metabolize(s, empty(), hashOf(s), cfg);
+    metabolize(s, empty(), hashOf(s), cfg, null);
     expect(s.energy[focal]).toBeCloseTo(50 - 0.3 * 2); // drain 0.6
   });
 
   it('a creature inside the free band (neighbors ≤ crowdThreshold) pays nothing', () => {
     const cfg = defaultConfig({ ...base, crowdingMortality: 0.3 });
     const { s, focal } = cluster(cfg, 5); // focal sees 4 ≤ 6 → no drain
-    metabolize(s, empty(), hashOf(s), cfg);
+    metabolize(s, empty(), hashOf(s), cfg, null);
     expect(s.energy[focal]).toBeCloseTo(50);
   });
 
@@ -210,7 +210,7 @@ describe('metabolize density-dependent crowding drain (lever D)', () => {
     s.energy[b] = 50;
     genes(s, b, cfg);
     s.rebuildLive();
-    metabolize(s, empty(), hashOf(s), cfg);
+    metabolize(s, empty(), hashOf(s), cfg, null);
     expect(s.energy[a]).toBeCloseTo(50);
     expect(s.energy[b]).toBeCloseTo(50);
   });
@@ -238,7 +238,7 @@ describe('metabolize two-channel niche split (lever B)', () => {
     genes(s, i, cfg, { [ScalarGene.EAT_RATE]: 2, [ScalarGene.FORAGE_PREF]: 0.5 });
     s.rebuildLive();
     const food = dualFood();
-    metabolize(s, food, hashOf(s), cfg);
+    metabolize(s, food, hashOf(s), cfg, null);
     expect(s.energy[i]).toBeCloseTo(5 + 2); // take 1 from A + 1 from B, spec=1 → gained 2
     expect(food.sampleAt(10, 10)).toBeCloseTo(5 - 1);
     expect(food.sampleAt2(10, 10)).toBeCloseTo(5 - 1);
@@ -253,7 +253,7 @@ describe('metabolize two-channel niche split (lever B)', () => {
     genes(s, i, cfg, { [ScalarGene.EAT_RATE]: 2, [ScalarGene.FORAGE_PREF]: 1 });
     s.rebuildLive();
     const food = dualFood();
-    metabolize(s, food, hashOf(s), cfg);
+    metabolize(s, food, hashOf(s), cfg, null);
     expect(s.energy[i]).toBeCloseTo(5 + 3); // takeB 2, spec=1.5 → gained 3
     expect(food.sampleAt(10, 10)).toBeCloseTo(5); // channel A untouched
     expect(food.sampleAt2(10, 10)).toBeCloseTo(5 - 2); // channel B depleted by 2
@@ -275,7 +275,7 @@ describe('metabolize two-channel niche split (lever B)', () => {
     genes(s, i, cfg0, { [ScalarGene.EAT_RATE]: 2, [ScalarGene.FORAGE_PREF]: 1 });
     s.rebuildLive();
     const food = dualFood();
-    metabolize(s, food, hashOf(s), cfg0);
+    metabolize(s, food, hashOf(s), cfg0, null);
     expect(s.energy[i]).toBeCloseTo(5 + 2); // takeB 2, spec=1 → gained 2 (no specialization bonus)
   });
 });
@@ -327,7 +327,7 @@ describe('metabolize three-channel place-coupled niche (F1)', () => {
     });
     s.rebuildLive();
     const cBefore = food.sampleAt3(pC.x, pC.y);
-    metabolize(s, food, hashOf(s), cfg);
+    metabolize(s, food, hashOf(s), cfg, null);
     // takeC = budget·wC = 2, spec = 1+0.5·1 = 1.5 → gained 3.
     expect(s.energy[i]).toBeCloseTo(5 + 3);
     expect(food.sampleAt3(pC.x, pC.y)).toBeCloseTo(cBefore - 2); // channel C depleted by exactly the take
@@ -350,7 +350,7 @@ describe('metabolize three-channel place-coupled niche (F1)', () => {
       [ScalarGene.FORAGE_PREF_C]: 1, // pure C eater
     });
     s.rebuildLive();
-    metabolize(s, food, hashOf(s), cfg);
+    metabolize(s, food, hashOf(s), cfg, null);
     expect(s.energy[i]).toBeCloseTo(5); // wA=wB=0, no C here → grazed nothing, no costs → unchanged
     expect(food.sampleAt(pA.x, pA.y)).toBeGreaterThan(5); // the A resource it can't use is untouched
   });
@@ -370,7 +370,7 @@ describe('metabolize three-channel place-coupled niche (F1)', () => {
       [ScalarGene.FORAGE_PREF_C]: 0.5,
     });
     s.rebuildLive();
-    metabolize(s, food, hashOf(s), cfg);
+    metabolize(s, food, hashOf(s), cfg, null);
     // maxW = 0.5 → spec = 1+0.5·((0.5−1/3)/(2/3)) = 1.125. Only channel C has food → takeC = budget·0.5 = 1.
     // gained = 1·1.125 = 1.125. (A/B shares graze 0 — those resources aren't in this pocket.)
     expect(s.energy[i]).toBeCloseTo(5 + 1.125);
@@ -435,7 +435,7 @@ describe('metabolize size→move-cost coupling', () => {
     genes(s, i, cfg, { [ScalarGene.SIZE]: 12 }); // 2× reference → moveFactor (12/6)^1 = 2
     s.rebuildLive();
     const food = new FoodField(W, H, 16, 16, 10, 0); // empty → isolate the costs
-    metabolize(s, food, hashOf(s), cfg);
+    metabolize(s, food, hashOf(s), cfg, null);
     expect(s.energy[i]).toBeCloseTo(50 - 0.4 - 0.01 * 2 * 25); // movement cost doubled by size
   });
 });
@@ -461,7 +461,7 @@ describe('hunt (predation)', () => {
     genes(s, pred, cfg, { [ScalarGene.DIET]: 1, [ScalarGene.DAMAGE]: 5, [ScalarGene.SIZE]: 10 });
     genes(s, prey, cfg, { [ScalarGene.DIET]: 0, [ScalarGene.SIZE]: 5 }); // small enough to eat
     s.rebuildLive();
-    hunt(s, mkHash(s), cfg);
+    hunt(s, mkHash(s), cfg, null);
     // drain = min(damage(5)·diet(1), preyEnergy) = 5; prey loses the drain, predator absorbs drain×gain.
     expect(s.energy[prey]).toBeCloseTo(25);
     expect(s.energy[pred]).toBeCloseTo(20 + 5 * cfg.predationGain);
@@ -480,7 +480,7 @@ describe('hunt (predation)', () => {
     genes(s, a, cfg, { [ScalarGene.DIET]: 0 });
     genes(s, b, cfg, { [ScalarGene.DIET]: 0 });
     s.rebuildLive();
-    hunt(s, mkHash(s), cfg);
+    hunt(s, mkHash(s), cfg, null);
     expect(s.energy[a]).toBe(20);
     expect(s.energy[b]).toBe(30);
   });
@@ -498,7 +498,7 @@ describe('hunt (predation)', () => {
     genes(s, pred, cfg, { [ScalarGene.DIET]: 1, [ScalarGene.DAMAGE]: 20, [ScalarGene.SIZE]: 10 });
     genes(s, prey, cfg, { [ScalarGene.DIET]: 0, [ScalarGene.SIZE]: 5 });
     s.rebuildLive();
-    hunt(s, mkHash(s), cfg);
+    hunt(s, mkHash(s), cfg, null);
     expect(s.energy[prey]).toBeCloseTo(0); // drained to 0 (capped) → dies next cull
     expect(s.energy[pred]).toBeCloseTo(10 + 3 * cfg.predationGain); // gained the 3 that existed × gain
   });
@@ -529,7 +529,7 @@ describe('hunt (predation)', () => {
     genes(s, peer, cfg, { [ScalarGene.DIET]: 0.9, [ScalarGene.DAMAGE]: 0, [ScalarGene.SIZE]: 5 });
     genes(s, prey, cfg, { [ScalarGene.DIET]: 0, [ScalarGene.SIZE]: 5 });
     s.rebuildLive();
-    hunt(s, mkHash(s), noCannibal);
+    hunt(s, mkHash(s), noCannibal, null);
     expect(s.energy[peer]).toBe(30); // peer spared despite being nearest
     expect(s.energy[prey]).toBeCloseTo(30 - 5 * 0.9); // prey eaten instead
   });
@@ -551,7 +551,7 @@ describe('hunt (predation)', () => {
     });
     genes(s, peer, cfg, { [ScalarGene.DIET]: 0.9, [ScalarGene.DAMAGE]: 0, [ScalarGene.SIZE]: 5 }); // small → eatable
     s.rebuildLive();
-    hunt(s, mkHash(s), cfg); // cannibalism true
+    hunt(s, mkHash(s), cfg, null); // cannibalism true
     expect(s.energy[peer]).toBeCloseTo(30 - 5 * 0.9); // peer drained
   });
 
@@ -573,7 +573,7 @@ describe('hunt (predation)', () => {
       });
       genes(s, prey, cfg, { [ScalarGene.DIET]: 0, [ScalarGene.SIZE]: preySize });
       s.rebuildLive();
-      hunt(s, mkHash(s), cfg); // huntSizeRatio 1.15
+      hunt(s, mkHash(s), cfg, null); // huntSizeRatio 1.15
       return s.energy[prey];
     };
     expect(mk(10, 5)).toBeCloseTo(25); // 10 ≥ 5×1.15 → eaten (lost 5)
@@ -594,7 +594,7 @@ describe('hunt (predation)', () => {
     genes(s, pred, cfg, { [ScalarGene.DIET]: 1, [ScalarGene.DAMAGE]: 5 });
     genes(s, prey, cfg, { [ScalarGene.DIET]: 0 });
     s.rebuildLive();
-    hunt(s, mkHash(s), cfg);
+    hunt(s, mkHash(s), cfg, null);
     expect(s.energy[pred]).toBe(20);
     expect(s.energy[prey]).toBe(30);
   });
@@ -625,14 +625,14 @@ describe('hunt (predation)', () => {
 
     it('counterBiteFraction 0 (OFF) → predator pays no counter-cost (byte-identical bite)', () => {
       const { s, pred, prey } = setup(8);
-      hunt(s, mkHash(s), { ...cfg, counterBiteFraction: 0 });
+      hunt(s, mkHash(s), { ...cfg, counterBiteFraction: 0 }, null);
       expect(s.energy[prey]).toBeCloseTo(25); // drained 5
       expect(s.energy[pred]).toBeCloseTo(20 + 5 * cfg.predationGain); // pure gain, no counter
     });
 
     it('counterBiteFraction > 0 → predator pays counterBiteFraction × prey DAMAGE', () => {
       const { s, pred, prey } = setup(8);
-      hunt(s, mkHash(s), { ...cfg, counterBiteFraction: 0.15 });
+      hunt(s, mkHash(s), { ...cfg, counterBiteFraction: 0.15 }, null);
       expect(s.energy[prey]).toBeCloseTo(25); // prey still loses exactly the drain
       // gain 5×gain, then counter-bite 0.15×8 = 1.2 back out → biting an armed prey costs the attacker
       expect(s.energy[pred]).toBeCloseTo(20 + 5 * cfg.predationGain - 0.15 * 8);
@@ -640,7 +640,7 @@ describe('hunt (predation)', () => {
 
     it('a toothless prey (DAMAGE 0) imposes no counter-cost even when ON (defense scales with the gene)', () => {
       const { s, pred } = setup(0);
-      hunt(s, mkHash(s), { ...cfg, counterBiteFraction: 0.15 });
+      hunt(s, mkHash(s), { ...cfg, counterBiteFraction: 0.15 }, null);
       expect(s.energy[pred]).toBeCloseTo(20 + 5 * cfg.predationGain); // 0.15×0 = 0 → same as OFF
     });
   });

@@ -42,6 +42,11 @@ export class OrganismStore {
   readonly wallSenseY: Float64Array;
   readonly flowSenseX: Float64Array;
   readonly flowSenseY: Float64Array;
+  // Transient per-tick PHEROMONE sense (world frame): the local ∇P gradient. Recomputed each tick by
+  // senseEnv when the field is active (else left 0); not hashed (derived). Wired into steer via the
+  // 4 PHERO brain genes.
+  readonly pheroSenseX: Float64Array;
+  readonly pheroSenseY: Float64Array;
 
   // Genome (heritable, mutated at birth): the brain weights (BRAIN_GENES per slot) + the hue gene
   // + the scalar genes (SCALAR_GENE_COUNT per slot — see genome.ScalarGene).
@@ -89,6 +94,8 @@ export class OrganismStore {
     this.wallSenseY = new Float64Array(capacity);
     this.flowSenseX = new Float64Array(capacity);
     this.flowSenseY = new Float64Array(capacity);
+    this.pheroSenseX = new Float64Array(capacity);
+    this.pheroSenseY = new Float64Array(capacity);
     this.brain = new Float32Array(capacity * BRAIN_GENES);
     this.hue = new Float32Array(capacity);
     this.scalarGenes = new Float32Array(capacity * SCALAR_GENE_COUNT);

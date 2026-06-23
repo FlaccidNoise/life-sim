@@ -124,7 +124,7 @@ describe('senseEnv', () => {
     s.wallSenseY[i] = 9;
     s.flowSenseX[i] = 9;
     s.flowSenseY[i] = 9;
-    senseEnv(s, null, null, defaultConfig({ wallRegionCount: 0, flowStrength: 0 }));
+    senseEnv(s, null, null, null, defaultConfig({ wallRegionCount: 0, flowStrength: 0 }));
     expect(s.wallSenseX[i]).toBe(0);
     expect(s.wallSenseY[i]).toBe(0);
     expect(s.flowSenseX[i]).toBe(0);
