@@ -79,10 +79,12 @@ describe('DetailOverlay camera mirror', () => {
     ov.draw(s);
     const calls = (host as unknown as { __calls: string[] }).__calls;
     expect(calls.some((c) => c.startsWith('arc'))).toBe(false);
-    // zoom in hard → same creature now Tier 2 → a debug marker (arc) is drawn
+    // zoom in hard → same creature now Tier 2 → the body trait module traces its outline
     ov.setCamera(4096, 4096, 64);
     (host as unknown as { __calls: string[] }).__calls.length = 0;
     ov.draw(s);
-    expect(calls.some((c) => c.startsWith('arc'))).toBe(true);
+    expect(calls.some((c) => c.startsWith('quadraticCurveTo') || c.startsWith('lineTo'))).toBe(
+      true,
+    );
   });
 });
