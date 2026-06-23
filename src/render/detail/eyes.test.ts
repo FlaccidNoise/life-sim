@@ -51,4 +51,30 @@ describe('eyes module', () => {
       Math.max(...(c as unknown as { __rec: ReturnType<typeof recordingCtx> }).__rec.arcRadii);
     expect(r(big)).toBeGreaterThan(r(small));
   });
+  it('higher vision acuity → sharper (smaller) pupil', () => {
+    const dull = ctxFor({ [ScalarGene.DIET]: 0, [ScalarGene.VISION_ACUITY]: 0 });
+    const sharp = ctxFor({ [ScalarGene.DIET]: 0, [ScalarGene.VISION_ACUITY]: 3 });
+    eyes.draw(dull);
+    eyes.draw(sharp);
+    // eyeball radius (eyeR) is equal (VISION_RANGE held at min); only the pupil + catchlight
+    // arcs shrink with acuity, so the smallest recorded arc radius drops.
+    const minR = (c: CreatureVisualCtx) =>
+      Math.min(...(c as unknown as { __rec: ReturnType<typeof recordingCtx> }).__rec.arcRadii);
+    expect(minR(sharp)).toBeLessThan(minR(dull));
+  });
+  it('diet boundary: 0.39 stays cute (round eye, no slit); 0.40 turns fearsome (slit + brow)', () => {
+    // fear = clamp(diet * 1.15) crosses 0.45 at diet ≈ 0.391. The cute branch strokes the eyeball
+    // outline too, so `stroke` can't distinguish the branches — the slit-pupil `ellipse` does.
+    const cute = ctxFor({ [ScalarGene.DIET]: 0.39 });
+    eyes.draw(cute);
+    const rc = (cute as unknown as { __rec: ReturnType<typeof recordingCtx> }).__rec;
+    expect(rc.counts.arc).toBeGreaterThanOrEqual(2);
+    expect(rc.counts.ellipse ?? 0).toBe(0);
+
+    const mean = ctxFor({ [ScalarGene.DIET]: 0.4 });
+    eyes.draw(mean);
+    const rm = (mean as unknown as { __rec: ReturnType<typeof recordingCtx> }).__rec;
+    expect(rm.counts.ellipse).toBeGreaterThanOrEqual(2);
+    expect(rm.counts.stroke).toBeGreaterThanOrEqual(2);
+  });
 });

@@ -13,6 +13,7 @@ export const eyes: TraitModule = {
     const fear = derived.fear;
     const vis = genes.norm(ScalarGene.VISION_RANGE);
     const fov = genes.raw(ScalarGene.VISION_FOV);
+    const acuity = genes.norm(ScalarGene.VISION_ACUITY);
     const lw = Math.max(1.5, R * 0.07);
     const eyeR = R * (0.16 + vis * 0.24) * lerp(1.35, 0.82, fear);
     const fwd = R * 0.3;
@@ -29,7 +30,7 @@ export const eyes: TraitModule = {
         ctx.lineWidth = lw * 0.7;
         ctx.strokeStyle = rgb(derived.ink);
         ctx.stroke();
-        const pr = eyeR * 0.5;
+        const pr = eyeR * (0.62 - 0.22 * acuity);
         const px = eyeR * 0.3;
         ctx.fillStyle = '#0a0f14';
         ctx.beginPath();
@@ -58,7 +59,7 @@ export const eyes: TraitModule = {
         const px = eyeR * 0.25;
         ctx.fillStyle = '#070b0f';
         ctx.beginPath();
-        ctx.ellipse(px, 0, eyeR * 0.18, eyeR * 0.6, 0, 0, TAU);
+        ctx.ellipse(px, 0, eyeR * (0.26 - 0.16 * acuity), eyeR * 0.6, 0, 0, TAU);
         ctx.fill();
         // angry brow slash (same mirrored+rotated frame)
         ctx.strokeStyle = rgb(derived.ink);
