@@ -6,6 +6,7 @@ import { applyFlowForce, computeRepulsion, integrate } from './physics';
 import { FoodField } from './food-field';
 import { Walls } from './walls';
 import { FlowField } from './flow-field';
+import { PheroField } from './phero-field';
 import { senseFood, senseCreatures, senseEnv } from './sense';
 import { steer, learn } from './brain';
 import {
@@ -35,6 +36,10 @@ export class World {
   readonly food: FoodField;
   readonly walls: Walls;
   readonly flow: FlowField;
+  /** The pheromone field — a diffusing deposit-and-sense scalar grid. Allocated ONLY when
+   *  cfg.pheromoneEnabled; null otherwise, so the OFF path never deposits/senses/steps/hashes and stays
+   *  byte-identical. */
+  readonly phero: PheroField | null;
   /** Whether the env-sense brain genes are LIVE this run — captured at construction (from the presence
    *  of walls / flow), so live-tuning a strength to 0 mid-run never changes the genome draw COUNT and the
    *  determinism contract holds. With both false the organism RNG stream is byte-identical to a pre-env world. */
@@ -83,6 +88,10 @@ export class World {
       config.foodRows,
       config,
     );
+    // Pheromone field sized to the food grid. Built ONLY when enabled → null is the byte-identical OFF path.
+    this.phero = config.pheromoneEnabled
+      ? new PheroField(config.worldWidth, config.worldHeight, config.foodCols, config.foodRows)
+      : null;
     // Capture once: env-sense genes are live iff the world has walls / flow. Fixed for the run's lifetime
     // so the genome draw count can't shift if a strength is live-tuned to 0 mid-run.
     this.wallSenseGenes = config.wallRegionCount > 0;
@@ -230,7 +239,7 @@ export class World {
     // SENSE → THINK/ACT: perceive the food gradient (per-creature sense range) + SIGHT (nearby creatures
     // within the vision cone; uses the start-of-tick hash), then steer (per-creature genes; sets thrust).
     senseFood(s, this.food, cfg);
-    senseEnv(s, this.walls, cfg.flowStrength > 0 ? this.flow : null, cfg);
+    senseEnv(s, this.walls, cfg.flowStrength > 0 ? this.flow : null, this.phero, cfg);
     senseCreatures(s, this.hash, cfg, this.walls);
     steer(s, cfg.learningEnabled, cfg.eligLambda, cfg.motorSquash, cfg);
     // MOVE: flow push (size-scaled current) then repulsion add onto the thrust force, then integrate.
@@ -250,10 +259,10 @@ export class World {
     // HUNT: predators (diet>0) bite nearby creatures. Rebuild the hash at post-MOVE positions first so
     // bites use where creatures actually are this tick.
     this.hash.build(s);
-    hunt(s, this.hash, cfg);
+    hunt(s, this.hash, cfg, this.phero);
     // METABOLIZE → LEARN → REPRO/DIE. Energy (the band the creature is in) is known after metabolize,
     // so the energy-gated within-life consolidation runs here (eligibility traces were laid in steer).
-    metabolize(s, this.food, this.hash, cfg);
+    metabolize(s, this.food, this.hash, cfg, this.phero);
     if (cfg.learningEnabled)
       learn(s, cfg.learningRate, cfg.weightDecay, cfg.maxLearnDeviation, cfg.learnRewardClamp);
     this.lastDeaths = cullDead(s);
@@ -275,6 +284,14 @@ export class World {
       cfg.flowStrength > 0 ? this.flow : null,
       this.walls.active ? this.walls.foodBlockedMask() : null,
     );
+    // Pheromone diffuse + decay, IMMEDIATELY after the food field (this tick's deposits, laid in
+    // metabolize/hunt, now spread + forget). Null when disabled → skipped entirely (byte-identical OFF).
+    if (this.phero !== null)
+      this.phero.step(
+        cfg.pheroDiffuse,
+        cfg.pheroDecay,
+        this.walls.active ? this.walls.foodBlockedMask() : null,
+      );
     this.tick++;
   }
 
@@ -284,6 +301,7 @@ export class World {
     this.store.clear();
     this.tick = 0;
     this.lastBirths = this.lastDeaths = this.totalBirths = this.totalDeaths = 0;
+    if (this.phero !== null) this.phero.reset();
     this.setup();
   }
 
@@ -311,6 +329,8 @@ export class World {
       h.u32(genId[i]!);
     }
     this.food.hashInto(h); // food is part of the sim state
+    // The pheromone field is part of sim state ONLY when active (after food, gated) → byte-identical when off.
+    if (this.phero !== null) this.phero.hashInto(h);
     return h.hex();
   }
 }
