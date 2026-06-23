@@ -280,6 +280,103 @@ describe('metabolize two-channel niche split (lever B)', () => {
   });
 });
 
+describe('metabolize three-channel place-coupled niche (F1)', () => {
+  // foodChannels=3, foodPocketChannelMode=1: pockets grow distinct resources (A/B/C round-robin). The eat
+  // budget splits across {A,B,C} by the barycentric FORAGE_PREF + FORAGE_PREF_C preference, then converts at
+  // spec=1+forageSpecBonus·((maxW−1/3)/(2/3)). Costs zeroed so the energy delta == grazing income. This is
+  // the NON-VACUITY proof: a C-specialist standing in a C-pocket genuinely earns energy from channel C.
+  const cfg = defaultConfig({
+    basalCost: 0,
+    moveCost: 0,
+    satiatedThreshold: 1000,
+    foodChannels: 3,
+    foodPocketChannelMode: 1,
+    forageSpecBonus: 0.5,
+  });
+  // Replays a fixed RNG sequence → three well-separated pockets so cell (16,16)→A, (48,48)→B, (80,80)→C.
+  class QueueRng {
+    private j = 0;
+    constructor(private q: number[]) {}
+    float(): number {
+      return this.q[Math.min(this.j++, this.q.length - 1)]!;
+    }
+  }
+  // 1024² over a 128-cell grid, K=10, three pockets at cells (16,16),(48,48),(80,80) (p%3 → A,B,C).
+  const tripleFood = (): FoodField => {
+    const f = new FoodField(1024, 1024, 128, 128, 10, 1, 3, 0.5, 1);
+    f.seedPatches(3, 5, 0, new QueueRng([0.125, 0.125, 0.375, 0.375, 0.625, 0.625]));
+    return f;
+  };
+
+  it('a hard C-specialist in a C-pocket earns energy from channel C (and depletes only C)', () => {
+    const food = tripleFood();
+    const pC = food.patchCenters[2]!; // pocket 2 → channel C
+    // Guard the fixture: the C-pocket really carries channel-C biomass and ~nothing in A/B (place-coupling).
+    expect(food.sampleAt3(pC.x, pC.y)).toBeGreaterThan(5);
+    expect(food.sampleAt(pC.x, pC.y)).toBeLessThan(0.5);
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.x[i] = pC.x;
+    s.y[i] = pC.y;
+    s.energy[i] = 5;
+    // prefC 1 → wC=1, wA=wB=0 (pure C-specialist). eatRate 2 (center) → no gene upkeep.
+    genes(s, i, cfg, {
+      [ScalarGene.EAT_RATE]: 2,
+      [ScalarGene.FORAGE_PREF]: 0.5,
+      [ScalarGene.FORAGE_PREF_C]: 1,
+    });
+    s.rebuildLive();
+    const cBefore = food.sampleAt3(pC.x, pC.y);
+    metabolize(s, food, hashOf(s), cfg);
+    // takeC = budget·wC = 2, spec = 1+0.5·1 = 1.5 → gained 3.
+    expect(s.energy[i]).toBeCloseTo(5 + 3);
+    expect(food.sampleAt3(pC.x, pC.y)).toBeCloseTo(cBefore - 2); // channel C depleted by exactly the take
+    expect(food.sampleAt(pC.x, pC.y)).toBeLessThan(0.5); // channel A in a C-pocket stays empty
+    expect(food.sampleAt2(pC.x, pC.y)).toBeLessThan(0.5); // channel B too
+  });
+
+  it('a C-specialist standing in an A-pocket starves on C (sampleAt3 ~0 there → no income)', () => {
+    const food = tripleFood();
+    const pA = food.patchCenters[0]!; // pocket 0 → channel A
+    expect(food.sampleAt3(pA.x, pA.y)).toBeLessThan(0.5); // no channel-C resource in an A-pocket
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.x[i] = pA.x;
+    s.y[i] = pA.y;
+    s.energy[i] = 5;
+    genes(s, i, cfg, {
+      [ScalarGene.EAT_RATE]: 2,
+      [ScalarGene.FORAGE_PREF]: 0.5,
+      [ScalarGene.FORAGE_PREF_C]: 1, // pure C eater
+    });
+    s.rebuildLive();
+    metabolize(s, food, hashOf(s), cfg);
+    expect(s.energy[i]).toBeCloseTo(5); // wA=wB=0, no C here → grazed nothing, no costs → unchanged
+    expect(food.sampleAt(pA.x, pA.y)).toBeGreaterThan(5); // the A resource it can't use is untouched
+  });
+
+  it('a generalist (pref 0.5, prefC 0.5) splits the budget A/B/C and earns the uniform-mix income', () => {
+    const food = tripleFood();
+    const pC = food.patchCenters[2]!;
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.x[i] = pC.x;
+    s.y[i] = pC.y;
+    s.energy[i] = 5;
+    // pref 0.5, prefC 0.5 → wC=0.5, wB=0.25, wA=0.25. In a C-pocket only the wC share finds food.
+    genes(s, i, cfg, {
+      [ScalarGene.EAT_RATE]: 2,
+      [ScalarGene.FORAGE_PREF]: 0.5,
+      [ScalarGene.FORAGE_PREF_C]: 0.5,
+    });
+    s.rebuildLive();
+    metabolize(s, food, hashOf(s), cfg);
+    // maxW = 0.5 → spec = 1+0.5·((0.5−1/3)/(2/3)) = 1.125. Only channel C has food → takeC = budget·0.5 = 1.
+    // gained = 1·1.125 = 1.125. (A/B shares graze 0 — those resources aren't in this pocket.)
+    expect(s.energy[i]).toBeCloseTo(5 + 1.125);
+  });
+});
+
 describe('satiatedBar (size-scaled energy reserve)', () => {
   it('scales the full bar with body size — a 2×-size body has a 2× reserve (exp 1)', () => {
     const cfg = defaultConfig({ cellRadius: 6, sizeStoreExp: 1 });

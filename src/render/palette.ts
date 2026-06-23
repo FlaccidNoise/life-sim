@@ -100,6 +100,15 @@ export function energyColor(efrac: number): RGB {
   return hsv2rgb(energyHue(efrac), 0.8, 0.95);
 }
 
+// ── Bioluminescence (render-only glow) ────────────────────────────────────────────────────────
+// Deep-sea additive bloom. The glow hue is the creature's active color-mode hue (lineage/diet/
+// energy) so the halo reads as "the same creature, lit"; this cool-cyan floor is mixed in toward
+// the core so even a red predator's bloom keeps an abyssal teal cast rather than reading as fire.
+// Inlined into the GLOW_FRAG shader in renderer.ts, so pinned in palette.test.ts (drift guard).
+export const GLOW_CORE_R = 0.55;
+export const GLOW_CORE_G = 0.9;
+export const GLOW_CORE_B = 1.0;
+
 // ── Distribution field hues ───────────────────────────────────────────────────────────────────
 // A stable, perceptually-spread hue per field (golden-angle so adjacent indices look distinct).
 // Keyed by the field's index in the registry, NOT its position in the selected set, so a field keeps

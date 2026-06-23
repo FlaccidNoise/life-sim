@@ -44,6 +44,7 @@ export class FoodField {
   private readonly Kcell: Float64Array;
   private readonly channels: number; // 1 (default, single field) or 2 (second resource B2)
   private readonly ratio: number; // channel-B share of each cell's cap, [0,1] (A gets 1−ratio)
+  private readonly pocketChannelMode: number; // F1 (channels===3 only): 0 = all pockets channel A, 1 = p%3
   // Lever C bookkeeping (set by seedPatches): pocket centres in WORLD coords (so a probe can assign each
   // creature to its island) + the variance actually applied (so maxCapacity reports the true render ceiling).
   private patchCentres: { x: number; y: number }[] = [];
@@ -52,6 +53,13 @@ export class FoodField {
   private scratch: Float64Array;
   private B2: Float64Array | null = null; // second channel; allocated only when channels===2
   private scratch2: Float64Array | null = null;
+  // F1 third channel (place-coupled): B3/scratch3 are allocated ONLY when channels===3, mirroring the B2
+  // path exactly. `channelMask` (allocated only when channels===3) assigns each cell to exactly one channel
+  // (0=A, 1=B, 2=C) so a pocket grows only its own resource — allopatric partitioning. Mode 0 leaves the
+  // mask all-zero (every cell channel A → B3/B2 inert, the ablation). The N<=2 paths never touch any of this.
+  private B3: Float64Array | null = null;
+  private scratch3: Float64Array | null = null;
+  private channelMask: Uint8Array | null = null;
   private advectScratch: Float64Array | null = null; // reused flux-accumulation buffer (lazy)
 
   constructor(
@@ -63,6 +71,7 @@ export class FoodField {
     initFraction: number,
     channels = 1,
     channelRatio = 0.5,
+    pocketChannelMode = 0,
   ) {
     this.cols = cols;
     this.rows = rows;
@@ -71,6 +80,7 @@ export class FoodField {
     this.initFraction = initFraction;
     this.channels = channels;
     this.ratio = channelRatio;
+    this.pocketChannelMode = pocketChannelMode;
     this.fertility = new Float32Array(cols * rows).fill(1); // uniform full world by default
     this.Kcell = new Float64Array(cols * rows);
     this.B = new Float64Array(cols * rows);
@@ -78,6 +88,16 @@ export class FoodField {
     if (channels === 2) {
       this.B2 = new Float64Array(cols * rows);
       this.scratch2 = new Float64Array(cols * rows);
+    }
+    if (channels === 3) {
+      // Three place-coupled channels: all three biomass buffers + the per-cell channel-assignment mask.
+      // Mask defaults to 0 (all channel A) so a freshly-constructed N=3 field is single-resource until
+      // seedPatches assigns pockets (mode 1) — keeps construction deterministic and RNG-free.
+      this.B2 = new Float64Array(cols * rows);
+      this.scratch2 = new Float64Array(cols * rows);
+      this.B3 = new Float64Array(cols * rows);
+      this.scratch3 = new Float64Array(cols * rows);
+      this.channelMask = new Uint8Array(cols * rows);
     }
     this.recomputeK();
     this.refill();
@@ -100,6 +120,20 @@ export class FoodField {
    *  per-cell capacity Kcell (= cap·fertility at the v=0 baseline) so it stays byte-identical to the old
    *  `cap·fertility·frac·init` while letting lever C vary K per pocket. */
   private refill(): void {
+    if (this.channels === 3) {
+      // Place-coupled: each cell's full Kcell is seeded into ONLY its assigned channel (mask), the other
+      // two start empty there. So an A-pocket holds biomass only in channel A. The mask gates this entirely.
+      const mask = this.channelMask!;
+      const init = this.initFraction;
+      for (let i = 0; i < this.B.length; i++) {
+        const k = this.Kcell[i]! * init;
+        const m = mask[i]!;
+        this.B[i] = m === 0 ? k : 0;
+        this.B2![i] = m === 1 ? k : 0;
+        this.B3![i] = m === 2 ? k : 0;
+      }
+      return;
+    }
     const fracA = this.fracA;
     for (let i = 0; i < this.B.length; i++) this.B[i] = this.Kcell[i]! * fracA * this.initFraction;
     if (this.B2)
@@ -143,7 +177,15 @@ export class FoodField {
     const useVar = variance > 0 && !!forkedRng;
     this.varianceUsed = useVar ? variance : 0;
     const kAccum = useVar ? new Float64Array(cols * rows) : null;
+    // F1 place-coupled channels (channels===3 ONLY → N<=2 never allocates this, byte-identical): each pocket
+    // is assigned a channel deterministically (mode 1 → p%3; mode 0 → all channel A) and each cell is tagged
+    // with the channel of its DOMINANT (closest, largest-g) pocket. `bestG` tracks that dominance per cell.
+    // RNG-free. Reset to all-A first so dead water (no pocket) defaults to channel A.
+    const mask = this.channels === 3 ? this.channelMask! : null;
+    const bestG = mask ? new Float32Array(cols * rows) : null;
+    if (mask) mask.fill(0);
     for (let p = 0; p < count; p++) {
+      const pocketChannel = mask && this.pocketChannelMode === 1 ? p % 3 : 0;
       const pc = rng.float() * cols;
       const pr = rng.float() * rows;
       this.patchCenters.push({ x: pc * this.cellW, y: pr * this.cellH });
@@ -165,6 +207,12 @@ export class FoodField {
           if (dr > rows / 2) dr = rows - dr;
           const g = Math.exp(-(dc * dc + dr * dr) / twoSigma2);
           const i = r * cols + c;
+          // F1: tag this cell with the channel of its dominant (largest-g) pocket. Only runs when channels===3
+          // (mask!=null); N<=2 skips it entirely so those paths stay byte-identical.
+          if (mask && g > bestG![i]!) {
+            bestG![i] = g;
+            mask[i] = pocketChannel;
+          }
           const v = fertility[i]! + peak * g;
           fertility[i] = v > maxFertility ? maxFertility : v;
           // Lever C K accumulation parallels the fertility build; peak===1 when SP1 is off, so this reduces
@@ -199,6 +247,7 @@ export class FoodField {
     this.refill();
     this.scratch.fill(0);
     if (this.scratch2) this.scratch2.fill(0);
+    if (this.scratch3) this.scratch3.fill(0);
   }
 
   private idx(x: number, y: number): number {
@@ -219,6 +268,11 @@ export class FoodField {
   /** Biomass at a world position (channel B). 0 when the second channel is not active. */
   sampleAt2(x: number, y: number): number {
     return this.B2 ? this.B2[this.idx(x, y)]! : 0;
+  }
+
+  /** Biomass at a world position (channel C). 0 when the third channel is not active (channels<3). */
+  sampleAt3(x: number, y: number): number {
+    return this.B3 ? this.B3[this.idx(x, y)]! : 0;
   }
 
   /** Per-cell FERTILITY at a world position — the stable "is this a pocket" signal (unlike biomass, which
@@ -252,11 +306,22 @@ export class FoodField {
     return taken;
   }
 
+  /** Remove up to `amount` biomass at a position (channel C); returns what was taken. 0 if B3 inactive. */
+  grazeAt3(x: number, y: number, amount: number): number {
+    if (!this.B3) return 0;
+    const i = this.idx(x, y);
+    const avail = this.B3[i]!;
+    const taken = avail < amount ? avail : amount;
+    this.B3[i] = avail - taken;
+    return taken;
+  }
+
   /** Total standing biomass across all active channels (for telemetry / the population graph). */
   total(): number {
     let s = 0;
     for (let i = 0; i < this.B.length; i++) s += this.B[i]!;
     if (this.B2) for (let i = 0; i < this.B2.length; i++) s += this.B2[i]!;
+    if (this.B3) for (let i = 0; i < this.B3.length; i++) s += this.B3[i]!;
     return s;
   }
 
@@ -299,9 +364,85 @@ export class FoodField {
    *  `blocked` (food-resolution, 1=rock) dams the field; null = walls-OFF (byte-identical legacy path).
    *  `flow` advects biomass along the current; null = no advection (body lands in a later task). */
   step(regen: number, diffuse: number, flow: FlowField | null, blocked: Uint8Array | null): void {
+    if (this.channels === 3) {
+      // Place-coupled: each channel's per-cell K is the full Kcell where the mask selects it, else 0. The
+      // three buffers regrow/diffuse independently over the SAME fertility map but in disjoint cells.
+      this.stepChannel3(this.B, 0, regen, diffuse, 0, blocked);
+      this.stepChannel3(this.B2!, 1, regen, diffuse, 1, blocked);
+      this.stepChannel3(this.B3!, 2, regen, diffuse, 2, blocked);
+      if (flow !== null) this.advect(flow, blocked);
+      return;
+    }
     this.stepChannel(this.B, this.fracA, regen, diffuse, false, blocked);
     if (this.B2) this.stepChannel(this.B2, this.ratio, regen, diffuse, true, blocked);
     if (flow !== null) this.advect(flow, blocked);
+  }
+
+  /** One place-coupled channel (channels===3): like stepChannel, but the per-cell carrying capacity is the
+   *  FULL Kcell where channelMask[i]===channelIndex and 0 elsewhere (so a pocket grows only its own resource).
+   *  `which` selects the scratch buffer for the double-buffered diffusion swap (0→B/scratch, 1→B2/scratch2,
+   *  2→B3/scratch3). RNG-free; wall no-flux identical to stepChannel. */
+  private stepChannel3(
+    field: Float64Array,
+    channelIndex: number,
+    regen: number,
+    diffuse: number,
+    which: number,
+    blocked: Uint8Array | null,
+  ): void {
+    const { cols, rows, Kcell } = this;
+    const mask = this.channelMask!;
+    if (regen > 0) {
+      for (let i = 0; i < field.length; i++) {
+        if (blocked !== null && blocked[i] === 1) {
+          field[i] = 0;
+          continue;
+        }
+        const k = mask[i] === channelIndex ? Kcell[i]! : 0;
+        const b = field[i]!;
+        let nb: number;
+        if (k <= 1e-6) {
+          nb = b * (1 - regen); // not this channel's cell (or dead water): decay toward 0
+        } else {
+          nb = b + regen * b * (1 - b / k);
+          if (nb > k) nb = k;
+        }
+        field[i] = nb < 0 ? 0 : nb;
+      }
+    }
+    if (diffuse > 0) {
+      const out = which === 0 ? this.scratch : which === 1 ? this.scratch2! : this.scratch3!;
+      for (let r = 0; r < rows; r++) {
+        const up = ((r - 1 + rows) % rows) * cols;
+        const dn = ((r + 1) % rows) * cols;
+        const cur = r * cols;
+        for (let c = 0; c < cols; c++) {
+          const self = field[cur + c]!;
+          if (blocked !== null && blocked[cur + c] === 1) {
+            out[cur + c] = 0;
+            continue;
+          }
+          const l = (c - 1 + cols) % cols;
+          const rt = (c + 1) % cols;
+          const vU = blocked !== null && blocked[up + c] === 1 ? self : field[up + c]!;
+          const vD = blocked !== null && blocked[dn + c] === 1 ? self : field[dn + c]!;
+          const vL = blocked !== null && blocked[cur + l] === 1 ? self : field[cur + l]!;
+          const vR = blocked !== null && blocked[cur + rt] === 1 ? self : field[cur + rt]!;
+          const avg4 = (vU + vD + vL + vR) * 0.25;
+          out[cur + c] = self + diffuse * (avg4 - self);
+        }
+      }
+      if (which === 0) {
+        this.B = out;
+        this.scratch = field;
+      } else if (which === 1) {
+        this.B2 = out;
+        this.scratch2 = field;
+      } else {
+        this.B3 = out;
+        this.scratch3 = field;
+      }
+    }
   }
 
   /** One channel's logistic regrowth + diffusion. `capFrac` is this channel's share of cap·fertility;
@@ -376,6 +517,7 @@ export class FoodField {
     const { cols, rows, cellW, cellH } = this;
     this.advectChannel(this.B, flow, blocked, cols, rows, cellW, cellH);
     if (this.B2) this.advectChannel(this.B2, flow, blocked, cols, rows, cellW, cellH);
+    if (this.B3) this.advectChannel(this.B3, flow, blocked, cols, rows, cellW, cellH);
   }
 
   private advectChannel(
@@ -429,5 +571,6 @@ export class FoodField {
   hashInto(h: { f: (v: number) => void }): void {
     for (let i = 0; i < this.B.length; i++) h.f(this.B[i]!);
     if (this.B2) for (let i = 0; i < this.B2.length; i++) h.f(this.B2[i]!);
+    if (this.B3) for (let i = 0; i < this.B3.length; i++) h.f(this.B3[i]!);
   }
 }

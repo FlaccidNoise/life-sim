@@ -20,6 +20,9 @@ import {
   ENERGY_HUE_STARVING,
   ENERGY_HUE_REPRO,
   ENERGY_HUE_SATIATED,
+  GLOW_CORE_R,
+  GLOW_CORE_G,
+  GLOW_CORE_B,
 } from './palette';
 
 /** Canvas color-by mode (cycled with 'c'): which gene/state drives dot hue. */
@@ -100,6 +103,82 @@ void main() {
     if (dot(c, c) > 0.25) discard;
   }
   outColor = vec4(v_color, 1.0);
+}`;
+
+// ── Bioluminescence glow pass ──────────────────────────────────────────────────────────────────
+// A second pass over the SAME live-creature points, drawn LARGER with a soft radial falloff and
+// composited additively (SRC_ALPHA, ONE) so overlapping halos pool into brighter pockets — the
+// deep-sea "lit creature" look. Intensity per creature ~ activity (speed) × energy, scaled by a
+// global u_glow knob. Hue follows the active color-mode (same channels as the dot pass) so the
+// bloom matches its creature; a cool abyssal floor (GLOW_CORE_*) is mixed toward the core so warm
+// creatures still read as bioluminescent teal rather than fire. Role tints the bloom radius
+// (predators flare wider) for a function-colored cue. Purely additive + bracketed by BLEND
+// enable/disable in draw(), so with the pass skipped the opaque passes are byte-identical.
+const GLOW_VERT = `#version 300 es
+in vec2 a_pos;
+in float a_hue;
+in float a_size;
+in float a_diet;
+in float a_vis;
+in float a_spd;
+in float a_shape;                 // 0 herbivore · 1 omnivore · 2 predator → flare width
+in float a_efrac;                 // energy band fraction [0,1]
+uniform vec2 u_cam;
+uniform vec2 u_canvas;
+uniform float u_scale;
+uniform int u_colorMode;
+uniform float u_glow;             // global glow intensity (0 = off; pass skipped, but still safe at 0)
+out vec3 v_glow;
+out float v_amp;                  // per-creature bloom amplitude → fragment alpha
+vec3 hsv2rgb(float h, float s, float v) {
+  vec3 p = abs(fract(vec3(h) + vec3(1.0, 2.0/3.0, 1.0/3.0)) * 6.0 - 3.0);
+  return v * mix(vec3(1.0), clamp(p - 1.0, 0.0, 1.0), s);
+}
+float dietHue(float t) {
+  t = clamp(t, 0.0, 1.0);
+  return t < 0.5 ? mix(${glf(DIET_HUE_HERB)}, ${glf(DIET_HUE_OMNI)}, t / 0.5)
+                 : mix(${glf(DIET_HUE_OMNI)}, ${glf(DIET_HUE_PRED)}, (t - 0.5) / 0.5);
+}
+float energyHue(float f) {
+  f = clamp(f, 0.0, 1.0);
+  return f < 0.5 ? mix(${glf(ENERGY_HUE_STARVING)}, ${glf(ENERGY_HUE_REPRO)}, f / 0.5)
+                 : mix(${glf(ENERGY_HUE_REPRO)}, ${glf(ENERGY_HUE_SATIATED)}, (f - 0.5) / 0.5);
+}
+void main() {
+  vec2 px = (a_pos - u_cam) * u_scale + u_canvas * 0.5;
+  gl_Position = vec4(px.x / u_canvas.x * 2.0 - 1.0, 1.0 - px.y / u_canvas.y * 2.0, 0.0, 1.0);
+  // Liveliness: idle/starving creatures barely glow, fast + well-fed ones flare. Role widens the halo
+  // (predators read as bigger lanterns). The bloom point is several× the body dot so it reads as a halo.
+  float activity = clamp(0.30 + 0.70 * clamp(a_spd, 0.0, 1.0), 0.0, 1.0);
+  float vitality = clamp(0.25 + 0.75 * clamp(a_efrac, 0.0, 1.0), 0.0, 1.0);
+  float amp = u_glow * activity * vitality;
+  float flare = 2.6 + 0.7 * a_shape;                  // predators (shape 2) flare widest
+  gl_PointSize = max(a_size * flare, 6.0);
+  v_amp = amp;
+  vec3 hue;
+  if (u_colorMode == 1)      hue = hsv2rgb(dietHue(a_diet), 0.85, 1.0);
+  else if (u_colorMode == 2) hue = hsv2rgb(energyHue(a_efrac), 0.80, 1.0);
+  else                       hue = hsv2rgb(fract(a_hue), 0.55 + 0.40 * clamp(a_vis, 0.0, 1.0), 1.0);
+  // Bias toward the abyssal cyan floor so the whole field keeps a deep-sea cast (warm creatures
+  // glow teal-tinged, not orange). 0.35 keeps the creature's own hue legible.
+  v_glow = mix(vec3(${glf(GLOW_CORE_R)}, ${glf(GLOW_CORE_G)}, ${glf(GLOW_CORE_B)}), hue, 0.65);
+}`;
+
+const GLOW_FRAG = `#version 300 es
+precision mediump float;
+in vec3 v_glow;
+in float v_amp;
+out vec4 outColor;
+void main() {
+  // Soft radial falloff over the point sprite: bright pinprick core → feathered halo edge.
+  vec2 c = gl_PointCoord - vec2(0.5);
+  float r = length(c) * 2.0;                 // 0 centre → 1 edge
+  float fall = clamp(1.0 - r, 0.0, 1.0);
+  fall = fall * fall;                        // quadratic feather
+  float a = v_amp * fall;
+  // Premultiply-ish: emit color×alpha with alpha; SRC_ALPHA,ONE blend then adds color×alpha into the
+  // framebuffer, so the core stacks bright while edges stay faint.
+  outColor = vec4(v_glow * a, a);
 }`;
 
 const FOOD_VERT = `#version 300 es
@@ -219,6 +298,16 @@ export class Renderer {
   private readonly aSpd: number;
   private readonly aShape: number;
   private readonly aEfrac: number;
+  // bioluminescence glow pass (additive; reuses the dot attribute buffers)
+  private readonly glowProgram: WebGLProgram;
+  private readonly gPos: number;
+  private readonly gHue: number;
+  private readonly gSize: number;
+  private readonly gDiet: number;
+  private readonly gVis: number;
+  private readonly gSpd: number;
+  private readonly gShape: number;
+  private readonly gEfrac: number;
   // debug overlay lines
   private readonly lineProgram: WebGLProgram;
   private readonly lineBuffer: WebGLBuffer;
@@ -241,6 +330,10 @@ export class Renderer {
   private camX: number;
   private camY: number;
   private zoom = 1;
+  // Bioluminescence (RENDER-only): OFF by default → the glow pass is skipped and today's pixels are
+  // byte-identical. Lives here, NOT in core Config — it has zero sim/determinism impact.
+  private glowEnabled = false;
+  private glowIntensity = 1;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -255,6 +348,7 @@ export class Renderer {
     this.gl = gl;
 
     this.dotProgram = link(gl, DOT_VERT, DOT_FRAG);
+    this.glowProgram = link(gl, GLOW_VERT, GLOW_FRAG);
     this.foodProgram = link(gl, FOOD_VERT, FOOD_FRAG);
     this.wallProgram = link(gl, FOOD_VERT, WALL_FRAG);
     this.lineProgram = link(gl, LINE_VERT, LINE_FRAG);
@@ -266,6 +360,14 @@ export class Renderer {
     this.aSpd = gl.getAttribLocation(this.dotProgram, 'a_spd');
     this.aShape = gl.getAttribLocation(this.dotProgram, 'a_shape');
     this.aEfrac = gl.getAttribLocation(this.dotProgram, 'a_efrac');
+    this.gPos = gl.getAttribLocation(this.glowProgram, 'a_pos');
+    this.gHue = gl.getAttribLocation(this.glowProgram, 'a_hue');
+    this.gSize = gl.getAttribLocation(this.glowProgram, 'a_size');
+    this.gDiet = gl.getAttribLocation(this.glowProgram, 'a_diet');
+    this.gVis = gl.getAttribLocation(this.glowProgram, 'a_vis');
+    this.gSpd = gl.getAttribLocation(this.glowProgram, 'a_spd');
+    this.gShape = gl.getAttribLocation(this.glowProgram, 'a_shape');
+    this.gEfrac = gl.getAttribLocation(this.glowProgram, 'a_efrac');
     this.aCorner = gl.getAttribLocation(this.foodProgram, 'a_corner');
     this.aWallCorner = gl.getAttribLocation(this.wallProgram, 'a_corner');
     this.aLinePos = gl.getAttribLocation(this.lineProgram, 'a_pos');
@@ -370,6 +472,20 @@ export class Renderer {
 
   get camera(): { x: number; y: number; zoom: number } {
     return { x: this.camX, y: this.camY, zoom: this.zoom };
+  }
+
+  /**
+   * Bioluminescence toggle + intensity (RENDER-only, zero sim impact). OFF by default so the
+   * additive glow pass is skipped and the opaque passes render exactly as before. `intensity` scales
+   * the global bloom (clamped ≥0). The demo wires this on; it is NOT part of core Config.
+   */
+  setGlow(enabled: boolean, intensity = this.glowIntensity): void {
+    this.glowEnabled = enabled;
+    this.glowIntensity = intensity < 0 ? 0 : intensity;
+  }
+
+  get glow(): { enabled: boolean; intensity: number } {
+    return { enabled: this.glowEnabled, intensity: this.glowIntensity };
   }
 
   private setCommonUniforms(program: WebGLProgram, sc: number): void {
@@ -579,6 +695,48 @@ export class Renderer {
       this.setCommonUniforms(this.dotProgram, sc);
       gl.uniform1i(gl.getUniformLocation(this.dotProgram, 'u_colorMode'), colorMode);
       gl.drawArrays(gl.POINTS, 0, n);
+
+      // ── Bioluminescence glow (additive, RENDER-only) ──
+      // OFF by default → entire pass skipped, so the opaque food/wall/dot passes above are
+      // byte-identical to before. When ON, bracket the additive blend so GL's sticky BLEND state is
+      // restored to disabled before this returns — even right after toggling glow back off, the next
+      // frame's opaque passes see BLEND disabled exactly as in the no-glow baseline.
+      if (this.glowEnabled && this.glowIntensity > 0) {
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.SRC_ALPHA, gl.ONE); // additive: halos pool into brighter pockets
+        gl.useProgram(this.glowProgram);
+        // Reuse the dot attribute buffers (already uploaded this frame). Re-point to the glow
+        // program's attribute slots (locations differ per program); no re-upload of data.
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.dotBuffer);
+        gl.enableVertexAttribArray(this.gPos);
+        gl.vertexAttribPointer(this.gPos, 2, gl.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.hueBuffer);
+        gl.enableVertexAttribArray(this.gHue);
+        gl.vertexAttribPointer(this.gHue, 1, gl.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.sizeBuffer);
+        gl.enableVertexAttribArray(this.gSize);
+        gl.vertexAttribPointer(this.gSize, 1, gl.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.dietBuffer);
+        gl.enableVertexAttribArray(this.gDiet);
+        gl.vertexAttribPointer(this.gDiet, 1, gl.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.visBuffer);
+        gl.enableVertexAttribArray(this.gVis);
+        gl.vertexAttribPointer(this.gVis, 1, gl.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.spdBuffer);
+        gl.enableVertexAttribArray(this.gSpd);
+        gl.vertexAttribPointer(this.gSpd, 1, gl.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.shapeBuffer);
+        gl.enableVertexAttribArray(this.gShape);
+        gl.vertexAttribPointer(this.gShape, 1, gl.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.efracBuffer);
+        gl.enableVertexAttribArray(this.gEfrac);
+        gl.vertexAttribPointer(this.gEfrac, 1, gl.FLOAT, false, 0, 0);
+        this.setCommonUniforms(this.glowProgram, sc);
+        gl.uniform1i(gl.getUniformLocation(this.glowProgram, 'u_colorMode'), colorMode);
+        gl.uniform1f(gl.getUniformLocation(this.glowProgram, 'u_glow'), this.glowIntensity);
+        gl.drawArrays(gl.POINTS, 0, n);
+        gl.disable(gl.BLEND); // restore the sticky GL state → opaque passes unaffected next frame
+      }
     }
   }
 

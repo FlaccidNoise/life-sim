@@ -71,6 +71,48 @@ describe('senseFood', () => {
     expect(s.senseX[a]!).toBeGreaterThan(0); // A-specialist pulled toward +x (channel A)
     expect(s.senseX[b]!).toBeLessThan(0); // B-specialist pulled toward −x (channel B)
   });
+
+  it('three-channel: a C-specialist smells the channel-C gradient; an A-specialist is blind to it', () => {
+    // Place-coupled field (mode 1): pocket 2 grows ONLY channel C. A creature just OUTSIDE the C-pocket
+    // smells UP the channel-C gradient iff its preference weights channel C. An A-specialist standing at
+    // the same spot weights only channel A (which has no resource here) → ~no pull. Proves the per-channel
+    // blended gradient + own-range smell are live (the C channel is NOT inert).
+    class QueueRng {
+      private j = 0;
+      constructor(private q: number[]) {}
+      float(): number {
+        return this.q[Math.min(this.j++, this.q.length - 1)]!;
+      }
+    }
+    // 1024² / 128-cell grid; pockets at cells (16,16)→A, (48,48)→B, (80,80)→C.
+    const f = new FoodField(1024, 1024, 128, 128, K, 1, 3, 0.5, 1);
+    f.seedPatches(3, 6, 0, new QueueRng([0.125, 0.125, 0.375, 0.375, 0.625, 0.625]));
+    const pC = f.patchCenters[2]!; // channel-C pocket centre
+    const cellW = 1024 / 128;
+    const cfg = defaultConfig({ worldWidth: 1024, worldHeight: 1024, foodChannels: 3 });
+    const s = new OrganismStore(4);
+    const cSpec = s.alloc(); // pure C eater
+    const aSpec = s.alloc(); // pure A eater (blind to C)
+    // Sit both a few cells to the −x side of the C-pocket so the C-gradient points toward +x (into the pocket).
+    const px = pC.x - 4 * cellW;
+    for (const i of [cSpec, aSpec]) {
+      s.x[i] = px;
+      s.y[i] = pC.y;
+      const base = i * SCALAR_GENE_COUNT;
+      s.scalarGenes[base + ScalarGene.SENSE_RANGE] = cellW;
+      s.scalarGenes[base + ScalarGene.SENSE_RANGE_B] = cellW;
+      s.scalarGenes[base + ScalarGene.SENSE_RANGE_C] = cellW;
+    }
+    // C-specialist: wC=1 (prefC=1). A-specialist: wA=1 (pref=0, prefC=0).
+    s.scalarGenes[cSpec * SCALAR_GENE_COUNT + ScalarGene.FORAGE_PREF] = 0.5;
+    s.scalarGenes[cSpec * SCALAR_GENE_COUNT + ScalarGene.FORAGE_PREF_C] = 1;
+    s.scalarGenes[aSpec * SCALAR_GENE_COUNT + ScalarGene.FORAGE_PREF] = 0;
+    s.scalarGenes[aSpec * SCALAR_GENE_COUNT + ScalarGene.FORAGE_PREF_C] = 0;
+    s.rebuildLive();
+    senseFood(s, f, cfg);
+    expect(s.senseX[cSpec]!).toBeGreaterThan(0); // C-specialist pulled toward +x (into the C-pocket)
+    expect(Math.abs(s.senseX[aSpec]!)).toBeLessThan(Math.abs(s.senseX[cSpec]!) * 0.1); // A-eater ~blind to C
+  });
 });
 
 describe('senseEnv', () => {

@@ -178,6 +178,24 @@ export function metabolize(
       const takeA = food.grazeAt(x[i]!, y[i]!, budget * (1 - pref));
       const takeB = food.grazeAt2(x[i]!, y[i]!, budget * pref);
       gained = (takeA + takeB) * spec;
+    } else if (cfg.foodChannels === 3) {
+      // THREE place-coupled channels: split the eat budget across {A,B,C} by the barycentric preference
+      // (same wA/wB/wC as sense.ts), graze each channel via grazeAt/2/3, then convert at the specialization
+      // rate. spec ∈ [1, 1+forageSpecBonus] keyed on the dominant weight (uniform 1/3 → no bonus, pure
+      // specialist → full): committing to one resource pays more, the disruptive pressure for the niche split.
+      // No biomass is created — the field depletes by exactly (takeA+takeB+takeC).
+      const pref = scalarGenes[sg + ScalarGene.FORAGE_PREF]!;
+      const prefC = scalarGenes[sg + ScalarGene.FORAGE_PREF_C]!;
+      const wC = prefC;
+      const wB = pref * (1 - prefC);
+      const wA = (1 - pref) * (1 - prefC);
+      const maxW = wA > wB ? (wA > wC ? wA : wC) : wB > wC ? wB : wC;
+      const spec = 1 + cfg.forageSpecBonus * ((maxW - 1 / 3) / (2 / 3));
+      const budget = eatRate * herbivory;
+      const takeA = food.grazeAt(x[i]!, y[i]!, budget * wA);
+      const takeB = food.grazeAt2(x[i]!, y[i]!, budget * wB);
+      const takeC = food.grazeAt3(x[i]!, y[i]!, budget * wC);
+      gained = (takeA + takeB + takeC) * spec;
     } else {
       gained = food.grazeAt(x[i]!, y[i]!, eatRate * herbivory); // single channel (byte-identical original)
     }

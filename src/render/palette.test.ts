@@ -12,6 +12,9 @@ import {
   DIET_HUE_HERB,
   DIET_HUE_OMNI,
   DIET_HUE_PRED,
+  GLOW_CORE_R,
+  GLOW_CORE_G,
+  GLOW_CORE_B,
 } from './palette';
 
 describe('hsv2rgb', () => {
@@ -96,6 +99,26 @@ describe('energyHue', () => {
     const full = energyColor(1);
     expect(starving[0]).toBeGreaterThan(starving[1]);
     expect(full[1]).toBeGreaterThan(full[0]);
+  });
+});
+
+describe('glow core (GLSL drift guard)', () => {
+  // GLOW_CORE_* are inlined as float literals into the GLOW_FRAG/GLOW_VERT shaders in renderer.ts
+  // (the abyssal-cyan bloom floor). Pin the exact values so the JS source and the GLSL can't drift.
+  it('pins the abyssal-cyan bloom floor', () => {
+    expect(GLOW_CORE_R).toBe(0.55);
+    expect(GLOW_CORE_G).toBe(0.9);
+    expect(GLOW_CORE_B).toBe(1.0);
+  });
+  it('is a cool cyan (blue ≥ green > red) so warm creatures still read deep-sea', () => {
+    expect(GLOW_CORE_B).toBeGreaterThanOrEqual(GLOW_CORE_G);
+    expect(GLOW_CORE_G).toBeGreaterThan(GLOW_CORE_R);
+  });
+  it('every component is a valid [0,1] color coordinate', () => {
+    for (const c of [GLOW_CORE_R, GLOW_CORE_G, GLOW_CORE_B]) {
+      expect(c).toBeGreaterThanOrEqual(0);
+      expect(c).toBeLessThanOrEqual(1);
+    }
   });
 });
 
