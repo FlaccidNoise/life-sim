@@ -7,7 +7,15 @@
  * on the mode, so the color row + swatch re-render on setColorMode.
  */
 import { ColorMode } from '../../render/renderer';
-import { lineageColor, dietColor, energyColor, rgbCss, type RGB } from '../../render/palette';
+import {
+  lineageColor,
+  dietColor,
+  energyColor,
+  rgbCss,
+  hsv2rgb,
+  CHANNEL_HUE,
+  type RGB,
+} from '../../render/palette';
 
 /** A horizontal CSS gradient sampled from a palette ramp (lo→hi across the bar). */
 function rampGradient(sample: (t: number) => RGB, stops = 12): string {
@@ -16,10 +24,30 @@ function rampGradient(sample: (t: number) => RGB, stops = 12): string {
   return `linear-gradient(90deg, ${parts.join(', ')})`;
 }
 
+/** A hard-edged categorical bar (no blending) from a list of swatch colors — for the forage mode,
+ *  where the channels are distinct categories (A/B/C specialist + generalist grey), not a ramp. */
+function categoricalBar(colors: RGB[]): string {
+  const n = colors.length;
+  const parts = colors.map((c, i) => `${rgbCss(c)} ${(i / n) * 100}% ${((i + 1) / n) * 100}%`);
+  return `linear-gradient(90deg, ${parts.join(', ')})`;
+}
+
+/** Vivid 0..255 RGB for a forage specialist swatch (matches the dot shader's hsv2rgb(hue,0.85,0.95)). */
+const specialist = (ch: number): RGB => hsv2rgb(CHANNEL_HUE[ch] ?? 0.33, 0.85, 0.95);
+
 const COLOR_INFO: Record<ColorMode, { label: string; ramp: string }> = {
   [ColorMode.LINEAGE]: { label: 'lineage · kin identity', ramp: rampGradient(lineageColor) },
   [ColorMode.DIET]: { label: 'diet · herbivore→predator', ramp: rampGradient(dietColor) },
   [ColorMode.ENERGY]: { label: 'energy · starving→satiated', ramp: rampGradient(energyColor) },
+  [ColorMode.FORAGE]: {
+    label: 'forage · A/B/C specialist · grey generalist',
+    ramp: categoricalBar([
+      specialist(0),
+      specialist(1),
+      specialist(2),
+      [115, 115, 115], // generalist grey (matches the shader's vec3(0.45))
+    ]),
+  },
 };
 
 export class Legend {
@@ -63,9 +91,9 @@ export class Legend {
     const info = COLOR_INFO[mode];
     this.colorLabel.textContent = info.label;
     this.colorBar.style.background = info.ramp;
-    // In energy mode the shader fixes saturation + brightness, so vision/speed aren't encoded —
-    // strike those rows so the legend never claims an encoding the dots don't show.
-    const na = mode === ColorMode.ENERGY;
+    // In energy + forage modes the shader fixes saturation + brightness, so vision/speed aren't
+    // encoded — strike those rows so the legend never claims an encoding the dots don't show.
+    const na = mode === ColorMode.ENERGY || mode === ColorMode.FORAGE;
     this.satRow.classList.toggle('lg-na', na);
     this.valRow.classList.toggle('lg-na', na);
   }

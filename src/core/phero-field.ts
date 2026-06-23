@@ -27,6 +27,9 @@ export class PheroField {
   private readonly cellH: number;
   private P: Float64Array;
   private scratch: Float64Array;
+  /** RENDER-ONLY running max for fillTexture normalization (ratchets up so a decaying trail stays
+   *  visible against its own historical peak). Not sim state — never hashed, reset, or read by core. */
+  private texMax = 1e-9;
 
   constructor(worldWidth: number, worldHeight: number, cols: number, rows: number) {
     this.cols = cols;
@@ -135,6 +138,22 @@ export class PheroField {
   reset(): void {
     this.P.fill(0);
     this.scratch.fill(0);
+  }
+
+  /**
+   * PURE-READ render helper (no sim state touched): write the concentration into `out` scaled to
+   * 0..255 against a ratcheting running max (so a freshly-deposited trail is visible and a decaying
+   * one fades against its own historical peak rather than going invisible). Row-major, row 0 = top.
+   */
+  fillTexture(out: Uint8Array): void {
+    let curMax = this.texMax;
+    for (let i = 0; i < this.P.length; i++) if (this.P[i]! > curMax) curMax = this.P[i]!;
+    this.texMax = curMax;
+    const inv = 255 / curMax;
+    for (let i = 0; i < this.P.length; i++) {
+      const v = this.P[i]! * inv;
+      out[i] = v < 0 ? 0 : v > 255 ? 255 : v;
+    }
   }
 
   /** Mix the field into a deterministic state hash (the pheromone is part of sim state when active). */
