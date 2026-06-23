@@ -12,6 +12,7 @@ import { defaultConfig, type Config } from '../core/config';
 import { scanHealth } from '../core/health';
 import { Renderer, ColorMode } from '../render/renderer';
 import { buildOverlaySegments } from '../render/overlay';
+import { DetailOverlay } from '../render/detail-overlay';
 import { Controls } from './observability/controls';
 import { Knobs } from './observability/knobs';
 import { Inspector } from './observability/inspector';
@@ -53,6 +54,8 @@ try {
   hudBody.textContent = `Renderer init failed: ${err instanceof Error ? err.message : String(err)}`;
   throw err;
 }
+
+const overlay = new DetailOverlay(canvas, config.worldWidth, config.worldHeight);
 
 const graph = new TimeSeriesGraph(el<HTMLCanvasElement>('graph'), [
   { label: 'pop', color: '#8ad9f2' }, // cyan
@@ -305,7 +308,10 @@ globalThis.addEventListener('mouseup', (e) => {
   dragging = false;
 });
 
-globalThis.addEventListener('resize', () => renderer.resize());
+globalThis.addEventListener('resize', () => {
+  renderer.resize();
+  overlay.resize();
+});
 
 // 'f' food heatmap · 'w' wall layer · 'o' creature overlay · 'v' flow arrows · 'c' cycle dot color-mode · 'l' lock follow-cam + record.
 globalThis.addEventListener('keydown', (e) => {
@@ -404,6 +410,8 @@ function frame(): void {
   }
   renderer.setCamera(camX, camY, zoom);
   renderer.draw(world.store, world.food, world.walls, showFood, showWalls, interp, colorMode);
+  overlay.setCamera(camX, camY, zoom);
+  overlay.draw(world.store);
   // Path trail of the followed creature (fading old→new; seam-crossing segments skipped so toroidal
   // wraps don't streak). A tight loop = spinning in place; a directed line = foraging.
   if (showOverlay && recorder.following && trailX.length > 1) {
