@@ -3,11 +3,20 @@ import { body } from './body';
 import { eyes } from './eyes';
 import { maw } from './maw';
 import { visionCone } from './vision-cone';
+import { tail } from './tail';
+import { fins } from './fins';
+import { antennae } from './antennae';
 
 // All trait modules, sorted once by draw order (z). Adding a gene's visual = import + add here.
-export const MODULES: readonly TraitModule[] = [body, eyes, maw, visionCone].sort(
-  (a, b) => a.z - b.z,
-);
+export const MODULES: readonly TraitModule[] = [
+  visionCone,
+  tail,
+  fins,
+  body,
+  maw,
+  antennae,
+  eyes,
+].sort((a, b) => a.z - b.z);
 
 export function dispatch(c: CreatureVisualCtx): void {
   for (const m of MODULES) if (m.minTier <= c.tier) m.draw(c);
