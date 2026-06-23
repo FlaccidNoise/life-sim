@@ -42,13 +42,29 @@ const hudBody = el('hud-body');
 //   • bioluminescence      — render glow (set below). NB the 3-channel world runs SPARSER + loses predators
 //     vs ch2 (food is segregated); it stays alive on all tested seeds. Tune live across seeds to taste.
 let config: Config = defaultConfig({
+  // Spatial structure + legibility.
   wallRegionCount: 5,
-  flowStrength: 0.15,
-  motorSquash: true,
-  foodChannels: 3,
-  foodPocketChannelMode: 1,
-  pheromoneEnabled: true,
+  flowStrength: 0.35, // stronger current so channel B actually drifts (and mixes pockets for encounters)
   flowPushStrength: 0.25,
+  motorSquash: true,
+  // Density (the proven lever): more + bigger pockets → dense → predators + niche partitioning return.
+  foodPatchCount: 40,
+  foodPatchRadius: 8,
+  // Two differentiated resources: channel A wall-tied (structural), channel B drifting in the current.
+  foodChannels: 2,
+  foodPocketChannelMode: 1,
+  foodChannelAWallTied: true,
+  foodChannelBDriftMult: 3,
+  // Pheromones (delayed-feedback substrate).
+  pheromoneEnabled: true,
+  // Sight-only drifting food parcels + the census-proven vision-cost cut → the dead vision genes get a
+  // reason to evolve up (this tuning lives in the demo so defaultConfig stays byte-identical to legacy).
+  parcelsEnabled: true,
+  parcelEnergy: 80,
+  parcelSpawnInterval: 6,
+  parcelCapacity: 120,
+  visionFovCost: 0.02,
+  visionAcuityCost: 0.02,
 });
 let world = new World(config);
 
@@ -135,6 +151,10 @@ foodLayerLabel.textContent = FOOD_LAYER_NAMES[foodLayer] ?? 'off';
 
 // Scratch for the selected creature's overlay line vertices ([x,y,r,g,b] per vertex; gl.LINES).
 const overlayScratch = new Float32Array(2048);
+// Sight-only food parcels drawn as small bright cyan crosses (a glowing mote) — 4 vertices (2 lines) ×
+// 5 floats per parcel. Sized to the pool capacity so it never reallocates.
+const parcelScratch = new Float32Array(Math.max(1, config.parcelCapacity) * 4 * 5);
+const PARCEL_R = 10; // cross half-extent in world units
 // Path trail of the FOLLOWED creature: recent positions drawn as a fading polyline, so spin-in-place
 // (a tight loop) reads instantly different from foraging (a directed path). Captured per tick.
 const TRAIL_LEN = 400;
@@ -461,6 +481,33 @@ function frame(): void {
     interp,
     colorMode,
   );
+  // Sight-only food parcels: bright cyan crosses that drift on the current (a creature with eyes chases
+  // them; they emit no smell). Drawn as gl.LINES plus-signs so they read as glowing motes.
+  if (world.parcels) {
+    const p = world.parcels;
+    let v = 0;
+    for (let i = 0; i < p.capacity; i++) {
+      if (p.alive[i] !== 1) continue;
+      const px = p.x[i]!;
+      const py = p.y[i]!;
+      // horizontal then vertical segment (4 vertices)
+      const pts = [
+        [px - PARCEL_R, py],
+        [px + PARCEL_R, py],
+        [px, py - PARCEL_R],
+        [px, py + PARCEL_R],
+      ] as const;
+      for (const [vx, vy] of pts) {
+        parcelScratch[v * 5] = vx;
+        parcelScratch[v * 5 + 1] = vy;
+        parcelScratch[v * 5 + 2] = 0.6; // bright cyan-white
+        parcelScratch[v * 5 + 3] = 1.0;
+        parcelScratch[v * 5 + 4] = 1.0;
+        v++;
+      }
+    }
+    if (v >= 2) renderer.drawLines(parcelScratch, v);
+  }
   // Path trail of the followed creature (fading old→new; seam-crossing segments skipped so toroidal
   // wraps don't streak). A tight loop = spinning in place; a directed line = foraging.
   if (showOverlay && recorder.following && trailX.length > 1) {
