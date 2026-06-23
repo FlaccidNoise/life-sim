@@ -143,13 +143,25 @@ interface SeedResult {
 // Live-demo overrides — mirrors src/app/main.ts (the world the user actually watches). Kept here so the
 // probe can measure the demo regime, not just the byte-clean default. Update if main.ts's config changes.
 export const DEMO_OVERRIDES: Partial<Config> = {
+  // Spatial structure + legibility.
   wallRegionCount: 5,
-  flowStrength: 0.15,
-  motorSquash: true,
-  foodChannels: 3,
-  foodPocketChannelMode: 1,
-  pheromoneEnabled: true,
+  flowStrength: 0.35,
   flowPushStrength: 0.25,
+  motorSquash: true,
+  // Density + two differentiated resources (channel A wall-tied, B drifting) + parcels (vision-revival).
+  foodPatchCount: 40,
+  foodPatchRadius: 8,
+  foodChannels: 2,
+  foodPocketChannelMode: 1,
+  foodChannelAWallTied: true,
+  foodChannelBDriftMult: 3,
+  pheromoneEnabled: true,
+  parcelsEnabled: true,
+  parcelEnergy: 80,
+  parcelSpawnInterval: 6,
+  parcelCapacity: 120,
+  visionFovCost: 0.02,
+  visionAcuityCost: 0.02,
   // Lifespan + behavior depth (mirrors main.ts): softer starvation clock + satiation-driven wander +
   // breeding cooldown so creatures dwell well-fed. Override on the CLI to A/B against the old demo.
   basalCost: 0.08,
