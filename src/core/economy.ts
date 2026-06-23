@@ -325,6 +325,14 @@ export function reproduce(
   for (let k = 0; k < n; k++) {
     const p = parents[k]!;
     if (!store.isAlive(p)) continue; // died in the cull this tick
+    // Breeding refractory (the satiation-dwell lever): a creature still cooling from a recent birth ticks
+    // its counter down and skips — it can be FULL yet NOT breed, which is exactly the "well-fed but idle"
+    // state the hunger-gate turns into wandering. Gated on breedCooldown>0 so the OFF path never touches the
+    // counter and stays byte-identical. First breed is never gated (newborns start at 0 = ready).
+    if (cfg.breedCooldown > 0 && store.breedCooldownLeft[p]! > 0) {
+      store.breedCooldownLeft[p] = store.breedCooldownLeft[p]! - 1;
+      continue;
+    }
     // Breed at the parent's OWN size-scaled satiated bar (bigger body = deeper reserve to fill first).
     if (energy[p]! < satiatedBar(scalarGenes, p, cfg)) continue; // not full yet → keep foraging
     const child = store.alloc();
@@ -375,6 +383,8 @@ export function reproduce(
     store.prevEnergy[child] = childEnergy; // first-tick learning reward = 0 for the newborn
     energy[p] = energy[p]! - childEnergy - reproOverhead;
     births++;
+    // Start this parent's breeding refractory (gated → no-op + byte-identical when off).
+    if (cfg.breedCooldown > 0) store.breedCooldownLeft[p] = cfg.breedCooldown;
     // Optional observation hook (off by default): hand the harness exact child→parent identity. Read-
     // only by contract — no store/RNG/order effect — so the determinism hash is unchanged (see Config).
     cfg.onBirth?.(p, store.genId[p]!, child, store.genId[child]!);

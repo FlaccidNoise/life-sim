@@ -49,6 +49,15 @@ let config: Config = defaultConfig({
   foodPocketChannelMode: 1,
   pheromoneEnabled: true,
   flowPushStrength: 0.25,
+  // Lifespan + behavior depth (this work stream). Margin: a softer starvation clock so creatures get a
+  // real runway off the food field (basalCost 0.12→0.08 — measured +20% median lifespan; NB this overlaps
+  // the food worktree's income tuning → reconcile the combined margin at merge). Satiation behavior:
+  // hungerGatesFood makes a full creature's food-seeking fade so it wanders on its other drives, and
+  // breedCooldown spaces reproduction so creatures actually DWELL well-fed (the regime the gate needs —
+  // measured: cooldown 150 → satiation dwell appears + median lifespan +30%, %bred up). All live-tunable.
+  basalCost: 0.08,
+  hungerGatesFood: true,
+  breedCooldown: 150,
 });
 let world = new World(config);
 
