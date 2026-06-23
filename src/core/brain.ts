@@ -44,6 +44,8 @@ export function steer(
   const { learnedBrain, elig, energy } = store;
   const genes = store.scalarGenes;
   const hungerSense = cfg.hungerSense;
+  const hungerGatesFood = cfg.hungerGatesFood;
+  const foodGateThreshold = cfg.foodGateThreshold;
   for (let k = 0; k < liveCount; k++) {
     const i = liveIndices[k]!;
     const sg = i * SCALAR_GENE_COUNT;
@@ -55,8 +57,30 @@ export function steer(
     const dy = Math.sin(h);
     const gx = senseX[i]!;
     const gy = senseY[i]!;
-    const fwd = gx * dx + gy * dy; // food gradient ahead
-    const lat = -gx * dy + gy * dx; // food gradient to the left
+    let fwd = gx * dx + gy * dy; // food gradient ahead
+    let lat = -gx * dy + gy * dx; // food gradient to the left
+    // Hunger scalar = clamp(1 − energy/satiatedBar, 0, 1): 0 = full, 1 = empty. Shared by the food-drive
+    // gate (below) and the interoceptive hunger synapses (further down). Computed ONCE, only when a consumer
+    // is on, so the all-off path never consults satiatedBar and stays byte-identical to pre-feature.
+    let hunger = 0;
+    if (hungerSense || hungerGatesFood) {
+      const sb = satiatedBar(genes, i, cfg);
+      hunger = sb > 0 ? 1 - energy[i]! / sb : 1;
+      if (hunger < 0) hunger = 0;
+      else if (hunger > 1) hunger = 1;
+    }
+    // Food-drive gate (satiation → stop seeking): scale the FOOD gradient by a drive that is FULL while
+    // the creature is hungry and eases to 0 only as it approaches satiation — drive = clamp(hunger /
+    // foodGateThreshold, 0, 1) (raw hunger when threshold ≤ 0). So a full creature stops seeking food and
+    // steers on its other drives (sight/flow/pheromone/bias) → wanders, a NEARLY-full one eases off, and
+    // the still-hungry majority forages at full strength (no handicap). ONLY the food gradient is scaled.
+    // Gated so the OFF path leaves fwd/lat untouched (byte-identical). Scaling at the source feeds the elig.
+    if (hungerGatesFood) {
+      let drive = foodGateThreshold > 0 ? hunger / foodGateThreshold : hunger;
+      if (drive > 1) drive = 1; // lower bound is implicit: hunger ≥ 0 → drive ≥ 0
+      fwd *= drive;
+      lat *= drive;
+    }
     const vx = sightX[i]!;
     const vy = sightY[i]!;
     const sFwd = vx * dx + vy * dy; // sight vector ahead (appeal-signed)
@@ -101,14 +125,10 @@ export function steer(
       learnedBrain[b + Brain.PHERO_FWD_THRUST]! * pFwd +
       learnedBrain[b + Brain.THRUST_BIAS]!;
 
-    // Interoceptive hunger (lever E2): a scalar drive on its own pair of synapses. Gated, not +0'd,
-    // so the OFF path leaves turn/thrust byte-identical (satiatedBar isn't even consulted when off).
-    let hunger = 0;
+    // Interoceptive hunger (lever E2): the shared hunger scalar (computed above) on its own pair of
+    // synapses. Gated, not +0'd, so the OFF path leaves turn/thrust byte-identical (hunger stays 0 / was
+    // never computed when both hunger levers are off).
     if (hungerSense) {
-      const sb = satiatedBar(genes, i, cfg);
-      hunger = sb > 0 ? 1 - energy[i]! / sb : 1;
-      if (hunger < 0) hunger = 0;
-      else if (hunger > 1) hunger = 1;
       turnRaw += learnedBrain[b + Brain.HUNGER_TURN]! * hunger;
       thrustRaw += learnedBrain[b + Brain.HUNGER_THRUST]! * hunger;
     }

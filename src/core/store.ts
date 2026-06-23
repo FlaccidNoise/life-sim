@@ -68,6 +68,10 @@ export class OrganismStore {
   readonly age: Uint32Array;
   readonly genId: Uint32Array;
   readonly alive: Uint8Array;
+  // Breeding refractory countdown (ticks until this slot may breed again; 0 = ready). Only touched when
+  // cfg.breedCooldown > 0, so the OFF path never reads/writes it. Auxiliary runtime state — NOT hashed
+  // (the determinism golden hash stays byte-identical when the cooldown feature is off).
+  readonly breedCooldownLeft: Uint32Array;
 
   /** Free slots available for allocation (LIFO). Reuse is genId-guarded. */
   private readonly freeStack: number[] = [];
@@ -105,6 +109,7 @@ export class OrganismStore {
     this.age = new Uint32Array(capacity);
     this.genId = new Uint32Array(capacity);
     this.alive = new Uint8Array(capacity);
+    this.breedCooldownLeft = new Uint32Array(capacity);
     this.liveIndices = new Uint32Array(capacity);
     this.clear();
   }
@@ -119,6 +124,7 @@ export class OrganismStore {
     this.alive.fill(0);
     this.age.fill(0);
     this.genId.fill(0);
+    this.breedCooldownLeft.fill(0);
     this.freeStack.length = 0;
     for (let i = this.capacity - 1; i >= 0; i--) this.freeStack.push(i);
     this.liveCount = 0;
@@ -131,6 +137,7 @@ export class OrganismStore {
     this.alive[slot] = 1;
     this.genId[slot] = (this.genId[slot]! + 1) >>> 0;
     this.age[slot] = 0;
+    this.breedCooldownLeft[slot] = 0; // a newborn is breeding-ready (first breed is never gated)
     return slot;
   }
 

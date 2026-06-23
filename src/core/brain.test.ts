@@ -409,3 +409,59 @@ describe('interoceptive hunger input (lever E2)', () => {
     expect(s.elig[b + Brain.HUNGER_TURN]!).toBe(0);
   });
 });
+
+describe('hunger-gated food drive (satiation → stop seeking food)', () => {
+  // cfg.hungerGatesFood scales the FOOD gradient by hunger = clamp(1−energy/satiatedBar, 0, 1): a full
+  // creature (hunger→0) stops responding to food and steers on its other drives (→ wanders); a starving
+  // one seeks at full strength. ONLY the food gradient is scaled (not sight/wall/flow). OFF = byte-identical.
+  const GATE_ON = defaultConfig({ hungerGatesFood: true });
+
+  // Pure food-driven thrust (no bias/sight), so the motor output IS the (gated) food response.
+  const foodThrust = (energy: number, cfg: Config): number => {
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.heading[i] = 0; // facing +x
+    s.senseX[i] = 1; // food gradient straight ahead
+    s.senseY[i] = 0;
+    setBrain(s, i, { FWD_THRUST: 2 });
+    s.energy[i] = energy;
+    s.rebuildLive();
+    steer(s, false, 0.2, false, cfg);
+    return Math.hypot(s.forceX[0]!, s.forceY[0]!);
+  };
+
+  it('a full creature stops thrusting toward food; a starving one drives at full strength (gate on)', () => {
+    expect(foodThrust(1e6, GATE_ON)).toBeCloseTo(0); // full → hunger 0 → food drive gated to nothing
+    expect(foodThrust(0, GATE_ON)).toBeCloseTo(2); // empty → hunger 1 → full food drive (FWD_THRUST·1·1)
+  });
+
+  it('with the gate OFF the food response is identical regardless of energy (ablation/byte-clean)', () => {
+    expect(foodThrust(0, CFG)).toBe(foodThrust(1e6, CFG)); // food gradient never scaled by energy
+  });
+
+  it('a still-hungry creature forages at FULL strength — the gate only eases off near satiation', () => {
+    // satiatedBar floors at repro+MIN_BAND = 65 here (SIZE 0). energy 20 → hunger ≈ 0.69, well above the
+    // 0.4 threshold → drive clamps to 1 (full). A raw-linear gate would throttle it to ~0.69·2; the
+    // threshold shape must NOT. This is what keeps the income-poor majority foraging hard.
+    expect(foodThrust(20, GATE_ON)).toBeCloseTo(2);
+  });
+
+  it('gates ONLY the food gradient — a full creature still steers on its sight vector', () => {
+    const sightThrust = (energy: number): number => {
+      const s = new OrganismStore(4);
+      const i = s.alloc();
+      s.heading[i] = 0;
+      s.senseX[i] = 0; // no food
+      s.senseY[i] = 0;
+      s.sightX[i] = 1; // prey straight ahead
+      s.sightY[i] = 0;
+      setBrain(s, i, { SIGHT_FWD_THRUST: 2 });
+      s.energy[i] = energy;
+      s.rebuildLive();
+      steer(s, false, 0.2, false, GATE_ON);
+      return Math.hypot(s.forceX[0]!, s.forceY[0]!);
+    };
+    expect(sightThrust(1e6)).toBeCloseTo(sightThrust(0)); // sight is NOT gated by hunger
+    expect(sightThrust(1e6)).toBeCloseTo(2); // a full creature still chases on sight
+  });
+});

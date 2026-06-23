@@ -117,6 +117,12 @@ export interface Config {
   birthEnergy: number;
   /** Offspring placement offset from the parent, in world units. */
   offspringOffset: number;
+  /** Breeding refractory period (ticks): after a creature reproduces it cannot breed again for this many
+   *  ticks, even while energetically able. This opens a "well-fed but not breeding" dwell — the regime the
+   *  hunger-gate needs to express satiation behavior (forage → breed → cooldown: wander while full → breed)
+   *  — and spaces reproduction into a real life-cycle. The FIRST breed is never gated (newborns start ready),
+   *  so getting established is unaffected. 0 = OFF: no gating, byte-identical to pre-cooldown (the contract). */
+  breedCooldown: number;
 
   // ── Steering + evolution (per-creature heritable brain) ─────────────────────────────────────────
   /** Gradient sample half-step in world units (central difference of the food field). */
@@ -377,6 +383,21 @@ export interface Config {
    *  pre-E2 (safeguard #1). true = the weights seed near 0 and EVOLVE; behavior couples to internal state. */
   hungerSense: boolean;
 
+  /** Hunger-gated food drive (satiation → stop seeking): when true, the FOOD gradient feeding the brain
+   *  is multiplied by hunger = clamp(1 − energy/satiatedBar, 0, 1), so a FULL creature's food-seeking
+   *  fades to zero and it steers on its OTHER drives (sight/flow/pheromone/bias) — i.e. it wanders/explores
+   *  instead of grinding the gradient — while a starving one still seeks at full strength. Only the food
+   *  gradient is scaled (not sight/wall/flow/pheromone). false = OFF: the gradient is never scaled, so the
+   *  sim is byte-identical to pre-gate (the OFF golden contract). Reuses the satiatedBar hunger signal. */
+  hungerGatesFood: boolean;
+
+  /** Food-gate shape (only meaningful when hungerGatesFood is on): the food drive = clamp(hunger /
+   *  foodGateThreshold, 0, 1), so a creature forages at FULL strength until its hunger drops below this
+   *  threshold, then eases off — i.e. only a NEARLY-FULL creature reduces its food-seeking (the gate
+   *  doesn't handicap the still-hungry majority). 0.4 ≈ "ease off only in the top 40% of the energy range".
+   *  Set ≤0 for the raw-linear gate (drive = hunger). Unused when hungerGatesFood is off. */
+  foodGateThreshold: number;
+
   // ── Observation hooks (optional; OFF by default — pure instrumentation, never affects the sim) ────
   /** Fired once per successful birth inside reproduce(), in ascending parent-slot order, BEFORE the
    *  tick counter advances. Read-only by contract: it must not touch the store, RNG, or iteration —
@@ -444,6 +465,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     reproOverhead: 15, // energy lost per birth beyond provisioning (parent pays birthEnergy + this)
     birthEnergy: 25, // gene center: offspring provisioning
     offspringOffset: 8,
+    breedCooldown: 0, // OFF: no breeding refractory → byte-identical; >0 spaces reproduction (the dwell lever)
 
     // Steering + evolution. Founders seeded near a chemotaxis brain (genome.ts FOUNDER_BRAIN) with a
     // spread; offspring mutate. senseStep ≈ one food cell (64u) so the gradient reads across cells.
@@ -574,6 +596,10 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     // Interoceptive hunger brain input (lever E2): OFF = byte-identical (hunger synapses unseeded/unread).
     // Flip on to give the brain its own energy-deficit sense, evolving from a neutral 0.
     hungerSense: false,
+    // Hunger-gated food drive (satiation → wander): OFF = byte-identical (food gradient never scaled).
+    // Flip on so a full creature stops climbing the food gradient and drifts on its other drives.
+    hungerGatesFood: false,
+    foodGateThreshold: 0.4, // ease off food-seeking only in the top ~40% of the energy range (unused when gate off)
     ...overrides,
   };
 }
