@@ -105,11 +105,24 @@ Rate/cost/centers only matter once `ageStages` is on — tuned via the life-hist
 - Longevity cost: `SENESCENCE_AGE` above center adds exactly `over·senescenceAgeCost` basal upkeep; at/below
   center adds nothing.
 
+## Demo opt-in — DONE (commit 1fe85bb)
+`ageStages: true` is live in `src/app/main.ts` + `life-history.ts` `DEMO_OVERRIDES`. Measured under the full
+demo config (basalCost 0.08 + walls/flow/pheromones/2-channel/parcels, 4000t seed1): immortal tail capped
+(max lifespan 3832→2455), pop thrives (7079, 54% bred), genes bounded (SENESCENCE_AGE evolves up to ~480 under
+the longer-lived demo regime — still cost-held, not railed; MATURITY_AGE ~90). senescenceRate left 0.01 — a
+live knob to crank for a sharper elder die-off.
+
+## Known non-invariant (acceptable)
+Nothing enforces `MATURITY_AGE < SENESCENCE_AGE`. A mutant could in principle have senescence begin before
+maturity (a juvenile taxed toward death before it can breed) — but that is a biologically dead-end genotype
+selection removes, not a crash or determinism break. Centers (100 vs 400) + the longevity cost keep the
+realized population well-ordered (probe: maturity ~90, senescence ~370–480). Left unenforced to avoid coupling
+two gene clamps; revisit only if a probe ever shows the pathological overlap actually occurring.
+
 ## Out of scope (later increments)
 - Juvenile metabolic discount (a real "grow-cheap-then-breed" strategy) — add only if the probe shows
   `MATURITY_AGE` collapsing to 0 and the juvenile stage being invisible.
 - Eat-rate-by-age coupling.
-- Demo opt-in (`ageStages: true` in `src/app/main.ts`) — after probe tuning of rate/cost/centers.
 
 ## Verification
 - Full suite green (`NODE_OPTIONS=--expose-gc npx vitest run`), `tsc --noEmit`, `eslint .`.
