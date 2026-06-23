@@ -464,4 +464,11 @@ describe('hunger-gated food drive (satiation → stop seeking food)', () => {
     expect(sightThrust(1e6)).toBeCloseTo(sightThrust(0)); // sight is NOT gated by hunger
     expect(sightThrust(1e6)).toBeCloseTo(2); // a full creature still chases on sight
   });
+
+  it('foodGateThreshold ≤ 0 falls back to the raw-linear gate (drive = hunger)', () => {
+    // threshold 0 → no saturating ramp: drive IS hunger. satiatedBar floors at 65 (SIZE 0), so energy 20
+    // → hunger ≈ 0.69 → thrust ≈ FWD_THRUST(2)·0.69, i.e. linearly throttled (not the full 2 a ramp gives).
+    const LINEAR = defaultConfig({ hungerGatesFood: true, foodGateThreshold: 0 });
+    expect(foodThrust(20, LINEAR)).toBeCloseTo(2 * (1 - 20 / 65), 1);
+  });
 });

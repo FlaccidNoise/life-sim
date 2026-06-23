@@ -624,7 +624,7 @@ function runSeed(seed: number, ticks: number, stride: number, overrides: Partial
 }
 
 // ── Seeds-spec parser: "3" | "1-5" | "1,3,7" ──────────────────────────────────────────────────────────
-function parseSeeds(spec: string): number[] {
+export function parseSeeds(spec: string): number[] {
   const out: number[] = [];
   for (const part of spec.split(',')) {
     const t = part.trim();

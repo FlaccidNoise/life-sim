@@ -15,7 +15,7 @@
 import { World } from '../core/world';
 import { defaultConfig, type Config } from '../core/config';
 import { ScalarGene, SCALAR_GENE_COUNT } from '../core/genome';
-import { DEMO_OVERRIDES } from './life-history';
+import { DEMO_OVERRIDES, parseSeeds } from './life-history';
 
 // Genes whose collapse IS the race to minimalism (mean ↓ + SD → 0 = stripped & monomorphic).
 const TRACK = [
@@ -100,17 +100,6 @@ const ARMS: Array<{ name: string; ov: Partial<Config> }> = [
   { name: 'basalCost=0.08', ov: { basalCost: 0.08 } },
   { name: 'sse0+basal0.08', ov: { sizeStoreExp: 0, basalCost: 0.08 } },
 ];
-
-// ── Seeds-spec parser ("1-3" | "1,3,5" | "2") ──
-function parseSeeds(spec: string): number[] {
-  const out: number[] = [];
-  for (const part of spec.split(',')) {
-    const m = part.trim().match(/^(\d+)-(\d+)$/);
-    if (m) for (let s = +m[1]!; s <= +m[2]!; s++) out.push(s);
-    else if (/^\d+$/.test(part.trim())) out.push(+part.trim());
-  }
-  return out.length ? out : [1, 2, 3];
-}
 
 const TICKS = Number(process.argv[2] ?? 6000);
 const SEEDS = parseSeeds(process.argv[3] ?? '1-3');
