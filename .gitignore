@@ -9,3 +9,4 @@ tmp-frames/
 m1-100k-*.png
 *.gif
 .worktrees/
+.superpowers/
