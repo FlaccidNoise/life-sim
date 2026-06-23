@@ -290,6 +290,25 @@ export interface Config {
    *  large value pushes the moved fraction past the CFL=0.25 ceiling and the upwind scheme can go negative. */
   foodChannelBDriftMult: number;
 
+  // ── Migrating food pockets (the pocket CENTRES drift over time so food moves; OFF default = byte-identical) ──
+  /** Master multiplier on pocket drift. 0 (default) = pockets are STATIC: driftPockets is a no-op, no
+   *  forked velocity RNG is drawn, no recarve runs → byte-identical to a fixed archipelago (the OFF state).
+   *  >0 scales every pocket's per-tick displacement: each channel's pockets sweep COHERENTLY along their own
+   *  global direction (dirA / dirB), so the two resource zones cross and rearrange. The forked velocity RNG
+   *  (seeded independently) draws the two directions, so the MAIN organism stream is untouched even when ON. */
+  fertilityDriftRate: number;
+  /** Recarve cadence: the fertility map + channelMask + Kcell are rebuilt from the moved pocket centres every
+   *  this-many ticks (NOT every tick — 40 Gaussians × 128² is ~650k exp). Biomass keeps regrowing/decaying in
+   *  place between recarves, so the pocket visibly migrates. Only read when fertilityDriftRate>0. */
+  fertilityDriftInterval: number;
+  /** Channel-A pocket drift rate multiplier (the SLOW seasonal current). Default 0.2 = A pockets creep. */
+  foodPocketDriftRateA: number;
+  /** Channel-B pocket drift rate multiplier (the NORMAL seasonal current). Default 1.0 = B pockets sweep. */
+  foodPocketDriftRateB: number;
+  /** Base pocket drift speed in world units/tick the per-channel rate scales. The displacement applied at a
+   *  recarve is pocketDriftSpeed · fertilityDriftRate · rate(channel) · fertilityDriftInterval along dir. */
+  pocketDriftSpeed: number;
+
   // ── F2 pheromones (a diffusing deposit-and-sense field; OFF default pheromoneEnabled=false = byte-identical) ──
   /** Master switch for the pheromone field + the 4 PHERO brain genes + PHERO_DEPOSIT scalar gene. false =
    *  the field is never allocated, the genes never draw RNG, and the sim is byte-identical to pre-feature. */
@@ -564,6 +583,14 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     foodPocketChannelMode: 0, // 0 = all pockets channel A (no spatial split); 1 = round-robin distinct islands
     foodChannelAWallTied: false, // ch2-diff OFF: legacy round-robin channel assignment → byte-identical
     foodChannelBDriftMult: 1, // ch2-diff OFF: uniform advection across channels → byte-identical
+    // Migrating food pockets (OFF default: fertilityDriftRate=0 → driftPockets no-ops, no forked velocity RNG,
+    // no recarve → byte-identical to the static archipelago). Flip on to make the pockets MOVE: channel-A
+    // pockets creep along dirA (slow), channel-B pockets sweep along dirB (normal) — two crossing currents.
+    fertilityDriftRate: 0,
+    fertilityDriftInterval: 20, // recarve every 20 ticks (cheap: ~650k exp / 20 ticks ≈ 33k exp/tick)
+    foodPocketDriftRateA: 0.2, // channel A creeps (the slow seasonal current)
+    foodPocketDriftRateB: 1.0, // channel B sweeps at the normal rate
+    pocketDriftSpeed: 0.6, // base world-units/tick the per-channel rate scales
     // F2 pheromones (OFF default: pheromoneEnabled=false → field never allocated, genes never draw → no-op).
     pheromoneEnabled: false,
     pheroDeposit: 1.0, // PHERO_DEPOSIT gene center

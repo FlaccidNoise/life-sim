@@ -67,6 +67,39 @@ export class FoodField {
   // Both default to the byte-identical OFF state (false / 1).
   private readonly wallTied: boolean;
   private readonly driftMult: number;
+  // ── Migrating pockets (the centres themselves move over time). All OFF-state defaults below leave the
+  // field byte-identical to a static archipelago: with driftRate===0, seedPatches draws NO forked velocity
+  // RNG and driftPockets is a no-op. When ON, each channel's pockets sweep along a GLOBAL direction (dirA /
+  // dirB) drawn from a FORKED rng (the main organism stream is never touched), and the fertility/Kcell/
+  // channelMask are periodically RE-CARVED (RNG-free) from the moved centres while biomass stays in place.
+  private driftRate = 0;
+  private driftInterval = 20;
+  private driftRateA = 0.2;
+  private driftRateB = 1;
+  private driftBaseSpeed = 0.6;
+  // Per-pocket persistent state captured at seedPatches so a recarve can rebuild the maps from the MOVED
+  // centres without redrawing anything: live centre (col,row in grid cells), peak amplitude, lever-C scale,
+  // and assigned channel (0=A,1=B,2=C). pc/pr are MUTATED by driftPockets; the rest are preserved as it moves.
+  private pocketPc: Float64Array = new Float64Array(0);
+  private pocketPr: Float64Array = new Float64Array(0);
+  private pocketPeak: Float64Array = new Float64Array(0);
+  private pocketScale: Float64Array = new Float64Array(0);
+  private pocketChan: Int32Array = new Int32Array(0);
+  private pocketCount = 0;
+  private radiusCells = 0;
+  private baseFert = 0;
+  private maxFert = 1;
+  private useVar = false;
+  private variance = 0;
+  // Per-channel global drift unit vectors (world units/displacement direction). Drawn from the forked
+  // velocity rng at seedPatches when drift is ON; A and B are guaranteed to point measurably different ways.
+  private dirAx = 0;
+  private dirAy = 0;
+  private dirBx = 0;
+  private dirBy = 0;
+  // Saved start-of-run pocket centres (grid cells) so reset() restores the archipelago to its seeded t0.
+  private seedPc: Float64Array = new Float64Array(0);
+  private seedPr: Float64Array = new Float64Array(0);
 
   constructor(
     private readonly worldWidth: number,
@@ -185,24 +218,24 @@ export class FoodField {
     // nearest wall (smaller = nearer a wall). Only read when this.wallTied && a mask is active; the draw
     // order is unaffected (pure read after the centre is drawn). undefined → legacy index-based assignment.
     proximityFn?: (x: number, y: number) => number,
+    // Migrating pockets: drift parameters + a FORKED velocity rng (for the per-channel directions). When
+    // driftRate===0 (or velocityRng is undefined) NO draw happens and the field is byte-identical to a
+    // static archipelago. velocityRng is forked off the MAIN rng so the organism stream is never touched.
+    driftRate = 0,
+    driftInterval = 20,
+    driftRateA = 0.2,
+    driftRateB = 1,
+    driftBaseSpeed = 0.6,
+    velocityRng?: { float(): number },
   ): void {
-    const { cols, rows, fertility } = this;
-    fertility.fill(baseFertility);
+    const { cols, rows } = this;
     this.patchCenters.length = 0;
     this.patchCentres = [];
-    const twoSigma2 = 2 * radiusCells * radiusCells;
-    // Only build the scaled-K accumulator when variance is active; otherwise the v=0 path stays exactly
-    // the legacy fertility-only accumulation (→ recomputeK → byte-identical).
+    // variance is active only when a forked rng is supplied; otherwise the v=0 path stays the legacy
+    // fertility-only build (recarve → recomputeK → byte-identical).
     const useVar = variance > 0 && !!forkedRng;
-    this.varianceUsed = useVar ? variance : 0;
-    const kAccum = useVar ? new Float64Array(cols * rows) : null;
-    // Place-coupled channels (channels===3 always; channels===2 ONLY when pocketChannelMode===1 → mask
-    // allocated; N<=2 mode 0 never allocates this, byte-identical): each pocket is assigned a channel and
-    // each cell is tagged with the channel of its DOMINANT (closest, largest-g) pocket. `bestG` tracks that
-    // dominance per cell. RNG-free. Reset to all-A first so dead water (no pocket) defaults to channel A.
+    // mask presence gates the wall-tied channel split below (the carve itself lives in recarve()).
     const mask = this.channelMask;
-    const bestG = mask ? new Float32Array(cols * rows) : null;
-    if (mask) mask.fill(0);
     // PRE-PASS: draw all pocket centres (+ optional peak) up front, in the SAME main-rng order as the legacy
     // single loop (pc, pr, then peak per pocket), recording each. This lets the wall-tied split decide a
     // pocket's channel from GLOBAL info (its wall-proximity rank) without changing the RNG draw sequence.
@@ -240,14 +273,70 @@ export class FoodField {
       }
       // else mode 0: all-A (Int32Array already zero-initialised)
     }
+    // Lever C per-pocket carrying-capacity scale s_p ∈ [1−variance, 1+variance], from the FORKED stream so
+    // the MAIN rng (placement + peak) is identical to the v=0 run. Drawn here in the SAME per-pocket order as
+    // the legacy carve loop (p=0..count), so moving the draw out of the carve loop is byte-identical. s_p ≡ 1
+    // when variance is off (no draw). Captured per pocket so a recarve reuses the SAME scale as it moves.
+    const scales = new Float64Array(count);
+    for (let p = 0; p < count; p++)
+      scales[p] = useVar ? 1 - variance + forkedRng!.float() * (2 * variance) : 1;
+    // Capture the per-pocket persistent state (centre in grid cells, peak, lever-C scale, channel) so the
+    // periodic recarve can rebuild the maps from the MOVED centres without redrawing. Also save the seeded
+    // start centres so reset() restores the archipelago to t0.
+    this.pocketCount = count;
+    this.radiusCells = radiusCells;
+    this.baseFert = baseFertility;
+    this.maxFert = maxFertility;
+    this.useVar = useVar;
+    this.variance = variance;
+    this.pocketPc = pcs;
+    this.pocketPr = prs;
+    this.pocketPeak = peaks;
+    this.pocketScale = scales;
+    this.pocketChan = pocketChannels;
+    this.seedPc = pcs.slice();
+    this.seedPr = prs.slice();
+    // Migrating pockets: stash the drift params + draw the two per-channel GLOBAL directions from the FORKED
+    // velocity rng. driftRate===0 (or no velocity rng) → NO draw, dir vectors stay zero, byte-identical OFF.
+    this.driftRate = driftRate;
+    this.driftInterval = driftInterval;
+    this.driftRateA = driftRateA;
+    this.driftRateB = driftRateB;
+    this.driftBaseSpeed = driftBaseSpeed;
+    if (driftRate > 0 && velocityRng) this.drawDriftDirections(velocityRng);
+    else {
+      this.dirAx = this.dirAy = this.dirBx = this.dirBy = 0;
+    }
+    // Carve the maps from the (start) centres. RNG-free — the actual Gaussian build is shared with the recarve.
+    this.recarve();
+  }
+
+  /**
+   * Rebuild fertility + channelMask + Kcell from the CURRENT per-pocket centres (pocketPc/pocketPr), then
+   * refill biomass to the new map. RNG-FREE and deterministic — it reuses the exact carve math from the
+   * legacy seedPatches body but reads the (possibly moved) centres. Called once at the end of seedPatches
+   * (centres at t0) and again by driftPockets after the centres advance, so the pocket visibly migrates.
+   * With useVar===false this reduces to the legacy fertility-only build → byte-identical to a static field.
+   */
+  private recarve(refillBiomass = true): void {
+    const { cols, rows, fertility } = this;
+    const count = this.pocketCount;
+    fertility.fill(this.baseFert);
+    this.varianceUsed = this.useVar ? this.variance : 0;
+    const twoSigma2 = 2 * this.radiusCells * this.radiusCells;
+    const kAccum = this.useVar ? new Float64Array(cols * rows) : null;
+    // Each cell is tagged with the channel of its DOMINANT (largest-g) pocket. bestG tracks the dominance.
+    // Reset to all-A first so dead water (no pocket) defaults to channel A. Only when a mask is active.
+    const mask = this.channelMask;
+    const bestG = mask ? new Float32Array(cols * rows) : null;
+    if (mask) mask.fill(0);
+    const maxFertility = this.maxFert;
     for (let p = 0; p < count; p++) {
-      const pocketChannel = mask ? pocketChannels[p]! : 0;
-      const pc = pcs[p]!;
-      const pr = prs[p]!;
-      const peak = peaks[p]!;
-      // Lever C per-pocket carrying-capacity scale s_p ∈ [1−variance, 1+variance], from the FORKED stream so
-      // the MAIN rng (placement + peak) is identical to the v=0 run. s_p ≡ 1 when variance is off (no draw).
-      const sp = useVar ? 1 - variance + forkedRng!.float() * (2 * variance) : 1;
+      const pocketChannel = mask ? this.pocketChan[p]! : 0;
+      const pc = this.pocketPc[p]!;
+      const pr = this.pocketPr[p]!;
+      const peak = this.pocketPeak[p]!;
+      const sp = this.pocketScale[p]!;
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
           // toroidal cell distance to the patch centre
@@ -257,16 +346,12 @@ export class FoodField {
           if (dr > rows / 2) dr = rows - dr;
           const g = Math.exp(-(dc * dc + dr * dr) / twoSigma2);
           const i = r * cols + c;
-          // Tag this cell with the channel of its dominant (largest-g) pocket. Only runs when a mask is
-          // active; N<=2 mode 0 skips it entirely so those paths stay byte-identical.
           if (mask && g > bestG![i]!) {
             bestG![i] = g;
             mask[i] = pocketChannel;
           }
           const v = fertility[i]! + peak * g;
           fertility[i] = v > maxFertility ? maxFertility : v;
-          // Lever C K accumulation parallels the fertility build; peak===1 when SP1 is off, so this reduces
-          // exactly to lever C's `g·sp` in isolation (and to the legacy path when both are off → kAccum null).
           if (kAccum) kAccum[i] = kAccum[i]! + peak * g * sp;
         }
       }
@@ -274,9 +359,9 @@ export class FoodField {
     if (kAccum) {
       // Build Kcell from the scaled Gaussian sum, clamped to [0, cap·(1+variance)]: dead water stays at
       // cap·baseFertility and a pocket peak reaches up to cap·(1+variance).
-      const upper = 1 + variance;
+      const upper = 1 + this.variance;
       for (let i = 0; i < kAccum.length; i++) {
-        let f = baseFertility + kAccum[i]!;
+        let f = this.baseFert + kAccum[i]!;
         if (f < 0) f = 0;
         else if (f > upper) f = upper;
         this.Kcell[i] = this.cap * f;
@@ -284,7 +369,72 @@ export class FoodField {
     } else {
       this.recomputeK(); // v=0: byte-identical cap·fertility (reads the float32 fertility map)
     }
-    this.refill();
+    if (refillBiomass) this.refill();
+  }
+
+  /**
+   * Draw the two per-channel GLOBAL drift directions from the FORKED velocity rng (never the main organism
+   * stream). dirA and dirB are unit vectors; B is guaranteed to point MEASURABLY differently from A (if the
+   * random pair lands within ~0.6 rad we rotate B by a fixed offset), so the two channels' pockets sweep
+   * along genuinely crossing currents rather than near-parallel. RNG-free callers (recarve/driftPockets)
+   * never reach this — only seedPatches, once, when drift is ON.
+   */
+  private drawDriftDirections(velocityRng: { float(): number }): void {
+    const aAng = velocityRng.float() * 2 * Math.PI;
+    let bAng = velocityRng.float() * 2 * Math.PI;
+    // Force a clear angular separation: if A and B are closer than ~0.6 rad (either direction), offset B by
+    // a fixed ~2.1 rad so the two currents visibly cross. Deterministic (reads the already-drawn angles).
+    let d = Math.abs(bAng - aAng) % (2 * Math.PI);
+    if (d > Math.PI) d = 2 * Math.PI - d;
+    if (d < 0.6) bAng = aAng + 2.1;
+    this.dirAx = Math.cos(aAng);
+    this.dirAy = Math.sin(aAng);
+    this.dirBx = Math.cos(bAng);
+    this.dirBy = Math.sin(bAng);
+  }
+
+  /**
+   * Advance the pocket CENTRES (so food migrates) and periodically re-carve the maps from the moved centres.
+   * Every driftInterval ticks: each pocket's grid-cell centre steps by its CHANNEL direction (dirA for
+   * channel A, dirB for channel B/C) × driftBaseSpeed × driftRate × the per-channel rate × interval,
+   * toroidally wrapped, then recarve() rebuilds fertility/channelMask/Kcell RNG-FREE. Biomass B stays in
+   * place (it regrows toward the new pockets and decays where they left), so the pocket visibly migrates.
+   * No-op when driftRate===0 (the byte-identical OFF state) — World gates the call on the same condition.
+   */
+  driftPockets(tick: number): void {
+    if (this.driftRate <= 0 || this.pocketCount === 0) return;
+    if (tick === 0 || tick % this.driftInterval !== 0) return;
+    const { cols, rows } = this;
+    // World-units → grid cells per axis (the centres live in grid coords). Displacement this recarve =
+    // base · rate · per-channel-rate · interval, in world units, converted to cells.
+    const baseStep = this.driftBaseSpeed * this.driftRate * this.driftInterval;
+    for (let p = 0; p < this.pocketCount; p++) {
+      const ch = this.pocketChan[p]!;
+      // Channel A (0) creeps at rateA; channels B/C (1/2) sweep at rateB along dirB. A small per-pocket
+      // angular jitter is intentionally omitted: the per-channel direction must DOMINATE (the brief), and a
+      // forked draw here would re-touch the velocity rng during a recarve (which must stay RNG-free).
+      const rate = ch === 0 ? this.driftRateA : this.driftRateB;
+      const dx = ch === 0 ? this.dirAx : this.dirBx;
+      const dy = ch === 0 ? this.dirAy : this.dirBy;
+      const stepWorld = baseStep * rate;
+      // Convert the world-unit step to grid cells (cellW/cellH may differ on a non-square food grid).
+      let pc = this.pocketPc[p]! + (stepWorld * dx) / this.cellW;
+      let pr = this.pocketPr[p]! + (stepWorld * dy) / this.cellH;
+      pc = ((pc % cols) + cols) % cols; // toroidal wrap in grid cells
+      pr = ((pr % rows) + rows) % rows;
+      this.pocketPc[p] = pc;
+      this.pocketPr[p] = pr;
+      // Keep the diagnostic world-space centres in sync with the moved grid centres.
+      const wx = pc * this.cellW;
+      const wy = pr * this.cellH;
+      this.patchCenters[p] = { x: wx, y: wy };
+      this.patchCentres[p] = { x: wx, y: wy };
+    }
+    // Recarve fertility/Kcell/mask from the MOVED centres but DO NOT refill biomass — the existing biomass
+    // persists and the logistic step grows it toward the new pockets (where K rose) + decays it where the
+    // pocket left (K dropped). Refilling here would teleport the field back to full every recarve (a free-
+    // energy injection: population scales with recarve frequency). Biomass-follow is organic, not a reset.
+    this.recarve(false);
   }
 
   /** Read-only view of the fertility map (for the wall generator's pocket awareness). */
@@ -292,9 +442,24 @@ export class FoodField {
     return this.fertility;
   }
 
-  /** Refill to the initial biomass (so World.reset reproduces a fresh construction's state). */
+  /** Refill to the initial biomass (so World.reset reproduces a fresh construction's state). When pockets
+   *  have migrated (drift ON), first restore the centres to their seeded t0 and recarve, so reset() rewinds
+   *  the archipelago to construction. With no pockets / drift OFF this is just the legacy biomass refill
+   *  (pocketCount 0 → restore loop no-ops, recarve rebuilds the same static map → byte-identical). */
   reset(): void {
-    this.refill();
+    if (this.pocketCount > 0) {
+      for (let p = 0; p < this.pocketCount; p++) {
+        this.pocketPc[p] = this.seedPc[p]!;
+        this.pocketPr[p] = this.seedPr[p]!;
+        const wx = this.seedPc[p]! * this.cellW;
+        const wy = this.seedPr[p]! * this.cellH;
+        this.patchCenters[p] = { x: wx, y: wy };
+        this.patchCentres[p] = { x: wx, y: wy };
+      }
+      this.recarve(); // rebuild fertility/Kcell/mask at t0 + refill biomass to it
+    } else {
+      this.refill();
+    }
     this.scratch.fill(0);
     if (this.scratch2) this.scratch2.fill(0);
     if (this.scratch3) this.scratch3.fill(0);
