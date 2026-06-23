@@ -40,6 +40,7 @@ export class World {
    *  determinism contract holds. With both false the organism RNG stream is byte-identical to a pre-env world. */
   readonly wallSenseGenes: boolean;
   readonly flowSenseGenes: boolean;
+  readonly pheroSenseGenes: boolean;
   tick = 0;
   /** Per-tick + cumulative vital rates (telemetry — drives the population graph and the gate). */
   lastBirths = 0;
@@ -85,6 +86,7 @@ export class World {
     // so the genome draw count can't shift if a strength is live-tuned to 0 mid-run.
     this.wallSenseGenes = config.wallRegionCount > 0;
     this.flowSenseGenes = config.flowStrength > 0 || config.flowPushStrength > 0;
+    this.pheroSenseGenes = config.pheromoneEnabled;
     this.setup();
   }
 
@@ -192,6 +194,7 @@ export class World {
         this.wallSenseGenes,
         this.flowSenseGenes,
         this.config.hungerSense,
+        this.pheroSenseGenes,
       );
       seedScalarGenes(s.scalarGenes, i, this.rng, this.config); // incl. life-history + trophic genes
       // Seed predators as OMNIVORES (diet 0.6): they survive on plants through the sparse early phase

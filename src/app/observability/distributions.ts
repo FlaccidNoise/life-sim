@@ -72,6 +72,10 @@ const GENE_LABELS: Record<number, string> = {
   [ScalarGene.SHELTER_DRIVE]: 'shelterDrive',
   [ScalarGene.COHESION_DRIVE]: 'cohesionDrive',
   [ScalarGene.FORAGE_PREF]: 'foragePref',
+  [ScalarGene.FORAGE_PREF_C]: 'foragePrefC',
+  [ScalarGene.SENSE_RANGE_B]: 'senseRangeB',
+  [ScalarGene.SENSE_RANGE_C]: 'senseRangeC',
+  [ScalarGene.PHERO_DEPOSIT]: 'pheroDeposit',
 };
 
 /** The full field registry: energy + age + every scalar gene (range pulled from SCALAR_GENE_SPECS). */
