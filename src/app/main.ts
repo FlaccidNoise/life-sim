@@ -55,6 +55,14 @@ let config: Config = defaultConfig({
   foodPocketChannelMode: 1,
   foodChannelAWallTied: true,
   foodChannelBDriftMult: 3,
+  // Migrating pockets — two crossing seasonal currents: channel A creeps slowly one way, channel B sweeps
+  // the normal rate in a different direction, so the resource zones constantly rearrange (kills the static
+  // "camp on a fixed gradient forever" equilibrium; food you must follow).
+  fertilityDriftRate: 1,
+  fertilityDriftInterval: 20,
+  foodPocketDriftRateA: 0.2,
+  foodPocketDriftRateB: 1.0,
+  pocketDriftSpeed: 0.6,
   // Pheromones (delayed-feedback substrate).
   pheromoneEnabled: true,
   // Sight-only drifting food parcels + the census-proven vision-cost cut → the dead vision genes get a
