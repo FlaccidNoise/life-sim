@@ -109,6 +109,30 @@ export const GLOW_CORE_R = 0.55;
 export const GLOW_CORE_G = 0.9;
 export const GLOW_CORE_B = 1.0;
 
+// ── Resource-channel tints (food-layer overlay + the FORAGE creature color-mode) ────────────────
+// One source of truth for the per-channel colors so the field overlay tint and the creature's
+// dominant-preference hue MATCH (an A-specialist dot is the same green as the channel-A layer). HSV
+// hues; the overlay shader tints its heatmap toward CHANNEL_RGB[ch] and the dot shader colors a
+// specialist with CHANNEL_HUE[ch]. Total reuses channel A (green = the legacy food look).
+export const CHANNEL_HUE = [0.33, 0.11, 0.83] as const; // A green · B amber · C violet
+export const PHERO_HUE = 0.5; // cyan
+
+/** Lit RGB (0..1) for an overlay tint at hue `h` — the bright end of the heatmap ramp. */
+function tintRgb01(h: number): RGB {
+  const c = hsv2rgb(h, 0.78, 0.62);
+  return [c[0] / 255, c[1] / 255, c[2] / 255];
+}
+
+/** Lit RGB (0..1) tint for a resource channel's food-layer overlay (A green · B amber · C violet). */
+export function channelTintRgb(ch: number): RGB {
+  return tintRgb01(CHANNEL_HUE[ch] ?? 0.33);
+}
+
+/** Lit RGB (0..1) tint for the pheromone food-layer overlay (cyan). */
+export function pheroTintRgb(): RGB {
+  return tintRgb01(PHERO_HUE);
+}
+
 // ── Distribution field hues ───────────────────────────────────────────────────────────────────
 // A stable, perceptually-spread hue per field (golden-angle so adjacent indices look distinct).
 // Keyed by the field's index in the registry, NOT its position in the selected set, so a field keeps

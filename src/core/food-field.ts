@@ -316,6 +316,12 @@ export class FoodField {
     return taken;
   }
 
+  /** Whether channel `ch` (0=A, 1=B, 2=C) is allocated/active. Channel A always is; B needs channels≥2,
+   *  C needs channels===3. Read-only — lets the renderer skip a food-layer that has no data. */
+  hasChannel(ch: number): boolean {
+    return ch === 0 ? true : ch === 1 ? this.B2 !== null : ch === 2 ? this.B3 !== null : false;
+  }
+
   /** Total standing biomass across all active channels (for telemetry / the population graph). */
   total(): number {
     let s = 0;
@@ -349,12 +355,44 @@ export class FoodField {
    * Channel A only (render is unchanged by the second channel for now).
    */
   fillTexture(out: Uint8Array): void {
-    // Normalize against the MAX reachable K (cap·(1+variance)) so lever-C rich pockets don't clip white.
-    // With variance off this equals cap, so the texture is unchanged.
+    this.fillTextureChannel(out, 0);
+  }
+
+  /**
+   * PURE-READ render helper (no sim state touched): write one channel's biomass into `out` as
+   * biomass/maxCapacity scaled to 0..255, row-major. `ch` selects 0=A (B), 1=B (B2), 2=C (B3). An
+   * absent channel (e.g. ch 2 when channels<3) fills all zeros. Normalized against maxCapacity exactly
+   * like the legacy fillTexture so lever-C rich pockets don't clip and the per-channel scale is shared.
+   */
+  fillTextureChannel(out: Uint8Array, ch: number): void {
+    const field = ch === 0 ? this.B : ch === 1 ? this.B2 : ch === 2 ? this.B3 : null;
+    if (!field) {
+      out.fill(0);
+      return;
+    }
     const max = this.maxCapacity;
     const inv = max > 0 ? 255 / max : 0;
+    for (let i = 0; i < field.length; i++) {
+      const v = field[i]! * inv;
+      out[i] = v < 0 ? 0 : v > 255 ? 255 : v;
+    }
+  }
+
+  /**
+   * PURE-READ render helper: write the SUM of all present channels' biomass into `out`, scaled to
+   * 0..255 against maxCapacity (the per-cell ceiling). With one channel this equals fillTexture; with
+   * 2/3 channels a full cell sums to ~maxCapacity, so a rich pocket reads bright regardless of split.
+   */
+  fillTextureTotal(out: Uint8Array): void {
+    const max = this.maxCapacity;
+    const inv = max > 0 ? 255 / max : 0;
+    const b2 = this.B2;
+    const b3 = this.B3;
     for (let i = 0; i < this.B.length; i++) {
-      const v = this.B[i]! * inv;
+      let s = this.B[i]!;
+      if (b2) s += b2[i]!;
+      if (b3) s += b3[i]!;
+      const v = s * inv;
       out[i] = v < 0 ? 0 : v > 255 ? 255 : v;
     }
   }

@@ -10,7 +10,7 @@
 import { World } from '../core/world';
 import { defaultConfig, type Config } from '../core/config';
 import { scanHealth } from '../core/health';
-import { Renderer, ColorMode } from '../render/renderer';
+import { Renderer, ColorMode, FoodLayer } from '../render/renderer';
 import { buildOverlaySegments } from '../render/overlay';
 import { Controls } from './observability/controls';
 import { Knobs } from './observability/knobs';
@@ -90,12 +90,49 @@ const recorder = new FollowRecorder();
 
 let running = false;
 let speed = 1; // sim ticks per animation frame; <1 = slow-mo (interpolated for fluid motion)
-let showFood = true; // food heatmap overlay (toggle with 'f')
+// Food-field overlay layer (cycled with 'f'): off → total → channel A/B/C → pheromone → off, skipping
+// layers that don't exist for the current config so the user never lands on a blank.
+let foodLayer: FoodLayer = FoodLayer.TOTAL;
 let showWalls = true; // wall slate layer (toggle with 'w')
 let showOverlay = true; // per-creature debug overlay on the selection (toggle with 'o')
 let showFlow = false; // flow-field current arrows (toggle with 'v')
-let colorMode: ColorMode = ColorMode.LINEAGE; // dot hue source (cycle with 'c'): lineage → diet → energy
+let colorMode: ColorMode = ColorMode.LINEAGE; // dot hue source (cycle with 'c'): lineage → diet → energy → forage
 let selected: { slot: number; gen: number } | null = null;
+
+// ── Food-layer + color-mode HUD labels and the 'f' cycle ───────────────────────────────────────────
+// Human-readable names for the HUD label (indexed by FoodLayer value).
+const FOOD_LAYER_NAMES: Record<number, string> = {
+  [FoodLayer.OFF]: 'off',
+  [FoodLayer.TOTAL]: 'total',
+  [FoodLayer.CHANNEL_A]: 'channel A',
+  [FoodLayer.CHANNEL_B]: 'channel B',
+  [FoodLayer.CHANNEL_C]: 'channel C',
+  [FoodLayer.PHEROMONE]: 'pheromone',
+};
+const COLOR_MODE_NAMES = ['lineage', 'diet', 'energy', 'forage'];
+const foodLayerLabel = el('food-layer-label');
+const colorModeLabel = el('color-mode-label');
+
+/** The ring of layers that actually have data for the current world, in cycle order. Off is always in
+ *  the ring; channels B/C only when foodChannels covers them; pheromone only when the field exists. */
+function availableFoodLayers(): FoodLayer[] {
+  const ring: FoodLayer[] = [FoodLayer.OFF, FoodLayer.TOTAL, FoodLayer.CHANNEL_A];
+  if (config.foodChannels >= 2) ring.push(FoodLayer.CHANNEL_B);
+  if (config.foodChannels >= 3) ring.push(FoodLayer.CHANNEL_C);
+  if (world.phero) ring.push(FoodLayer.PHEROMONE);
+  return ring;
+}
+
+/** Advance foodLayer to the next existing layer (skips blanks), then refresh the HUD label. */
+function cycleFoodLayer(): void {
+  const ring = availableFoodLayers();
+  const cur = ring.indexOf(foodLayer);
+  // If the current layer vanished (e.g. a reset dropped a channel), restart the ring at off.
+  foodLayer = ring[(cur < 0 ? 0 : cur + 1) % ring.length]!;
+  foodLayerLabel.textContent = FOOD_LAYER_NAMES[foodLayer] ?? 'off';
+}
+foodLayerLabel.textContent = FOOD_LAYER_NAMES[foodLayer] ?? 'off';
+
 // Scratch for the selected creature's overlay line vertices ([x,y,r,g,b] per vertex; gl.LINES).
 const overlayScratch = new Float32Array(2048);
 // Path trail of the FOLLOWED creature: recent positions drawn as a fading polyline, so spin-in-place
@@ -316,16 +353,17 @@ globalThis.addEventListener('mouseup', (e) => {
 
 globalThis.addEventListener('resize', () => renderer.resize());
 
-// 'f' food heatmap · 'w' wall layer · 'o' creature overlay · 'v' flow arrows · 'c' cycle dot color-mode · 'l' lock follow-cam + record.
+// 'f' cycle food/field layer · 'w' wall layer · 'o' creature overlay · 'v' flow arrows · 'c' cycle dot color-mode · 'l' lock follow-cam + record.
 globalThis.addEventListener('keydown', (e) => {
-  if (e.key === 'f' || e.key === 'F') showFood = !showFood;
+  if (e.key === 'f' || e.key === 'F') cycleFoodLayer();
   if (e.key === 'w' || e.key === 'W') showWalls = !showWalls;
   if (e.key === 'o' || e.key === 'O') showOverlay = !showOverlay;
   if (e.key === 'v' || e.key === 'V') showFlow = !showFlow;
   if (e.key === 'g' || e.key === 'G') renderer.setGlow(!renderer.glow, 1); // bioluminescence
   if (e.key === 'c' || e.key === 'C') {
-    colorMode = ((colorMode + 1) % 3) as ColorMode;
+    colorMode = ((colorMode + 1) % 4) as ColorMode;
     legend.setColorMode(colorMode);
+    colorModeLabel.textContent = COLOR_MODE_NAMES[colorMode] ?? 'lineage';
   }
   if (e.key === 'l' || e.key === 'L') {
     if (recorder.following) {
@@ -413,7 +451,16 @@ function frame(): void {
     camY = world.store.y[recorder.followedSlot]!;
   }
   renderer.setCamera(camX, camY, zoom);
-  renderer.draw(world.store, world.food, world.walls, showFood, showWalls, interp, colorMode);
+  renderer.draw(
+    world.store,
+    world.food,
+    world.phero,
+    world.walls,
+    foodLayer,
+    showWalls,
+    interp,
+    colorMode,
+  );
   // Path trail of the followed creature (fading old→new; seam-crossing segments skipped so toroidal
   // wraps don't streak). A tight loop = spinning in place; a directed line = foraging.
   if (showOverlay && recorder.following && trailX.length > 1) {

@@ -10,6 +10,7 @@
  */
 import { type OrganismStore } from '../core/store';
 import { type FoodField } from '../core/food-field';
+import { type PheroField } from '../core/phero-field';
 import { type Walls } from '../core/walls';
 import { ScalarGene, SCALAR_GENE_COUNT, SCALAR_GENE_SPECS, MIN_BAND } from '../core/genome';
 import {
@@ -23,11 +24,25 @@ import {
   GLOW_CORE_R,
   GLOW_CORE_G,
   GLOW_CORE_B,
+  CHANNEL_HUE,
+  channelTintRgb,
+  pheroTintRgb,
 } from './palette';
 
 /** Canvas color-by mode (cycled with 'c'): which gene/state drives dot hue. */
-export const ColorMode = { LINEAGE: 0, DIET: 1, ENERGY: 2 } as const;
+export const ColorMode = { LINEAGE: 0, DIET: 1, ENERGY: 2, FORAGE: 3 } as const;
 export type ColorMode = (typeof ColorMode)[keyof typeof ColorMode];
+
+/** Food-field overlay layer (cycled with 'f'): which field the heatmap shows + its tint. */
+export const FoodLayer = {
+  OFF: -1,
+  TOTAL: 0,
+  CHANNEL_A: 1,
+  CHANNEL_B: 2,
+  CHANNEL_C: 3,
+  PHEROMONE: 4,
+} as const;
+export type FoodLayer = (typeof FoodLayer)[keyof typeof FoodLayer];
 
 /** Vision-range cap → saturation normalizer (sourced from the gene spec, not a magic literal). */
 const VISION_MAX = SCALAR_GENE_SPECS[ScalarGene.VISION_RANGE]!.max;
@@ -44,10 +59,11 @@ in float a_vis;                 // vision range, normalized [0,1] → SATURATION
 in float a_spd;                 // current speed, normalized [0,1] → BRIGHTNESS (active bright ↔ idle/jiggling dim)
 in float a_shape;               // 0 herbivore (circle) · 1 omnivore (diamond) · 2 predator (triangle)
 in float a_efrac;               // energy band fraction [0,1] → hue in energy color-mode
+in float a_forage;              // dominant-resource hue [0,1); <0 = generalist (rendered grey)
 uniform vec2 u_cam;             // camera centre in world units (pan)
 uniform vec2 u_canvas;
 uniform float u_scale;          // device px per world unit (base fit × zoom)
-uniform int u_colorMode;        // 0 = lineage · 1 = diet · 2 = energy (cycled with 'c')
+uniform int u_colorMode;        // 0 = lineage · 1 = diet · 2 = energy · 3 = forage (cycled with 'c')
 out vec3 v_color;
 flat out float v_shape;
 vec3 hsv2rgb(float h, float s, float v) {
@@ -79,6 +95,9 @@ void main() {
     v_color = hsv2rgb(dietHue(a_diet), sat, val);          // diet: green herbivore → red predator
   } else if (u_colorMode == 2) {
     v_color = hsv2rgb(energyHue(a_efrac), 0.80, 0.95);     // energy: starving red → satiated green
+  } else if (u_colorMode == 3) {
+    // forage: dominant resource preference (hue matches the food-layer tints); generalist → grey
+    v_color = a_forage < 0.0 ? vec3(0.45) : hsv2rgb(a_forage, 0.85, 0.95);
   } else {
     v_color = hsv2rgb(fract(a_hue), sat, val);             // lineage: hue gene over the full wheel
   }
@@ -123,6 +142,7 @@ in float a_vis;
 in float a_spd;
 in float a_shape;                 // 0 herbivore · 1 omnivore · 2 predator → flare width
 in float a_efrac;                 // energy band fraction [0,1]
+in float a_forage;                // dominant-resource hue [0,1); <0 = generalist
 uniform vec2 u_cam;
 uniform vec2 u_canvas;
 uniform float u_scale;
@@ -158,6 +178,7 @@ void main() {
   vec3 hue;
   if (u_colorMode == 1)      hue = hsv2rgb(dietHue(a_diet), 0.85, 1.0);
   else if (u_colorMode == 2) hue = hsv2rgb(energyHue(a_efrac), 0.80, 1.0);
+  else if (u_colorMode == 3) hue = a_forage < 0.0 ? vec3(0.5) : hsv2rgb(a_forage, 0.85, 1.0);
   else                       hue = hsv2rgb(fract(a_hue), 0.55 + 0.40 * clamp(a_vis, 0.0, 1.0), 1.0);
   // Bias toward the abyssal cyan floor so the whole field keeps a deep-sea cast (warm creatures
   // glow teal-tinged, not orange). 0.35 keeps the creature's own hue legible.
@@ -199,10 +220,11 @@ const FOOD_FRAG = `#version 300 es
 precision mediump float;
 in vec2 v_uv;
 uniform sampler2D u_tex;
+uniform vec3 u_tint;                                       // lit end of the ramp (per food layer)
 out vec4 outColor;
 void main() {
-  float b = texture(u_tex, v_uv).r;                       // biomass / capacity, 0..1
-  vec3 col = mix(vec3(0.04, 0.055, 0.08), vec3(0.10, 0.42, 0.24), b); // bg → green
+  float b = texture(u_tex, v_uv).r;                       // field value / capacity, 0..1
+  vec3 col = mix(vec3(0.04, 0.055, 0.08), u_tint, b);     // bg → layer tint
   outColor = vec4(col, 1.0);
 }`;
 
@@ -282,6 +304,7 @@ export class Renderer {
   private readonly spdBuffer: WebGLBuffer;
   private readonly shapeBuffer: WebGLBuffer;
   private readonly efracBuffer: WebGLBuffer;
+  private readonly forageBuffer: WebGLBuffer;
   private readonly dotScratch: Float32Array;
   private readonly hueScratch: Float32Array;
   private readonly sizeScratch: Float32Array;
@@ -290,6 +313,7 @@ export class Renderer {
   private readonly spdScratch: Float32Array;
   private readonly shapeScratch: Float32Array;
   private readonly efracScratch: Float32Array;
+  private readonly forageScratch: Float32Array;
   private readonly aPos: number;
   private readonly aHue: number;
   private readonly aSize: number;
@@ -298,6 +322,7 @@ export class Renderer {
   private readonly aSpd: number;
   private readonly aShape: number;
   private readonly aEfrac: number;
+  private readonly aForage: number;
   // bioluminescence glow pass (additive; reuses the dot attribute buffers)
   private readonly glowProgram: WebGLProgram;
   private readonly gPos: number;
@@ -308,6 +333,7 @@ export class Renderer {
   private readonly gSpd: number;
   private readonly gShape: number;
   private readonly gEfrac: number;
+  private readonly gForage: number;
   // debug overlay lines
   private readonly lineProgram: WebGLProgram;
   private readonly lineBuffer: WebGLBuffer;
@@ -320,6 +346,8 @@ export class Renderer {
   private readonly foodTex: WebGLTexture;
   private foodTexData: Uint8Array = new Uint8Array(0);
   private foodTexInit = false;
+  private foodTexCols = 0;
+  private foodTexRows = 0;
   // wall overlay (mirrors the food layer; NEAREST so the 0/1 mask stays crisp)
   private readonly wallProgram: WebGLProgram;
   private readonly aWallCorner: number;
@@ -360,6 +388,7 @@ export class Renderer {
     this.aSpd = gl.getAttribLocation(this.dotProgram, 'a_spd');
     this.aShape = gl.getAttribLocation(this.dotProgram, 'a_shape');
     this.aEfrac = gl.getAttribLocation(this.dotProgram, 'a_efrac');
+    this.aForage = gl.getAttribLocation(this.dotProgram, 'a_forage');
     this.gPos = gl.getAttribLocation(this.glowProgram, 'a_pos');
     this.gHue = gl.getAttribLocation(this.glowProgram, 'a_hue');
     this.gSize = gl.getAttribLocation(this.glowProgram, 'a_size');
@@ -368,6 +397,7 @@ export class Renderer {
     this.gSpd = gl.getAttribLocation(this.glowProgram, 'a_spd');
     this.gShape = gl.getAttribLocation(this.glowProgram, 'a_shape');
     this.gEfrac = gl.getAttribLocation(this.glowProgram, 'a_efrac');
+    this.gForage = gl.getAttribLocation(this.glowProgram, 'a_forage');
     this.aCorner = gl.getAttribLocation(this.foodProgram, 'a_corner');
     this.aWallCorner = gl.getAttribLocation(this.wallProgram, 'a_corner');
     this.aLinePos = gl.getAttribLocation(this.lineProgram, 'a_pos');
@@ -381,6 +411,7 @@ export class Renderer {
     const spdBuffer = gl.createBuffer();
     const shapeBuffer = gl.createBuffer();
     const efracBuffer = gl.createBuffer();
+    const forageBuffer = gl.createBuffer();
     const quadBuffer = gl.createBuffer();
     const lineBuffer = gl.createBuffer();
     const foodTex = gl.createTexture();
@@ -394,6 +425,7 @@ export class Renderer {
       !spdBuffer ||
       !shapeBuffer ||
       !efracBuffer ||
+      !forageBuffer ||
       !quadBuffer ||
       !lineBuffer ||
       !foodTex ||
@@ -404,6 +436,7 @@ export class Renderer {
     this.spdBuffer = spdBuffer;
     this.shapeBuffer = shapeBuffer;
     this.efracBuffer = efracBuffer;
+    this.forageBuffer = forageBuffer;
     this.dotBuffer = dotBuffer;
     this.hueBuffer = hueBuffer;
     this.sizeBuffer = sizeBuffer;
@@ -420,6 +453,7 @@ export class Renderer {
     this.spdScratch = new Float32Array(capacity);
     this.shapeScratch = new Float32Array(capacity);
     this.efracScratch = new Float32Array(capacity);
+    this.forageScratch = new Float32Array(capacity);
 
     // Unit quad as a triangle strip: (0,0)(1,0)(0,1)(1,1).
     gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
@@ -499,6 +533,49 @@ export class Renderer {
   }
 
   /**
+   * Resolve a foodLayer to its grid + a PURE-READ texture-fill closure + the overlay tint, or null
+   * when the layer has no data (OFF, channel C with foodChannels<3, or pheromone with phero===null) so
+   * draw() skips the heatmap entirely. The fill closures call the read-only fillTexture* helpers.
+   */
+  private fieldSource(
+    food: FoodField | null,
+    phero: PheroField | null,
+    layer: FoodLayer,
+  ): {
+    cols: number;
+    rows: number;
+    tint: [number, number, number];
+    fill: (o: Uint8Array) => void;
+  } | null {
+    if (layer === FoodLayer.PHEROMONE) {
+      if (!phero) return null;
+      return {
+        cols: phero.cols,
+        rows: phero.rows,
+        tint: pheroTintRgb(),
+        fill: (o) => phero.fillTexture(o),
+      };
+    }
+    if (!food || layer === FoodLayer.OFF) return null;
+    if (layer === FoodLayer.TOTAL) {
+      return {
+        cols: food.cols,
+        rows: food.rows,
+        tint: channelTintRgb(0),
+        fill: (o) => food.fillTextureTotal(o),
+      };
+    }
+    const ch = layer - 1; // CHANNEL_A=1→0, B=2→1, C=3→2
+    if (!food.hasChannel(ch)) return null;
+    return {
+      cols: food.cols,
+      rows: food.rows,
+      tint: channelTintRgb(ch),
+      fill: (o) => food.fillTextureChannel(o, ch),
+    };
+  }
+
+  /**
    * Draw a frame. `interp` (optional) smooths motion between sim ticks: positions are lerped from the
    * previous tick's snapshot toward the current state by `alpha ∈ [0,1]` — so even at fractional sim
    * speeds (0.125×…) movement is fluid, not a teleport per tick. Wrap-aware so toroidal crossings
@@ -508,8 +585,9 @@ export class Renderer {
   draw(
     store: OrganismStore,
     food: FoodField | null,
+    phero: PheroField | null,
     walls: Walls | null,
-    showFood: boolean,
+    foodLayer: FoodLayer,
     showWalls: boolean,
     interp?: {
       prevX: Float64Array;
@@ -524,41 +602,49 @@ export class Renderer {
     gl.clearColor(0.04, 0.055, 0.08, 1); // --bg (also fills the off-world margins)
     gl.clear(gl.COLOR_BUFFER_BIT);
 
-    // ── Food heatmap (under the dots) ──
-    if (food && showFood) {
-      const cells = food.cols * food.rows;
+    // ── Field heatmap (under the dots) ──
+    // foodLayer selects which scalar field is shown + how it's tinted: TOTAL/A = green (legacy look),
+    // B = amber, C = violet, PHEROMONE = cyan. A layer with no data (channel C when foodChannels<3, or
+    // pheromone when phero===null) renders nothing (src===null below → block skipped).
+    const src = this.fieldSource(food, phero, foodLayer);
+    if (src) {
+      const { cols, rows, tint } = src;
+      const cells = cols * rows;
       if (this.foodTexData.length !== cells) this.foodTexData = new Uint8Array(cells);
-      food.fillTexture(this.foodTexData);
+      src.fill(this.foodTexData);
       gl.useProgram(this.foodProgram);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, this.foodTex);
-      if (!this.foodTexInit) {
+      if (!this.foodTexInit || this.foodTexCols !== cols || this.foodTexRows !== rows) {
         gl.texImage2D(
           gl.TEXTURE_2D,
           0,
           gl.R8,
-          food.cols,
-          food.rows,
+          cols,
+          rows,
           0,
           gl.RED,
           gl.UNSIGNED_BYTE,
           this.foodTexData,
         );
         this.foodTexInit = true;
+        this.foodTexCols = cols;
+        this.foodTexRows = rows;
       } else {
         gl.texSubImage2D(
           gl.TEXTURE_2D,
           0,
           0,
           0,
-          food.cols,
-          food.rows,
+          cols,
+          rows,
           gl.RED,
           gl.UNSIGNED_BYTE,
           this.foodTexData,
         );
       }
       gl.uniform1i(gl.getUniformLocation(this.foodProgram, 'u_tex'), 0);
+      gl.uniform3f(gl.getUniformLocation(this.foodProgram, 'u_tint'), tint[0], tint[1], tint[2]);
       this.setCommonUniforms(this.foodProgram, sc);
       gl.bindBuffer(gl.ARRAY_BUFFER, this.quadBuffer);
       gl.enableVertexAttribArray(this.aCorner);
@@ -619,6 +705,7 @@ export class Renderer {
       const ssc = this.spdScratch;
       const psc = this.shapeScratch;
       const esc = this.efracScratch;
+      const fsc = this.forageScratch;
       const { liveIndices, x, y, vx, vy, hue, genId, scalarGenes, energy } = store;
       const useInterp = interp != null && interp.alpha < 1;
       const a = useInterp ? interp.alpha : 0;
@@ -658,6 +745,25 @@ export class Renderer {
               : repro > 0
                 ? (0.5 * e) / repro
                 : 0;
+        // Forage color-mode: dominant resource preference from the barycentric FORAGE_PREF/FORAGE_PREF_C.
+        // wC=prefC, wB=pref·(1−prefC), wA=(1−pref)·(1−prefC). A clear majority (>0.5) → that channel's hue
+        // (matching the food-layer tints); no dominant weight → −1 sentinel (rendered desaturated grey).
+        const pref = scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.FORAGE_PREF]!;
+        const prefC = scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.FORAGE_PREF_C]!;
+        const wC = prefC;
+        const wB = pref * (1 - prefC);
+        const wA = (1 - pref) * (1 - prefC);
+        let dom = 0;
+        let domW = wA;
+        if (wB > domW) {
+          dom = 1;
+          domW = wB;
+        }
+        if (wC > domW) {
+          dom = 2;
+          domW = wC;
+        }
+        fsc[k] = domW > 0.5 ? CHANNEL_HUE[dom]! : -1;
       }
       gl.useProgram(this.dotProgram);
       gl.bindBuffer(gl.ARRAY_BUFFER, this.dotBuffer);
@@ -692,6 +798,10 @@ export class Renderer {
       gl.bufferData(gl.ARRAY_BUFFER, esc.subarray(0, n), gl.DYNAMIC_DRAW);
       gl.enableVertexAttribArray(this.aEfrac);
       gl.vertexAttribPointer(this.aEfrac, 1, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.forageBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, fsc.subarray(0, n), gl.DYNAMIC_DRAW);
+      gl.enableVertexAttribArray(this.aForage);
+      gl.vertexAttribPointer(this.aForage, 1, gl.FLOAT, false, 0, 0);
       this.setCommonUniforms(this.dotProgram, sc);
       gl.uniform1i(gl.getUniformLocation(this.dotProgram, 'u_colorMode'), colorMode);
       gl.drawArrays(gl.POINTS, 0, n);
@@ -731,6 +841,9 @@ export class Renderer {
         gl.bindBuffer(gl.ARRAY_BUFFER, this.efracBuffer);
         gl.enableVertexAttribArray(this.gEfrac);
         gl.vertexAttribPointer(this.gEfrac, 1, gl.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.forageBuffer);
+        gl.enableVertexAttribArray(this.gForage);
+        gl.vertexAttribPointer(this.gForage, 1, gl.FLOAT, false, 0, 0);
         this.setCommonUniforms(this.glowProgram, sc);
         gl.uniform1i(gl.getUniformLocation(this.glowProgram, 'u_colorMode'), colorMode);
         gl.uniform1f(gl.getUniformLocation(this.glowProgram, 'u_glow'), this.glowIntensity);
