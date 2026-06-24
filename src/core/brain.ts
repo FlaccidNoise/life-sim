@@ -84,6 +84,8 @@ export function steer(
   const ageSense = cfg.ageSense; // feed maturity = min(age/ageNorm,1) as an interoceptive input
   const ageNorm = cfg.ageNorm;
   const readinessSense = cfg.readinessSense; // feed repro-readiness (clamped to the breeding band)
+  const bodySense = cfg.bodySense; // A1a: feed own-SIZE/own-DIET as interoceptive inputs
+  const cellRadius = cfg.cellRadius; // SIZE normalization divisor (2·cellRadius)
   const hiddenLayer = cfg.hiddenLayer; // nonlinear tanh layer (conditional logic) on top of the linear map
   const moodGlow = cfg.moodGlow; // bioluminescence output read from the hidden "mood" layer (display + signal)
   // Per-creature scratch for the hidden layer (reused each iteration — no per-creature allocation).
@@ -217,6 +219,19 @@ export function steer(
       thrustRaw += learnedBrain[b + Brain.READINESS_THRUST]! * readiness;
     }
 
+    // Interoceptive own-body inputs (A1a): own normalized SIZE + own DIET on their own synapses. Constant
+    // within a life → EVOLVE-ONLY (no eligibility below; a learning synapse on a constant input is the bias
+    // positive-feedback runaway learn() excludes biases for). Gated, not +0'd, so the OFF path is untouched.
+    let sizeN = 0;
+    let dietN = 0;
+    if (bodySense) {
+      sizeN = genes[sg + ScalarGene.SIZE]! / (2 * cellRadius);
+      dietN = genes[sg + ScalarGene.DIET]!;
+      turnRaw += learnedBrain[b + Brain.SIZE_TURN]! * sizeN + learnedBrain[b + Brain.DIET_TURN]! * dietN;
+      thrustRaw +=
+        learnedBrain[b + Brain.SIZE_THRUST]! * sizeN + learnedBrain[b + Brain.DIET_THRUST]! * dietN;
+    }
+
     // Hidden layer (slice E): a tanh layer adding a NONLINEAR correction on top of the linear map above
     // (skip-connection). Computed once per creature; its units feed turn + thrust here, eatGate below, and
     // are reused for the hidden→output eligibility traces. Input→hidden is frozen (evolved); hidden→output
@@ -234,6 +249,8 @@ export function steer(
       hidIn[HiddenInput.HUNGER] = hunger;
       hidIn[HiddenInput.AGE] = aged;
       hidIn[HiddenInput.READINESS] = readiness;
+      hidIn[HiddenInput.SIZE] = sizeN; // 0 when !bodySense → no hidden contribution either
+      hidIn[HiddenInput.DIET] = dietN;
       hidIn[HiddenInput.BIAS] = 1;
       const w1 = b + HIDDEN_W1;
       for (let j = 0; j < HIDDEN_UNITS; j++) {
