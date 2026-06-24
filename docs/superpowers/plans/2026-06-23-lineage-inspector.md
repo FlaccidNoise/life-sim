@@ -258,7 +258,6 @@ export class Lineage {
   private nodes = new Map<string, LineageNode>();
   private pending: Array<{ pKey: string; cSlot: number; cGen: number }> = [];
   private prunedLeaves = 0;
-  private unattributed = 0; // births whose parent wasn't tracked (guard; expect 0)
 
   constructor(private readonly maxNodes: number = DEFAULT_MAX_NODES) {}
 
@@ -274,7 +273,6 @@ export class Lineage {
     this.nodes.clear();
     this.pending.length = 0;
     this.prunedLeaves = 0;
-    this.unattributed = 0;
     for (let k = 0; k < store.liveCount; k++) {
       const slot = store.liveIndices[k]!;
       const gen = store.genId[slot]!;
@@ -301,8 +299,9 @@ export class Lineage {
     if (this.pending.length === 0) return;
     for (const b of this.pending) {
       const cKey = keyOf(b.cSlot, b.cGen);
+      // Parent should always be present (founders are snapshotted before any step); a missing parent
+      // is the only orphan case → record the child as a gen-1 root rather than dropping the birth.
       const parent = this.nodes.get(b.pKey);
-      if (parent === undefined) this.unattributed++;
       this.nodes.set(cKey, {
         key: cKey,
         slot: b.cSlot,
@@ -413,7 +412,7 @@ Expected: PASS — 5 tests.
 - [ ] **Step 5: Typecheck + lint**
 
 Run: `npx tsc --noEmit && npx eslint src/app/observability/lineage.ts src/app/observability/lineage.test.ts`
-Expected: clean (no output / exit 0). Note: `unattributed` is assigned but only read defensively — if eslint flags it as unused, that's expected to pass because it IS written; leave it (it's a deliberate guard counter).
+Expected: clean (no output / exit 0).
 
 - [ ] **Step 6: Commit**
 
