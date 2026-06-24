@@ -3,6 +3,7 @@ import { OrganismStore } from './store';
 import { FoodField } from './food-field';
 import { SpatialHash } from './spatial-hash';
 import { senseFood, senseCreatures, senseEnv } from './sense';
+import { PheroField } from './phero-field';
 import { Walls } from './walls';
 import { defaultConfig } from './config';
 import { ScalarGene, SCALAR_GENE_COUNT } from './genome';
@@ -117,7 +118,7 @@ describe('senseFood', () => {
 });
 
 describe('senseEnv', () => {
-  it('leaves all 4 transients at 0 when both features are off', () => {
+  it('leaves all env transients at 0 when the features are off', () => {
     const s = new OrganismStore(1);
     const i = s.alloc();
     s.rebuildLive();
@@ -125,11 +126,38 @@ describe('senseEnv', () => {
     s.wallSenseY[i] = 9;
     s.flowSenseX[i] = 9;
     s.flowSenseY[i] = 9;
-    senseEnv(s, null, null, null, defaultConfig({ wallRegionCount: 0, flowStrength: 0 }));
+    s.glowSenseX[i] = 9;
+    s.glowSenseY[i] = 9;
+    senseEnv(s, null, null, null, null, defaultConfig({ wallRegionCount: 0, flowStrength: 0 }));
     expect(s.wallSenseX[i]).toBe(0);
     expect(s.wallSenseY[i]).toBe(0);
     expect(s.flowSenseX[i]).toBe(0);
     expect(s.flowSenseY[i]).toBe(0);
+    expect(s.glowSenseX[i]).toBe(0); // glow-sense off (null field) → 0
+    expect(s.glowSenseY[i]).toBe(0);
+  });
+
+  it('senses the glow field gradient into glowSenseX/Y (glow-sense channel, slice F3)', () => {
+    const s = new OrganismStore(1);
+    const i = s.alloc();
+    s.x[i] = 64;
+    s.y[i] = 64;
+    s.heading[i] = 0;
+    s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.SENSE_RANGE] = W / COLS; // one-cell step (phero-test parity)
+    s.rebuildLive();
+    const glowField = new PheroField(W, H, COLS, ROWS);
+    // Deposit into the +x neighbour cell the step samples (x=64+8=72 → cell at x∈[72,80)); a far blob would
+    // be missed by the one-cell finite difference.
+    glowField.deposit(76, 64, 50);
+    senseEnv(
+      s,
+      null,
+      null,
+      null,
+      glowField,
+      defaultConfig({ wallRegionCount: 0, flowStrength: 0 }),
+    );
+    expect(s.glowSenseX[i]!).toBeGreaterThan(0); // ∇G points up-gradient, toward the glow blob (+x)
   });
 
   it('writes per-channel scent gradients when the field is active', () => {
@@ -141,7 +169,7 @@ describe('senseEnv', () => {
     s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.SENSE_RANGE] = 20;
     const scent = new ScentField(1000, 1000, 50, 50);
     scent.deposit(610, 500, 0, 0, 100, true); // PREY blob one cell to the +x (590±20 straddles it)
-    senseEnv(s, null, null, scent, defaultConfig({ pheromoneEnabled: true }));
+    senseEnv(s, null, null, scent, null, defaultConfig({ pheromoneEnabled: true }));
     expect(s.scentSenseX[i * SCENT_CHANNELS + Scent.PREY]!).toBeGreaterThan(0); // gradient toward the blob
     expect(s.scentSenseX[i * SCENT_CHANNELS + Scent.PRED]!).toBe(0); // PRED channel empty → flat
   });

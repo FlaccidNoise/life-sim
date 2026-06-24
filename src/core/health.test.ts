@@ -63,12 +63,14 @@ describe('scanHealth', () => {
     expect(r.violations.some((v) => v.kind === 'oob' && v.slot === i)).toBe(true);
   });
 
-  it('catches non-positive energy on a live creature', () => {
+  it('catches NEGATIVE energy on a live creature (but allows exactly 0 — a post-reproduce transient)', () => {
     const w = smallWorld();
     const i = w.store.liveIndices[0]!;
+    w.store.energy[i] = -1; // negative = a real bug (cull floor is ≤0)
+    expect(scanHealth(w).byKind.energy).toBe(1);
+    // exactly 0 is a valid transient (reproduce can spend a parent to 0 after the cull) → NOT flagged
     w.store.energy[i] = 0;
-    const r = scanHealth(w);
-    expect(r.byKind.energy).toBe(1);
+    expect(scanHealth(w).byKind.energy).toBe(0);
   });
 
   it('catches a scalar gene outside its hard clamp range', () => {

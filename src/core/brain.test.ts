@@ -1,11 +1,23 @@
 import { describe, it, expect } from 'vitest';
 import { OrganismStore } from './store';
 import { defaultConfig, type Config } from './config';
-import { Brain, BRAIN_GENES, ScalarGene, SCALAR_GENE_COUNT } from './genome';
+import {
+  Brain,
+  BRAIN_GENES,
+  ScalarGene,
+  SCALAR_GENE_COUNT,
+  HIDDEN_UNITS,
+  HIDDEN_OUTPUTS,
+  HIDDEN_W1,
+  HIDDEN_W2,
+  GLOW_BIAS,
+  GLOW_HID,
+} from './genome';
 import { steer, learn } from './brain';
 
-// Default config (hungerSense OFF) for every steer() call below; the hunger lever has its own block.
-const CFG = defaultConfig();
+// Default config for the motor-mechanics steer() tests below. brainGatedEating is OFF here to ISOLATE
+// turn/thrust from the eat-immobilize penalty (slice B) — the eat-gate has its own test block that opts in.
+const CFG = defaultConfig({ brainGatedEating: false });
 
 /** Set a creature's genome brain weights (slot), seed generous movement genes (so steer's per-creature
  *  maxTurn/maxThrust clamps + the efficiency multiplier don't interfere), and sync the runtime brain. */
@@ -131,7 +143,7 @@ describe('steer (per-creature brain)', () => {
   });
 
   it('reverse cap also applies under motorSquash', () => {
-    const cfg = defaultConfig({ reverseThrustFraction: 0.5 });
+    const cfg = defaultConfig({ reverseThrustFraction: 0.5, brainGatedEating: false }); // isolate reverse
     const s = new OrganismStore(4);
     const i = s.alloc();
     s.heading[i] = 0;
@@ -140,6 +152,207 @@ describe('steer (per-creature brain)', () => {
     steer(s, false, 0.2, true, cfg); // motorSquash = true
     expect(s.forceX[i]!).toBeCloseTo(-2.5); // floored at 0.5·5
     expect(s.forceY[i]!).toBeCloseTo(0);
+  });
+
+  it('eating slows the body (eat-gate thrust penalty) when brainGatedEating is on', () => {
+    const cruise = (cfg: Config): number => {
+      const s = new OrganismStore(4);
+      const i = s.alloc();
+      s.heading[i] = 0;
+      setBrain(s, i, { THRUST_BIAS: 1, EAT_GATE_BIAS: 10 }); // gate≈1 (head down, eating) + cruise thrust
+      s.rebuildLive();
+      steer(s, false, 0.2, false, cfg);
+      return Math.hypot(s.forceX[i]!, s.forceY[i]!);
+    };
+    const on = cruise(defaultConfig({ eatMovePenalty: 0.4 }));
+    const off = cruise(defaultConfig({ brainGatedEating: false }));
+    expect(on).toBeLessThan(off); // eating costs mobility
+    expect(on).toBeCloseTo(off * (1 - 0.4)); // gate≈1 → thrust ×(1−penalty)
+  });
+
+  it('a threat ahead lowers the eat-gate (lift the head → regain mobility)', () => {
+    const gateWith = (sightFwd: number): number => {
+      const s = new OrganismStore(4);
+      const i = s.alloc();
+      s.heading[i] = 0; // facing +x → sFwd === sightX
+      s.sightX[i] = sightFwd; // appeal-signed sight fwd: negative = threat ahead
+      s.sightY[i] = 0;
+      setBrain(s, i, { EAT_GATE_BIAS: 4, EAT_GATE_SIGHT_FWD: 2 }); // founder-style seed
+      s.rebuildLive();
+      steer(s, false, 0.2, false, defaultConfig());
+      return s.eatGate[i]!;
+    };
+    expect(gateWith(-2)).toBeLessThan(gateWith(0)); // threat ahead drops the gate (stop eating)
+    expect(gateWith(-2)).toBeLessThan(0.6); // and meaningfully so
+  });
+
+  it('brainGatedEating off leaves thrust unpenalized (legacy motor)', () => {
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.heading[i] = 0;
+    setBrain(s, i, { THRUST_BIAS: 1, EAT_GATE_BIAS: 10 });
+    s.rebuildLive();
+    steer(s, false, 0.2, false, defaultConfig({ brainGatedEating: false }));
+    expect(Math.hypot(s.forceX[i]!, s.forceY[i]!)).toBeCloseTo(1); // full cruise, no eat penalty
+  });
+
+  it('feeds maturity (min(age/ageNorm,1)) as an interoceptive input when ageSense is on', () => {
+    const thrustAtAge = (ageTicks: number): number => {
+      const s = new OrganismStore(4);
+      const i = s.alloc();
+      s.heading[i] = 0;
+      s.age[i] = ageTicks;
+      setBrain(s, i, { AGE_THRUST: 1.0 }); // older → more thrust
+      s.rebuildLive();
+      // brainGatedEating off to isolate the age term from the eat-immobilize penalty; ageNorm = 1000.
+      steer(s, false, 0.2, false, defaultConfig({ brainGatedEating: false, ageNorm: 1000 }));
+      return Math.hypot(s.forceX[i]!, s.forceY[i]!);
+    };
+    expect(thrustAtAge(1000)).toBeGreaterThan(thrustAtAge(0)); // a mature creature thrusts more
+    expect(thrustAtAge(0)).toBe(0); // a newborn (aged 0) gets no age contribution
+  });
+
+  it('ageSense off → age does not affect the motor', () => {
+    const mk = (ageTicks: number): number => {
+      const s = new OrganismStore(4);
+      const i = s.alloc();
+      s.heading[i] = 0;
+      s.age[i] = ageTicks;
+      setBrain(s, i, { AGE_THRUST: 1.0 });
+      s.rebuildLive();
+      steer(s, false, 0.2, false, defaultConfig({ ageSense: false, brainGatedEating: false }));
+      return Math.hypot(s.forceX[i]!, s.forceY[i]!);
+    };
+    expect(mk(1000)).toBe(mk(0)); // age ignored entirely when off
+  });
+
+  it('feeds repro-readiness (progress through the breeding band) when readinessSense is on', () => {
+    const thrustAtEnergy = (e: number): number => {
+      const s = new OrganismStore(4);
+      const i = s.alloc();
+      s.heading[i] = 0;
+      s.energy[i] = e;
+      setBrain(s, i, { READINESS_THRUST: 1.0 }); // readier → more thrust (for the test)
+      s.rebuildLive();
+      steer(s, false, 0.2, false, defaultConfig({ brainGatedEating: false }));
+      return Math.hypot(s.forceX[i]!, s.forceY[i]!);
+    };
+    // setBrain seeds REPRO_THRESHOLD 60 → energy below the repro bar gives readiness 0; well above the bar
+    // saturates readiness at 1. So a near-breeding creature thrusts more than a just-surviving one.
+    expect(thrustAtEnergy(30)).toBe(0); // below the repro bar → readiness 0
+    expect(thrustAtEnergy(200)).toBeGreaterThan(thrustAtEnergy(30)); // near/over the breeding bar → readiness up
+  });
+
+  it('readinessSense off → breeding energy does not affect the motor', () => {
+    const mk = (e: number): number => {
+      const s = new OrganismStore(4);
+      const i = s.alloc();
+      s.heading[i] = 0;
+      s.energy[i] = e;
+      setBrain(s, i, { READINESS_THRUST: 1.0 });
+      s.rebuildLive();
+      steer(
+        s,
+        false,
+        0.2,
+        false,
+        defaultConfig({ readinessSense: false, brainGatedEating: false }),
+      );
+      return Math.hypot(s.forceX[i]!, s.forceY[i]!);
+    };
+    expect(mk(200)).toBe(mk(30)); // readiness ignored entirely when off
+  });
+
+  it('hidden layer adds a tanh nonlinear contribution on top of the linear map (skip-connection)', () => {
+    const mk = (hidden: boolean): number => {
+      const s = new OrganismStore(4);
+      const i = s.alloc();
+      s.heading[i] = 0;
+      s.senseX[i] = 1; // food fwd = 1 (HiddenInput.FOOD_FWD = 0)
+      setBrain(s, i, {});
+      const b = i * BRAIN_GENES;
+      s.brain[b + HIDDEN_W1 + 0 * HIDDEN_UNITS + 0] = 2; // input0 → hidden0, weight 2 → h0 = tanh(2·1)
+      s.brain[b + HIDDEN_W2 + 0 * HIDDEN_OUTPUTS + 1] = 3; // hidden0 → thrust, weight 3
+      s.resetLearned(i);
+      s.rebuildLive();
+      steer(s, false, 0.2, false, defaultConfig({ hiddenLayer: hidden, brainGatedEating: false }));
+      return Math.hypot(s.forceX[i]!, s.forceY[i]!);
+    };
+    expect(mk(false)).toBe(0); // hidden off + no linear thrust weights → zero
+    expect(mk(true)).toBeCloseTo(3 * Math.tanh(2)); // hidden on → thrust = W2 · tanh(W1·input)
+  });
+
+  it('hidden layer learns output-side only: hidden→output (W2) drifts, input→hidden (W1) stays frozen', () => {
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.heading[i] = 0;
+    s.senseX[i] = 1; // food fwd drives hidden unit 0
+    setBrain(s, i, { THRUST_BIAS: 1 }); // a nonzero motor output so the W2 eligibility (pre·post) is live
+    const b = i * BRAIN_GENES;
+    s.brain[b + HIDDEN_W1 + 0 * HIDDEN_UNITS + 0] = 1; // input0 → hidden0 (a live hidden unit)
+    s.resetLearned(i);
+    s.rebuildLive();
+    const w1Idx = b + HIDDEN_W1 + 0 * HIDDEN_UNITS + 0;
+    const w2Idx = b + HIDDEN_W2 + 0 * HIDDEN_OUTPUTS + 1; // hidden0 → thrust
+    for (let t = 0; t < 200; t++) {
+      s.prevEnergy[i] = 50;
+      s.energy[i] = 60; // sustained reward
+      steer(s, true, 0.5, false, defaultConfig({ brainGatedEating: false }));
+      learn(s, 1.0, 0.0, 0.5, 5);
+    }
+    expect(s.learnedBrain[w1Idx]!).toBe(s.brain[w1Idx]!); // input→hidden frozen (evolved-only, no credit path)
+    expect(s.learnedBrain[w2Idx]!).not.toBe(s.brain[w2Idx]!); // hidden→output consolidated within life
+  });
+
+  it('mood-glow output = sigmoid of the hidden layer (display-only, does not move the body); off → 0', () => {
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.heading[i] = 0;
+    s.senseX[i] = 1; // drives hidden unit 0
+    setBrain(s, i, {});
+    const b = i * BRAIN_GENES;
+    s.brain[b + HIDDEN_W1 + 0 * HIDDEN_UNITS + 0] = 2; // input0 → hidden0 → h0 = tanh(2)
+    s.brain[b + GLOW_BIAS] = 0; // clean baseline for the expected value (override the dim default)
+    s.brain[b + GLOW_HID + 0] = 3; // hidden0 → glow, weight 3
+    s.resetLearned(i);
+    s.rebuildLive();
+    const fx0 = s.forceX[i];
+    steer(s, false, 0.2, false, defaultConfig({ moodGlow: true }));
+    expect(s.glow[i]!).toBeCloseTo(1 / (1 + Math.exp(-3 * Math.tanh(2)))); // sigmoid(GLOW_BIAS + h0·3)
+    // glow is display-only — it must not have perturbed the motor relative to a no-glow run.
+    const sNoGlow = new OrganismStore(4);
+    const k = sNoGlow.alloc();
+    sNoGlow.heading[k] = 0;
+    sNoGlow.senseX[k] = 1;
+    setBrain(sNoGlow, k, {});
+    sNoGlow.brain[k * BRAIN_GENES + HIDDEN_W1 + 0 * HIDDEN_UNITS + 0] = 2;
+    sNoGlow.resetLearned(k);
+    sNoGlow.rebuildLive();
+    steer(sNoGlow, false, 0.2, false, defaultConfig({ moodGlow: false }));
+    expect(s.forceX[i]!).toBe(sNoGlow.forceX[k]!); // motor identical with glow on vs off
+    expect(fx0).toBe(0);
+    // off → glow not computed (stays 0)
+    s.glow[i] = 0;
+    steer(s, false, 0.2, false, defaultConfig({ moodGlow: false }));
+    expect(s.glow[i]!).toBe(0);
+  });
+
+  it('different hidden→glow weights glow differently for the same state (lineage divergence)', () => {
+    const glowWith = (w: number): number => {
+      const s = new OrganismStore(4);
+      const i = s.alloc();
+      s.heading[i] = 0;
+      s.senseX[i] = 1;
+      setBrain(s, i, {});
+      const b = i * BRAIN_GENES;
+      s.brain[b + HIDDEN_W1 + 0 * HIDDEN_UNITS + 0] = 2; // same hidden encoding…
+      s.brain[b + GLOW_HID + 0] = w; // …different glow wiring
+      s.resetLearned(i);
+      s.rebuildLive();
+      steer(s, false, 0.2, false, defaultConfig({ moodGlow: true }));
+      return s.glow[i]!;
+    };
+    expect(glowWith(3)).not.toBeCloseTo(glowWith(-3)); // opposite glow triggers → different glow
   });
 
   it('a positive WALL_FWD_THRUST weight converts a forward wall-gradient into forward thrust', () => {
@@ -286,6 +499,26 @@ describe('Baldwin within-life learning (reward-modulated)', () => {
     // Biases stay at instinct no matter how hard/long we reinforce (Float32-exact equality to the seed).
     expect(s.learnedBrain[b + Brain.TURN_BIAS]!).toBe(s.brain[b + Brain.TURN_BIAS]!);
     expect(s.learnedBrain[b + Brain.THRUST_BIAS]!).toBe(s.brain[b + Brain.THRUST_BIAS]!);
+  });
+
+  it('does NOT make EAT_GATE_BIAS plastic either (slice B — same constant-input runaway guard)', () => {
+    const cfgEat = defaultConfig({ brainGatedEating: true }); // eat-gate ON so its elig path is exercised
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.heading[i] = 0;
+    s.senseX[i] = 1; // food fwd = 1 → eat-gate FWD weight has a live input to consolidate on
+    setBrain(s, i, { EAT_GATE_BIAS: 1.0 });
+    s.rebuildLive();
+    const b = i * BRAIN_GENES;
+    for (let t = 0; t < 200; t++) {
+      s.prevEnergy[i] = 50;
+      s.energy[i] = 60;
+      steer(s, true, 0.5, false, cfgEat);
+      learn(s, 1.0, 0.0, 0.5, 5);
+    }
+    expect(s.learnedBrain[b + Brain.EAT_GATE_BIAS]!).toBe(s.brain[b + Brain.EAT_GATE_BIAS]!); // pinned
+    // …while a non-bias eat-gate weight DID consolidate, proving the elig path is live (not vacuous).
+    expect(s.learnedBrain[b + Brain.EAT_GATE_FWD]!).not.toBe(s.brain[b + Brain.EAT_GATE_FWD]!);
   });
 
   it('resetLearned restores the runtime brain to the genome (no Lamarck across birth)', () => {

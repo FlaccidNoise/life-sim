@@ -7,7 +7,9 @@
  * The invariants checked are HARD guarantees of the core, not soft preferences:
  *   - nonfinite: every kinematic field, gene, and brain weight must be finite (NaN/±Inf = a bug).
  *   - oob: integrate() wraps toroidally, so a live creature's position is always in [0,world).
- *   - energy: cullDead() removes anything ≤0, so a live creature always has energy > 0.
+ *   - energy: cullDead() removes anything ≤0 each tick, but reproduce() runs AFTER the cull and can spend
+ *           a parent down to exactly 0 giving birth (a valid transient — it grazes back up or is culled
+ *           next tick). So NEGATIVE energy is the bug; exactly 0 on a live creature is allowed.
  *   - gene: every scalar gene is hard-clamped to [spec.min, spec.max] at seed AND every mutation,
  *           so a live value outside its range means the clamp was bypassed or memory was corrupted.
  *
@@ -102,8 +104,8 @@ export function scanHealth(world: World, maxViolations = 50): HealthReport {
     if (Number.isFinite(xi) && (xi < 0 || xi >= worldWidth)) add('oob', i, 'x', xi);
     if (Number.isFinite(yi) && (yi < 0 || yi >= worldHeight)) add('oob', i, 'y', yi);
 
-    // ── energy: a live creature is always above the cull floor ──
-    if (Number.isFinite(ei) && ei <= 0) add('energy', i, 'energy', ei);
+    // ── energy: NEGATIVE is a bug (cull floor is ≤0); exactly 0 is a valid post-reproduce transient ──
+    if (Number.isFinite(ei) && ei < 0) add('energy', i, 'energy', ei);
 
     // ── gene: finite + within its hard clamp range ──
     const gb = i * SCALAR_GENE_COUNT;

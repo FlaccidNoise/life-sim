@@ -27,6 +27,16 @@ export class OrganismStore {
   readonly forceX: Float64Array;
   readonly forceY: Float64Array;
 
+  // Transient per-tick EAT-GATE actuator (0..1): the brain's grazing throttle (slice B). Recomputed each
+  // tick in steer(); read by metabolize (intake) and applied as a thrust penalty (eating slows the body).
+  // Not hashed (derived). Defaults to 1 (full eating) on alloc for the edge-case pre-steer read.
+  readonly eatGate: Float64Array;
+
+  // Transient per-tick MOOD-GLOW actuator (0..1): the brain's bioluminescence output (slice F). Recomputed
+  // each tick in steer() from the hidden "mood" layer; read by the renderer (biolum brightness) and, when
+  // the glow-sense channel is on, deposited into the glow field. Not hashed (derived).
+  readonly glow: Float64Array;
+
   // Transient per-tick sensed food gradient (world frame), recomputed each tick from positions+food.
   // Not hashed (derived). Surfaced in the inspector so you can see what an organism perceives.
   readonly senseX: Float64Array;
@@ -48,6 +58,11 @@ export class OrganismStore {
   // hashed (derived). Wired into steer via the 16 PHERO brain genes (4 channels × lat/fwd × turn/thrust).
   readonly scentSenseX: Float64Array;
   readonly scentSenseY: Float64Array;
+  // Transient per-tick GLOW sense (world frame): the local ∇G gradient of the glow field. Recomputed each
+  // tick by senseEnv when the field is active (else left 0); not hashed (derived). Wired into steer via the
+  // 4 GLOW_SENSE brain genes (slice F3 — the receiver side of the glow communication channel).
+  readonly glowSenseX: Float64Array;
+  readonly glowSenseY: Float64Array;
 
   // Genome (heritable, mutated at birth): the brain weights (BRAIN_GENES per slot) + the hue gene
   // + the scalar genes (SCALAR_GENE_COUNT per slot — see genome.ScalarGene).
@@ -96,6 +111,8 @@ export class OrganismStore {
     this.energy = new Float64Array(capacity);
     this.forceX = new Float64Array(capacity);
     this.forceY = new Float64Array(capacity);
+    this.eatGate = new Float64Array(capacity);
+    this.glow = new Float64Array(capacity);
     this.senseX = new Float64Array(capacity);
     this.senseY = new Float64Array(capacity);
     this.sightX = new Float64Array(capacity);
@@ -106,6 +123,8 @@ export class OrganismStore {
     this.flowSenseY = new Float64Array(capacity);
     this.scentSenseX = new Float64Array(capacity * SCENT_CHANNELS);
     this.scentSenseY = new Float64Array(capacity * SCENT_CHANNELS);
+    this.glowSenseX = new Float64Array(capacity);
+    this.glowSenseY = new Float64Array(capacity);
     this.brain = new Float32Array(capacity * BRAIN_GENES);
     this.hue = new Float32Array(capacity);
     this.scalarGenes = new Float32Array(capacity * SCALAR_GENE_COUNT);
@@ -150,6 +169,7 @@ export class OrganismStore {
     this.breedCooldownLeft[slot] = 0; // a newborn is breeding-ready (first breed is never gated)
     this.seeking[slot] = 0;
     this.seekTicksLeft[slot] = 0;
+    this.eatGate[slot] = 1; // default full eating until steer() recomputes (avoids a stale pre-steer read)
     return slot;
   }
 

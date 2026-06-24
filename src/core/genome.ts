@@ -393,7 +393,8 @@ export const Brain = {
   // F2 identity-bearing scent: 4 channels × (lat/fwd × turn/thrust) = 16 synapses. The per-channel
   // gradient ∇P_c (lateral, forward) in the heading frame → turn + thrust. Gated on pheroSenseGenes; seed
   // at 0 so evolution picks each channel's SIGN — climb prey-scent / descend predator-scent / cluster on
-  // kin-hue. Kept LAST so each gated block draws RNG only when on. Per-channel base = PHERO_C0_LAT_TURN+c*4.
+  // kin-hue. Per-channel base = PHERO_C0_LAT_TURN+c*4. These 16 weights ALSO feed the hidden layer (the 8
+  // SCENT_C* HiddenInput slots) — the same dual linear+hidden path every other sense uses.
   PHERO_C0_LAT_TURN: 20,
   PHERO_C0_FWD_TURN: 21,
   PHERO_C0_LAT_THRUST: 22,
@@ -410,11 +411,95 @@ export const Brain = {
   PHERO_C3_FWD_TURN: 33,
   PHERO_C3_LAT_THRUST: 34,
   PHERO_C3_FWD_THRUST: 35,
+  // Eat-gate OUTPUT (slice B): a 0..1 sigmoid throttle on grazing intake that ALSO costs mobility (eating
+  // slows the body), so eating is a decision — graze (fed, slow, catchable) vs lift the head to flee. Reads
+  // food + sight + bias. Seeded to default-eat (high bias) with a threat→suppress weight so prey lift their
+  // heads when a predator is ahead, then evolution/learning refine it. Always present (on-by-default policy).
+  EAT_GATE_BIAS: 36,
+  EAT_GATE_FWD: 37, // food gradient fwd → eat more when food is ahead
+  EAT_GATE_LAT: 38,
+  EAT_GATE_SIGHT_FWD: 39, // appeal-signed sight fwd → keep eating toward appeal, lift head from a threat ahead
+  EAT_GATE_SIGHT_LAT: 40,
+  // Interoceptive AGE input (slice C): the creature's maturity (min(age/ageNorm,1), 0=newborn…1=old) drives
+  // turn + thrust on its own synapses, so life-stage behaviour can evolve. Always present (on-by-default).
+  AGE_TURN: 41,
+  AGE_THRUST: 42, // seeded slightly + so older creatures roam a touch more (restless elders); evolution tunes
+  // Interoceptive REPRO-READINESS input (slice D): clamp((energy−reproThreshold)/(satiatedBar−reproThreshold),
+  // 0,1) — 0 while just surviving … 1 near the breeding bar — on its own synapses. Distinct from hunger (it
+  // is clamped to the breeding BAND, not the full bar). Seeded 0; the repro-timing response evolves.
+  READINESS_TURN: 43,
+  READINESS_THRUST: 44,
 } as const;
 /** Senses-core brain weights (food + sight) — the count present before walls/flow/hunger, and the RNG-draw
  *  count when all gated blocks are off. Each gated block extends the array but draws RNG only when on. */
 export const BRAIN_CORE_GENES = 10;
-export const BRAIN_GENES = 36;
+/** Number of named (non-hidden) brain weights — the linear sensor→motor map above (slots 0..44). The hidden
+ *  layer's weight blocks start here. */
+export const NAMED_BRAIN_GENES = 45;
+
+/** Order of the 20 scalars fed into the hidden layer (slice E) — the same heading-frame inputs turn/thrust
+ *  read, plus a constant bias. The single pre-merge PHERO pair is replaced by the 4 identity-bearing scent
+ *  channels (8 inputs: C0..C3 × {fwd,lat}) so scent feeds the NONLINEAR layer, not just the linear synapses.
+ *  Index into the W1 input→hidden block. */
+export const HiddenInput = {
+  FOOD_FWD: 0,
+  FOOD_LAT: 1,
+  SIGHT_FWD: 2,
+  SIGHT_LAT: 3,
+  WALL_FWD: 4,
+  WALL_LAT: 5,
+  FLOW_FWD: 6,
+  FLOW_LAT: 7,
+  SCENT_C0_FWD: 8,
+  SCENT_C0_LAT: 9,
+  SCENT_C1_FWD: 10,
+  SCENT_C1_LAT: 11,
+  SCENT_C2_FWD: 12,
+  SCENT_C2_LAT: 13,
+  SCENT_C3_FWD: 14,
+  SCENT_C3_LAT: 15,
+  HUNGER: 16,
+  AGE: 17,
+  READINESS: 18,
+  BIAS: 19,
+} as const;
+
+/** Hidden layer (slice E): a fixed H-unit tanh layer adding a NONLINEAR correction ON TOP of the linear
+ *  sensor→motor map (skip-connection / residual), giving the brain conditional logic ("flee only if a
+ *  predator is close AND I'm cornered") the single linear layer cannot express. H is a COMPILE-TIME constant
+ *  (it sizes the genome stride, so it can't be a live knob). Two contiguous weight blocks after the named
+ *  genes, addressed by index math:
+ *    - W1 input→hidden:  HIDDEN_W1 + i*HIDDEN_UNITS + j     (HIDDEN_INPUTS × HIDDEN_UNITS)
+ *    - W2 hidden→output: HIDDEN_W2 + j*HIDDEN_OUTPUTS + o   (HIDDEN_UNITS × HIDDEN_OUTPUTS)
+ *  Inputs ordered by HiddenInput; outputs are turn(0)/thrust(1)/eatGate(2). All seed 0 (+founder noise breaks
+ *  symmetry). Plasticity is asymmetric: input→hidden is EVOLVED-only (frozen within life — the Hebbian rule
+ *  can't credit-assign through a hidden unit), hidden→output LEARNS. Gated by cfg.hiddenLayer (the forward
+ *  pass is skipped when off); the weights are always drawn (on-by-default policy). */
+export const HIDDEN_UNITS = 4; // escape hatch: bump to 6 only if 4 bottlenecks — not speculatively
+export const HIDDEN_INPUTS = 20; // 8 sense pairs (food/sight/wall/flow) + 8 scent (C0..C3 × fwd/lat) + hunger/age/readiness/bias
+export const HIDDEN_OUTPUTS = 3; // turn=0, thrust=1, eatGate=2
+export const HIDDEN_W1 = NAMED_BRAIN_GENES; // input→hidden block start (slot 45)
+export const HIDDEN_W2 = HIDDEN_W1 + HIDDEN_INPUTS * HIDDEN_UNITS; // hidden→output block start (slot 125)
+
+/** Mood-glow output (slice F): bioluminescence = sigmoid(GLOW_BIAS + Σ_j hidden_j·GLOW_HID_j), reading the
+ *  hidden "mood" layer + a bias. DISPLAY-ONLY (no motor/energy effect) and EVOLVE-ONLY (no within-life
+ *  learning). The hidden→glow weights seed at 0 + founder noise, so each LINEAGE drifts to its OWN glow
+ *  trigger — different species evolve different glow mechanisms. Hue stays for lineage; glow is a separate
+ *  channel. Always drawn (on-by-default policy); the forward pass is gated on cfg.moodGlow. */
+export const GLOW_BIAS = HIDDEN_W2 + HIDDEN_UNITS * HIDDEN_OUTPUTS; // 137 (after the hidden W2 block)
+export const GLOW_HID = GLOW_BIAS + 1; // 138; hidden→glow weights (HIDDEN_UNITS of them)
+
+/** GLOW-SENSE weights (slice F3): the glow-field gradient ∇G (lateral, forward) in the heading frame →
+ *  turn + thrust — the receiver side of the glow communication channel (the deposit side reads store.glow).
+ *  A tail block of 4 weights AFTER the hidden→glow block. They have a REAL input (the sensed gradient), so
+ *  unlike the display-only mood-glow weights they both EVOLVE and LEARN (eligibility traces in steer). Seed
+ *  at 0 so evolution picks the SIGN — approach the glowing crowd or flee it. Always drawn (on-by-default,
+ *  like the eat-gate/age/readiness/glow blocks), so the draw stream is consistent whether glowSense is on. */
+export const GLOW_SENSE_LAT_TURN = GLOW_HID + HIDDEN_UNITS; // 142
+export const GLOW_SENSE_FWD_TURN = GLOW_SENSE_LAT_TURN + 1; // 107
+export const GLOW_SENSE_LAT_THRUST = GLOW_SENSE_LAT_TURN + 2; // 108
+export const GLOW_SENSE_FWD_THRUST = GLOW_SENSE_LAT_TURN + 3; // 109
+export const BRAIN_GENES = GLOW_SENSE_LAT_TURN + 4; // 146
 
 /** Founder brain ≈ the hand-tuned chemotaxis controller (turn toward lateral food, thrust up-gradient,
  *  gentle cruise) + ACTIVE sight: turn toward & thrust along the appeal-signed sight vector. Because that
@@ -427,10 +512,33 @@ export const BRAIN_GENES = 36;
  *   SIGHT_LAT_TURN, SIGHT_FWD_TURN, SIGHT_LAT_THRUST, SIGHT_FWD_THRUST,
  *   WALL_LAT_TURN, WALL_FWD_TURN, WALL_LAT_THRUST, WALL_FWD_THRUST,
  *   FLOW_LAT_TURN, FLOW_FWD_TURN, FLOW_LAT_THRUST, FLOW_FWD_THRUST, HUNGER_TURN, HUNGER_THRUST,
- *   PHERO_C0_LAT_TURN … PHERO_C3_FWD_THRUST (16)]. The 16 phero weights seed at 0. */
+ *   PHERO_C0_LAT_TURN … PHERO_C3_FWD_THRUST (16),
+ *   EAT_GATE_BIAS, EAT_GATE_FWD, EAT_GATE_LAT, EAT_GATE_SIGHT_FWD, EAT_GATE_SIGHT_LAT,
+ *   AGE_TURN, AGE_THRUST, READINESS_TURN, READINESS_THRUST]. The 16 scent weights seed at 0; the eat-gate
+ *   seeds BIAS 4 (sigmoid≈0.98 → eat ~fully by default) + SIGHT_FWD 2 (a threat ahead pulls the gate down →
+ *   lift head + regain mobility); the age input seeds AGE_THRUST 0.3 (older → a touch more thrust), AGE_TURN
+ *   0; the repro-readiness pair seeds 0 (the repro-timing response evolves); every other weight 0. */
 const FOUNDER_BRAIN: readonly number[] = [
-  1.2, 0, 0, 1.5, 0, 0.3, 1.0, 0, 0, 1.2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-  0, 0, 0, 0, 0, 0,
+  // core (0-9): chemotaxis + sight
+  1.2, 0, 0, 1.5, 0, 0.3, 1.0, 0, 0, 1.2,
+  // wall (10-13), flow (14-17), hunger (18-19) — neutral
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  // scent C0..C3 (20-35) — 16 weights seed 0 (evolution picks each channel's sign)
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  // eat-gate (36-40): BIAS 4, FWD 0, LAT 0, SIGHT_FWD 2, SIGHT_LAT 0
+  4, 0, 0, 2, 0,
+  // age (41-42): AGE_TURN 0, AGE_THRUST 0.3 ; readiness (43-44): 0, 0
+  0, 0.3, 0, 0,
+  // Hidden layer (slice E): HIDDEN_INPUTS·HIDDEN_UNITS (80) input→hidden + HIDDEN_UNITS·HIDDEN_OUTPUTS (12)
+  // hidden→output weights, all seeded 0 — the founder Gaussian noise at seed breaks the unit symmetry.
+  ...new Array<number>(HIDDEN_INPUTS * HIDDEN_UNITS + HIDDEN_UNITS * HIDDEN_OUTPUTS).fill(0),
+  // Mood-glow (slice F): GLOW_BIAS dim baseline (sigmoid(−1.5)≈0.18 — glow is the exception, not the norm);
+  // the HIDDEN_UNITS hidden→glow weights seed 0 (founder noise → each lineage drifts to its own trigger).
+  -1.5,
+  ...new Array<number>(HIDDEN_UNITS).fill(0),
+  // Glow-sense (slice F3): the 4 ∇G turn/thrust weights seed 0 — evolution picks the sign (approach a
+  // glowing crowd or flee it). Always drawn (consistent stream); they learn (real input → eligibility).
+  ...new Array<number>(4).fill(0),
 ];
 
 /** Seed a founder's genome: founder brain + Gaussian spread, random hue (lineage colors diverge).

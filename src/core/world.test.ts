@@ -200,7 +200,7 @@ describe('World — Phase 0 determinism contract', () => {
     expect(off.stateHash()).toBe(baseline.stateHash());
     // ON diverges → the pockets actually migrate + recarve, so the food field (sim state) changes
     expect(on.stateHash()).not.toBe(baseline.stateHash());
-  }, 60000); // 3 full 8192² worlds × 1000 ticks (the ON one recarves 50×) → headroom over the 20s default
+  }, 120000); // 3 full 8192² worlds × 1000 ticks (the ON one recarves 50×) → headroom over the 20s default
 
   it('fertilityDriftRate ON leaves the ORGANISM RNG stream byte-identical (forked velocity rng)', () => {
     // The cardinal guarantee: pocket-drift velocity randomness is on its OWN forked rng (stream 0x5eed), so
@@ -277,7 +277,7 @@ describe('World — Phase 0 determinism contract', () => {
         expect(Math.hypot(s.vx[i]!, s.vy[i]!)).toBeLessThanOrEqual(maxSpeed + 1e-6);
       }
     }
-  }, 60000); // 5000 ticks at the richer foodCap 40 sustains ~1600 creatures → ~22s; 60s leaves CI headroom
+  }, 120000); // 5000 ticks at the richer foodCap 40 sustains ~1600 creatures → ~22s; 60s leaves CI headroom
 
   it('alive-guardrail (CI proxy): population sustains BOTH births and deaths without extinction', () => {
     // The playground spec's ONE automated guardrail (§10): the world must stay alive — no extinction,
@@ -289,7 +289,7 @@ describe('World — Phase 0 determinism contract', () => {
     expect(w.totalDeaths).toBeGreaterThan(0);
     expect(w.population).toBeGreaterThan(0); // not extinct
     expect(w.population).toBeLessThan(cfg.maxOrganisms); // food-limited, not buffer-pegged
-  });
+  }, 120000); // the hidden layer (slice E) adds per-creature compute, so 3000 ticks needs the longer budget
 
   it('full env stack (walls+flow+advection+push) is deterministic AND non-vacuous', () => {
     // Reproducibility with the WHOLE env feature set live, including the size-scaled flow PUSH that is
