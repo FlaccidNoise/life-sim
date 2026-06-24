@@ -335,16 +335,12 @@ export function geneUpkeep(genes: Float32Array, slot: number, cfg: Config): numb
   return cost;
 }
 
-/** Brain contribution to genetic distance. v1 returns 0 — a modular seam: when the NN topology change
- *  lands, this becomes a real per-weight distance without touching geneticDistance's callers. */
-export function brainDistance(_brain: Float32Array, _a: number, _b: number): number {
-  return 0;
-}
-
 /** Genetic distance between two creatures: normalised L2 over the ECOLOGICAL scalar genes (DIET up-
  *  weighted by cfg.mateDietWeight so trophic role dominates → predator/prey reproductive isolation falls
  *  out of the metric). DISPLAY/PREFERENCE are sexual-selection axes, NOT species axes, so they weight 0.
- *  Plus a modular brain term (0 in v1). This is the compatibility metric the mate gate thresholds on. */
+ *  A brain-weight term can be added here when the NN topology change lands (per-weight distance over the
+ *  brain block) without touching this function's callers. This is the compatibility metric the mate gate
+ *  thresholds on. */
 export function geneticDistance(genes: Float32Array, a: number, b: number, cfg: Config): number {
   const ab = a * SCALAR_GENE_COUNT;
   const bb = b * SCALAR_GENE_COUNT;
