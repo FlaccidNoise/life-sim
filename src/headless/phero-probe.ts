@@ -10,6 +10,7 @@
 import { defaultConfig } from '../core/config';
 import { World } from '../core/world';
 import { Brain, BRAIN_GENES } from '../core/genome';
+import { Scent } from '../core/scent-field';
 
 const TICKS = 4000;
 const SEED = 1;
@@ -57,13 +58,13 @@ console.log(header);
 console.log('-'.repeat(header.length));
 
 const sample = (tick: number): void => {
-  const phero = w.phero!;
-  const meanP = phero.total() / cells;
+  const prey = w.scent!.channel(Scent.PREY); // sample the PREY channel as the representative trail
+  const meanP = prey.total() / cells;
   const row =
     `${tick}`.padStart(6) +
     `${w.population}`.padStart(8) +
     meanP.toExponential(3).padStart(12) +
-    phero.max().toExponential(3).padStart(12) +
+    prey.max().toExponential(3).padStart(12) +
     meanPheroGene(w, Brain.PHERO_C0_FWD_THRUST).toFixed(5).padStart(12) +
     absMeanPheroGene(w, Brain.PHERO_C0_FWD_THRUST).toFixed(5).padStart(12) +
     meanPheroGene(w, Brain.PHERO_C0_LAT_TURN).toFixed(5).padStart(12) +
