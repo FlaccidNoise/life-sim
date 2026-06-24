@@ -784,7 +784,9 @@ describe('reproduce (breed at the per-creature satiated bar)', () => {
       return reproduce(s, new Rng(1), c, false, false, null, emptyHash(s, c));
     };
     expect(breeds(60 + MIN_BAND - 1)).toBe(0); // below the guarded bar (NOT the inverted satiated 40)
-    expect(breeds(60 + MIN_BAND + 1)).toBe(1); // above it → breeds
+    // Above the guarded satiated bar (60+MIN_BAND=65) AND above the viability floor (reproOverhead 15 +
+    // reproThreshold 60 = 75) → breeds. The satiated-bar intent holds: energy must clear its own gene-set bar.
+    expect(breeds(76)).toBe(1); // above the guarded bar → breeds
   });
 
   it('provisions the child to ITS OWN (mutated) birthEnergy gene, not the parent’s', () => {

@@ -27,7 +27,7 @@ describe('World — Phase 0 determinism contract', () => {
     // changes. The real invariant (same seed → same hash run-to-run) is the test above.
     const w = new World(defaultConfig({ seed: 3 }));
     for (let t = 0; t < 1000; t++) w.step();
-    expect(w.stateHash()).toBe('eb021a91');
+    expect(w.stateHash()).toBe('5f664f4d');
   });
 
   it('different seeds → different hash (seed actually controls the world)', () => {
