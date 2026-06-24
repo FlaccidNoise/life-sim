@@ -328,3 +328,42 @@ export function senseCreatures(
     sightY[i] = sy;
   }
 }
+
+/** Count each creature's live neighbors within cfg.crowdSenseRange via the start-of-tick hash — the A1b
+ *  interoceptive density sense, written into store.crowding. Independent of vision (a blind creature still
+ *  feels its crowd) and of the dead lever-D crowdingMortality scan. Gated on bodySense (skipped → crowding
+ *  stays 0). Integer count, ascending live-slot order, RNG-free → deterministic. */
+export function senseCrowding(store: OrganismStore, hash: SpatialHash, cfg: Config): void {
+  const { liveIndices, liveCount, x, y, crowding } = store;
+  if (!cfg.bodySense) return; // steer gates crowdN on bodySense too, so leaving crowding stale is harmless
+  const { cols, rows, bucketStart, sorted } = hash;
+  const { worldWidth, worldHeight, crowdSenseRange } = cfg;
+  const r2 = crowdSenseRange * crowdSenseRange;
+  const cellSize = Math.min(worldWidth / cols, worldHeight / rows);
+  const halfGrid = Math.floor((Math.min(cols, rows) - 1) / 2);
+  const cr = Math.min(halfGrid, Math.max(1, Math.ceil(crowdSenseRange / cellSize)));
+  for (let k = 0; k < liveCount; k++) {
+    const i = liveIndices[k]!;
+    const xi = x[i]!;
+    const yi = y[i]!;
+    const ci = hash.colOf(xi);
+    const cj = hash.rowOf(yi);
+    let n = 0;
+    for (let dy = -cr; dy <= cr; dy++) {
+      const by = (cj + dy + rows) % rows;
+      for (let dx = -cr; dx <= cr; dx++) {
+        const bx = (ci + dx + cols) % cols;
+        const b = by * cols + bx;
+        const end = bucketStart[b + 1]!;
+        for (let idx = bucketStart[b]!; idx < end; idx++) {
+          const j = sorted[idx]!;
+          if (j === i) continue;
+          const ddx = wrapDelta(xi - x[j]!, worldWidth);
+          const ddy = wrapDelta(yi - y[j]!, worldHeight);
+          if (ddx * ddx + ddy * ddy <= r2) n++;
+        }
+      }
+    }
+    crowding[i] = n;
+  }
+}

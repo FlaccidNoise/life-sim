@@ -9,7 +9,7 @@ import { FlowField } from './flow-field';
 import { ScentField } from './scent-field';
 import { PheroField } from './phero-field';
 import { Parcels } from './parcels';
-import { senseFood, senseCreatures, senseEnv } from './sense';
+import { senseFood, senseCreatures, senseEnv, senseCrowding } from './sense';
 import { steer, learn } from './brain';
 import {
   seedGenome,
@@ -301,6 +301,7 @@ export class World {
       cfg,
     );
     senseCreatures(s, this.hash, cfg, this.walls, this.parcels);
+    senseCrowding(s, this.hash, cfg);
     steer(s, cfg.learningEnabled, cfg.eligLambda, cfg.motorSquash, cfg);
     // GLOW DEPOSIT (slice F3): every live creature broadcasts this tick's store.glow (set by steer) into the
     // glow field, so the gradient others sense reflects who is lit up. RNG-free; ascending order. Gated (null
