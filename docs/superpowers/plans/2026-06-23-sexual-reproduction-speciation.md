@@ -665,15 +665,70 @@ function findMate(store: OrganismStore, p: number, cfg: Config, hash: SpatialHas
 ```
 (`wrapDelta` already exists in economy.ts.)
 
-Change `reproduce`'s signature to add `hash: SpatialHash` as the last param. At the TOP of the per-parent loop body, AFTER the maturity gate + cooldown decrement + (for the asexual path) the existing satiated check, branch. Concretely, replace the body from the satiated check onward with:
+**Extract two shared birth helpers** (the asexual and sexual paths differ ONLY in the genome step — `mutate*` vs `crossover*` — so the spawn + provision is shared). Add these module-private helpers above `reproduce`. **Determinism is load-bearing:** `spawnChildSlot` draws the spawn-angle RNG FIRST (exactly where today's asexual block draws it), the genome step draws next, and `provisionAndFinalize` draws no RNG — so the asexual RNG order is byte-identical to before the refactor (the Task 1/Task 4 golden-hash pin stays valid).
+
+```ts
+/** Allocate + place a child near its mother (spawn-angle RNG, toroidal wrap, wall fallback, inherit
+ *  kinematics). Returns the child slot, or -1 if the store is full. The ONLY RNG draw here is the angle —
+ *  drawn first, matching the legacy asexual order so the determinism stream is unchanged. */
+function spawnChildSlot(
+  store: OrganismStore,
+  mom: number,
+  rng: Rng,
+  cfg: Config,
+  walls: Walls | null,
+): number {
+  const child = store.alloc();
+  if (child < 0) return -1;
+  const { x, y, vx, vy, heading } = store;
+  const angle = rng.range(0, Math.PI * 2);
+  let cx = x[mom]! + Math.cos(angle) * cfg.offspringOffset;
+  let cy = y[mom]! + Math.sin(angle) * cfg.offspringOffset;
+  cx %= cfg.worldWidth; if (cx < 0) cx += cfg.worldWidth;
+  cy %= cfg.worldHeight; if (cy < 0) cy += cfg.worldHeight;
+  if (walls !== null && walls.active && walls.isSolidAt(cx, cy)) { cx = x[mom]!; cy = y[mom]!; }
+  x[child] = cx; y[child] = cy; vx[child] = vx[mom]!; vy[child] = vy[mom]!; heading[child] = heading[mom]!;
+  return child;
+}
+
+/** After the child's genome is written: reset its learning state, provision it to its BIRTH_ENERGY gene
+ *  (capped by the mother's spare energy — energy-conserving), debit the mother (provisioning + reproOverhead),
+ *  start the mother's breed cooldown, and fire the onBirth hook. RNG-free. Called once the genome (mutate or
+ *  crossover) has set the child's genes. */
+function provisionAndFinalize(store: OrganismStore, mom: number, child: number, cfg: Config): void {
+  store.resetLearned(child);
+  const { energy, scalarGenes } = store;
+  const childBirth = scalarGenes[child * SCALAR_GENE_COUNT + ScalarGene.BIRTH_ENERGY]!;
+  const childEnergy = Math.min(childBirth, energy[mom]! - cfg.reproOverhead);
+  energy[child] = childEnergy;
+  store.prevEnergy[child] = childEnergy;
+  energy[mom] = energy[mom]! - childEnergy - cfg.reproOverhead;
+  if (cfg.breedCooldown > 0) store.breedCooldownLeft[mom] = cfg.breedCooldown;
+  cfg.onBirth?.(mom, store.genId[mom]!, child, store.genId[child]!);
+}
+```
+
+**Refactor the existing asexual block to use the helpers** (inside the `!cfg.sexualReproduction` branch). The current inline alloc/angle/wrap/wall/kinematics becomes `spawnChildSlot`; the current resetLearned/provision/energy/cooldown/onBirth becomes `provisionAndFinalize`; the `mutateGenome` + `mutateScalarGenes` calls stay between them, unchanged:
 
 ```ts
     if (!cfg.sexualReproduction) {
-      // ── Asexual path (ablation) — UNCHANGED from here down ──
-      if (energy[p]! < satiatedBar(scalarGenes, p, cfg)) continue;
-      // ... existing asexual alloc/mutate/provision block stays exactly as-is ...
+      if (energy[p]! < satiatedBar(scalarGenes, p, cfg)) continue; // not full yet
+      const child = spawnChildSlot(store, p, rng, cfg, walls);
+      if (child < 0) break; // store full
+      mutateGenome(
+        store.brain, store.hue, child, p, rng, cfg.mutationSigma, cfg.hueMutationSigma,
+        wallSenseGenes, flowSenseGenes, cfg.hungerSense, cfg.pheromoneEnabled,
+      );
+      mutateScalarGenes(store.scalarGenes, child, p, rng, cfg);
+      provisionAndFinalize(store, p, child, cfg);
+      births++;
       continue;
     }
+```
+
+**Change `reproduce`'s signature** to add `hash: SpatialHash` as the last param. Then add the sexual path after the asexual branch:
+
+```ts
     // ── Sexual path ──
     const ready = energy[p]! >= satiatedBar(scalarGenes, p, cfg);
     if (store.seeking[p]! === 1) {
@@ -687,38 +742,25 @@ Change `reproduce`'s signature to add `hash: SpatialHash` as the last param. At 
         }
         continue;
       }
-      // Compatible mate found → crossover birth. Mother = p, father = mate.
-      const child = store.alloc();
+      // Compatible mate found → crossover birth. Mother = p, father = mate. spawnChildSlot draws the
+      // angle FIRST, then crossover draws — same order as the asexual path above.
+      const child = spawnChildSlot(store, p, rng, cfg, walls);
       if (child < 0) break;
-      const angle = rng.range(0, Math.PI * 2);
-      let cx = x[p]! + Math.cos(angle) * offspringOffset;
-      let cy = y[p]! + Math.sin(angle) * offspringOffset;
-      cx %= worldWidth; if (cx < 0) cx += worldWidth;
-      cy %= worldHeight; if (cy < 0) cy += worldHeight;
-      if (walls !== null && walls.active && walls.isSolidAt(cx, cy)) { cx = x[p]!; cy = y[p]!; }
-      x[child] = cx; y[child] = cy; vx[child] = vx[p]!; vy[child] = vy[p]!; heading[child] = heading[p]!;
       crossoverBrain(
         store.brain, store.hue, child, p, mate, rng, cfg.mutationSigma, cfg.hueMutationSigma,
         wallSenseGenes, flowSenseGenes, cfg.hungerSense, cfg.pheromoneEnabled,
       );
       crossoverScalarGenes(store.scalarGenes, child, p, mate, rng, cfg);
-      store.resetLearned(child);
-      const childBirth = scalarGenes[child * SCALAR_GENE_COUNT + ScalarGene.BIRTH_ENERGY]!;
-      const childEnergy = Math.min(childBirth, energy[p]! - reproOverhead);
-      energy[child] = childEnergy;
-      store.prevEnergy[child] = childEnergy;
-      energy[p] = energy[p]! - childEnergy - reproOverhead;
+      provisionAndFinalize(store, p, child, cfg);
       births++;
       store.seeking[p] = 0;
-      if (cfg.breedCooldown > 0) store.breedCooldownLeft[p] = cfg.breedCooldown;
-      cfg.onBirth?.(p, store.genId[p]!, child, store.genId[child]!);
     } else if (ready) {
       store.seeking[p] = 1; // become a seeker; the steer picks it up next tick, mate attempt starts then
       store.seekTicksLeft[p] = cfg.mateSeekWindow;
     }
 ```
 
-Keep the existing asexual block intact inside the `if (!cfg.sexualReproduction)` branch (move the current alloc/mutate/provision code there verbatim).
+(Note: `provisionAndFinalize` already sets the mother's `breedCooldown`, so the sexual birth doesn't set it again. The asexual block's old standalone `reproOverhead`/`offspringOffset`/`worldWidth`/`worldHeight` destructure at the top of `reproduce` may now be unused — remove any that lint flags as unused.)
 
 > **Forward seam (v2 bead `life-sim-z0f1`):** the `if (!cfg.sexualReproduction)` branch is intentionally the single decision point for reproduction mode. v2 (evolution of sex) replaces this global-config read with a per-creature heritable `REPRO_MODE` gene so asexual and sexual compete under selection — a localized change here. Do NOT generalize it in v1; just keep the branch clean and self-contained.
 
