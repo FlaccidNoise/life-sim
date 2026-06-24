@@ -768,7 +768,7 @@ describe('reproduce (breed at the per-creature satiated bar)', () => {
   });
 
   it('breed bar is reproGene+MIN_BAND when the satiated gene is below the repro gene', () => {
-    const c = defaultConfig({ reproOverhead: 15, mutationSigma: 0, sexualReproduction: false, worldWidth: W, worldHeight: H });
+    const c = defaultConfig({ reproOverhead: 2, mutationSigma: 0, sexualReproduction: false, worldWidth: W, worldHeight: H });
     const breeds = (energy: number): number => {
       const s = new OrganismStore(4);
       const p = s.alloc();
@@ -783,10 +783,11 @@ describe('reproduce (breed at the per-creature satiated bar)', () => {
       s.rebuildLive();
       return reproduce(s, new Rng(1), c, false, false, null, emptyHash(s, c));
     };
-    expect(breeds(60 + MIN_BAND - 1)).toBe(0); // below the guarded bar (NOT the inverted satiated 40)
-    // Above the guarded satiated bar (60+MIN_BAND=65) AND above the viability floor (reproOverhead 15 +
-    // reproThreshold 60 = 75) → breeds. The satiated-bar intent holds: energy must clear its own gene-set bar.
-    expect(breeds(76)).toBe(1); // above the guarded bar → breeds
+    // reproOverhead (2) is set below MIN_BAND (5) so the viability floor (reproOverhead 2 +
+    // reproThreshold 60 = 62) sits below the satiated bar (60+MIN_BAND=65). The satiated bar — not the
+    // viability floor — is the binding constraint being probed here.
+    expect(breeds(60 + MIN_BAND - 1)).toBe(0); // energy 64: above the floor (62) but below the bar (65) → blocked by the bar
+    expect(breeds(60 + MIN_BAND + 1)).toBe(1); // energy 66: above the bar (65) AND the floor (62) → breeds
   });
 
   it('provisions the child to ITS OWN (mutated) birthEnergy gene, not the parent’s', () => {
