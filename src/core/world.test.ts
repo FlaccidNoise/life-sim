@@ -354,6 +354,47 @@ describe('World — Phase 0 determinism contract', () => {
   });
 });
 
+describe('sexual reproduction — determinism + liveness', () => {
+  // A demo-ish config: dense pockets so mate-seeking has partners (per the feasibility probe).
+  // World shrunk 8192→2048: at 8192² the population (~70) is so sparse that seekers almost never
+  // land within the ~12u mate-contact scan, so births trickle to ~2/1500-ticks and the world bleeds
+  // out (90→39). mateSeekWindow/mateCompatThreshold are inert here — the binding constraint is
+  // ENCOUNTER GEOMETRY, not the search window or compatibility (probed: ~26 seekers live at any tick,
+  // yet they can't find each other). Concentrating the same population into a 2048² world is the only
+  // lever that brings seekers into contact range — births jump to ~280-440 and the world grows
+  // (robust across 5 seeds: pop 296-491). This is a TEST-LOCAL override; defaultConfig is unchanged
+  // (no golden-hash re-pin needed).
+  const demoish = () =>
+    defaultConfig({
+      seed: 7,
+      sexualReproduction: true,
+      worldWidth: 2048,
+      worldHeight: 2048,
+      foodPatchCount: 40,
+      foodPatchRadius: 8,
+      breedCooldown: 150,
+      ageStages: true,
+      hungerGatesFood: true,
+    });
+
+  it('same (config, seed) → identical hash after 1500 ticks (sexual ON)', () => {
+    const a = new World(demoish());
+    const b = new World(demoish());
+    for (let t = 0; t < 1500; t++) {
+      a.step();
+      b.step();
+    }
+    expect(a.stateHash()).toBe(b.stateHash());
+  });
+
+  it('liveness guardrail: world stays alive + breeds under sexual reproduction', () => {
+    const w = new World(demoish());
+    for (let t = 0; t < 1500; t++) w.step();
+    expect(w.population).toBeGreaterThan(50); // not collapsed to extinction
+    expect(w.totalBirths).toBeGreaterThan(0); // sexual births actually happen
+  });
+});
+
 describe('World — founding-protection (predator cluster-seeding)', () => {
   // Pockets that differ in depth (richnessVar>0 → a clear "deepest" nursery), a healthy predator fraction,
   // on a small fast world.
