@@ -11,7 +11,7 @@
 
          LAYOUT MODEL (desktop): the canvas is the full-screen hero. Floating over it —
            • top-centre   : the TRANSPORT bar (time controls + live status)
-           • left         : the SELECTED-CREATURE dossier (brain keystone → genes → morphotype)
+           • left         : the SELECTED-CREATURE dossier (brain keystone → morphotype → genes)
            • right        : the WORLD panel (population graph + distributions + world stats)
            • bottom-left  : menu buttons (⚙ settings · ❔ guide) that summon modal sheets
            • bottom-centre: the VIEW chips (food layer / color mode / flow / walls / overlay / glow)
@@ -95,6 +95,12 @@
         text-transform: uppercase;
         color: var(--muted);
         margin: 12px 0 5px;
+      }
+      .h3-hint {
+        text-transform: none;
+        letter-spacing: 0;
+        opacity: 0.65;
+        font-weight: 400;
       }
       .muted {
         color: var(--muted);
@@ -974,7 +980,7 @@
       <button id="mode-toggle" aria-label="Toggle mobile / desktop layout">📱 mobile</button>
     </header>
 
-    <!-- LEFT: selected-creature dossier (brain keystone → genes → morphotype) -->
+    <!-- LEFT: selected-creature dossier (brain keystone → morphotype → genes) -->
     <aside id="left" class="panel" aria-label="Selected creature">
       <div class="panel-head">
         <h2>selected creature</h2>
@@ -984,11 +990,11 @@
       <div id="creature-body" hidden>
         <h3>brain</h3>
         <canvas id="brain"></canvas>
-        <h3>state &amp; genes</h3>
-        <div id="inspector"></div>
-        <h3>morphotype</h3>
+        <h3>morphotype <span class="muted h3-hint">— flip the lens to walk the whole genome</span></h3>
         <select id="radar-lens"></select>
         <canvas id="radar"></canvas>
+        <h3>state &amp; genes</h3>
+        <div id="inspector"></div>
         <div class="ctl-row" style="margin-top: 10px">
           <button id="follow-btn" class="btn" title="follow + record this creature (l)">
             🔒 follow
@@ -1008,7 +1014,7 @@
       <h2>population</h2>
       <canvas id="graph"></canvas>
       <div id="graph-legend"></div>
-      <h2>distributions</h2>
+      <h2>distributions <span class="muted h3-hint">— drag a chart to reorder</span></h2>
       <details id="dist-pick" class="dist-pick">
         <summary>fields ▾</summary>
         <div id="dist-fields" class="dist-fields"></div>

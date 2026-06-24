@@ -1,15 +1,16 @@
 /**
- * Trait radar — a 7-spoke polygon of a selected creature's heritable genes, so you can read its
- * "morphotype" at a glance and see how guilds differ in SHAPE. Mirrors the BrainView split: a pure,
- * unit-tested computeRadar() does all the math (read-only), and RadarView only draws.
+ * Trait radar — a polygon of a selected creature's heritable genes, so you can read its "morphotype"
+ * at a glance and see how guilds differ in SHAPE. Mirrors the BrainView split: a pure, unit-tested
+ * computeRadar() does all the math (read-only), and RadarView only draws.
  *
- * The seven axes are heritable scalar genes that already exist (genome.ts) AND are seeded to vary from
- * t0, so no spoke is born flat: trophic role (diet) + weaponry (bite) + locomotion (speed) + body size
- * + the chemoreception sense (smell) + the two r/K life-history genes (repro threshold + offspring
- * provisioning). Each spoke is normalized against the gene's own clamp bounds (SCALAR_GENE_SPECS), so a
- * full-length spoke = the genetic maximum for that trait — absolute magnitude, comparable across
- * creatures and across time. The polygon is filled with the creature's diet GUILD hue (the same
- * green→red mapping as the dots), and each spoke carries a distinct accent color for its label.
+ * A <select> lens swaps the axis-set. Capability is the curated overview (the headline "what kind of
+ * competitor" mix); the remaining five lenses partition the WHOLE genome by subsystem — Body & motion,
+ * Senses, Metabolism & life, Foraging & diet, Social & mating — so flipping through them walks every one
+ * of the 26 heritable scalar genes with its live value printed on the rim. Each spoke is normalized
+ * against the gene's own clamp bounds (SCALAR_GENE_SPECS), so a full-length spoke = the genetic maximum
+ * for that trait — absolute magnitude, comparable across creatures and across time. The polygon is filled
+ * with the creature's diet GUILD hue (the same green→red mapping as the dots), and each spoke carries a
+ * distinct accent color for its label.
  *
  * Guild silhouettes this is meant to make obvious: a sessile grazer is a small wedge pulled toward the
  * smell/fecundity side; a predator is a spiky star pulled toward diet/bite/speed/size; a forager is a
@@ -25,15 +26,14 @@ interface RadarAxisDef {
   color: string; // accent color for the spoke label + vertex dot
 }
 
-// Lens spoke-sets are gated by the multi-seed variance census (src/headless/gene-variance.ts): a spoke
-// ships only for a gene that actually VARIES across the population (≥10% IQR of its clamp range), so no
-// spoke is born flat. `diet` is the one deliberate exception — at the current scale the population is a
-// grazer monoculture so diet reads flat, but it's the trophic ANCHOR + the green→red guild-fill driver
-// + the explicit target of the diversity work, so it stays as the honest monoculture indicator.
+// The lenses below partition the WHOLE genome (all 26 heritable scalar genes) into readable category
+// radars; flipping the <select> walks every gene with its live value on the rim. Unlike the earlier
+// variance-gated design, completeness wins here — a flat spoke is an honest "this gene isn't varying",
+// which is itself information. Each spoke normalizes against its own clamp bounds (SCALAR_GENE_SPECS),
+// so a full-length spoke = the genetic maximum.
 
-/** CAPABILITY lens — the headline "what kind of competitor" mix across categories, clockwise from top.
- *  spd (maxSpeed) and smell (senseRange) were dropped as census-FLAT and replaced by agility (maxTurn)
- *  and vision (visionRange), both PROMOTE — so every spoke but the diet anchor demonstrably varies. */
+/** CAPABILITY lens — the headline "what kind of competitor" mix across categories. Kept as the default
+ *  overview; the category lenses below go deep on each subsystem. */
 export const CAPABILITY_AXES: readonly RadarAxisDef[] = [
   { gene: ScalarGene.DIET, label: 'diet', color: '#d98b6a' },
   { gene: ScalarGene.DAMAGE, label: 'bite', color: '#e0566a' },
@@ -44,15 +44,52 @@ export const CAPABILITY_AXES: readonly RadarAxisDef[] = [
   { gene: ScalarGene.BIRTH_ENERGY, label: 'prov', color: '#e8cf7a' },
 ];
 
-/** LIFE-HISTORY lens — the reproduction/metabolism deep-dive, the strongest-varying cluster (metabEff
- *  alone spans ~41% IQR). Flat eatRate + maxThrust dropped; all six spokes PROMOTE. */
-export const LIFE_HISTORY_AXES: readonly RadarAxisDef[] = [
+/** BODY & MOTION — the physical/locomotor genes: how fast, how hard it pushes/turns, how big, how it bites. */
+export const BODY_AXES: readonly RadarAxisDef[] = [
+  { gene: ScalarGene.MAX_SPEED, label: 'speed', color: '#6fd0e8' },
+  { gene: ScalarGene.MAX_THRUST, label: 'thrust', color: '#7fb0e8' },
+  { gene: ScalarGene.MAX_TURN, label: 'agility', color: '#e0b15f' },
+  { gene: ScalarGene.SIZE, label: 'size', color: '#9aa7b4' },
+  { gene: ScalarGene.DAMAGE, label: 'bite', color: '#e0566a' },
+];
+
+/** SENSES — the full perception suite: three chemoreception channels + the three vision genes. */
+export const SENSES_AXES: readonly RadarAxisDef[] = [
+  { gene: ScalarGene.SENSE_RANGE, label: 'smell A', color: '#7fd0a0' },
+  { gene: ScalarGene.SENSE_RANGE_B, label: 'smell B', color: '#7fd0c0' },
+  { gene: ScalarGene.SENSE_RANGE_C, label: 'smell C', color: '#7fc8d8' },
+  { gene: ScalarGene.VISION_RANGE, label: 'vis range', color: '#5f9de8' },
+  { gene: ScalarGene.VISION_FOV, label: 'vis FOV', color: '#8fb8e8' },
+  { gene: ScalarGene.VISION_ACUITY, label: 'vis acuity', color: '#a8d4f0' },
+];
+
+/** METABOLISM & LIFE — the energy economy + r/K + the age-stage genes (when to mature, when to die). */
+export const METABOLISM_AXES: readonly RadarAxisDef[] = [
+  { gene: ScalarGene.EAT_RATE, label: 'eat', color: '#9ad07a' },
+  { gene: ScalarGene.METAB_EFF, label: 'econ', color: '#5fc9b0' },
   { gene: ScalarGene.REPRO_THRESHOLD, label: 'r/K', color: '#e88fb0' },
   { gene: ScalarGene.SATIATED_THRESHOLD, label: 'satiety', color: '#e8b07a' },
   { gene: ScalarGene.BIRTH_ENERGY, label: 'prov', color: '#e8cf7a' },
-  { gene: ScalarGene.METAB_EFF, label: 'econ', color: '#5fc9b0' },
-  { gene: ScalarGene.MAX_TURN, label: 'agility', color: '#e0b15f' },
-  { gene: ScalarGene.SIZE, label: 'size', color: '#9aa7b4' },
+  { gene: ScalarGene.MATURITY_AGE, label: 'mature', color: '#c0a0e0' },
+  { gene: ScalarGene.SENESCENCE_AGE, label: 'lifespan', color: '#b08fd0' },
+];
+
+/** FORAGING & DIET — the trophic niche: where it sits on the herbivore→predator axis + resource prefs. */
+export const FORAGING_AXES: readonly RadarAxisDef[] = [
+  { gene: ScalarGene.DIET, label: 'diet', color: '#d98b6a' },
+  { gene: ScalarGene.EAT_RATE, label: 'eat', color: '#9ad07a' },
+  { gene: ScalarGene.FORAGE_PREF, label: 'forage AB', color: '#d0c060' },
+  { gene: ScalarGene.FORAGE_PREF_C, label: 'forage C', color: '#c8d080' },
+  { gene: ScalarGene.DAMAGE, label: 'bite', color: '#e0566a' },
+];
+
+/** SOCIAL & MATING — schooling/sheltering, scent broadcasting, and the sexual display/preference pair. */
+export const SOCIAL_AXES: readonly RadarAxisDef[] = [
+  { gene: ScalarGene.COHESION_DRIVE, label: 'cohesion', color: '#8fb0e8' },
+  { gene: ScalarGene.SHELTER_DRIVE, label: 'shelter', color: '#9aa7b4' },
+  { gene: ScalarGene.PHERO_DEPOSIT, label: 'scent', color: '#c89ad8' },
+  { gene: ScalarGene.DISPLAY, label: 'display', color: '#e0a0c0' },
+  { gene: ScalarGene.PREFERENCE, label: 'pref', color: '#e8b0a0' },
 ];
 
 export interface RadarLens {
@@ -61,13 +98,15 @@ export interface RadarLens {
   axes: readonly RadarAxisDef[];
 }
 
-/** The swappable radar lenses (the display decision: one ≤8-spoke radar, selectable axis-sets). Order is
- *  the <select> order; the first is the default. A "Senses & Social" lens is DEFERRED: at the current
- *  scale every social gene (cohesion, shelter, foragePref) censuses FLAT, so it would be empty — it
- *  returns once boldness (Phase 3) and pheromone-trail (Phase 5) genes add varying social spokes. */
+/** The swappable radar lenses — Capability is the overview default; the rest partition the whole genome
+ *  by subsystem so the dropdown walks every gene. Order is the <select> order; the first is the default. */
 export const LENSES: readonly RadarLens[] = [
-  { key: 'capability', name: 'Capability', axes: CAPABILITY_AXES },
-  { key: 'lifeHistory', name: 'Life-history', axes: LIFE_HISTORY_AXES },
+  { key: 'capability', name: 'Capability (overview)', axes: CAPABILITY_AXES },
+  { key: 'body', name: 'Body & motion', axes: BODY_AXES },
+  { key: 'senses', name: 'Senses', axes: SENSES_AXES },
+  { key: 'metabolism', name: 'Metabolism & life', axes: METABOLISM_AXES },
+  { key: 'foraging', name: 'Foraging & diet', axes: FORAGING_AXES },
+  { key: 'social', name: 'Social & mating', axes: SOCIAL_AXES },
 ];
 
 export const DEFAULT_LENS = 'capability';
@@ -82,6 +121,15 @@ export interface RadarAxis {
   color: string;
   value: number; // raw gene value
   norm: number; // value mapped to [0,1] over the gene's clamp bounds
+  display: string; // compact value string for the rim (precision scales to the gene's range)
+}
+
+/** Rim value string — precision scales to the gene's clamp range so small genes (diet 0.05) and large
+ *  ones (lifespan 2400) both read cleanly. */
+function fmtGeneValue(value: number, max: number): string {
+  if (max <= 3) return value.toFixed(2);
+  if (max <= 30) return value.toFixed(1);
+  return Math.round(value).toString();
 }
 
 export interface RadarState {
@@ -108,7 +156,14 @@ export function computeRadar(
     const spec = SCALAR_GENE_SPECS[def.gene]!;
     const value = store.scalarGenes[sg + def.gene]!;
     const norm = clamp01((value - spec.min) / (spec.max - spec.min));
-    return { key: def.gene, label: def.label, color: def.color, value, norm };
+    return {
+      key: def.gene,
+      label: def.label,
+      color: def.color,
+      value,
+      norm,
+      display: fmtGeneValue(value, spec.max),
+    };
   });
   const diet = store.scalarGenes[sg + ScalarGene.DIET]!;
   const dietHue = 122 * (1 - clamp01(diet));
@@ -171,7 +226,7 @@ export class RadarView {
     const n = st.axes.length;
     const cx = w / 2;
     const cy = h / 2 + 6 * dpr; // nudge down to leave room for the guild caption up top
-    const R = Math.min(w, h) / 2 - 26 * dpr; // margin for rim labels
+    const R = Math.min(w, h) / 2 - 32 * dpr; // margin for the two-line rim labels (name + value)
     const ang = (i: number): number => -Math.PI / 2 + (2 * Math.PI * i) / n;
 
     // Concentric grid rings (faint heptagons) — the magnitude reference.
@@ -190,8 +245,7 @@ export class RadarView {
       ctx.stroke();
     }
 
-    // Spokes + rim labels.
-    ctx.font = `${Math.round(9 * dpr)}px ui-monospace, monospace`;
+    // Spokes + rim labels (gene name in its accent color, live value beneath in bright mono).
     ctx.textBaseline = 'middle';
     for (let i = 0; i < n; i++) {
       const a = ang(i);
@@ -203,11 +257,15 @@ export class RadarView {
       ctx.lineTo(cx + dx * R, cy + dy * R);
       ctx.stroke();
       // Label just outside the rim, aligned away from center so text never overlaps the polygon.
-      const lx = cx + dx * (R + 9 * dpr);
-      const ly = cy + dy * (R + 9 * dpr);
+      const lx = cx + dx * (R + 10 * dpr);
+      const ly = cy + dy * (R + 10 * dpr);
       ctx.textAlign = dx > 0.3 ? 'left' : dx < -0.3 ? 'right' : 'center';
+      ctx.font = `${Math.round(9 * dpr)}px ui-monospace, monospace`;
       ctx.fillStyle = st.axes[i]!.color;
-      ctx.fillText(st.axes[i]!.label, lx, ly);
+      ctx.fillText(st.axes[i]!.label, lx, ly - 5 * dpr);
+      ctx.font = `${Math.round(10 * dpr)}px ui-monospace, monospace`;
+      ctx.fillStyle = 'rgba(225,235,245,0.92)';
+      ctx.fillText(st.axes[i]!.display, lx, ly + 6 * dpr);
     }
 
     // Data polygon, filled with the diet guild hue.

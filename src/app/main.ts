@@ -127,8 +127,8 @@ const graph = new TimeSeriesGraph(el<HTMLCanvasElement>('graph'), [
 const inspector = new Inspector(el('inspector'));
 const brainView = new BrainView(el<HTMLCanvasElement>('brain'));
 const radar = new RadarView(el<HTMLCanvasElement>('radar'));
-// Lens selector: switches which heritable-trait axis-set the radar draws (Capability / Senses & Social
-// / Life-history). Options come from the LENSES registry so the list lives in one place.
+// Lens selector: switches which heritable-trait axis-set the radar draws (Capability overview + the
+// per-subsystem genome walk). Options come from the LENSES registry so the list lives in one place.
 const lensSelect = el<HTMLSelectElement>('radar-lens');
 for (const lens of LENSES) {
   const opt = document.createElement('option');
@@ -154,7 +154,7 @@ let speed = 1; // sim ticks per animation frame; <1 = slow-mo (interpolated for 
 let foodLayer: FoodLayer = FoodLayer.TOTAL;
 let showWalls = true; // wall slate layer (toggle with 'w')
 let showOverlay = true; // per-creature debug overlay on the selection (toggle with 'o')
-let showFlow = false; // flow-field current arrows (toggle with 'v')
+let showFlow = true; // flow-field current arrows (toggle with 'v') — on by default to show the world's drift
 let colorMode: ColorMode = ColorMode.LINEAGE; // dot hue source (cycle with 'c'): lineage → diet → energy → forage
 let selected: { slot: number; gen: number } | null = null;
 
@@ -684,13 +684,25 @@ function frame(): void {
     renderer.drawLines(trailScratch, v);
   }
   // Flow-field current arrows ('v'): coarse sub-grid sample of world.flow drawn as cell-centre→centre+v·scale
-  // line pairs (dim cyan). scale=8·dt maps the CFL-max velocity (0.25·cellW/dt) to a ~2-cell arrow, so the
-  // arrows stay visibly sized whatever the flow strength. Pure render — no sim/determinism impact.
+  // line pairs, each a dim-tail→bright-head comet so the current's direction reads. On by default.
   if (showFlow && world.flow) {
     const flow = world.flow;
     const cellW = config.worldWidth / flow.cols;
     const cellH = config.worldHeight / flow.rows;
-    const scale = 8 * config.dt;
+    // Auto-scale the arrows to the field's ACTUAL peak magnitude, not the CFL ceiling: the tuned current
+    // sits ~1000× below CFL-max, so a fixed scale renders every arrow sub-pixel (invisible). One cheap
+    // pass over the sampled sub-grid finds the peak; the longest arrow is then drawn at ~1.6 cells so the
+    // current's pattern reads at any flowStrength. Pure render — no sim/determinism impact.
+    let peak = 1e-9;
+    for (let r = 0; r < flow.rows; r += FLOW_STRIDE) {
+      const cy = (r + 0.5) * cellH;
+      for (let c = 0; c < flow.cols; c += FLOW_STRIDE) {
+        const cx = (c + 0.5) * cellW;
+        const m = Math.hypot(flow.sampleX(cx, cy), flow.sampleY(cx, cy));
+        if (m > peak) peak = m;
+      }
+    }
+    const scale = (1.6 * cellW) / peak;
     let v = 0;
     for (let r = 0; r < flow.rows; r += FLOW_STRIDE) {
       const cy = (r + 0.5) * cellH;
@@ -698,17 +710,18 @@ function frame(): void {
         const cx = (c + 0.5) * cellW;
         const vx = flow.sampleX(cx, cy);
         const vy = flow.sampleY(cx, cy);
+        // Tail dim, head bright → a comet gradient that shows flow DIRECTION (a bare line wouldn't).
         flowScratch[v * 5] = cx;
         flowScratch[v * 5 + 1] = cy;
-        flowScratch[v * 5 + 2] = 0.2;
-        flowScratch[v * 5 + 3] = 0.7;
-        flowScratch[v * 5 + 4] = 0.8;
+        flowScratch[v * 5 + 2] = 0.1;
+        flowScratch[v * 5 + 3] = 0.34;
+        flowScratch[v * 5 + 4] = 0.4;
         v++;
         flowScratch[v * 5] = cx + vx * scale;
         flowScratch[v * 5 + 1] = cy + vy * scale;
-        flowScratch[v * 5 + 2] = 0.2;
-        flowScratch[v * 5 + 3] = 0.7;
-        flowScratch[v * 5 + 4] = 0.8;
+        flowScratch[v * 5 + 2] = 0.42;
+        flowScratch[v * 5 + 3] = 0.92;
+        flowScratch[v * 5 + 4] = 1.0;
         v++;
       }
     }

@@ -82,9 +82,9 @@ export const ScalarGene = {
   SENESCENCE_AGE: 23, // at/above this age the basal senescence tax begins (elder); costed (longevity tradeoff)
   // Sexual-selection genes (life-sim-xa90): a pure mate signal + the preference for it. Heritable, 0..1.
   // DISPLAY is what mates are chosen on; PREFERENCE is the display value this creature finds attractive.
-  // Neither is an ecological/species axis, so geneticDistance weights them 0. NOTE (interconnection audit
-  // 2026-06-24): DISPLAY has NO render cue and NO radar axis yet — an ornament nothing can perceive (a
-  // wired-but-invisible gap for the visibility phase); PREFERENCE is likewise invisible + not an NN input.
+  // Neither is an ecological/species axis, so geneticDistance weights them 0. Both now surface on the
+  // radar's "Social & mating" lens (display/pref spokes); DISPLAY still has NO render cue on the dot and
+  // PREFERENCE is not an NN input — those remain wired-but-invisible gaps for the visibility phase.
   DISPLAY: 24,
   PREFERENCE: 25,
 } as const;
