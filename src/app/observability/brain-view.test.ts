@@ -129,7 +129,8 @@ describe('computeBrainState', () => {
   it('reports learning drift = Σ|learned − instinct|', () => {
     const s = setup();
     const st = computeBrainState(s, cfg, 0);
-    expect(st.drift).toBeCloseTo(0.05 * BRAIN_GENES, 6); // each weight offset by 0.05
+    // Each weight offset by 0.05; summing 101 Float32 diffs accumulates ~1e-6 rounding → tolerance 4dp.
+    expect(st.drift).toBeCloseTo(0.05 * BRAIN_GENES, 4);
   });
 
   it('clamps turn to the maxTurn gene', () => {
@@ -143,7 +144,8 @@ describe('computeBrainState', () => {
   });
 
   it('matches steer() under motorSquash and eases below the limit (ON-mode contract)', () => {
-    const sq = defaultConfig({ motorSquash: true });
+    // hiddenLayer off so the large setup() hidden weights don't saturate tanh — isolate the squash mechanic.
+    const sq = defaultConfig({ motorSquash: true, hiddenLayer: false });
     const s = setup();
     const i = 0;
     // Drive turn into the saturation region so the tanh path (not the ~linear toe) is exercised.
