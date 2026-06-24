@@ -369,7 +369,18 @@ export const HIDDEN_W2 = HIDDEN_W1 + HIDDEN_INPUTS * HIDDEN_UNITS; // hidden→o
  *  channel. Always drawn (on-by-default policy); the forward pass is gated on cfg.moodGlow. */
 export const GLOW_BIAS = HIDDEN_W2 + HIDDEN_UNITS * HIDDEN_OUTPUTS; // 101 (after the hidden W2 block)
 export const GLOW_HID = GLOW_BIAS + 1; // 102; hidden→glow weights (HIDDEN_UNITS of them)
-export const BRAIN_GENES = GLOW_HID + HIDDEN_UNITS; // 106
+
+/** GLOW-SENSE weights (slice F3): the glow-field gradient ∇G (lateral, forward) in the heading frame →
+ *  turn + thrust — the receiver side of the glow communication channel (the deposit side reads store.glow).
+ *  A tail block of 4 weights AFTER the hidden→glow block. They have a REAL input (the sensed gradient), so
+ *  unlike the display-only mood-glow weights they both EVOLVE and LEARN (eligibility traces in steer). Seed
+ *  at 0 so evolution picks the SIGN — approach the glowing crowd or flee it. Always drawn (on-by-default,
+ *  like the eat-gate/age/readiness/glow blocks), so the draw stream is consistent whether glowSense is on. */
+export const GLOW_SENSE_LAT_TURN = GLOW_HID + HIDDEN_UNITS; // 106
+export const GLOW_SENSE_FWD_TURN = GLOW_SENSE_LAT_TURN + 1; // 107
+export const GLOW_SENSE_LAT_THRUST = GLOW_SENSE_LAT_TURN + 2; // 108
+export const GLOW_SENSE_FWD_THRUST = GLOW_SENSE_LAT_TURN + 3; // 109
+export const BRAIN_GENES = GLOW_SENSE_LAT_TURN + 4; // 110
 
 /** Founder brain ≈ the hand-tuned chemotaxis controller (turn toward lateral food, thrust up-gradient,
  *  gentle cruise) + ACTIVE sight: turn toward & thrust along the appeal-signed sight vector. Because that
@@ -429,6 +440,9 @@ const FOUNDER_BRAIN: readonly number[] = [
   // the HIDDEN_UNITS hidden→glow weights seed 0 (founder noise → each lineage drifts to its own trigger).
   -1.5,
   ...new Array<number>(HIDDEN_UNITS).fill(0),
+  // Glow-sense (slice F3): the 4 ∇G turn/thrust weights seed 0 — evolution picks the sign (approach a
+  // glowing crowd or flee it). Always drawn (consistent stream); they learn (real input → eligibility).
+  ...new Array<number>(4).fill(0),
 ];
 
 /** Seed a founder's genome: founder brain + Gaussian spread, random hue (lineage colors diverge).

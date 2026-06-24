@@ -331,6 +331,19 @@ export interface Config {
    *  primary source, but kept as an evolvable flavor channel. */
   pheroAlarmStrength: number;
 
+  // ── F3 glow-sense (a diffusing glow field whose deposit source is store.glow; SELECTS the glow signal) ──
+  /** Master switch for the glow field + the 4 GLOW_SENSE brain genes. When on, every creature deposits its
+   *  store.glow each tick into a diffusing scalar field and senses that field's gradient as a brain input —
+   *  so glow becomes a signal others react to. The genes are ALWAYS drawn (consistent stream) either way;
+   *  this just toggles whether the field is allocated/deposited/sensed/hashed. */
+  glowSense: boolean;
+  /** Inter-cell diffusion of the glow field per tick [0,0.25] — how FAR the glow signal carries. */
+  glowDiffuse: number;
+  /** Glow-field decay per tick (0,1] — the field forgets at this rate (low + diffuse = long-memory). */
+  glowDecay: number;
+  /** Scale on the per-tick glow deposit: each creature adds store.glow·glowDepositStrength into its cell. */
+  glowDepositStrength: number;
+
   /** Gaussian σ spread of founder brain weights around the seed brain (initial behavioral variation). */
   founderSigma: number;
   /** Founder SIZE-variety spread: founders' SIZE gene is seeded UNIFORMLY in cellRadius·[1−s, 1+s]
@@ -647,6 +660,11 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     pheroDepositOnGraze: true, // ubiquitous deposit source so the field populates at scale
     pheroGrazeStrength: 1,
     pheroAlarmStrength: 0, // alarm-on-bite secondary (bites too rare at scale to lead with)
+    // F3 glow-sense (ON by default — glow is now a SELECTED comms signal). Knobs mirror the pheromone field.
+    glowSense: true,
+    glowDiffuse: 0.2, // mirrors pheroDiffuse: carries the glow signal across the pocket NND
+    glowDecay: 0.02, // mirrors pheroDecay: slow forget → long-memory glow trail
+    glowDepositStrength: 1, // mirrors pheroGrazeStrength: scale on the per-tick store.glow deposit
     // NB pre-sight, predators hunt by PROXIMITY only — the encounter rate is too low for hunting to
     // pay, so the predator trait does not persist yet (it needs the sight slice to actively target
     // prey). The mechanic + genes + color are in place; sight activates it.

@@ -41,6 +41,12 @@ export class World {
    *  cfg.pheromoneEnabled; null otherwise, so the OFF path never deposits/senses/steps/hashes and stays
    *  byte-identical. */
   readonly phero: PheroField | null;
+  /** The glow field (slice F3) — a diffusing deposit-and-sense scalar grid whose deposit SOURCE is each
+   *  creature's store.glow (every tick), so glow becomes a SELECTED communication signal others steer on.
+   *  Reuses PheroField (a generic diffusing scalar grid). Allocated ONLY when cfg.glowSense; null otherwise,
+   *  so the OFF path never deposits/senses/steps/hashes it. The 4 GLOW_SENSE genes are always drawn either
+   *  way, so the draw stream — hence determinism — is identical regardless of this toggle. */
+  readonly glowField: PheroField | null;
   /** Drifting SIGHT-ONLY food parcels — discrete, smell-less, high-value motes that only the sight system
    *  perceives (giving the VISION genes a payoff). Allocated ONLY when cfg.parcelsEnabled; null otherwise,
    *  so the OFF path never spawns/drifts/senses/eats/hashes parcels and stays byte-identical. All parcel
@@ -98,6 +104,10 @@ export class World {
     );
     // Pheromone field sized to the food grid. Built ONLY when enabled → null is the byte-identical OFF path.
     this.phero = config.pheromoneEnabled
+      ? new PheroField(config.worldWidth, config.worldHeight, config.foodCols, config.foodRows)
+      : null;
+    // Glow field (slice F3) sized to the food grid like phero. Built ONLY when enabled → null is OFF.
+    this.glowField = config.glowSense
       ? new PheroField(config.worldWidth, config.worldHeight, config.foodCols, config.foodRows)
       : null;
     // Parcels built ONLY when enabled → null is the byte-identical OFF path. Its forked spawn RNG is
@@ -274,9 +284,27 @@ export class World {
       this.parcels.step(cfg.flowStrength > 0 ? this.flow : null, cfg.dt);
     }
     senseFood(s, this.food, cfg);
-    senseEnv(s, this.walls, cfg.flowStrength > 0 ? this.flow : null, this.phero, cfg);
+    senseEnv(
+      s,
+      this.walls,
+      cfg.flowStrength > 0 ? this.flow : null,
+      this.phero,
+      this.glowField,
+      cfg,
+    );
     senseCreatures(s, this.hash, cfg, this.walls, this.parcels);
     steer(s, cfg.learningEnabled, cfg.eligLambda, cfg.motorSquash, cfg);
+    // GLOW DEPOSIT (slice F3): every live creature broadcasts this tick's store.glow (set by steer) into the
+    // glow field, so the gradient others sense reflects who is lit up. RNG-free; ascending order. Gated (null
+    // = OFF, no-op). diffuse+decay happens in the FIELDS stage below, mirroring the pheromone field exactly.
+    if (this.glowField !== null) {
+      const { liveIndices, liveCount, x, y, glow } = s;
+      const strength = cfg.glowDepositStrength;
+      for (let k = 0; k < liveCount; k++) {
+        const i = liveIndices[k]!;
+        this.glowField.deposit(x[i]!, y[i]!, glow[i]! * strength);
+      }
+    }
     // MOVE: flow push (size-scaled current) then repulsion add onto the thrust force, then integrate.
     if (cfg.flowPushStrength > 0) applyFlowForce(s, this.flow, cfg);
     computeRepulsion(s, this.hash, cfg.cellRadius, cfg.repulsion, cfg.worldWidth, cfg.worldHeight);
@@ -330,6 +358,14 @@ export class World {
         cfg.pheroDecay,
         this.walls.active ? this.walls.foodBlockedMask() : null,
       );
+    // Glow field diffuse + decay (slice F3), after phero (this tick's glow deposits now spread + forget).
+    // Null when disabled → skipped entirely.
+    if (this.glowField !== null)
+      this.glowField.step(
+        cfg.glowDiffuse,
+        cfg.glowDecay,
+        this.walls.active ? this.walls.foodBlockedMask() : null,
+      );
     this.tick++;
   }
 
@@ -340,6 +376,7 @@ export class World {
     this.tick = 0;
     this.lastBirths = this.lastDeaths = this.totalBirths = this.totalDeaths = 0;
     if (this.phero !== null) this.phero.reset();
+    if (this.glowField !== null) this.glowField.reset();
     if (this.parcels !== null) this.parcels.reset();
     this.setup();
   }
@@ -370,6 +407,8 @@ export class World {
     this.food.hashInto(h); // food is part of the sim state
     // The pheromone field is part of sim state ONLY when active (after food, gated) → byte-identical when off.
     if (this.phero !== null) this.phero.hashInto(h);
+    // The glow field is part of sim state ONLY when active (after phero, gated) → byte-identical when off.
+    if (this.glowField !== null) this.glowField.hashInto(h);
     // Parcels are part of sim state ONLY when active (after the field hashes, gated) → byte-identical OFF.
     if (this.parcels !== null) this.parcels.hashInto(h);
     return h.hex();

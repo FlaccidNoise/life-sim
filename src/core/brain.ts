@@ -29,6 +29,10 @@ import {
   HIDDEN_W2,
   GLOW_BIAS,
   GLOW_HID,
+  GLOW_SENSE_LAT_TURN,
+  GLOW_SENSE_FWD_TURN,
+  GLOW_SENSE_LAT_THRUST,
+  GLOW_SENSE_FWD_THRUST,
 } from './genome';
 
 /**
@@ -67,6 +71,7 @@ export function steer(
     age,
   } = store;
   const { wallSenseX, wallSenseY, flowSenseX, flowSenseY, pheroSenseX, pheroSenseY } = store;
+  const { glowSenseX, glowSenseY } = store;
   const { learnedBrain, elig, energy } = store;
   const genes = store.scalarGenes;
   const hungerSense = cfg.hungerSense;
@@ -110,6 +115,10 @@ export function steer(
     const pheroVy = pheroSenseY[i]!;
     const pFwd = pheroVx * dx + pheroVy * dy; // pheromone gradient ahead (∇P)
     const pLat = -pheroVx * dy + pheroVy * dx; // pheromone gradient to the left
+    const glowVx = glowSenseX[i]!;
+    const glowVy = glowSenseY[i]!;
+    const glFwd = glowVx * dx + glowVy * dy; // glow-field gradient ahead (∇G)
+    const glLat = -glowVx * dy + glowVy * dx; // glow-field gradient to the left
 
     const b = i * BRAIN_GENES;
     // Turn/thrust = food-gradient + sight + wall + flow responses (+ hunger when on); all heading-frame.
@@ -124,6 +133,8 @@ export function steer(
       learnedBrain[b + Brain.FLOW_FWD_TURN]! * flFwd +
       learnedBrain[b + Brain.PHERO_LAT_TURN]! * pLat +
       learnedBrain[b + Brain.PHERO_FWD_TURN]! * pFwd +
+      learnedBrain[b + GLOW_SENSE_LAT_TURN]! * glLat +
+      learnedBrain[b + GLOW_SENSE_FWD_TURN]! * glFwd +
       learnedBrain[b + Brain.TURN_BIAS]!;
     let thrustRaw =
       learnedBrain[b + Brain.LAT_THRUST]! * lat +
@@ -136,6 +147,8 @@ export function steer(
       learnedBrain[b + Brain.FLOW_FWD_THRUST]! * flFwd +
       learnedBrain[b + Brain.PHERO_LAT_THRUST]! * pLat +
       learnedBrain[b + Brain.PHERO_FWD_THRUST]! * pFwd +
+      learnedBrain[b + GLOW_SENSE_LAT_THRUST]! * glLat +
+      learnedBrain[b + GLOW_SENSE_FWD_THRUST]! * glFwd +
       learnedBrain[b + Brain.THRUST_BIAS]!;
 
     // Interoceptive hunger (lever E2): a scalar drive on its own pair of synapses. Gated, not +0'd,
@@ -312,6 +325,15 @@ export function steer(
       keep * elig[b + Brain.PHERO_LAT_THRUST]! + eligLambda * pLat * thrustRaw;
     elig[b + Brain.PHERO_FWD_THRUST] =
       keep * elig[b + Brain.PHERO_FWD_THRUST]! + eligLambda * pFwd * thrustRaw;
+    // Glow-sense elig (slice F3): real input (∇G), so these LEARN. pre = glLat/glFwd, post = motor output.
+    elig[b + GLOW_SENSE_LAT_TURN] =
+      keep * elig[b + GLOW_SENSE_LAT_TURN]! + eligLambda * glLat * turnRaw;
+    elig[b + GLOW_SENSE_FWD_TURN] =
+      keep * elig[b + GLOW_SENSE_FWD_TURN]! + eligLambda * glFwd * turnRaw;
+    elig[b + GLOW_SENSE_LAT_THRUST] =
+      keep * elig[b + GLOW_SENSE_LAT_THRUST]! + eligLambda * glLat * thrustRaw;
+    elig[b + GLOW_SENSE_FWD_THRUST] =
+      keep * elig[b + GLOW_SENSE_FWD_THRUST]! + eligLambda * glFwd * thrustRaw;
     elig[b + Brain.THRUST_BIAS] = keep * elig[b + Brain.THRUST_BIAS]! + eligLambda * thrustRaw;
     if (hungerSense) {
       elig[b + Brain.HUNGER_TURN] =
