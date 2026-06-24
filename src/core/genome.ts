@@ -504,16 +504,16 @@ export const HiddenInput = {
 export const HIDDEN_UNITS = 4; // escape hatch: bump to 6 only if 4 bottlenecks — not speculatively
 export const HIDDEN_INPUTS = 23; // +SIZE +DIET (A1a) +CROWD (A1b)
 export const HIDDEN_OUTPUTS = 3; // turn=0, thrust=1, eatGate=2
-export const HIDDEN_W1 = NAMED_BRAIN_GENES; // input→hidden block start (slot 49)
-export const HIDDEN_W2 = HIDDEN_W1 + HIDDEN_INPUTS * HIDDEN_UNITS; // hidden→output block start (slot 137)
+export const HIDDEN_W1 = NAMED_BRAIN_GENES; // input→hidden block start (derived; see genome.test layout lock)
+export const HIDDEN_W2 = HIDDEN_W1 + HIDDEN_INPUTS * HIDDEN_UNITS; // hidden→output block start (derived)
 
 /** Mood-glow output (slice F): bioluminescence = sigmoid(GLOW_BIAS + Σ_j hidden_j·GLOW_HID_j), reading the
  *  hidden "mood" layer + a bias. DISPLAY-ONLY (no motor/energy effect) and EVOLVE-ONLY (no within-life
  *  learning). The hidden→glow weights seed at 0 + founder noise, so each LINEAGE drifts to its OWN glow
  *  trigger — different species evolve different glow mechanisms. Hue stays for lineage; glow is a separate
  *  channel. Always drawn (on-by-default policy); the forward pass is gated on cfg.moodGlow. */
-export const GLOW_BIAS = HIDDEN_W2 + HIDDEN_UNITS * HIDDEN_OUTPUTS; // 149 (after the hidden W2 block)
-export const GLOW_HID = GLOW_BIAS + 1; // 150; hidden→glow weights (HIDDEN_UNITS of them)
+export const GLOW_BIAS = HIDDEN_W2 + HIDDEN_UNITS * HIDDEN_OUTPUTS; // after the hidden W2 block (derived)
+export const GLOW_HID = GLOW_BIAS + 1; // hidden→glow weights (HIDDEN_UNITS of them)
 
 /** GLOW-SENSE weights (slice F3): the glow-field gradient ∇G (lateral, forward) in the heading frame →
  *  turn + thrust — the receiver side of the glow communication channel (the deposit side reads store.glow).
@@ -521,11 +521,11 @@ export const GLOW_HID = GLOW_BIAS + 1; // 150; hidden→glow weights (HIDDEN_UNI
  *  unlike the display-only mood-glow weights they both EVOLVE and LEARN (eligibility traces in steer). Seed
  *  at 0 so evolution picks the SIGN — approach the glowing crowd or flee it. Always drawn (on-by-default,
  *  like the eat-gate/age/readiness/glow blocks), so the draw stream is consistent whether glowSense is on. */
-export const GLOW_SENSE_LAT_TURN = GLOW_HID + HIDDEN_UNITS; // 154
-export const GLOW_SENSE_FWD_TURN = GLOW_SENSE_LAT_TURN + 1; // 155
-export const GLOW_SENSE_LAT_THRUST = GLOW_SENSE_LAT_TURN + 2; // 156
-export const GLOW_SENSE_FWD_THRUST = GLOW_SENSE_LAT_TURN + 3; // 157
-export const BRAIN_GENES = GLOW_SENSE_LAT_TURN + 4; // 158
+export const GLOW_SENSE_LAT_TURN = GLOW_HID + HIDDEN_UNITS;
+export const GLOW_SENSE_FWD_TURN = GLOW_SENSE_LAT_TURN + 1;
+export const GLOW_SENSE_LAT_THRUST = GLOW_SENSE_LAT_TURN + 2;
+export const GLOW_SENSE_FWD_THRUST = GLOW_SENSE_LAT_TURN + 3;
+export const BRAIN_GENES = GLOW_SENSE_LAT_TURN + 4; // derived; the genome.test layout-lock pins the value
 
 /** Founder brain ≈ the hand-tuned chemotaxis controller (turn toward lateral food, thrust up-gradient,
  *  gentle cruise) + ACTIVE sight: turn toward & thrust along the appeal-signed sight vector. Because that
