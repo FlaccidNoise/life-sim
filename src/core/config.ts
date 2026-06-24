@@ -534,8 +534,9 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     dt: 1,
     maxOrganisms: 32768,
     // Seeded into the pockets (rejection-sampled onto fertile spots), spread across the islands.
-    // Modest count so the small pockets aren't overgrazed at t0.
-    initialPopulation: 90,
+    // Higher count seeds a denser founder pool — more well-fed seekers can find compatible mates at
+    // the 8192² demo scale (sexual reproduction's encounter rate scales with density).
+    initialPopulation: 1000,
     driftSpeed: 1.5,
     // Physics defaults: light drag so seeded motion is visibly sustained (organisms glide + wrap),
     // soft repulsion that spreads crowding, a speed ceiling that bounds any repulsion spike.
