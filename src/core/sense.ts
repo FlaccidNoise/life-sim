@@ -263,6 +263,18 @@ export function senseCreatures(
               pull += cohesion * (1 - 2 * hd); // identical hue → +cohesion, opposite → 0
             }
           }
+          // Mate-seeking pull (life-sim-xa90): while SEEKING, add attraction toward creatures that LOOK
+          // like compatible mates — same diet class + similar hue (cheap kin-by-appearance proxy; true
+          // compatibility is decided at the contact gate in reproduce). Modular seam: replaced by the
+          // kin-scent gradient when that field lands. Bounded by mateSenseAttraction so it can't swamp flee.
+          if (store.seeking[i] === 1 && cfg.mateSenseAttraction > 0) {
+            const sameClass = (myDiet < 0.5) === (itsDiet < 0.5) ? 1 : 0;
+            if (sameClass) {
+              let hd = Math.abs(myHue - hue[j]!);
+              if (hd > 0.5) hd = 1 - hd;
+              pull += cfg.mateSenseAttraction * (1 - 2 * hd);
+            }
+          }
           const w = pull * (1 - d / range) * acuity;
           sx += ux * w;
           sy += uy * w;
