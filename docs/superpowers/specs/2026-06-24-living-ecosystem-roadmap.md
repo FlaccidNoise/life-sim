@@ -74,7 +74,9 @@ A2 (bite-gate) is the lever Bucket B needs, and A1 (own-size/diet) shapes diverg
 
 ### A1 — Interoceptive INPUTS (safe, do first)
 **Progress (2026-06-24):** sliced A1a/A1b/A1c (spec: `docs/superpowers/specs/2026-06-24-A1-interoceptive-inputs-design.md`).
-✅ **A1a (own-SIZE + own-DIET) SHIPPED to main `a7421fe`** — both feed linear+hidden, evolve-only (no elig — constant-within-life bias-runaway avoided), behind `cfg.bodySense` (ON); `BRAIN_GENES 146→158`; 374 green, liveness PASS, final review clean. Measured: mechanism live (ablation) but not cleanly recruited (size→motor sign-inconsistent across seeds; own-DIET grazer-pinned by the predation ceiling). ⏳ A1b (local-CROWDING) in progress; A1c (fertility-under-foot) queued.
+✅ **A1a (own-SIZE + own-DIET) SHIPPED to main `a7421fe`** — both feed linear+hidden, evolve-only (no elig — constant-within-life bias-runaway avoided), behind `cfg.bodySense` (ON); `BRAIN_GENES 146→158`; review clean. Measured: mechanism live (ablation) but not cleanly recruited (size→motor sign-inconsistent; own-DIET grazer-pinned by the predation ceiling).
+✅ **A1b (local-CROWDING) SHIPPED to main `d9e7ca3`** — `senseCrowding` fixed-radius neighbor count (start-of-tick hash, indep. of vision + dead lever-D); steer reads crowdN behind bodySense, CROWD LEARNS (has elig; SIZE/DIET stay evolve-only); `BRAIN_GENES 158→164`; 378 green, review clean. Measured HONEST: wired+live but largely INERT at 8192² (mean crowding ~0.5, ~35-40% feel ≥1 neighbor in 36u, far below norm=8; density wall NND≫36u) — NOT pure-zero (radius 36 > dead lever-D 12); activates if Bucket B concentrates prey.
+⏳ **A1c (fertility-under-foot) in progress** — expected the first genuinely-LIVE A1 input (biomass-under-foot nonzero in pockets). **Pattern so far: A1 closes the audit's decision-wiring gaps (mandate 1), but the behavioral payoff is gated by the density wall — downstream of Bucket B.**
 
 Add as gated hidden+linear inputs (seeded 0 → additive, liveness-safe; they evolve in): **own-SIZE**
 (normalize by ~2·cfg.cellRadius), **own-DIET** (the gene is already 0..1), **local-CROWDING** (the hash
