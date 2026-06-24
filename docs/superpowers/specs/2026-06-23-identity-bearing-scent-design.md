@@ -183,3 +183,16 @@ Report each with file:line evidence, multi-seed.
 - Multi-channel render compositing (channel 0 only for V1).
 - Genome-projected signature beyond hue (hue is the genetic-makeup scalar for V1).
 - Deposit-on-energy-gain model (rejected: leaves predators scent-less).
+
+---
+
+## Findings (measured 2026-06-23, `scent-probe.ts` 6000 ticks × 4 seeds, demo config)
+
+Raw: grazer preyFwd −0.193 / predFwd +0.040; predator preyFwd −0.307 / predFwd −0.135 (n: 25800 grazer, 737 predator). Kin NN hue-dist ON 0.130 vs global 0.212; OFF (identity-blind) NN 0.158. Mean live(ON) 6845.
+
+1. **Liveness — PASS.** World thrives across all 4 seeds. Identity-blind sometimes carries more (the scent/dispersal response costs some local foraging efficiency).
+2. **Scent is used + diverges by diet — the mechanism works.** Synapses evolved strongly off the 0 seed (−0.19…−0.31) and differ by diet bin → identity info rides the signal and shapes behavior, deterministically (`brain.ts` channel loop; `genome.ts` Brain.PHERO_C0..C3).
+3. **Follow-prey/flee-predator — NOT as framed.** The dominant emergent response is **crowd-aversion** on the majority (grazer) PREY channel — everyone descends it (predators most), i.e. disperse from same-type crowds, not hunt. Root cause: the PREY channel is dominated by grazer self-density (near-uniform for a predator swimming in prey → no useful gradient TOWARD prey), and the PRED channel is faint because predators are only ~2.7% of the population. This is the pre-existing **predation-encounter ceiling** (memory `predation-engine-ceiling`: predEncounter never >0.06, founding-gated), NOT a scent-mechanism fault.
+4. **Kin clustering — PRESENT, scent-enhanced.** Identity scent tightens spatial hue co-location ~17% beyond birth-locality (NN 0.130 ON vs 0.158 identity-blind control). The clearest positive result.
+
+**Verdict:** the identity-bearing scent is correctly built, deterministic, ON-by-default, alive, and demonstrably drives diet-divergent behavior + kin clustering. The literal follow/flee headline is gated by the independent predation-encounter ceiling, not by this feature. **Follow-up (separate concern):** to get predator-follows-prey, the predation economy needs more predator contact/founding (see `predation-engine-ceiling`) and/or a prey channel that encodes a *gradient toward sparse prey* rather than grazer crowd-density — a scent-tuning + economy question, not a build defect.
