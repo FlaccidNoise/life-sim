@@ -248,7 +248,8 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
       sizeN,
       dietN,
       crowdN, // CROWD (A1b): 0 when !bodySense (mirrors steer's hidIn[HiddenInput.CROWD])
-      1, // BIAS (now HiddenInput slot 22)
+      0, // FERT (A1c): inert until steer() reads fertHere (Task 3) — steer leaves this hidIn slot 0 too
+      1, // BIAS (now HiddenInput slot 23)
     ];
     for (let j = 0; j < HIDDEN_UNITS; j++) {
       let s = 0;
