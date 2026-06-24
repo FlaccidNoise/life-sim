@@ -116,7 +116,7 @@ describe('genome', () => {
     const hue = new Float32Array(1);
     seedGenome(brain, hue, 0, a, 0.3, false, false, false, false);
     for (let g = 0; g < BRAIN_CORE_GENES; g++) b.gaussian(0, 0.3);
-    // eat-gate block (slice B) is ALWAYS drawn (on-by-default policy, not gated) — eat-gate (5) + age (2) + readiness (2) + hidden (68) + glow (5) + glow-sense (4), always-drawn, after the core.
+    // eat-gate block (slice B) is ALWAYS drawn (on-by-default policy, not gated) — eat-gate (5) + age (2) + readiness (2) + hidden (92) + glow (5) + glow-sense (4), always-drawn, after the core.
     for (let g = Brain.EAT_GATE_BIAS; g < BRAIN_GENES; g++) b.gaussian(0, 0.3);
     b.float();
     expect(a.state).toBe(b.state);
@@ -132,7 +132,7 @@ describe('genome', () => {
     const hue = new Float32Array(2);
     mutateGenome(brain, hue, 1, 0, a, 0.05, 0.02, false, false, false, false);
     for (let g = 0; g < BRAIN_CORE_GENES; g++) b.gaussian(0, 0.05);
-    // eat-gate block (slice B) is ALWAYS drawn (on-by-default policy, not gated) — eat-gate (5) + age (2) + readiness (2) + hidden (68) + glow (5) + glow-sense (4), always-drawn, after the core.
+    // eat-gate block (slice B) is ALWAYS drawn (on-by-default policy, not gated) — eat-gate (5) + age (2) + readiness (2) + hidden (92) + glow (5) + glow-sense (4), always-drawn, after the core.
     for (let g = Brain.EAT_GATE_BIAS; g < BRAIN_GENES; g++) b.gaussian(0, 0.05);
     b.gaussian(0, 0.02); // hue mutation draw
     expect(a.state).toBe(b.state);

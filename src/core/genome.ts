@@ -496,9 +496,9 @@ export const GLOW_HID = GLOW_BIAS + 1; // 138; hidden→glow weights (HIDDEN_UNI
  *  at 0 so evolution picks the SIGN — approach the glowing crowd or flee it. Always drawn (on-by-default,
  *  like the eat-gate/age/readiness/glow blocks), so the draw stream is consistent whether glowSense is on. */
 export const GLOW_SENSE_LAT_TURN = GLOW_HID + HIDDEN_UNITS; // 142
-export const GLOW_SENSE_FWD_TURN = GLOW_SENSE_LAT_TURN + 1; // 107
-export const GLOW_SENSE_LAT_THRUST = GLOW_SENSE_LAT_TURN + 2; // 108
-export const GLOW_SENSE_FWD_THRUST = GLOW_SENSE_LAT_TURN + 3; // 109
+export const GLOW_SENSE_FWD_TURN = GLOW_SENSE_LAT_TURN + 1; // 143
+export const GLOW_SENSE_LAT_THRUST = GLOW_SENSE_LAT_TURN + 2; // 144
+export const GLOW_SENSE_FWD_THRUST = GLOW_SENSE_LAT_TURN + 3; // 145
 export const BRAIN_GENES = GLOW_SENSE_LAT_TURN + 4; // 146
 
 /** Founder brain ≈ the hand-tuned chemotaxis controller (turn toward lateral food, thrust up-gradient,
