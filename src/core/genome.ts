@@ -281,6 +281,31 @@ export function geneUpkeep(genes: Float32Array, slot: number, cfg: Config): numb
   return cost;
 }
 
+/** Brain contribution to genetic distance. v1 returns 0 — a modular seam: when the NN topology change
+ *  lands, this becomes a real per-weight distance without touching geneticDistance's callers. */
+export function brainDistance(_brain: Float32Array, _a: number, _b: number): number {
+  return 0;
+}
+
+/** Genetic distance between two creatures: normalised L2 over the ECOLOGICAL scalar genes (DIET up-
+ *  weighted by cfg.mateDietWeight so trophic role dominates → predator/prey reproductive isolation falls
+ *  out of the metric). DISPLAY/PREFERENCE are sexual-selection axes, NOT species axes, so they weight 0.
+ *  Plus a modular brain term (0 in v1). This is the compatibility metric the mate gate thresholds on. */
+export function geneticDistance(genes: Float32Array, a: number, b: number, cfg: Config): number {
+  const ab = a * SCALAR_GENE_COUNT;
+  const bb = b * SCALAR_GENE_COUNT;
+  let sum = 0;
+  for (let g = 0; g < SCALAR_GENE_COUNT; g++) {
+    if (g === ScalarGene.DISPLAY || g === ScalarGene.PREFERENCE) continue; // sexual axes ≠ species axes
+    const spec = SCALAR_GENE_SPECS[g]!;
+    const range = spec.max - spec.min || 1;
+    const d = (genes[ab + g]! - genes[bb + g]!) / range;
+    const w = g === ScalarGene.DIET ? cfg.mateDietWeight : 1;
+    sum += w * d * d;
+  }
+  return Math.sqrt(sum);
+}
+
 /** Brain weight layout (index into the per-creature brain block). Two sensory gradients in the heading
  *  frame drive turn + thrust: the FOOD gradient (chemotaxis) and the SIGHT vector (appeal-signed pull
  *  toward edible creatures / away from threats). Sight weights seed at 0 so vision starts neutral and
