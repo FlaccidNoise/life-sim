@@ -49,7 +49,10 @@ const fatal = el('fatal'); // boot-fatal banner (renderer init failure)
 let config: Config = defaultConfig({
   // Spatial structure + legibility.
   wallRegionCount: 5,
-  flowStrength: 0.35, // stronger current so channel B actually drifts (and mixes pockets for encounters)
+  flowStrength: 4, // strong current: food gradients drift visibly downstream (~11× the old 0.35). Swept the
+  // demo config across seeds — fs=4 is the strongest current that keeps the population robustly alive AND
+  // breeding (births fall ~32% from baseline as the push sweeps bodies off food; fs≥8 craters them). The
+  // arrow OVERLAY ('v') is off by default now — the current reads in the drifting food itself.
   flowPushStrength: 0.25,
   motorSquash: true,
   // Density (the proven lever): more + bigger pockets → dense → predators + niche partitioning return.
@@ -154,7 +157,7 @@ let speed = 1; // sim ticks per animation frame; <1 = slow-mo (interpolated for 
 let foodLayer: FoodLayer = FoodLayer.TOTAL;
 let showWalls = true; // wall slate layer (toggle with 'w')
 let showOverlay = true; // per-creature debug overlay on the selection (toggle with 'o')
-let showFlow = true; // flow-field current arrows (toggle with 'v') — on by default to show the world's drift
+let showFlow = false; // flow-field current arrows (toggle with 'v') — OFF by default; the current's effect reads in the drifting food, the arrow overlay is opt-in
 let colorMode: ColorMode = ColorMode.LINEAGE; // dot hue source (cycle with 'c'): lineage → diet → energy → forage
 let selected: { slot: number; gen: number } | null = null;
 
@@ -684,7 +687,7 @@ function frame(): void {
     renderer.drawLines(trailScratch, v);
   }
   // Flow-field current arrows ('v'): coarse sub-grid sample of world.flow drawn as cell-centre→centre+v·scale
-  // line pairs, each a dim-tail→bright-head comet so the current's direction reads. On by default.
+  // line pairs, each a dim-tail→bright-head comet so the current's direction reads. Opt-in (off by default).
   if (showFlow && world.flow) {
     const flow = world.flow;
     const cellW = config.worldWidth / flow.cols;
