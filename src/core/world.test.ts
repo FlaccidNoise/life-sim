@@ -14,15 +14,11 @@ describe('World — Phase 0 determinism contract', () => {
     expect(a.stateHash()).toBe(b.stateHash());
   });
 
-  it('OFF-state golden hash: default config is byte-identical to the pre-feature engine', () => {
-    // Pins the load-bearing invariant: every new knob (per-pocket richness, deadWaterCost, founding-
-    // protection, food channels, …) defaults OFF → the seeded world is byte-identical to legacy. The
-    // comparative tests above would silently pass if a future edit reordered an RNG draw at the default;
-    // this one fails LOUDLY. Constant verified against the engine before these features (commit 55f899e).
-    const w = new World(defaultConfig({ seed: 3 }));
-    for (let t = 0; t < 1000; t++) w.step();
-    expect(w.stateHash()).toBe('a32e9375');
-  });
+  // RETIRED 2026-06-23: the frozen "default config matches the pre-feature engine" golden hash
+  // (was `a32e9375`). The off-by-default ablation gate is gone — new features now ship ON by default, so
+  // the default world is SUPPOSED to move as features land (see docs/decisions/INDEX.md → Conventions).
+  // The surviving invariant is determinism: same (config, seed) → same hash, asserted by the first test
+  // above. Per-config reproducibility, not a frozen baseline, is what we pin.
 
   it('different seeds → different hash (seed actually controls the world)', () => {
     const a = new World(defaultConfig({ seed: 3 }));
