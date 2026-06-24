@@ -268,6 +268,60 @@ export function mutateScalarGenes(
   }
 }
 
+/** Sexual crossover of scalar genes: each gene is independently inherited from mom OR dad (uniform pick —
+ *  preserves discrete allele combinations, unlike a blend, which speciation needs), then mutated + clamped
+ *  exactly like mutateScalarGenes. Gated genes (forage/phero/age off) inherit from MOM with no draw, so
+ *  the gating still skips RNG. One pick-draw per active gene; called per child in ascending mother order. */
+export function crossoverScalarGenes(
+  genes: Float32Array,
+  child: number,
+  mom: number,
+  dad: number,
+  rng: Rng,
+  cfg: Config,
+): void {
+  const cb = child * SCALAR_GENE_COUNT;
+  const mb = mom * SCALAR_GENE_COUNT;
+  const db = dad * SCALAR_GENE_COUNT;
+  for (let g = 0; g < SCALAR_GENE_COUNT; g++) {
+    const spec = SCALAR_GENE_SPECS[g]!;
+    if (scalarGeneGatedOff(g, cfg)) {
+      genes[cb + g] = genes[mb + g]!; // gated → inherit from mom, no draw
+      continue;
+    }
+    const parentBase = rng.float() < 0.5 ? mb : db; // uniform per-gene pick
+    const center = cfg[spec.centerKey];
+    genes[cb + g] = clampTo(
+      genes[parentBase + g]! + rng.gaussian(0, cfg.mutationSigma * center),
+      spec.min,
+      spec.max,
+    );
+  }
+}
+
+/** Sexual brain inheritance. v1: inherit the MOTHER's brain (+ hue), mutated — a modular seam. A separate
+ *  session is changing the NN topology; once it lands this becomes real per-weight brain crossover with the
+ *  dad parameter, without touching reproduce(). */
+export function crossoverBrain(
+  brain: Float32Array,
+  hue: Float32Array,
+  child: number,
+  mom: number,
+  _dad: number,
+  rng: Rng,
+  sigma: number,
+  hueSigma: number,
+  wallSenseGenes: boolean,
+  flowSenseGenes: boolean,
+  hungerSense: boolean,
+  pheroSenseGenes: boolean,
+): void {
+  mutateGenome(
+    brain, hue, child, mom, rng, sigma, hueSigma,
+    wallSenseGenes, flowSenseGenes, hungerSense, pheroSenseGenes,
+  );
+}
+
 /** Extra basal upkeep this creature pays for its costed genes: Σ max(0, gene − center)·costCoeff. */
 export function geneUpkeep(genes: Float32Array, slot: number, cfg: Config): number {
   const base = slot * SCALAR_GENE_COUNT;

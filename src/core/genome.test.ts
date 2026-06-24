@@ -12,6 +12,7 @@ import {
   SCALAR_GENE_SPECS,
   seedScalarGenes,
   mutateScalarGenes,
+  crossoverScalarGenes,
   scalarGeneGatedOff,
   geneUpkeep,
   geneticDistance,
@@ -292,5 +293,44 @@ describe('FORAGE_PREF gene (lever B — two-channel niche axis, RNG-gated)', () 
     const c = child[SCALAR_GENE_COUNT + ScalarGene.FORAGE_PREF]!;
     expect(Math.abs(c - 0.4)).toBeGreaterThan(0);
     expect(Math.abs(c - 0.4)).toBeLessThan(0.5);
+  });
+
+  it('crossoverScalarGenes: each child gene is near one parent allele, clamped', () => {
+    const cfg = defaultConfig({ mutationSigma: 0 }); // no mutation → child gene EXACTLY one parent's
+    const N = SCALAR_GENE_COUNT;
+    const genes = new Float32Array(3 * N);
+    for (let g = 0; g < N; g++) {
+      genes[0 * N + g] = SCALAR_GENE_SPECS[g]!.min; // mom = min allele
+      genes[1 * N + g] = SCALAR_GENE_SPECS[g]!.max; // dad = max allele
+    }
+    const rng = new Rng(42);
+    crossoverScalarGenes(genes, 2, 0, 1, rng, cfg);
+    let fromMom = 0;
+    let fromDad = 0;
+    for (let g = 0; g < N; g++) {
+      const v = genes[2 * N + g]!;
+      const spec = SCALAR_GENE_SPECS[g]!;
+      const min = Math.fround(spec.min); // parent alleles round-trip through Float32 storage
+      const max = Math.fround(spec.max);
+      expect(v === min || v === max).toBe(true); // exactly one parent (sigma 0)
+      if (v === min) fromMom++;
+      else fromDad++;
+    }
+    expect(fromMom).toBeGreaterThan(0); // mixes both parents (not all from one)
+    expect(fromDad).toBeGreaterThan(0);
+  });
+
+  it('crossoverScalarGenes is deterministic for a given rng state', () => {
+    const cfg = defaultConfig({});
+    const N = SCALAR_GENE_COUNT;
+    const a = new Float32Array(3 * N);
+    const b = new Float32Array(3 * N);
+    for (let g = 0; g < N; g++) {
+      a[g] = b[g] = 1;
+      a[N + g] = b[N + g] = 2;
+    }
+    crossoverScalarGenes(a, 2, 0, 1, new Rng(7), cfg);
+    crossoverScalarGenes(b, 2, 0, 1, new Rng(7), cfg);
+    for (let g = 0; g < N; g++) expect(a[2 * N + g]).toBe(b[2 * N + g]);
   });
 });
