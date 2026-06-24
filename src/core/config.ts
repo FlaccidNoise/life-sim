@@ -442,6 +442,12 @@ export interface Config {
    *  (both the linear map and the hidden layer), so behaviour can be conditional on the body. Gates only the
    *  steer() forward pass; the synapses are always drawn (on-by-default policy). */
   bodySense: boolean;
+  /** A1b local-crowding sense radius (world units): senseCrowding counts live neighbors within this distance
+   *  into store.crowding. Wider than the 2·cellRadius repulsion cutoff (which holds creatures ~12u apart, so a
+   *  12u radius reads ~0 — the dead lever-D scan's failure). Only read when bodySense (the A1 umbrella flag). */
+  crowdSenseRange: number;
+  /** Normalization divisor for the crowding count: crowdN = min(crowding/this, 1). ~8 neighbors → saturated. */
+  crowdSenseNorm: number;
   /** Hidden layer (slice E): when on, a fixed H-unit tanh layer adds a NONLINEAR correction on top of the
    *  linear sensor→motor map (skip-connection), giving the brain conditional logic ("flee only if a predator
    *  is close AND I'm cornered"). Off = the pure linear brain (the hidden forward pass is skipped). The
@@ -775,6 +781,8 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     ageNorm: 1000, // ~average lifespan at the shipped economy → maturity reaches ~1 near mid-late life
     readinessSense: true, // ON by default: the brain can sense how close it is to breeding (the repro band)
     bodySense: true, // ON by default: the brain senses its own size + diet (A1a interoceptive inputs)
+    crowdSenseRange: 36, // = 6·cellRadius; wider than the 12u repulsion cutoff so neighbors can register
+    crowdSenseNorm: 8, // crowding count → [0,1]: 8 neighbors-in-radius reads as fully crowded
     hiddenLayer: true, // ON by default: the nonlinear hidden layer (conditional logic — the emergent-behavior substrate)
     moodGlow: true, // ON by default: bioluminescence read from the hidden mood layer (display + comms signal)
 

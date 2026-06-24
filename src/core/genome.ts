@@ -447,13 +447,17 @@ export const Brain = {
   SIZE_THRUST: 46,
   DIET_TURN: 47,
   DIET_THRUST: 48,
+  // A1b interoceptive local-CROWDING input: count of live neighbors within cfg.crowdSenseRange (normalized).
+  // Unlike own-SIZE/own-DIET this VARIES within a life → it LEARNS (eligibility traces in steer). Seeded 0.
+  CROWD_TURN: 49,
+  CROWD_THRUST: 50,
 } as const;
 /** Senses-core brain weights (food + sight) — the count present before walls/flow/hunger, and the RNG-draw
  *  count when all gated blocks are off. Each gated block extends the array but draws RNG only when on. */
 export const BRAIN_CORE_GENES = 10;
 /** Number of named (non-hidden) brain weights — the linear sensor→motor map above (slots 0..44). The hidden
  *  layer's weight blocks start here. */
-export const NAMED_BRAIN_GENES = 49;
+export const NAMED_BRAIN_GENES = 51;
 
 /** Order of the HIDDEN_INPUTS scalars fed into the hidden layer (slice E) — the same heading-frame inputs
  *  turn/thrust read, plus own-SIZE/own-DIET (A1a) and a constant bias. The single pre-merge PHERO pair is
@@ -482,7 +486,8 @@ export const HiddenInput = {
   READINESS: 18,
   SIZE: 19, // A1a: own normalized SIZE feeds the hidden layer (conditional logic on body size)
   DIET: 20, // A1a: own DIET feeds the hidden layer (conditional logic on trophic role)
-  BIAS: 21,
+  CROWD: 21, // A1b: local crowding feeds the hidden layer (conditional logic on density)
+  BIAS: 22,
 } as const;
 
 /** Hidden layer (slice E): a fixed H-unit tanh layer adding a NONLINEAR correction ON TOP of the linear
@@ -497,7 +502,7 @@ export const HiddenInput = {
  *  can't credit-assign through a hidden unit), hidden→output LEARNS. Gated by cfg.hiddenLayer (the forward
  *  pass is skipped when off); the weights are always drawn (on-by-default policy). */
 export const HIDDEN_UNITS = 4; // escape hatch: bump to 6 only if 4 bottlenecks — not speculatively
-export const HIDDEN_INPUTS = 22; // +SIZE +DIET (A1a)
+export const HIDDEN_INPUTS = 23; // +SIZE +DIET (A1a) +CROWD (A1b)
 export const HIDDEN_OUTPUTS = 3; // turn=0, thrust=1, eatGate=2
 export const HIDDEN_W1 = NAMED_BRAIN_GENES; // input→hidden block start (slot 49)
 export const HIDDEN_W2 = HIDDEN_W1 + HIDDEN_INPUTS * HIDDEN_UNITS; // hidden→output block start (slot 137)
@@ -552,6 +557,8 @@ const FOUNDER_BRAIN: readonly number[] = [
   0, 0.3, 0, 0,
   // A1a own-SIZE/own-DIET (45-48): SIZE_TURN, SIZE_THRUST, DIET_TURN, DIET_THRUST — seed 0 (response evolves).
   0, 0, 0, 0,
+  // A1b local-CROWDING (49-50): CROWD_TURN, CROWD_THRUST — seed 0 (the density response evolves + learns).
+  0, 0,
   // Hidden layer (slice E): HIDDEN_INPUTS·HIDDEN_UNITS (80) input→hidden + HIDDEN_UNITS·HIDDEN_OUTPUTS (12)
   // hidden→output weights, all seeded 0 — the founder Gaussian noise at seed breaks the unit symmetry.
   ...new Array<number>(HIDDEN_INPUTS * HIDDEN_UNITS + HIDDEN_UNITS * HIDDEN_OUTPUTS).fill(0),
