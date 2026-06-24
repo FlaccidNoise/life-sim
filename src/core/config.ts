@@ -386,6 +386,12 @@ export interface Config {
   /** How hard active eating cuts thrust (the mobility cost that makes the eat-gate matter). 0 = eating is
    *  free (gate only throttles intake); 0.4 = a full-gate grazer moves at ~60% thrust. */
   eatMovePenalty: number;
+  /** Age sense (slice C): feed an interoceptive "maturity" input = min(age/ageNorm, 1) (0 = newborn …
+   *  1 = at/past the reference lifespan) into the brain on its own turn/thrust synapses, so behaviour can
+   *  depend on life stage (juvenile dispersal, elder risk-taking). Off = the brain can't sense its age. */
+  ageSense: boolean;
+  /** Reference lifespan (ticks) the age input normalizes against — age/ageNorm saturates at 1 here. */
+  ageNorm: number;
 
   // ── Walls (env pass 1) ─────────────────────────────────────────────────────
   /** FINE wall-grid resolution (decoupled from the food grid for creature-scale nooks). */
@@ -652,6 +658,8 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     reverseThrustFraction: 0.5, // ON by default: creatures can back away at half forward power
     brainGatedEating: true, // ON by default: eating is a decision — graze slow vs lift the head to flee fast
     eatMovePenalty: 0.4,
+    ageSense: true, // ON by default: the brain can sense its own maturity (life-stage behaviour)
+    ageNorm: 1000, // ~average lifespan at the shipped economy → maturity reaches ~1 near mid-late life
 
     // Walls: 5 biome regions over a 512² fine grid (16u cells), ~35% solid, vision-occluding.
     // Default OFF (wallRegionCount 0) so defaultConfig stays a TRUE no-op — byte-identical to the

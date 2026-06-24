@@ -99,6 +99,12 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
     else if (hunger > 1) hunger = 1;
     inputs.push(node('hunger', hunger, Brain.HUNGER_TURN, Brain.HUNGER_THRUST));
   }
+  // Age input (slice C): maturity = min(age/ageNorm, 1), mirroring steer()'s gate. Climbs over a life.
+  if (cfg.ageSense) {
+    let aged = cfg.ageNorm > 0 ? store.age[slot]! / cfg.ageNorm : 0; // mirror steer's ageNorm≤0 guard
+    if (aged > 1) aged = 1;
+    inputs.push(node('age', aged, Brain.AGE_TURN, Brain.AGE_THRUST));
+  }
 
   let turnRaw = 0;
   let thrustRaw = 0;

@@ -308,11 +308,15 @@ export const Brain = {
   EAT_GATE_LAT: 26,
   EAT_GATE_SIGHT_FWD: 27, // appeal-signed sight fwd → keep eating toward appeal, lift head from a threat ahead
   EAT_GATE_SIGHT_LAT: 28,
+  // Interoceptive AGE input (slice C): the creature's maturity (min(age/ageNorm,1), 0=newborn…1=old) drives
+  // turn + thrust on its own synapses, so life-stage behaviour can evolve. Always present (on-by-default).
+  AGE_TURN: 29,
+  AGE_THRUST: 30, // seeded slightly + so older creatures roam a touch more (restless elders); evolution tunes
 } as const;
 /** Senses-core brain weights (food + sight) — the count present before walls/flow/hunger, and the RNG-draw
  *  count when all gated blocks are off. Each gated block extends the array but draws RNG only when on. */
 export const BRAIN_CORE_GENES = 10;
-export const BRAIN_GENES = 29;
+export const BRAIN_GENES = 31;
 
 /** Founder brain ≈ the hand-tuned chemotaxis controller (turn toward lateral food, thrust up-gradient,
  *  gentle cruise) + ACTIVE sight: turn toward & thrust along the appeal-signed sight vector. Because that
@@ -326,11 +330,13 @@ export const BRAIN_GENES = 29;
  *   WALL_LAT_TURN, WALL_FWD_TURN, WALL_LAT_THRUST, WALL_FWD_THRUST,
  *   FLOW_LAT_TURN, FLOW_FWD_TURN, FLOW_LAT_THRUST, FLOW_FWD_THRUST, HUNGER_TURN, HUNGER_THRUST,
  *   PHERO_LAT_TURN, PHERO_FWD_TURN, PHERO_LAT_THRUST, PHERO_FWD_THRUST,
- *   EAT_GATE_BIAS, EAT_GATE_FWD, EAT_GATE_LAT, EAT_GATE_SIGHT_FWD, EAT_GATE_SIGHT_LAT]. The 4 phero weights
- *   seed at 0; the eat-gate seeds BIAS 4 (sigmoid≈0.98 → eat ~fully by default) + SIGHT_FWD 2 (a threat
- *   ahead pulls the gate down → lift head + regain mobility), the rest 0 (evolve). */
+ *   EAT_GATE_BIAS, EAT_GATE_FWD, EAT_GATE_LAT, EAT_GATE_SIGHT_FWD, EAT_GATE_SIGHT_LAT,
+ *   AGE_TURN, AGE_THRUST]. The 4 phero weights seed at 0; the eat-gate seeds BIAS 4 (sigmoid≈0.98 → eat
+ *   ~fully by default) + SIGHT_FWD 2 (a threat ahead pulls the gate down → lift head + regain mobility); the
+ *   age input seeds AGE_THRUST 0.3 (older → a touch more thrust), AGE_TURN 0, the rest 0 (evolve). */
 const FOUNDER_BRAIN: readonly number[] = [
   1.2, 0, 0, 1.5, 0, 0.3, 1.0, 0, 0, 1.2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 2, 0,
+  0, 0.3,
 ];
 
 /** Seed a founder's genome: founder brain + Gaussian spread, random hue (lineage colors diverge).

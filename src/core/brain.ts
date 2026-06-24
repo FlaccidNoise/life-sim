@@ -50,6 +50,7 @@ export function steer(
     forceX,
     forceY,
     eatGate,
+    age,
   } = store;
   const { wallSenseX, wallSenseY, flowSenseX, flowSenseY, pheroSenseX, pheroSenseY } = store;
   const { learnedBrain, elig, energy } = store;
@@ -58,6 +59,8 @@ export function steer(
   const reverseFrac = cfg.reverseThrustFraction; // 0 = forward-only (legacy); 0.5 = back away at half power
   const brainGatedEating = cfg.brainGatedEating; // eatGate output throttles intake + costs mobility
   const eatMovePenalty = cfg.eatMovePenalty; // thrust ×= 1 − eatGate·penalty while eating
+  const ageSense = cfg.ageSense; // feed maturity = min(age/ageNorm,1) as an interoceptive input
+  const ageNorm = cfg.ageNorm;
   for (let k = 0; k < liveCount; k++) {
     const i = liveIndices[k]!;
     const sg = i * SCALAR_GENE_COUNT;
@@ -125,6 +128,16 @@ export function steer(
       else if (hunger > 1) hunger = 1;
       turnRaw += learnedBrain[b + Brain.HUNGER_TURN]! * hunger;
       thrustRaw += learnedBrain[b + Brain.HUNGER_THRUST]! * hunger;
+    }
+
+    // Interoceptive AGE (slice C): maturity = min(age/ageNorm, 1) on its own synapses (gated like hunger so
+    // the OFF path is untouched). A newborn's aged = 0, so even ON it adds nothing until the creature ages.
+    let aged = 0;
+    if (ageSense) {
+      aged = ageNorm > 0 ? age[i]! / ageNorm : 0; // ageNorm≤0 (live-tune footgun) → no age signal, not NaN
+      if (aged > 1) aged = 1;
+      turnRaw += learnedBrain[b + Brain.AGE_TURN]! * aged;
+      thrustRaw += learnedBrain[b + Brain.AGE_THRUST]! * aged;
     }
 
     let turn: number;
@@ -231,6 +244,12 @@ export function steer(
         keep * elig[b + Brain.EAT_GATE_SIGHT_FWD]! + eligLambda * sFwd * eatGateRaw;
       elig[b + Brain.EAT_GATE_SIGHT_LAT] =
         keep * elig[b + Brain.EAT_GATE_SIGHT_LAT]! + eligLambda * sLat * eatGateRaw;
+    }
+    // Age input eligibility (slice C): pre = maturity, post = the motor output (mirrors the hunger pair).
+    if (ageSense) {
+      elig[b + Brain.AGE_TURN] = keep * elig[b + Brain.AGE_TURN]! + eligLambda * aged * turnRaw;
+      elig[b + Brain.AGE_THRUST] =
+        keep * elig[b + Brain.AGE_THRUST]! + eligLambda * aged * thrustRaw;
     }
   }
 }
