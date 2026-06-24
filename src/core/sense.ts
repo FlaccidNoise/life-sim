@@ -367,3 +367,22 @@ export function senseCrowding(store: OrganismStore, hash: SpatialHash, cfg: Conf
     crowding[i] = n;
   }
 }
+
+/** Sum the food-field biomass at each creature's body across the active channels into store.fertHere — the
+ *  A1c interoceptive "how much food is right here" sense (distinct from the food GRADIENT, which is ~0 at a
+ *  pocket's peak). Gated on bodySense (skipped → fertHere stays 0). Field sampling only, ascending live-slot
+ *  order, RNG-free → deterministic. steer normalizes by cfg.foodCap. */
+export function senseFertility(store: OrganismStore, food: FoodField, cfg: Config): void {
+  const { liveIndices, liveCount, x, y, fertHere } = store;
+  if (!cfg.bodySense) return; // steer gates fertN on bodySense too, so leaving fertHere stale is harmless
+  const channels = cfg.foodChannels;
+  for (let k = 0; k < liveCount; k++) {
+    const i = liveIndices[k]!;
+    const xi = x[i]!;
+    const yi = y[i]!;
+    let b = food.sampleAt(xi, yi);
+    if (channels >= 2) b += food.sampleAt2(xi, yi);
+    if (channels >= 3) b += food.sampleAt3(xi, yi);
+    fertHere[i] = b;
+  }
+}

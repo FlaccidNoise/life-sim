@@ -9,7 +9,7 @@ import { FlowField } from './flow-field';
 import { ScentField } from './scent-field';
 import { PheroField } from './phero-field';
 import { Parcels } from './parcels';
-import { senseFood, senseCreatures, senseEnv, senseCrowding } from './sense';
+import { senseFood, senseCreatures, senseEnv, senseCrowding, senseFertility } from './sense';
 import { steer, learn } from './brain';
 import {
   seedGenome,
@@ -292,6 +292,7 @@ export class World {
       this.parcels.step(cfg.flowStrength > 0 ? this.flow : null, cfg.dt);
     }
     senseFood(s, this.food, cfg);
+    senseFertility(s, this.food, cfg);
     senseEnv(
       s,
       this.walls,
