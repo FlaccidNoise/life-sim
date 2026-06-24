@@ -296,27 +296,26 @@ export interface Config {
    *  large value pushes the moved fraction past the CFL=0.25 ceiling and the upwind scheme can go negative. */
   foodChannelBDriftMult: number;
 
-  // ── F2 pheromones (a diffusing deposit-and-sense field; OFF default pheromoneEnabled=false = byte-identical) ──
-  /** Master switch for the pheromone field + the 4 PHERO brain genes + PHERO_DEPOSIT scalar gene. false =
+  // ── F2 identity-bearing scent (a 4-channel deposit-and-sense field; pheromoneEnabled master switch) ──
+  /** Master switch for the ScentField + the 16 PHERO brain genes + PHERO_DEPOSIT scalar gene. false =
    *  the field is never allocated, the genes never draw RNG, and the sim is byte-identical to pre-feature. */
   pheromoneEnabled: boolean;
-  /** PHERO_DEPOSIT gene center: baseline deposit strength a creature broadcasts. Only drawn when enabled. */
+  /** PHERO_DEPOSIT gene center: baseline deposit loudness a creature broadcasts. Only drawn when enabled. */
   pheroDeposit: number;
   /** Per-unit-above-center upkeep for PHERO_DEPOSIT (no free chemical broadcast). */
   pheroDepositCost: number;
-  /** Inter-cell diffusion of the pheromone field per tick [0,0.25] — sets how FAR the signal carries (the
-   *  density-wall crossing) and, with decay, the DELAY that makes it candidate breathing feedback. */
+  /** Inter-cell diffusion of each scent channel per tick [0,0.25] — how FAR the signal carries (shared
+   *  across channels for V1) and, with decay, the DELAY that makes it candidate breathing feedback. */
   pheroDiffuse: number;
-  /** Pheromone decay per tick (0,1] — the field forgets at this rate. Low + diffuse = long-memory delayed feedback. */
+  /** Scent decay per tick (0,1] — each channel forgets at this rate. Low + diffuse = long-memory feedback. */
   pheroDecay: number;
-  /** Default deposit source = on-graze (ubiquitous, so the field actually populates at 8192² where bites are
-   *  rare). true = a grazing creature deposits PHERO_DEPOSIT·pheroGrazeStrength into its cell. */
-  pheroDepositOnGraze: boolean;
-  /** Scale on the on-graze deposit. */
-  pheroGrazeStrength: number;
-  /** Secondary alarm-on-bite deposit (a bitten prey emits). Default 0 — bites are too rare at scale to be the
-   *  primary source, but kept as an evolvable flavor channel. */
-  pheroAlarmStrength: number;
+  /** Per-tick passive deposit scale: every live creature broadcasts PHERO_DEPOSIT_gene·pheroDepositStrength
+   *  of its signature each tick. The continuous trail (vs on-graze) so predators — who hunt, not graze —
+   *  also lay scent. Lower it / raise pheroDecay if the field saturates. */
+  pheroDepositStrength: number;
+  /** Identity ablation: true → deposit splits by diet (role) + hue (signature); false → equal into all
+   *  channels (field alive but information-free). The toggle that isolates the feature's effect. */
+  scentIdentity: boolean;
 
   /** Gaussian σ spread of founder brain weights around the seed brain (initial behavioral variation). */
   founderSigma: number;
@@ -606,15 +605,14 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     foodPocketChannelMode: 0, // 0 = all pockets channel A (no spatial split); 1 = round-robin distinct islands
     foodChannelAWallTied: false, // ch2-diff OFF: legacy round-robin channel assignment → byte-identical
     foodChannelBDriftMult: 1, // ch2-diff OFF: uniform advection across channels → byte-identical
-    // F2 pheromones (OFF default: pheromoneEnabled=false → field never allocated, genes never draw → no-op).
+    // F2 identity-bearing scent (master OFF here; the demo turns pheromoneEnabled on — on-by-default policy).
     pheromoneEnabled: false,
-    pheroDeposit: 1.0, // PHERO_DEPOSIT gene center
+    pheroDeposit: 1.0, // PHERO_DEPOSIT gene center (deposit loudness)
     pheroDepositCost: 0.01, // upkeep per unit above center
     pheroDiffuse: 0.2, // carries the signal ~64-91u in 10-20 ticks (crosses the ~40u pocket NND)
     pheroDecay: 0.02, // slow forget → long-memory delayed feedback (the breathing candidate)
-    pheroDepositOnGraze: true, // ubiquitous deposit source so the field populates at scale
-    pheroGrazeStrength: 1,
-    pheroAlarmStrength: 0, // alarm-on-bite secondary (bites too rare at scale to lead with)
+    pheroDepositStrength: 0.1, // per-tick passive deposit; ×4 channels ×live creatures, so kept small
+    scentIdentity: true, // identity-bearing by default (on-by-default policy)
     // NB pre-sight, predators hunt by PROXIMITY only — the encounter rate is too low for hunting to
     // pay, so the predator trait does not persist yet (it needs the sight slice to actively target
     // prey). The mechanic + genes + color are in place; sight activates it.
