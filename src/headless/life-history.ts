@@ -169,8 +169,6 @@ export const DEMO_OVERRIDES: Partial<Config> = {
   breedCooldown: 150,
   // Age / life stages (life-sim-bd8a): juvenile breed-lock + elder senescence tax + costed longevity gene.
   ageStages: true,
-  // Sexual reproduction: compatibility-gated mating + display/preference genes (the feature under measurement).
-  sexualReproduction: true,
 };
 
 // ── One seed: run the sim, observe every tick, build the per-seed report, return structured stats ──────
