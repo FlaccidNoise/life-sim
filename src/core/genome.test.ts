@@ -35,23 +35,25 @@ describe('unified brain layout (consolidation)', () => {
     expect(Brain.READINESS_THRUST).toBe(44);
     expect(Brain.SIZE_TURN).toBe(45);
     expect(Brain.DIET_THRUST).toBe(48);
-    expect(Brain.CROWD_TURN).toBe(49); // A1b: local-crowding linear synapses
-    expect(Brain.CROWD_THRUST).toBe(50);
-    expect(NAMED_BRAIN_GENES).toBe(51);
+    expect(Brain.CROWD_TURN).toBe(49);
+    expect(Brain.FERT_TURN).toBe(51); // A1c: fertility-under-foot linear synapses
+    expect(Brain.FERT_THRUST).toBe(52);
+    expect(NAMED_BRAIN_GENES).toBe(53);
   });
-  it('grows the hidden layer to carry own-SIZE + own-DIET + local-CROWDING (23 inputs)', () => {
+  it('grows the hidden layer to carry own-SIZE + own-DIET + local-CROWDING + fertility (24 inputs)', () => {
     expect(SCENT_CHANNELS).toBe(4);
-    expect(HIDDEN_INPUTS).toBe(23);
+    expect(HIDDEN_INPUTS).toBe(24);
     expect(HiddenInput.SIZE).toBe(19);
     expect(HiddenInput.DIET).toBe(20);
     expect(HiddenInput.CROWD).toBe(21);
-    expect(HiddenInput.BIAS).toBe(22);
+    expect(HiddenInput.FERT).toBe(22);
+    expect(HiddenInput.BIAS).toBe(23);
   });
   it('derives downstream offsets from the unified sizes', () => {
-    expect(HIDDEN_W1).toBe(NAMED_BRAIN_GENES); // 51
-    expect(HIDDEN_W2).toBe(HIDDEN_W1 + HIDDEN_INPUTS * HIDDEN_UNITS); // 143
-    expect(GLOW_BIAS).toBe(HIDDEN_W2 + HIDDEN_UNITS * HIDDEN_OUTPUTS); // 155
-    expect(BRAIN_GENES).toBe(164);
+    expect(HIDDEN_W1).toBe(NAMED_BRAIN_GENES); // 53
+    expect(HIDDEN_W2).toBe(HIDDEN_W1 + HIDDEN_INPUTS * HIDDEN_UNITS); // 149
+    expect(GLOW_BIAS).toBe(HIDDEN_W2 + HIDDEN_UNITS * HIDDEN_OUTPUTS); // 161
+    expect(BRAIN_GENES).toBe(170);
   });
 });
 
