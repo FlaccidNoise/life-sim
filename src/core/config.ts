@@ -785,8 +785,8 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     wallCorridorRadius: 2,
     wallOccludesVision: true,
     wallSenseRange: 24,
-    // Flow: gentle divergence-free current that drifts food; default OFF (flowStrength 0) for the same
-    // no-op reason as walls. The demo opts in with flowStrength 0.15. Creature push OFF by default.
+    // Flow: divergence-free current that drifts food; default OFF (flowStrength 0) for the same
+    // no-op reason as walls. The demo opts in with a strong flowStrength 4. Creature push OFF by default.
     flowStrength: 0,
     flowScale: 18,
     flowPushStrength: 0,
