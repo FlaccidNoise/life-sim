@@ -122,13 +122,26 @@ describe('computeBrainState', () => {
       'wall lat',
       'flow fwd',
       'flow lat',
+      'prey fwd',
+      'prey lat',
+      'pred fwd',
+      'pred lat',
+      'kin·c fwd',
+      'kin·c lat',
+      'kin·s fwd',
+      'kin·s lat',
       'bias',
       'age',
       'ready',
+      'glow fwd',
+      'glow lat',
     ]);
-    expect(st.inputs[8]!.value).toBe(1); // bias is constant 1
-    expect(st.inputs[9]!.label).toBe('age'); // interoceptive maturity input (slice C)
-    expect(st.inputs[10]!.label).toBe('ready'); // interoceptive repro-readiness input (slice D)
+    expect(st.inputs[16]!.value).toBe(1); // bias is constant 1 (after the 8 base + 8 scent inputs)
+    expect(st.inputs[16]!.label).toBe('bias');
+    expect(st.inputs[17]!.label).toBe('age'); // interoceptive maturity input (slice C)
+    expect(st.inputs[18]!.label).toBe('ready'); // interoceptive repro-readiness input (slice D)
+    expect(st.inputs.find((n) => n.label === 'prey fwd')).toBeDefined(); // 4-channel scent now drawn
+    expect(st.inputs.find((n) => n.label === 'glow lat')).toBeDefined(); // glow-sense now drawn
   });
 
   it('exposes the eat-gate output (slice B): 1 when off, the sigmoid of its inputs when on', () => {
@@ -171,12 +184,23 @@ describe('computeBrainState', () => {
       'wall lat',
       'flow fwd',
       'flow lat',
+      'prey fwd',
+      'prey lat',
+      'pred fwd',
+      'pred lat',
+      'kin·c fwd',
+      'kin·c lat',
+      'kin·s fwd',
+      'kin·s lat',
       'bias',
       'hunger',
       'age',
       'ready',
+      'glow fwd',
+      'glow lat',
     ]);
-    expect(st.inputs[9]!.value).toBeCloseTo(0.5, 10); // fractional drive, genuinely exercised (idx 9 = hunger)
+    expect(st.inputs[17]!.label).toBe('hunger');
+    expect(st.inputs[17]!.value).toBeCloseTo(0.5, 10); // fractional hunger drive, genuinely exercised (idx 17)
     // The hunger node must reproduce the turn/thrust steer() actually applies under the SAME mode.
     steer(s, false, hc.eligLambda, hc.motorSquash, hc);
     expect(st.turn).toBeCloseTo(s.heading[i]! - h0, 10);
