@@ -6,6 +6,7 @@ import {
   BRAIN_GENES,
   ScalarGene,
   SCALAR_GENE_COUNT,
+  HiddenInput,
   HIDDEN_UNITS,
   HIDDEN_OUTPUTS,
   HIDDEN_W1,
@@ -13,6 +14,7 @@ import {
   GLOW_BIAS,
   GLOW_HID,
 } from './genome';
+import { SCENT_CHANNELS } from './scent-field';
 import { steer, learn } from './brain';
 
 // Default config for the motor-mechanics steer() tests below. brainGatedEating is OFF here to ISOLATE
@@ -676,6 +678,34 @@ describe('interoceptive hunger input (lever E2)', () => {
     const b = i * BRAIN_GENES;
     expect(s.elig[b + Brain.HUNGER_THRUST]!).toBe(0); // trace untouched
     expect(s.elig[b + Brain.HUNGER_TURN]!).toBe(0);
+  });
+});
+
+describe('scent feeds the hidden layer (consolidation mandate 1)', () => {
+  // The 4 identity scent channels must reach the NONLINEAR hidden layer, not just the linear synapses.
+  // Wire ONLY a hidden path: SCENT_C0_FWD → hidden unit 0 (W1=1) → turn (W2=1). All linear synapses 0.
+  const turnFromScentC0 = (gradient: number): number => {
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.heading[i] = 0; // facing +x, so scentSenseX projects entirely onto the forward axis
+    setBrain(s, i, {}); // all named synapses 0
+    const b = i * BRAIN_GENES;
+    // W1: SCENT_C0_FWD (HiddenInput row 8) → hidden unit 0
+    s.brain[b + HIDDEN_W1 + HiddenInput.SCENT_C0_FWD * HIDDEN_UNITS + 0] = 1;
+    // W2: hidden unit 0 → turn (output 0)
+    s.brain[b + HIDDEN_W2 + 0 * HIDDEN_OUTPUTS + 0] = 1;
+    s.resetLearned(i);
+    s.scentSenseX[i * SCENT_CHANNELS + 0] = gradient; // PREY channel gradient ahead
+    s.rebuildLive();
+    steer(s, false, 0.2, false, CFG); // CFG has hiddenLayer on (default)
+    return s.heading[i]!; // started at 0, so this IS the turn applied
+  };
+
+  it('a scent gradient drives the hidden layer → a turn (not a vestigial linear path)', () => {
+    expect(turnFromScentC0(1)).toBeGreaterThan(0.5); // tanh(1)·1 ≈ 0.76 turn
+  });
+  it('with no scent gradient the hidden contribution is zero (baseline)', () => {
+    expect(turnFromScentC0(0)).toBe(0);
   });
 });
 
