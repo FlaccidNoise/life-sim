@@ -9,6 +9,7 @@
  */
 import { World } from '../core/world';
 import { defaultConfig, type Config } from '../core/config';
+import { livingWorldOverrides } from './living-world-config';
 import { scanHealth } from '../core/health';
 import { Renderer, ColorMode, FoodLayer } from '../render/renderer';
 import { buildOverlaySegments } from '../render/overlay';
@@ -32,48 +33,16 @@ const canvas = el<HTMLCanvasElement>('view');
 const hudBody = el('hud-body');
 
 // Live demo = the FULL LIVING-WORLD PACKAGE. defaultConfig keeps every feature OFF so headless/tests stay
-// byte-identical to the pre-feature engine; the demo opts in here. Every knob is live-tunable in the panel:
+// byte-identical to the pre-feature engine; the demo opts in via livingWorldOverrides (shared with the
+// headless census probe so the two can't drift). Every knob is live-tunable in the panel:
 //   • walls + flow         — spatial structure: 5 vision-occluding/food-damming biome regions + drift current
 //   • motorSquash          — legibility: graded tanh steering (kills the motor-saturation spin/vibrate)
-//   • foodChannels 3 +     — multi-resource: 3 resources, each grown in its OWN pockets (round-robin), so diet
+//   • foodChannels +       — multi-resource: each resource grown in its OWN pockets (round-robin), so diet
 //     pocketChannelMode 1     couples to PLACE — a specialist must live in its resource's island (allopatry).
 //   • pheromoneEnabled     — a diffusing deposit-and-sense field (on-graze); the delayed-feedback substrate.
 //   • flowPushStrength     — mixing: the current carries bodies between pockets.
-//   • bioluminescence      — render glow (set below). NB the 3-channel world runs SPARSER + loses predators
-//     vs ch2 (food is segregated); it stays alive on all tested seeds. Tune live across seeds to taste.
-let config: Config = defaultConfig({
-  // Spatial structure + legibility.
-  wallRegionCount: 5,
-  flowStrength: 0.35, // stronger current so channel B actually drifts (and mixes pockets for encounters)
-  flowPushStrength: 0.25,
-  motorSquash: true,
-  // Density (the proven lever): more + bigger pockets → dense → predators + niche partitioning return.
-  foodPatchCount: 40,
-  foodPatchRadius: 8,
-  // Two differentiated resources: channel A wall-tied (structural), channel B drifting in the current.
-  foodChannels: 2,
-  foodPocketChannelMode: 1,
-  foodChannelAWallTied: true,
-  foodChannelBDriftMult: 3,
-  // Migrating pockets — two crossing seasonal currents: channel A creeps slowly one way, channel B sweeps
-  // the normal rate in a different direction, so the resource zones constantly rearrange (kills the static
-  // "camp on a fixed gradient forever" equilibrium; food you must follow).
-  fertilityDriftRate: 1,
-  fertilityDriftInterval: 20,
-  foodPocketDriftRateA: 0.2,
-  foodPocketDriftRateB: 1.0,
-  pocketDriftSpeed: 0.6,
-  // Pheromones (delayed-feedback substrate).
-  pheromoneEnabled: true,
-  // Sight-only drifting food parcels + the census-proven vision-cost cut → the dead vision genes get a
-  // reason to evolve up (this tuning lives in the demo so defaultConfig stays byte-identical to legacy).
-  parcelsEnabled: true,
-  parcelEnergy: 80,
-  parcelSpawnInterval: 6,
-  parcelCapacity: 120,
-  visionFovCost: 0.02,
-  visionAcuityCost: 0.02,
-});
+//   • bioluminescence      — render glow (set below). Tune live across seeds to taste.
+let config: Config = defaultConfig(livingWorldOverrides);
 let world = new World(config);
 
 let renderer: Renderer;
