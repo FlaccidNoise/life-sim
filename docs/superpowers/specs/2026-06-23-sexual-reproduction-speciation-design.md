@@ -44,6 +44,16 @@ because the mate need only be a mature compatible adult (a pool of ~most of the 
 **Deferred (noted, not built):** CHOOSINESS gene (evolvable per-creature threshold); brain crossover (waits for the
 NN topology change); the kin-scent mate field (other session); a father-side mating energy cost.
 
+**Forward seam — evolvable reproduction mode (v2, bead `life-sim-z0f1`):** in real biology asexual and sexual
+reproduction *compete* under selection (the "evolution of sex"). v1 deliberately keeps `sexualReproduction` a
+**global config toggle**, but reproduction branches on a single check inside `reproduce()` — so v2 can turn that
+into a per-creature heritable `REPRO_MODE` gene with a localized change. v2's real work is NOT the gene; it's
+engineering a **benefit-to-recombination** that offsets asexual's ~2-fold cost (else asexual fixates and sex goes
+extinct — v1's probe already showed sex is the more expensive strategy here). Candidate levers: Red Queen /
+changing environment (the living-world's migrating pockets let recombination track a moving optimum clones can't),
+Muller's ratchet (asexual mutation-load accumulation), or a direct clone-tax. Out of scope for v1; the seam is
+intentional.
+
 ---
 
 ## 2. Genome changes (`src/core/genome.ts`)
