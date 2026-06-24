@@ -142,6 +142,7 @@ in float a_vis;
 in float a_spd;
 in float a_shape;                 // 0 herbivore · 1 omnivore · 2 predator → flare width
 in float a_efrac;                 // energy band fraction [0,1]
+in float a_mood;                  // brain glow output [0,1] → bioluminescence brightness
 in float a_forage;                // dominant-resource hue [0,1); <0 = generalist
 uniform vec2 u_cam;
 uniform vec2 u_canvas;
@@ -167,11 +168,10 @@ float energyHue(float f) {
 void main() {
   vec2 px = (a_pos - u_cam) * u_scale + u_canvas * 0.5;
   gl_Position = vec4(px.x / u_canvas.x * 2.0 - 1.0, 1.0 - px.y / u_canvas.y * 2.0, 0.0, 1.0);
-  // Liveliness: idle/starving creatures barely glow, fast + well-fed ones flare. Role widens the halo
-  // (predators read as bigger lanterns). The bloom point is several× the body dot so it reads as a halo.
-  float activity = clamp(0.30 + 0.70 * clamp(a_spd, 0.0, 1.0), 0.0, 1.0);
-  float vitality = clamp(0.25 + 0.75 * clamp(a_efrac, 0.0, 1.0), 0.0, 1.0);
-  float amp = u_glow * activity * vitality;
+  // Brightness is now the brain's own glow decision (a_mood ∈ [0,1] from store.glow), scaled by the
+  // global u_glow knob. Role still widens the halo (predators read as bigger lanterns) below; the bloom
+  // point is several× the body dot so it reads as a halo.
+  float amp = u_glow * clamp(a_mood, 0.0, 1.0);
   float flare = 2.6 + 0.7 * a_shape;                  // predators (shape 2) flare widest
   gl_PointSize = max(a_size * flare, 6.0);
   v_amp = amp;
@@ -304,6 +304,7 @@ export class Renderer {
   private readonly spdBuffer: WebGLBuffer;
   private readonly shapeBuffer: WebGLBuffer;
   private readonly efracBuffer: WebGLBuffer;
+  private readonly moodBuffer: WebGLBuffer;
   private readonly forageBuffer: WebGLBuffer;
   private readonly dotScratch: Float32Array;
   private readonly hueScratch: Float32Array;
@@ -313,6 +314,7 @@ export class Renderer {
   private readonly spdScratch: Float32Array;
   private readonly shapeScratch: Float32Array;
   private readonly efracScratch: Float32Array;
+  private readonly moodScratch: Float32Array;
   private readonly forageScratch: Float32Array;
   private readonly aPos: number;
   private readonly aHue: number;
@@ -333,6 +335,7 @@ export class Renderer {
   private readonly gSpd: number;
   private readonly gShape: number;
   private readonly gEfrac: number;
+  private readonly gMood: number;
   private readonly gForage: number;
   // debug overlay lines
   private readonly lineProgram: WebGLProgram;
@@ -397,6 +400,7 @@ export class Renderer {
     this.gSpd = gl.getAttribLocation(this.glowProgram, 'a_spd');
     this.gShape = gl.getAttribLocation(this.glowProgram, 'a_shape');
     this.gEfrac = gl.getAttribLocation(this.glowProgram, 'a_efrac');
+    this.gMood = gl.getAttribLocation(this.glowProgram, 'a_mood');
     this.gForage = gl.getAttribLocation(this.glowProgram, 'a_forage');
     this.aCorner = gl.getAttribLocation(this.foodProgram, 'a_corner');
     this.aWallCorner = gl.getAttribLocation(this.wallProgram, 'a_corner');
@@ -411,6 +415,7 @@ export class Renderer {
     const spdBuffer = gl.createBuffer();
     const shapeBuffer = gl.createBuffer();
     const efracBuffer = gl.createBuffer();
+    const moodBuffer = gl.createBuffer();
     const forageBuffer = gl.createBuffer();
     const quadBuffer = gl.createBuffer();
     const lineBuffer = gl.createBuffer();
@@ -425,6 +430,7 @@ export class Renderer {
       !spdBuffer ||
       !shapeBuffer ||
       !efracBuffer ||
+      !moodBuffer ||
       !forageBuffer ||
       !quadBuffer ||
       !lineBuffer ||
@@ -436,6 +442,7 @@ export class Renderer {
     this.spdBuffer = spdBuffer;
     this.shapeBuffer = shapeBuffer;
     this.efracBuffer = efracBuffer;
+    this.moodBuffer = moodBuffer;
     this.forageBuffer = forageBuffer;
     this.dotBuffer = dotBuffer;
     this.hueBuffer = hueBuffer;
@@ -453,6 +460,7 @@ export class Renderer {
     this.spdScratch = new Float32Array(capacity);
     this.shapeScratch = new Float32Array(capacity);
     this.efracScratch = new Float32Array(capacity);
+    this.moodScratch = new Float32Array(capacity);
     this.forageScratch = new Float32Array(capacity);
 
     // Unit quad as a triangle strip: (0,0)(1,0)(0,1)(1,1).
@@ -705,8 +713,9 @@ export class Renderer {
       const ssc = this.spdScratch;
       const psc = this.shapeScratch;
       const esc = this.efracScratch;
+      const msc = this.moodScratch;
       const fsc = this.forageScratch;
-      const { liveIndices, x, y, vx, vy, hue, genId, scalarGenes, energy } = store;
+      const { liveIndices, x, y, vx, vy, hue, genId, scalarGenes, energy, glow } = store;
       const useInterp = interp != null && interp.alpha < 1;
       const a = useInterp ? interp.alpha : 0;
       const ww = this.worldWidth;
@@ -745,6 +754,7 @@ export class Renderer {
               : repro > 0
                 ? (0.5 * e) / repro
                 : 0;
+        msc[k] = glow[i]!; // brain glow output → bioluminescence brightness
         // Forage color-mode: dominant resource preference from the barycentric FORAGE_PREF/FORAGE_PREF_C.
         // wC=prefC, wB=pref·(1−prefC), wA=(1−pref)·(1−prefC). A clear majority (>0.5) → that channel's hue
         // (matching the food-layer tints); no dominant weight → −1 sentinel (rendered desaturated grey).
@@ -841,6 +851,12 @@ export class Renderer {
         gl.bindBuffer(gl.ARRAY_BUFFER, this.efracBuffer);
         gl.enableVertexAttribArray(this.gEfrac);
         gl.vertexAttribPointer(this.gEfrac, 1, gl.FLOAT, false, 0, 0);
+        // a_mood is glow-pass-only (not in the dot program), so upload its scratch here — the other
+        // glow attrs reuse buffers already filled by the dot pass; this one needs its own bufferData.
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.moodBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, this.moodScratch.subarray(0, n), gl.DYNAMIC_DRAW);
+        gl.enableVertexAttribArray(this.gMood);
+        gl.vertexAttribPointer(this.gMood, 1, gl.FLOAT, false, 0, 0);
         gl.bindBuffer(gl.ARRAY_BUFFER, this.forageBuffer);
         gl.enableVertexAttribArray(this.gForage);
         gl.vertexAttribPointer(this.gForage, 1, gl.FLOAT, false, 0, 0);
