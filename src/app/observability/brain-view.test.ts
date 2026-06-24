@@ -1,7 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { OrganismStore } from '../../core/store';
 import { defaultConfig } from '../../core/config';
-import { ScalarGene, SCALAR_GENE_COUNT, SCALAR_GENE_SPECS, BRAIN_GENES } from '../../core/genome';
+import {
+  Brain,
+  ScalarGene,
+  SCALAR_GENE_COUNT,
+  SCALAR_GENE_SPECS,
+  BRAIN_GENES,
+} from '../../core/genome';
 import { steer } from '../../core/brain';
 import { satiatedBar } from '../../core/economy';
 import { computeBrainState } from './brain-view';
@@ -47,9 +53,9 @@ describe('computeBrainState', () => {
     expect(st.thrust).toBeCloseTo(appliedThrust, 10); // brain-view thrust already includes ×efficiency
   });
 
-  it('exposes 9 inputs in the documented order with their live values', () => {
+  it('exposes the base inputs incl. age in the documented order with their live values', () => {
     const s = setup();
-    const st = computeBrainState(s, cfg, 0);
+    const st = computeBrainState(s, cfg, 0); // default cfg: ageSense on, hungerSense off
     expect(st.inputs.map((n) => n.label)).toEqual([
       'food fwd',
       'food lat',
@@ -60,8 +66,34 @@ describe('computeBrainState', () => {
       'flow fwd',
       'flow lat',
       'bias',
+      'age',
+      'ready',
     ]);
     expect(st.inputs[8]!.value).toBe(1); // bias is constant 1
+    expect(st.inputs[9]!.label).toBe('age'); // interoceptive maturity input (slice C)
+    expect(st.inputs[10]!.label).toBe('ready'); // interoceptive repro-readiness input (slice D)
+  });
+
+  it('exposes the eat-gate output (slice B): 1 when off, the sigmoid of its inputs when on', () => {
+    const s = new OrganismStore(2);
+    const i = s.alloc();
+    s.heading[i] = 0; // heading 0 → fwd = senseX, sFwd = sightX
+    s.senseX[i] = 1;
+    s.senseY[i] = 0;
+    s.sightX[i] = -1; // appeal-signed sight: negative = threat ahead
+    s.sightY[i] = 0;
+    const b = i * BRAIN_GENES;
+    s.brain[b + Brain.EAT_GATE_BIAS] = 4;
+    s.brain[b + Brain.EAT_GATE_SIGHT_FWD] = 2; // threat ahead pulls the gate down
+    s.resetLearned(i);
+    s.rebuildLive();
+    // Off → no throttle, gate reads 1.
+    expect(computeBrainState(s, defaultConfig({ brainGatedEating: false }), i).eatGate).toBe(1);
+    // On → sigmoid(EAT_GATE_BIAS + EAT_GATE_SIGHT_FWD·sFwd) = sigmoid(4 + 2·(−1)) = sigmoid(2).
+    expect(computeBrainState(s, defaultConfig({ brainGatedEating: true }), i).eatGate).toBeCloseTo(
+      1 / (1 + Math.exp(-2)),
+      10,
+    );
   });
 
   it('adds a 6th hunger input that matches a real steer() run when hungerSense is on', () => {
@@ -84,6 +116,8 @@ describe('computeBrainState', () => {
       'flow lat',
       'bias',
       'hunger',
+      'age',
+      'ready',
     ]);
     expect(st.inputs[9]!.value).toBeCloseTo(0.5, 10); // fractional drive, genuinely exercised (idx 9 = hunger)
     // The hunger node must reproduce the turn/thrust steer() actually applies under the SAME mode.
@@ -95,7 +129,8 @@ describe('computeBrainState', () => {
   it('reports learning drift = Σ|learned − instinct|', () => {
     const s = setup();
     const st = computeBrainState(s, cfg, 0);
-    expect(st.drift).toBeCloseTo(0.05 * BRAIN_GENES, 6); // each weight offset by 0.05
+    // Each weight offset by 0.05; summing 101 Float32 diffs accumulates ~1e-6 rounding → tolerance 4dp.
+    expect(st.drift).toBeCloseTo(0.05 * BRAIN_GENES, 4);
   });
 
   it('clamps turn to the maxTurn gene', () => {
@@ -109,7 +144,8 @@ describe('computeBrainState', () => {
   });
 
   it('matches steer() under motorSquash and eases below the limit (ON-mode contract)', () => {
-    const sq = defaultConfig({ motorSquash: true });
+    // hiddenLayer off so the large setup() hidden weights don't saturate tanh — isolate the squash mechanic.
+    const sq = defaultConfig({ motorSquash: true, hiddenLayer: false });
     const s = setup();
     const i = 0;
     // Drive turn into the saturation region so the tanh path (not the ~linear toe) is exercised.

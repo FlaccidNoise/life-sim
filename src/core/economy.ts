@@ -156,7 +156,7 @@ export function depositScent(store: OrganismStore, scent: ScentField, cfg: Confi
 }
 
 export function metabolize(store: OrganismStore, food: FoodField, hash: SpatialHash, cfg: Config): void {
-  const { liveIndices, liveCount, x, y, vx, vy, energy, age, scalarGenes } = store;
+  const { liveIndices, liveCount, x, y, vx, vy, energy, age, scalarGenes, eatGate } = store;
   const { basalCost, moveCost, deadWaterCost } = cfg;
   const { crowdingMortality, crowdThreshold, crowdRadius, worldWidth, worldHeight } = cfg;
   // Lever D (density-dependent mortality): when crowdingMortality>0 each creature pays an energy drain
@@ -175,6 +175,9 @@ export function metabolize(store: OrganismStore, food: FoodField, hash: SpatialH
     const i = liveIndices[k]!;
     const sg = i * SCALAR_GENE_COUNT;
     const eatRate = scalarGenes[sg + ScalarGene.EAT_RATE]!;
+    // Brain-gated eating (slice B): throttle the eat budget by the creature's eatGate (0..1), so a creature
+    // that lifts its head grazes/absorbs less. Off → unconditional eating (effEatRate === eatRate).
+    const effEatRate = cfg.brainGatedEating ? eatRate * eatGate[i]! : eatRate;
     const efficiency = scalarGenes[sg + ScalarGene.METAB_EFF]!;
     const diet = scalarGenes[sg + ScalarGene.DIET]!; // 0 grazer … 1 hunter; graze income ×(1−diet)
     // SATIATED at the creature's OWN size-scaled satiated bar (bigger body = deeper reserve), kept above
@@ -194,7 +197,7 @@ export function metabolize(store: OrganismStore, food: FoodField, hash: SpatialH
       // conversion efficiency. This is the disruptive pressure that pulls FORAGE_PREF apart into two niches.
       const pref = scalarGenes[sg + ScalarGene.FORAGE_PREF]!;
       const spec = 1 + cfg.forageSpecBonus * (2 * Math.abs(pref - 0.5));
-      const budget = eatRate * herbivory;
+      const budget = effEatRate * herbivory;
       const takeA = food.grazeAt(x[i]!, y[i]!, budget * (1 - pref));
       const takeB = food.grazeAt2(x[i]!, y[i]!, budget * pref);
       gained = (takeA + takeB) * spec;
@@ -213,7 +216,7 @@ export function metabolize(store: OrganismStore, food: FoodField, hash: SpatialH
       const wA = (1 - pref) * (1 - prefC);
       const maxW = wA > wB ? (wA > wC ? wA : wC) : wB > wC ? wB : wC;
       const spec = 1 + cfg.forageSpecBonus * ((maxW - 1 / 3) / (2 / 3));
-      const budget = eatRate * herbivory;
+      const budget = effEatRate * herbivory;
       // Availability-weighted split: e_ch = w_ch · localBiomass_ch, renormalized so Σ = budget. The budget
       // flows to present-and-preferred resources; nothing is wasted on an empty channel.
       const avA = food.sampleAt(x[i]!, y[i]!);
@@ -232,7 +235,7 @@ export function metabolize(store: OrganismStore, food: FoodField, hash: SpatialH
         gained = 0; // no preferred resource present here
       }
     } else {
-      gained = food.grazeAt(x[i]!, y[i]!, eatRate * herbivory); // single channel (byte-identical original)
+      gained = food.grazeAt(x[i]!, y[i]!, effEatRate * herbivory); // single channel (eatGate-throttled)
     }
     const speed2 = vx[i]! * vx[i]! + vy[i]! * vy[i]!;
     // Bigger bodies are costlier to move (mass): the speed² cost scales by (size/cellRadius)^sizeMoveCostExp.

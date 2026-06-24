@@ -352,6 +352,19 @@ export interface Config {
    *  channels (field alive but information-free). The toggle that isolates the feature's effect. */
   scentIdentity: boolean;
 
+  // ── F3 glow-sense (a diffusing glow field whose deposit source is store.glow; SELECTS the glow signal) ──
+  /** Master switch for the glow field + the 4 GLOW_SENSE brain genes. When on, every creature deposits its
+   *  store.glow each tick into a diffusing scalar field and senses that field's gradient as a brain input —
+   *  so glow becomes a signal others react to. The genes are ALWAYS drawn (consistent stream) either way;
+   *  this just toggles whether the field is allocated/deposited/sensed/hashed. */
+  glowSense: boolean;
+  /** Inter-cell diffusion of the glow field per tick [0,0.25] — how FAR the glow signal carries. */
+  glowDiffuse: number;
+  /** Glow-field decay per tick (0,1] — the field forgets at this rate (low + diffuse = long-memory). */
+  glowDecay: number;
+  /** Scale on the per-tick glow deposit: each creature adds store.glow·glowDepositStrength into its cell. */
+  glowDepositStrength: number;
+
   /** Gaussian σ spread of founder brain weights around the seed brain (initial behavioral variation). */
   founderSigma: number;
   /** Founder SIZE-variety spread: founders' SIZE gene is seeded UNIFORMLY in cellRadius·[1−s, 1+s]
@@ -399,6 +412,36 @@ export interface Config {
    *  motor); 0.5 = can back away from a threat at half forward power while still facing it. This is its
    *  OWN ablation knob — set to 0 and the motor is byte-identical to the pre-reverse engine. */
   reverseThrustFraction: number;
+  /** Brain-gated eating (slice B): when on, a creature's eatGate brain output (0..1) throttles its graze
+   *  intake AND eating slows the body (thrust ×= 1 − eatGate·eatMovePenalty), so grazing is a real decision
+   *  — graze (fed but slow + catchable) vs lift the head to flee at full speed. Off = legacy unconditional
+   *  eating with no mobility cost (its ablation switch). */
+  brainGatedEating: boolean;
+  /** How hard active eating cuts thrust (the mobility cost that makes the eat-gate matter). 0 = eating is
+   *  free (gate only throttles intake); 0.4 = a full-gate grazer moves at ~60% thrust. */
+  eatMovePenalty: number;
+  /** Age sense (slice C): feed an interoceptive "maturity" input = min(age/ageNorm, 1) (0 = newborn …
+   *  1 = at/past the reference lifespan) into the brain on its own turn/thrust synapses, so behaviour can
+   *  depend on life stage (juvenile dispersal, elder risk-taking). Off = the brain can't sense its age. */
+  ageSense: boolean;
+  /** Reference lifespan (ticks) the age input normalizes against — age/ageNorm saturates at 1 here. */
+  ageNorm: number;
+  /** Repro-readiness sense (slice D): feed clamp((energy − reproThreshold)/(satiatedBar − reproThreshold),
+   *  0, 1) — 0 while just surviving, ramping to 1 as the creature nears its breeding bar — on its own
+   *  turn/thrust synapses, so behaviour can change as reproduction approaches (e.g. settle before breeding).
+   *  Distinct from hunger (whose denominator is the full bar): this one is clamped to the breeding BAND.
+   *  Off = the brain can't sense breeding readiness. */
+  readinessSense: boolean;
+  /** Hidden layer (slice E): when on, a fixed H-unit tanh layer adds a NONLINEAR correction on top of the
+   *  linear sensor→motor map (skip-connection), giving the brain conditional logic ("flee only if a predator
+   *  is close AND I'm cornered"). Off = the pure linear brain (the hidden forward pass is skipped). The
+   *  hidden weights always exist in the genome either way; this just toggles whether they're computed. */
+  hiddenLayer: boolean;
+  /** Mood-glow (slice F): when on, a glow brain output = sigmoid(GLOW_BIAS + Σ hidden·GLOW_HID) reads the
+   *  hidden "mood" layer and drives bioluminescence brightness, so you can scan the population and see which
+   *  creatures are "lit up". Display-only + evolve-only; hidden→glow weights diverge per lineage, so different
+   *  species glow for different reasons. Off = no glow output computed. */
+  moodGlow: boolean;
 
   // ── Walls (env pass 1) ─────────────────────────────────────────────────────
   /** FINE wall-grid resolution (decoupled from the food grid for creature-scale nooks). */
@@ -685,6 +728,11 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     pheroDecay: 0.02, // slow forget → long-memory delayed feedback (the breathing candidate)
     pheroDepositStrength: 0.1, // per-tick passive deposit; ×4 channels ×live creatures, so kept small
     scentIdentity: true, // identity-bearing by default (on-by-default policy)
+    // F3 glow-sense (ON by default — glow is now a SELECTED comms signal). Knobs mirror the pheromone field.
+    glowSense: true,
+    glowDiffuse: 0.2, // mirrors pheroDiffuse: carries the glow signal across the pocket NND
+    glowDecay: 0.02, // mirrors pheroDecay: slow forget → long-memory glow trail
+    glowDepositStrength: 1, // mirrors pheroGrazeStrength: scale on the per-tick store.glow deposit
     // NB pre-sight, predators hunt by PROXIMITY only — the encounter rate is too low for hunting to
     // pay, so the predator trait does not persist yet (it needs the sight slice to actively target
     // prey). The mechanic + genes + color are in place; sight activates it.
@@ -710,6 +758,13 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     // smoothly tanh-squash turn/thrust → graded, legible steering (kills the motor-saturation spin).
     motorSquash: false,
     reverseThrustFraction: 0.5, // ON by default: creatures can back away at half forward power
+    brainGatedEating: true, // ON by default: eating is a decision — graze slow vs lift the head to flee fast
+    eatMovePenalty: 0.4,
+    ageSense: true, // ON by default: the brain can sense its own maturity (life-stage behaviour)
+    ageNorm: 1000, // ~average lifespan at the shipped economy → maturity reaches ~1 near mid-late life
+    readinessSense: true, // ON by default: the brain can sense how close it is to breeding (the repro band)
+    hiddenLayer: true, // ON by default: the nonlinear hidden layer (conditional logic — the emergent-behavior substrate)
+    moodGlow: true, // ON by default: bioluminescence read from the hidden mood layer (display + comms signal)
 
     // Walls: 5 biome regions over a 512² fine grid (16u cells), ~35% solid, vision-occluding.
     // Default OFF (wallRegionCount 0) so defaultConfig stays a TRUE no-op — byte-identical to the

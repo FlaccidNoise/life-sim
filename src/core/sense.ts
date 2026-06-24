@@ -12,6 +12,7 @@ import { type Config } from './config';
 import { type Walls } from './walls';
 import { type FlowField } from './flow-field';
 import { type ScentField, SCENT_CHANNELS } from './scent-field';
+import { type PheroField } from './phero-field';
 import { type Parcels } from './parcels';
 import { ScalarGene, SCALAR_GENE_COUNT } from './genome';
 
@@ -120,10 +121,11 @@ export function senseEnv(
   walls: Walls | null,
   flow: FlowField | null,
   scent: ScentField | null,
+  glowField: PheroField | null,
   cfg: Config,
 ): void {
   const { liveIndices, liveCount, x, y, wallSenseX, wallSenseY, flowSenseX, flowSenseY } = store;
-  const { scentSenseX, scentSenseY, scalarGenes } = store;
+  const { scentSenseX, scentSenseY, glowSenseX, glowSenseY, scalarGenes } = store;
   const wallsOn = walls !== null && walls.active;
   const flowOn = flow !== null && cfg.flowStrength > 0;
   // Scent sense is live only when the field is allocated (cfg.pheromoneEnabled). Each of the N channels'
@@ -155,6 +157,18 @@ export function senseEnv(
         scentSenseX[b + c] = 0;
         scentSenseY[b + c] = 0;
       }
+    }
+    // Glow sense (slice F3): the ∇G gradient of the glow field, sampled at the creature's own SENSE_RANGE
+    // (same half-step as food/phero). Live only when the field is allocated (cfg.glowSense); else 0 → the
+    // GLOW_SENSE brain inputs are inert. This is the receiver side of the glow communication channel.
+    if (glowField !== null) {
+      const step = scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.SENSE_RANGE]!;
+      const g = glowField.gradientAt(x[i]!, y[i]!, step);
+      glowSenseX[i] = g.gx;
+      glowSenseY[i] = g.gy;
+    } else {
+      glowSenseX[i] = 0;
+      glowSenseY[i] = 0;
     }
   }
 }
