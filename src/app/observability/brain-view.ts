@@ -18,6 +18,7 @@ import {
   BRAIN_GENES,
   ScalarGene,
   SCALAR_GENE_COUNT,
+  HiddenInput,
   HIDDEN_UNITS,
   HIDDEN_INPUTS,
   HIDDEN_OUTPUTS,
@@ -31,6 +32,7 @@ export interface BrainInputNode {
   turnW: number; // learned weight → turn
   thrustW: number; // learned weight → thrust
   eatW: number; // learned weight → eat-gate (0 for inputs the eat-gate doesn't read)
+  hidIdx: number; // this input's row in the hidden layer's W1 block (HiddenInput index)
   turnInst: number; // genome instinct weight → turn
   thrustInst: number; // genome instinct weight → thrust
 }
@@ -84,6 +86,7 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
     value: number,
     turnG: number,
     thrustG: number,
+    hidIdx: number, // this input's HiddenInput row (for the input→hidden W1 edges)
     eatG: number | null = null, // eat-gate gene index, or null when this input doesn't feed the eat-gate
   ): BrainInputNode => ({
     label,
@@ -91,20 +94,49 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
     turnW: lb[b + turnG]!,
     thrustW: lb[b + thrustG]!,
     eatW: eatG !== null ? lb[b + eatG]! : 0,
+    hidIdx,
     turnInst: ib[b + turnG]!,
     thrustInst: ib[b + thrustG]!,
   });
 
   const inputs: BrainInputNode[] = [
-    node('food fwd', fwd, Brain.FWD_TURN, Brain.FWD_THRUST, Brain.EAT_GATE_FWD),
-    node('food lat', lat, Brain.LAT_TURN, Brain.LAT_THRUST, Brain.EAT_GATE_LAT),
-    node('sight fwd', sFwd, Brain.SIGHT_FWD_TURN, Brain.SIGHT_FWD_THRUST, Brain.EAT_GATE_SIGHT_FWD),
-    node('sight lat', sLat, Brain.SIGHT_LAT_TURN, Brain.SIGHT_LAT_THRUST, Brain.EAT_GATE_SIGHT_LAT),
-    node('wall fwd', wFwd, Brain.WALL_FWD_TURN, Brain.WALL_FWD_THRUST),
-    node('wall lat', wLat, Brain.WALL_LAT_TURN, Brain.WALL_LAT_THRUST),
-    node('flow fwd', flFwd, Brain.FLOW_FWD_TURN, Brain.FLOW_FWD_THRUST),
-    node('flow lat', flLat, Brain.FLOW_LAT_TURN, Brain.FLOW_LAT_THRUST),
-    node('bias', 1, Brain.TURN_BIAS, Brain.THRUST_BIAS, Brain.EAT_GATE_BIAS),
+    node(
+      'food fwd',
+      fwd,
+      Brain.FWD_TURN,
+      Brain.FWD_THRUST,
+      HiddenInput.FOOD_FWD,
+      Brain.EAT_GATE_FWD,
+    ),
+    node(
+      'food lat',
+      lat,
+      Brain.LAT_TURN,
+      Brain.LAT_THRUST,
+      HiddenInput.FOOD_LAT,
+      Brain.EAT_GATE_LAT,
+    ),
+    node(
+      'sight fwd',
+      sFwd,
+      Brain.SIGHT_FWD_TURN,
+      Brain.SIGHT_FWD_THRUST,
+      HiddenInput.SIGHT_FWD,
+      Brain.EAT_GATE_SIGHT_FWD,
+    ),
+    node(
+      'sight lat',
+      sLat,
+      Brain.SIGHT_LAT_TURN,
+      Brain.SIGHT_LAT_THRUST,
+      HiddenInput.SIGHT_LAT,
+      Brain.EAT_GATE_SIGHT_LAT,
+    ),
+    node('wall fwd', wFwd, Brain.WALL_FWD_TURN, Brain.WALL_FWD_THRUST, HiddenInput.WALL_FWD),
+    node('wall lat', wLat, Brain.WALL_LAT_TURN, Brain.WALL_LAT_THRUST, HiddenInput.WALL_LAT),
+    node('flow fwd', flFwd, Brain.FLOW_FWD_TURN, Brain.FLOW_FWD_THRUST, HiddenInput.FLOW_FWD),
+    node('flow lat', flLat, Brain.FLOW_LAT_TURN, Brain.FLOW_LAT_THRUST, HiddenInput.FLOW_LAT),
+    node('bias', 1, Brain.TURN_BIAS, Brain.THRUST_BIAS, HiddenInput.BIAS, Brain.EAT_GATE_BIAS),
   ];
   // Interoceptive scalars — hoisted to function scope so the hidden layer below can read them (steer parity).
   // Each is 0 unless its lever is on, exactly mirroring steer().
@@ -118,13 +150,13 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
     hunger = sb > 0 ? 1 - store.energy[slot]! / sb : 1;
     if (hunger < 0) hunger = 0;
     else if (hunger > 1) hunger = 1;
-    inputs.push(node('hunger', hunger, Brain.HUNGER_TURN, Brain.HUNGER_THRUST));
+    inputs.push(node('hunger', hunger, Brain.HUNGER_TURN, Brain.HUNGER_THRUST, HiddenInput.HUNGER));
   }
   // Age input (slice C): maturity = min(age/ageNorm, 1), mirroring steer()'s gate. Climbs over a life.
   if (cfg.ageSense) {
     aged = cfg.ageNorm > 0 ? store.age[slot]! / cfg.ageNorm : 0; // mirror steer's ageNorm≤0 guard
     if (aged > 1) aged = 1;
-    inputs.push(node('age', aged, Brain.AGE_TURN, Brain.AGE_THRUST));
+    inputs.push(node('age', aged, Brain.AGE_TURN, Brain.AGE_THRUST, HiddenInput.AGE));
   }
   // Repro-readiness input (slice D): clamp((energy − reproThreshold)/(satiatedBar − reproThreshold), 0, 1),
   // mirroring steer()'s gate. Climbs as the creature nears its breeding bar.
@@ -134,7 +166,9 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
     readiness = band > 0 ? (store.energy[slot]! - repro) / band : 0;
     if (readiness < 0) readiness = 0;
     else if (readiness > 1) readiness = 1;
-    inputs.push(node('ready', readiness, Brain.READINESS_TURN, Brain.READINESS_THRUST));
+    inputs.push(
+      node('ready', readiness, Brain.READINESS_TURN, Brain.READINESS_THRUST, HiddenInput.READINESS),
+    );
   }
 
   let turnRaw = 0;
@@ -269,14 +303,23 @@ export class BrainView {
     }
 
     const st = computeBrainState(store, cfg, this.slot);
+    const hasHidden = st.hidden.length > 0; // 3-layer view when the hidden layer is on
+    // Keep inputs/outputs at the positions whose labels fit the panel; the hidden column sits BETWEEN them
+    // (not by widening the span, which would push the output value labels off the panel's right edge).
     const inX = 0.3 * w;
+    const hidX = 0.52 * w;
     const outX = 0.74 * w;
     const top = 26 * dpr;
     const bot = h - 12 * dpr;
     const inN = st.inputs.length;
     const inY = (i: number): number => top + ((bot - top) * i) / (inN - 1);
     const outY = (o: number): number => top + ((bot - top) * (o + 1)) / 4; // 3 outputs: turn, thrust, eat
+    const hidN = st.hidden.length;
+    const hidY = (j: number): number => top + ((bot - top) * (j + 0.5)) / Math.max(1, hidN); // centered cells
     const nodeR = 5 * dpr;
+    // Hidden-layer weights (read directly; the activations are in st.hidden) for the input→hidden + hidden→output edges.
+    const hb = this.slot * BRAIN_GENES;
+    const lbw = store.learnedBrain;
 
     // Normalize edge activity so the most-active synapse this frame reads full-bright.
     let maxAct = 1e-6;
@@ -306,13 +349,33 @@ export class BrainView {
       ctx.stroke();
     };
 
-    // Edges (behind nodes): each input → both outputs.
-    for (let i = 0; i < inN; i++) {
-      const n = st.inputs[i]!;
-      const iy = inY(i);
-      edge(inX, iy, outX, outY(0), n.turnW, n.value * n.turnW);
-      edge(inX, iy, outX, outY(1), n.thrustW, n.value * n.thrustW);
-      if (n.eatW !== 0) edge(inX, iy, outX, outY(2), n.eatW, n.value * n.eatW); // eat-gate edges (subset)
+    // Edges (behind nodes). With a hidden layer: input→hidden (W1) then hidden→output (W2) — a clean 3-layer
+    // view. The direct linear skip edges are omitted to keep it legible (the output VALUES still include them).
+    // Without it: the linear input→output map.
+    if (hasHidden) {
+      for (let i = 0; i < inN; i++) {
+        const n = st.inputs[i]!;
+        const iy = inY(i);
+        for (let j = 0; j < hidN; j++) {
+          const wgt = lbw[hb + HIDDEN_W1 + n.hidIdx * HIDDEN_UNITS + j]!;
+          edge(inX, iy, hidX, hidY(j), wgt, n.value * wgt);
+        }
+      }
+      for (let j = 0; j < hidN; j++) {
+        const a = st.hidden[j]!;
+        for (let o = 0; o < HIDDEN_OUTPUTS; o++) {
+          const wgt = lbw[hb + HIDDEN_W2 + j * HIDDEN_OUTPUTS + o]!;
+          edge(hidX, hidY(j), outX, outY(o), wgt, a * wgt);
+        }
+      }
+    } else {
+      for (let i = 0; i < inN; i++) {
+        const n = st.inputs[i]!;
+        const iy = inY(i);
+        edge(inX, iy, outX, outY(0), n.turnW, n.value * n.turnW);
+        edge(inX, iy, outX, outY(1), n.thrustW, n.value * n.thrustW);
+        if (n.eatW !== 0) edge(inX, iy, outX, outY(2), n.eatW, n.value * n.eatW); // eat-gate edges (subset)
+      }
     }
 
     ctx.font = `${Math.round(10 * dpr)}px ui-monospace, monospace`;
@@ -333,6 +396,20 @@ export class BrainView {
       ctx.fillStyle = 'rgba(180,200,220,0.85)';
       ctx.textAlign = 'right';
       ctx.fillText(n.label, inX - nodeR - 4 * dpr, iy);
+    }
+
+    // Hidden nodes (slice E): the middle layer, filled violet by tanh activation (distinct from the input
+    // cyan and output green). Watch them swing as the senses change — this is the conditional-logic layer.
+    for (let j = 0; j < hidN; j++) {
+      const a = st.hidden[j]!;
+      const hy = hidY(j);
+      ctx.fillStyle =
+        a >= 0
+          ? POS(190, 160, 230, 0.25 + 0.6 * Math.abs(a))
+          : POS(240, 150, 90, 0.25 + 0.6 * Math.abs(a));
+      ctx.beginPath();
+      ctx.arc(hidX, hy, nodeR * 1.1, 0, Math.PI * 2);
+      ctx.fill();
     }
 
     // Output nodes.
