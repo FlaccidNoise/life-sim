@@ -159,14 +159,14 @@ describe('World — Phase 0 determinism contract', () => {
     }
   });
 
-  it('pheromoneEnabled OFF: the 4 PHERO brain genes stay exactly 0 after a long run (ablation)', () => {
+  it('pheromoneEnabled OFF: the 16 PHERO brain genes stay exactly 0 after a long run (ablation)', () => {
     const w = new World(defaultConfig({ seed: 13, pheromoneEnabled: false }));
     for (let t = 0; t < 500; t++) w.step();
     const s = w.store;
     expect(s.liveCount).toBeGreaterThan(0);
     for (let k = 0; k < s.liveCount; k++) {
       const base = s.liveIndices[k]! * BRAIN_GENES;
-      for (let g = Brain.PHERO_LAT_TURN; g <= Brain.PHERO_FWD_THRUST; g++) {
+      for (let g = Brain.PHERO_C0_LAT_TURN; g <= Brain.PHERO_C3_FWD_THRUST; g++) {
         expect(s.brain[base + g]!).toBe(0);
       }
     }

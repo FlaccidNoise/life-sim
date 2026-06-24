@@ -305,18 +305,31 @@ export const Brain = {
   // pre-feature stream, byte-identical to legacy.
   HUNGER_TURN: 18, // hunger scalar → turn (e.g. wander/cast more when starving)
   HUNGER_THRUST: 19, // hunger scalar → thrust (e.g. forage harder when starving)
-  // F2 pheromone-sense weights: the pheromone gradient ∇P (lateral, forward) in the heading frame → turn +
-  // thrust. Gated on pheroSenseGenes; seed at 0 so evolution picks the SIGN — flee a crowd or aggregate.
-  // Kept LAST so each gated block (wall/flow/hunger/phero) draws RNG only when on; OFF stream byte-identical.
-  PHERO_LAT_TURN: 20,
-  PHERO_FWD_TURN: 21,
-  PHERO_LAT_THRUST: 22,
-  PHERO_FWD_THRUST: 23,
+  // F2 identity-bearing scent: 4 channels × (lat/fwd × turn/thrust) = 16 synapses. The per-channel
+  // gradient ∇P_c (lateral, forward) in the heading frame → turn + thrust. Gated on pheroSenseGenes; seed
+  // at 0 so evolution picks each channel's SIGN — climb prey-scent / descend predator-scent / cluster on
+  // kin-hue. Kept LAST so each gated block draws RNG only when on. Per-channel base = PHERO_C0_LAT_TURN+c*4.
+  PHERO_C0_LAT_TURN: 20,
+  PHERO_C0_FWD_TURN: 21,
+  PHERO_C0_LAT_THRUST: 22,
+  PHERO_C0_FWD_THRUST: 23,
+  PHERO_C1_LAT_TURN: 24,
+  PHERO_C1_FWD_TURN: 25,
+  PHERO_C1_LAT_THRUST: 26,
+  PHERO_C1_FWD_THRUST: 27,
+  PHERO_C2_LAT_TURN: 28,
+  PHERO_C2_FWD_TURN: 29,
+  PHERO_C2_LAT_THRUST: 30,
+  PHERO_C2_FWD_THRUST: 31,
+  PHERO_C3_LAT_TURN: 32,
+  PHERO_C3_FWD_TURN: 33,
+  PHERO_C3_LAT_THRUST: 34,
+  PHERO_C3_FWD_THRUST: 35,
 } as const;
 /** Senses-core brain weights (food + sight) — the count present before walls/flow/hunger, and the RNG-draw
  *  count when all gated blocks are off. Each gated block extends the array but draws RNG only when on. */
 export const BRAIN_CORE_GENES = 10;
-export const BRAIN_GENES = 24;
+export const BRAIN_GENES = 36;
 
 /** Founder brain ≈ the hand-tuned chemotaxis controller (turn toward lateral food, thrust up-gradient,
  *  gentle cruise) + ACTIVE sight: turn toward & thrust along the appeal-signed sight vector. Because that
@@ -329,9 +342,10 @@ export const BRAIN_GENES = 24;
  *   SIGHT_LAT_TURN, SIGHT_FWD_TURN, SIGHT_LAT_THRUST, SIGHT_FWD_THRUST,
  *   WALL_LAT_TURN, WALL_FWD_TURN, WALL_LAT_THRUST, WALL_FWD_THRUST,
  *   FLOW_LAT_TURN, FLOW_FWD_TURN, FLOW_LAT_THRUST, FLOW_FWD_THRUST, HUNGER_TURN, HUNGER_THRUST,
- *   PHERO_LAT_TURN, PHERO_FWD_TURN, PHERO_LAT_THRUST, PHERO_FWD_THRUST]. The 4 phero weights seed at 0. */
+ *   PHERO_C0_LAT_TURN … PHERO_C3_FWD_THRUST (16)]. The 16 phero weights seed at 0. */
 const FOUNDER_BRAIN: readonly number[] = [
-  1.2, 0, 0, 1.5, 0, 0.3, 1.0, 0, 0, 1.2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  1.2, 0, 0, 1.5, 0, 0.3, 1.0, 0, 0, 1.2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0,
 ];
 
 /** Seed a founder's genome: founder brain + Gaussian spread, random hue (lineage colors diverge).
@@ -355,7 +369,7 @@ export function seedGenome(
     const isWall = g >= Brain.WALL_LAT_TURN && g <= Brain.WALL_FWD_THRUST;
     const isFlow = g >= Brain.FLOW_LAT_TURN && g <= Brain.FLOW_FWD_THRUST;
     const isHunger = g >= Brain.HUNGER_TURN && g <= Brain.HUNGER_THRUST;
-    const isPhero = g >= Brain.PHERO_LAT_TURN && g <= Brain.PHERO_FWD_THRUST;
+    const isPhero = g >= Brain.PHERO_C0_LAT_TURN && g <= Brain.PHERO_C3_FWD_THRUST;
     if (
       (isWall && !wallSenseGenes) ||
       (isFlow && !flowSenseGenes) ||
@@ -393,7 +407,7 @@ export function mutateGenome(
     const isWall = g >= Brain.WALL_LAT_TURN && g <= Brain.WALL_FWD_THRUST;
     const isFlow = g >= Brain.FLOW_LAT_TURN && g <= Brain.FLOW_FWD_THRUST;
     const isHunger = g >= Brain.HUNGER_TURN && g <= Brain.HUNGER_THRUST;
-    const isPhero = g >= Brain.PHERO_LAT_TURN && g <= Brain.PHERO_FWD_THRUST;
+    const isPhero = g >= Brain.PHERO_C0_LAT_TURN && g <= Brain.PHERO_C3_FWD_THRUST;
     if (
       (isWall && !wallSenseGenes) ||
       (isFlow && !flowSenseGenes) ||
