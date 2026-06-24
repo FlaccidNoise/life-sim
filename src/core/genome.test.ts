@@ -5,6 +5,14 @@ import {
   Brain,
   BRAIN_GENES,
   BRAIN_CORE_GENES,
+  NAMED_BRAIN_GENES,
+  HiddenInput,
+  HIDDEN_INPUTS,
+  HIDDEN_UNITS,
+  HIDDEN_OUTPUTS,
+  HIDDEN_W1,
+  HIDDEN_W2,
+  GLOW_BIAS,
   seedGenome,
   mutateGenome,
   ScalarGene,
@@ -17,6 +25,30 @@ import {
   geneUpkeep,
   geneticDistance,
 } from './genome';
+import { SCENT_CHANNELS } from './scent-field';
+
+describe('unified brain layout (consolidation)', () => {
+  it('places the 16-synapse scent block at 20..35 and the named tail at 45', () => {
+    expect(Brain.PHERO_C0_LAT_TURN).toBe(20);
+    expect(Brain.PHERO_C3_FWD_THRUST).toBe(35);
+    expect(Brain.EAT_GATE_BIAS).toBe(36);
+    expect(Brain.READINESS_THRUST).toBe(44);
+    expect(NAMED_BRAIN_GENES).toBe(45);
+  });
+  it('grows the hidden layer to carry all 4 scent channels (20 inputs)', () => {
+    expect(SCENT_CHANNELS).toBe(4);
+    expect(HIDDEN_INPUTS).toBe(20);
+    expect(HiddenInput.SCENT_C0_FWD).toBe(8);
+    expect(HiddenInput.SCENT_C3_LAT).toBe(15);
+    expect(HiddenInput.BIAS).toBe(19);
+  });
+  it('derives downstream offsets from the unified sizes', () => {
+    expect(HIDDEN_W1).toBe(NAMED_BRAIN_GENES); // 45
+    expect(HIDDEN_W2).toBe(HIDDEN_W1 + HIDDEN_INPUTS * HIDDEN_UNITS); // 125
+    expect(GLOW_BIAS).toBe(HIDDEN_W2 + HIDDEN_UNITS * HIDDEN_OUTPUTS); // 137
+    expect(BRAIN_GENES).toBe(146);
+  });
+});
 
 describe('genome', () => {
   it('DISPLAY and PREFERENCE are seeded in range and counted', () => {
