@@ -232,7 +232,9 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
       hunger,
       aged,
       readiness,
-      1,
+      0, // SIZE (A1a): inert until steer() reads own-size (Task 2) — steer leaves this hidIn slot 0 too
+      0, // DIET (A1a): inert until steer() reads own-diet (Task 2) — keeps inspector↔steer hidden parity
+      1, // BIAS (now HiddenInput slot 21)
     ];
     for (let j = 0; j < HIDDEN_UNITS; j++) {
       let s = 0;
