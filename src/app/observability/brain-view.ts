@@ -26,6 +26,10 @@ import {
   HIDDEN_W2,
   GLOW_BIAS,
   GLOW_HID,
+  GLOW_SENSE_LAT_TURN,
+  GLOW_SENSE_FWD_TURN,
+  GLOW_SENSE_LAT_THRUST,
+  GLOW_SENSE_FWD_THRUST,
 } from '../../core/genome';
 import { SCENT_CHANNELS } from '../../core/scent-field';
 
@@ -196,6 +200,15 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
     turnRaw += lb[pb]! * cLat + lb[pb + 1]! * cFwd;
     thrustRaw += lb[pb + 2]! * cLat + lb[pb + 3]! * cFwd;
   }
+  // Glow-sense (slice F3): the ∇G glow-field gradient on 4 LINEAR-only weights (not in the hidden layer).
+  // steer() sums these (brain.ts) but the inspector did not → the displayed motor diverged from the sim
+  // whenever glowSense is active (default ON). Mirror steer's glow-sense terms exactly.
+  const glx = store.glowSenseX[slot]!;
+  const gly = store.glowSenseY[slot]!;
+  const glFwd = glx * dx + gly * dy;
+  const glLat = -glx * dy + gly * dx;
+  turnRaw += lb[b + GLOW_SENSE_LAT_TURN]! * glLat + lb[b + GLOW_SENSE_FWD_TURN]! * glFwd;
+  thrustRaw += lb[b + GLOW_SENSE_LAT_THRUST]! * glLat + lb[b + GLOW_SENSE_FWD_THRUST]! * glFwd;
 
   // Hidden layer (slice E): the nonlinear correction on top of the linear sum, mirroring steer() exactly —
   // same 20 inputs (HiddenInput order: 8 sense pairs incl. the unshown 4-channel scent + bias=1), same tanh,

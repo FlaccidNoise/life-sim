@@ -7,6 +7,10 @@ import {
   SCALAR_GENE_COUNT,
   SCALAR_GENE_SPECS,
   BRAIN_GENES,
+  GLOW_SENSE_LAT_TURN,
+  GLOW_SENSE_FWD_TURN,
+  GLOW_SENSE_LAT_THRUST,
+  GLOW_SENSE_FWD_THRUST,
 } from '../../core/genome';
 import { SCENT_CHANNELS } from '../../core/scent-field';
 import { steer } from '../../core/brain';
@@ -78,6 +82,32 @@ describe('computeBrainState', () => {
     expect(st.turn).toBeCloseTo(s.heading[i]! - h0, 10);
     expect(st.thrust).toBeCloseTo(Math.hypot(s.forceX[i]!, s.forceY[i]!), 10);
     expect(Math.abs(st.turn)).toBeGreaterThan(1e-6); // guard: the scent path is actually exercised
+  });
+
+  it('reproduces turn/thrust from the linear glow-sense synapses (non-saturated, glow active)', () => {
+    // Glow-sense (slice F3) is a LINEAR-only receiver; steer() sums it. Small weights so no saturation masks
+    // a missing term. Pins the inspector to steer()'s glow-sense contribution.
+    const s = new OrganismStore(8);
+    const i = s.alloc();
+    s.heading[i] = 0;
+    const base = i * SCALAR_GENE_COUNT;
+    for (let g = 0; g < SCALAR_GENE_COUNT; g++)
+      s.scalarGenes[base + g] = cfg[SCALAR_GENE_SPECS[g]!.centerKey];
+    const b = i * BRAIN_GENES;
+    s.brain[b + GLOW_SENSE_LAT_TURN] = 0.2;
+    s.brain[b + GLOW_SENSE_FWD_TURN] = 0.1;
+    s.brain[b + GLOW_SENSE_LAT_THRUST] = 0.15;
+    s.brain[b + GLOW_SENSE_FWD_THRUST] = 0.25;
+    s.glowSenseX[i] = 0.5;
+    s.glowSenseY[i] = 0.3;
+    s.resetLearned(i);
+    s.rebuildLive();
+    const h0 = s.heading[i]!;
+    const st = computeBrainState(s, cfg, i);
+    steer(s, false, cfg.eligLambda, cfg.motorSquash, cfg);
+    expect(st.turn).toBeCloseTo(s.heading[i]! - h0, 10);
+    expect(st.thrust).toBeCloseTo(Math.hypot(s.forceX[i]!, s.forceY[i]!), 10);
+    expect(Math.abs(st.turn)).toBeGreaterThan(1e-6); // guard: the glow-sense path is actually exercised
   });
 
   it('exposes the base inputs incl. age in the documented order with their live values', () => {
