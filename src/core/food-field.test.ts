@@ -582,3 +582,241 @@ describe('FoodField ch2 differentiated channels (wall-tied A + drifting B)', () 
     expect(Math.abs(b1 - b0)).toBeGreaterThan(Math.abs(a1 - a0));
   });
 });
+
+describe('FoodField — migrating pockets (drifting centres)', () => {
+  // A FORKED-velocity-rng stand-in. The field only calls .float() on it (for the two channel directions).
+  const velRng = (...vals: number[]): { float(): number } => {
+    let i = 0;
+    return { float: () => vals[Math.min(i++, vals.length - 1)]! };
+  };
+  // Toroidal displacement of a centre between two snapshots (world units).
+  const toroDisp = (
+    ax: number,
+    ay: number,
+    bx: number,
+    by: number,
+    W: number,
+    H: number,
+  ): { dx: number; dy: number; mag: number } => {
+    let dx = bx - ax;
+    if (dx > W / 2) dx -= W;
+    else if (dx < -W / 2) dx += W;
+    let dy = by - ay;
+    if (dy > H / 2) dy -= H;
+    else if (dy < -H / 2) dy += H;
+    return { dx, dy, mag: Math.hypot(dx, dy) };
+  };
+
+  it('drift OFF (rate 0) leaves pocket centres + fertility static (byte-identical over time)', () => {
+    const f = new FoodField(1024, 1024, 128, 128, K, 1);
+    // Explicit drift args with rate 0 (+ a velocity rng that must go UNUSED) → no movement, no recarve.
+    f.seedPatches(
+      4,
+      5,
+      0,
+      new QueueRng([0.2, 0.2, 0.5, 0.5, 0.7, 0.3, 0.3, 0.8]),
+      1,
+      0,
+      1,
+      0,
+      undefined,
+      undefined,
+      0,
+      20,
+      0.2,
+      1,
+      0.6,
+      velRng(0.1, 0.6),
+    );
+    const c0 = f.patchCenters.map((c) => ({ ...c }));
+    const fert0 = Array.from(f.fertilityMap());
+    for (let t = 1; t <= 200; t++) f.driftPockets(t); // rate 0 → every call is a no-op
+    f.patchCenters.forEach((c, p) => {
+      expect(c.x).toBe(c0[p]!.x);
+      expect(c.y).toBe(c0[p]!.y);
+    });
+    const fert1 = Array.from(f.fertilityMap());
+    for (let i = 0; i < fert1.length; i++) expect(fert1[i]).toBe(fert0[i]);
+  });
+
+  it('drift ON moves pocket centres over time', () => {
+    const f = new FoodField(1024, 1024, 128, 128, K, 1, 2, 0.5, 1); // channels=2 mode 1 → distinct A/B pockets
+    f.seedPatches(
+      6,
+      4,
+      0,
+      new QueueRng([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.15, 0.85, 0.45, 0.55]),
+      1,
+      0,
+      1,
+      0,
+      undefined,
+      undefined,
+      1,
+      20,
+      0.2,
+      1,
+      0.6,
+      velRng(0.05, 0.55),
+    );
+    const c0 = f.patchCenters.map((c) => ({ ...c }));
+    for (let t = 1; t <= 200; t++) f.driftPockets(t);
+    let moved = 0;
+    f.patchCenters.forEach((c, p) => {
+      const d = toroDisp(c0[p]!.x, c0[p]!.y, c.x, c.y, 1024, 1024);
+      if (d.mag > 1) moved++;
+    });
+    expect(moved).toBe(f.patchCenters.length); // EVERY pocket migrated
+  });
+
+  it('channel-A pockets move SLOWER than channel-B, and A vs B head in measurably DIFFERENT directions', () => {
+    const W = 1024;
+    const H = 1024;
+    const f = new FoodField(W, H, 128, 128, K, 1, 2, 0.5, 1); // channels=2 mode 1
+    // 8 pockets spread out; mode-1 round-robin → even index = channel A, odd = channel B.
+    const centres = [
+      0.1, 0.1, 0.2, 0.6, 0.35, 0.85, 0.5, 0.2, 0.6, 0.7, 0.75, 0.4, 0.85, 0.9, 0.95, 0.15,
+    ];
+    f.seedPatches(
+      8,
+      4,
+      0,
+      new QueueRng(centres),
+      1,
+      0,
+      1,
+      0,
+      undefined,
+      undefined,
+      1,
+      20,
+      0.2,
+      1,
+      0.6,
+      velRng(0.05, 0.5),
+    );
+    const c0 = f.patchCenters.map((c) => ({ ...c }));
+    // Classify each pocket by the channel carrying its biomass at its centre (A vs B).
+    const chanOf = f.patchCenters.map((c) =>
+      f.sampleAt(c.x, c.y) >= f.sampleAt2(c.x, c.y) ? 0 : 1,
+    );
+    for (let t = 1; t <= 500; t++) f.driftPockets(t);
+    let aMag = 0;
+    let aN = 0;
+    let aDx = 0;
+    let aDy = 0;
+    let bMag = 0;
+    let bN = 0;
+    let bDx = 0;
+    let bDy = 0;
+    f.patchCenters.forEach((c, p) => {
+      const d = toroDisp(c0[p]!.x, c0[p]!.y, c.x, c.y, W, H);
+      if (chanOf[p] === 0) {
+        aMag += d.mag;
+        aN++;
+        aDx += d.dx;
+        aDy += d.dy;
+      } else {
+        bMag += d.mag;
+        bN++;
+        bDx += d.dx;
+        bDy += d.dy;
+      }
+    });
+    expect(aN).toBeGreaterThan(0);
+    expect(bN).toBeGreaterThan(0);
+    // A creeps (rateA 0.2), B sweeps (rateB 1.0) → mean A displacement is much smaller than mean B.
+    expect(aMag / aN).toBeLessThan(bMag / bN);
+    // Mean A drift vector vs mean B drift vector point measurably different ways (the crossing currents).
+    const aAng = Math.atan2(aDy / aN, aDx / aN);
+    const bAng = Math.atan2(bDy / bN, bDx / bN);
+    let dAng = Math.abs(aAng - bAng) % (2 * Math.PI);
+    if (dAng > Math.PI) dAng = 2 * Math.PI - dAng;
+    expect(dAng).toBeGreaterThan(0.5); // clearly different headings (≳29°), not parallel
+  });
+
+  it('all channel-A pockets drift COHERENTLY (same dirA) and all channel-B pockets along dirB', () => {
+    const W = 1024;
+    const H = 1024;
+    const f = new FoodField(W, H, 128, 128, K, 1, 2, 0.5, 1);
+    const centres = [
+      0.1, 0.1, 0.2, 0.6, 0.35, 0.85, 0.5, 0.2, 0.6, 0.7, 0.75, 0.4, 0.85, 0.9, 0.95, 0.15,
+    ];
+    f.seedPatches(
+      8,
+      4,
+      0,
+      new QueueRng(centres),
+      1,
+      0,
+      1,
+      0,
+      undefined,
+      undefined,
+      1,
+      20,
+      0.2,
+      1,
+      0.6,
+      velRng(0.05, 0.5),
+    );
+    const c0 = f.patchCenters.map((c) => ({ ...c }));
+    const chanOf = f.patchCenters.map((c) =>
+      f.sampleAt(c.x, c.y) >= f.sampleAt2(c.x, c.y) ? 0 : 1,
+    );
+    for (let t = 1; t <= 500; t++) f.driftPockets(t);
+    const angs: { ch: number; ang: number }[] = [];
+    f.patchCenters.forEach((c, p) => {
+      const d = toroDisp(c0[p]!.x, c0[p]!.y, c.x, c.y, W, H);
+      angs.push({ ch: chanOf[p]!, ang: Math.atan2(d.dy, d.dx) });
+    });
+    // Within each channel every pocket's heading is (nearly) identical (no per-pocket scatter).
+    const within = (ch: number): number => {
+      const a = angs.filter((x) => x.ch === ch).map((x) => x.ang);
+      let max = 0;
+      for (let i = 0; i < a.length; i++)
+        for (let j = i + 1; j < a.length; j++) {
+          let d = Math.abs(a[i]! - a[j]!) % (2 * Math.PI);
+          if (d > Math.PI) d = 2 * Math.PI - d;
+          if (d > max) max = d;
+        }
+      return max;
+    };
+    expect(within(0)).toBeLessThan(0.05); // channel-A pockets all sweep along dirA (coherent)
+    expect(within(1)).toBeLessThan(0.05); // channel-B pockets all sweep along dirB (coherent)
+  });
+
+  it('reset restores the seeded start centres + fertility after drift', () => {
+    const f = new FoodField(1024, 1024, 128, 128, K, 1, 2, 0.5, 1);
+    f.seedPatches(
+      6,
+      4,
+      0,
+      new QueueRng([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.15, 0.85, 0.45, 0.55]),
+      1,
+      0,
+      1,
+      0,
+      undefined,
+      undefined,
+      1,
+      20,
+      0.2,
+      1,
+      0.6,
+      velRng(0.05, 0.55),
+    );
+    const c0 = f.patchCenters.map((c) => ({ ...c }));
+    const fert0 = Array.from(f.fertilityMap());
+    for (let t = 1; t <= 200; t++) f.driftPockets(t);
+    // pockets have moved by now
+    expect(f.patchCenters.some((c, p) => c.x !== c0[p]!.x || c.y !== c0[p]!.y)).toBe(true);
+    f.reset();
+    f.patchCenters.forEach((c, p) => {
+      expect(c.x).toBe(c0[p]!.x);
+      expect(c.y).toBe(c0[p]!.y);
+    });
+    const fertR = Array.from(f.fertilityMap());
+    for (let i = 0; i < fertR.length; i++) expect(fertR[i]).toBe(fert0[i]);
+  });
+});

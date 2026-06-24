@@ -29,6 +29,19 @@ Full rationale: `docs/superpowers/specs/2026-06-15-life-sim-design.md` (§4).
 **Decision:** Live runs are non-deterministic (free to parallelize without preserving float-order). RNG is seedable everywhere, so pure functions are unit-tested deterministically and whole-sim behaviour is tested via statistical invariants.
 ---
 
+### [APPROVED] New features ship ON by default; determinism is the only invariant (off-by-default ablation gate retired)
+**Date:** 2026-06-23
+**Context:** Features had been shipping OFF-by-default behind a byte-identical-when-off "ablation gate" (a frozen golden hash asserting the default world matched the pre-feature engine — `world.test.ts:17`, `a32e9375`). This directly fights the evolution-playground direction (feel-first: watch the latest behaviour live) and made new work invisible until manually toggled — senses shipped OFF and were never used (census 0). Owner directive (2026-06-23): visibility-by-default, with determinism kept.
+**Decision:**
+- **The only invariant is determinism:** for any given `(config, seed)` the sim is byte-identical reproducible run-to-run (`world.test.ts:7`). This stays sacred — it is independent of what the defaults are.
+- **New features ship ON by default** (flag defaults to `true` in `defaultConfig`) so the live demo always shows the latest behaviour.
+- **Feature flags are KEPT** — every feature stays individually toggleable so it can be ablated/bisected when debugging; only the *default* flips.
+- **RETIRED:** the frozen "default config matches the pre-feature engine" golden hash (`world.test.ts:17`) and the obligation to keep a new feature byte-identical-when-off (the tail-gated RNG draw-skip gymnastics in `genome.ts`). A new feature need only be deterministic given `(config, seed)` — no draw-skip, no golden-hash dance. This is a real simplification of new-feature work.
+- **Replacement guardrail:** a headless liveness check (the world stays alive / non-degenerate at N ticks, per the playground pivot) so on-by-default cannot silently ship a dead world — this covers the safety role the ablation gate used to play.
+- **Scope:** this is the rule for NEW features going forward. Existing OFF features are NOT blanket-flipped — several are mutually exclusive (`foodChannels` 1/2/3; sessile vs drifting plants) or known-destabilizing (the 8192² collapse). Turning any existing feature on is a deliberate, per-feature step that verifies the world survives.
+**Supersedes:** the OFF-by-default "ablation gate" convention (the env-features entry in `architecture.md`; the OFF-by-default framing of the 2026-06-22 diversity/predation decisions — those remain accurate *records* of current code state, but are no longer the go-forward rule). Aligns with the 2026-06-20 evolution-playground pivot.
+---
+
 ### [REJECTED] Pocket geometry / world size as a predation lever
 **Date:** 2026-06-22
 **Context:** Reviving the dead trophic axis (grazer monoculture; predEncounter≈0). Investigated via 4 multi-seed sweeps (`src/headless/diversity-sweep.ts` + `fixb-stability.ts`).

@@ -1,4 +1,4 @@
-.PHONY: help dev test check lint typecheck build headless
+.PHONY: help dev test check lint typecheck build headless guardrail
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -21,5 +21,8 @@ build: ## Build the production bundle
 
 headless: ## Run the headless simulation entry
 	pnpm headless
+
+guardrail: ## Liveness gate: default config stays alive + breathing (slow; the on-by-default safety net)
+	pnpm tsx src/headless/env-guardrail.ts
 
 check: typecheck lint test ## Run typecheck + lint + tests
