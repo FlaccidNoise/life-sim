@@ -84,7 +84,7 @@ export class Legend {
     );
     pill.addEventListener('click', () => this.setOpen(true));
     this.setColorMode(ColorMode.LINEAGE);
-    this.setOpen(true);
+    this.setOpen(false); // start collapsed to its pill — the reference is opt-in, not default clutter
   }
 
   setColorMode(mode: ColorMode): void {
