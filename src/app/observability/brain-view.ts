@@ -185,6 +185,17 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
     turnRaw += n.value * n.turnW;
     thrustRaw += n.value * n.thrustW;
   }
+  // The 16 linear identity-scent synapses (PHERO_C0..C3) — not shown as input nodes yet, but steer() sums
+  // them into turn/thrust, so the inspector must too or its motor diverges from the sim whenever scent is
+  // active. Per-channel base = PHERO_C0_LAT_TURN + c*4 → {lat_turn, fwd_turn, lat_thrust, fwd_thrust};
+  // scentGrad is laid out [c0_fwd, c0_lat, c1_fwd, c1_lat, …] (mirrors brain.ts steer's scent loop).
+  for (let c = 0; c < SCENT_CHANNELS; c++) {
+    const cFwd = scentGrad[c * 2]!;
+    const cLat = scentGrad[c * 2 + 1]!;
+    const pb = b + Brain.PHERO_C0_LAT_TURN + c * 4;
+    turnRaw += lb[pb]! * cLat + lb[pb + 1]! * cFwd;
+    thrustRaw += lb[pb + 2]! * cLat + lb[pb + 3]! * cFwd;
+  }
 
   // Hidden layer (slice E): the nonlinear correction on top of the linear sum, mirroring steer() exactly —
   // same 20 inputs (HiddenInput order: 8 sense pairs incl. the unshown 4-channel scent + bias=1), same tanh,

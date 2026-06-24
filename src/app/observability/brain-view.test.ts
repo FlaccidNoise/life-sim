@@ -8,6 +8,7 @@ import {
   SCALAR_GENE_SPECS,
   BRAIN_GENES,
 } from '../../core/genome';
+import { SCENT_CHANNELS } from '../../core/scent-field';
 import { steer } from '../../core/brain';
 import { satiatedBar } from '../../core/economy';
 import { computeBrainState } from './brain-view';
@@ -51,6 +52,32 @@ describe('computeBrainState', () => {
     const appliedThrust = Math.hypot(s.forceX[i]!, s.forceY[i]!);
     expect(st.turn).toBeCloseTo(appliedTurn, 10);
     expect(st.thrust).toBeCloseTo(appliedThrust, 10); // brain-view thrust already includes ×efficiency
+  });
+
+  it('reproduces turn/thrust from the linear scent synapses (non-saturated, scent active)', () => {
+    // Small scent-only weights so the motor does NOT saturate — a saturated motor would mask a missing
+    // linear-scent term (both clamp to maxTurn). This pins the inspector to steer()'s scent contribution.
+    const s = new OrganismStore(8);
+    const i = s.alloc();
+    s.heading[i] = 0;
+    const base = i * SCALAR_GENE_COUNT;
+    for (let g = 0; g < SCALAR_GENE_COUNT; g++)
+      s.scalarGenes[base + g] = cfg[SCALAR_GENE_SPECS[g]!.centerKey];
+    const b = i * BRAIN_GENES;
+    s.brain[b + Brain.PHERO_C0_LAT_TURN] = 0.2;
+    s.brain[b + Brain.PHERO_C0_FWD_TURN] = 0.1;
+    s.brain[b + Brain.PHERO_C0_LAT_THRUST] = 0.15;
+    s.brain[b + Brain.PHERO_C0_FWD_THRUST] = 0.25;
+    s.scentSenseX[i * SCENT_CHANNELS + 0] = 0.5;
+    s.scentSenseY[i * SCENT_CHANNELS + 0] = 0.3;
+    s.resetLearned(i);
+    s.rebuildLive();
+    const h0 = s.heading[i]!;
+    const st = computeBrainState(s, cfg, i);
+    steer(s, false, cfg.eligLambda, cfg.motorSquash, cfg);
+    expect(st.turn).toBeCloseTo(s.heading[i]! - h0, 10);
+    expect(st.thrust).toBeCloseTo(Math.hypot(s.forceX[i]!, s.forceY[i]!), 10);
+    expect(Math.abs(st.turn)).toBeGreaterThan(1e-6); // guard: the scent path is actually exercised
   });
 
   it('exposes the base inputs incl. age in the documented order with their live values', () => {

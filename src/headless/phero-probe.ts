@@ -1,6 +1,6 @@
 /**
  * F2 pheromone BREATHING probe — at the shipped 8192² scale with pheromoneEnabled=true, does the field
- * actually populate (mean/max P > 0) and does the PHERO_FWD_THRUST brain gene evolve AWAY from its
+ * actually populate (mean/max P > 0) and does the PHERO_C0_FWD_THRUST brain gene evolve AWAY from its
  * founder 0 over a few thousand ticks (i.e. does selection pick a flee-or-aggregate response)?
  *
  * Honest diagnostic — it's fine if the field populates but the gene does NOT move off 0 yet (that just
