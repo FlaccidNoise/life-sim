@@ -64,10 +64,10 @@ const sample = (tick: number): void => {
     `${w.population}`.padStart(8) +
     meanP.toExponential(3).padStart(12) +
     phero.max().toExponential(3).padStart(12) +
-    meanPheroGene(w, Brain.PHERO_FWD_THRUST).toFixed(5).padStart(12) +
-    absMeanPheroGene(w, Brain.PHERO_FWD_THRUST).toFixed(5).padStart(12) +
-    meanPheroGene(w, Brain.PHERO_LAT_TURN).toFixed(5).padStart(12) +
-    absMeanPheroGene(w, Brain.PHERO_LAT_TURN).toFixed(5).padStart(12);
+    meanPheroGene(w, Brain.PHERO_C0_FWD_THRUST).toFixed(5).padStart(12) +
+    absMeanPheroGene(w, Brain.PHERO_C0_FWD_THRUST).toFixed(5).padStart(12) +
+    meanPheroGene(w, Brain.PHERO_C0_LAT_TURN).toFixed(5).padStart(12) +
+    absMeanPheroGene(w, Brain.PHERO_C0_LAT_TURN).toFixed(5).padStart(12);
   console.log(row);
 };
 
