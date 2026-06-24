@@ -107,7 +107,35 @@ near-blind baseline). Report population alongside (must not collapse).
 If, after sweeping count/radius/center/appeal, nothing clears: report the encounter wall
 honestly and tee up the fallback. **No dressing up a null result.**
 
-## Fallback (not in this increment)
+## Result (2026-06-23): CONFIRMED NULL — clustering does not revive range
+
+Ran an 8-config sweep (center × appeal × clusterCount × radius), 8000 ticks, then an
+8-seed confirmation on the best config (center 60, appeal 3, 16 clusters, radius 120).
+Per-seed paired range Δ (clustering ON − OFF), seeds 1–8:
+
+```
++14.1  +17.2  −5.0  −1.2  −8.6  −6.2  −3.9  +0.6
+mean = +0.87   SD = 8.96   3/8 positive, 5/8 negative   mean/SE ≈ 0.28
+```
+
+Statistically indistinguishable from zero. The +15.6 that looked like a win was the two
+lucky seeds (1,2); it collapses with more seeds. The sign flips with both the seed *and*
+small parameter changes (appeal 3→5 flipped it on the same seeds 1,2), i.e. it's noise.
+Range **never** evolved above its center in any config (best ON ≈ 54.6 < center 60).
+
+**Why:** below-center range is free (`max(0,gene−center)·cost`) and smell-food sustains
+the population, so there's no survival pressure keeping eyes large. At 8192² even clustered
+sight-only parcels are encountered too rarely, and the per-seed variance in where range
+settles — driven by where the random cluster centers land relative to pockets/walls/flow —
+swamps any clustering signal. This confirms the encounter wall: at this scale density is
+the lever, not range (`perception-scale-mismatch`, `predation-engine-ceiling`). A
+sight-acquisition payoff (clustered or not) cannot overcome it.
+
+**Disposition:** the clustering lever is built, OFF-by-default, byte-clean, and committed
+(`684608d`) — kept as a tool, NOT shipped ON in the demo (it buys nothing). Vision-revival
+via parcels is abandoned. Pursue behavioral/evolutionary enhancement through other methods.
+
+## Fallback (not pursued — recorded for completeness)
 
 **D — sight-only lethal hazards.** Avoidance is a sharper selector than a food bonus. A
 drifting, smell-less, lethal-on-contact mote (same SoA + forked-RNG pattern, opposite appeal
