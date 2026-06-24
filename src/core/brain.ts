@@ -61,6 +61,7 @@ export function steer(
   const eatMovePenalty = cfg.eatMovePenalty; // thrust ×= 1 − eatGate·penalty while eating
   const ageSense = cfg.ageSense; // feed maturity = min(age/ageNorm,1) as an interoceptive input
   const ageNorm = cfg.ageNorm;
+  const readinessSense = cfg.readinessSense; // feed repro-readiness (clamped to the breeding band)
   for (let k = 0; k < liveCount; k++) {
     const i = liveIndices[k]!;
     const sg = i * SCALAR_GENE_COUNT;
@@ -138,6 +139,19 @@ export function steer(
       if (aged > 1) aged = 1;
       turnRaw += learnedBrain[b + Brain.AGE_TURN]! * aged;
       thrustRaw += learnedBrain[b + Brain.AGE_THRUST]! * aged;
+    }
+
+    // Interoceptive REPRO-READINESS (slice D): how far into the breeding band [reproThreshold, satiatedBar]
+    // the creature is, clamped 0..1. Distinct from hunger (clamped to the BAND, not the full bar). Gated.
+    let readiness = 0;
+    if (readinessSense) {
+      const repro = genes[sg + ScalarGene.REPRO_THRESHOLD]!;
+      const band = satiatedBar(genes, i, cfg) - repro;
+      readiness = band > 0 ? (energy[i]! - repro) / band : 0; // band>0 always (satiatedBar ≥ repro+MIN_BAND)
+      if (readiness < 0) readiness = 0;
+      else if (readiness > 1) readiness = 1;
+      turnRaw += learnedBrain[b + Brain.READINESS_TURN]! * readiness;
+      thrustRaw += learnedBrain[b + Brain.READINESS_THRUST]! * readiness;
     }
 
     let turn: number;
@@ -250,6 +264,13 @@ export function steer(
       elig[b + Brain.AGE_TURN] = keep * elig[b + Brain.AGE_TURN]! + eligLambda * aged * turnRaw;
       elig[b + Brain.AGE_THRUST] =
         keep * elig[b + Brain.AGE_THRUST]! + eligLambda * aged * thrustRaw;
+    }
+    // Repro-readiness eligibility (slice D): pre = readiness, post = the motor output.
+    if (readinessSense) {
+      elig[b + Brain.READINESS_TURN] =
+        keep * elig[b + Brain.READINESS_TURN]! + eligLambda * readiness * turnRaw;
+      elig[b + Brain.READINESS_THRUST] =
+        keep * elig[b + Brain.READINESS_THRUST]! + eligLambda * readiness * thrustRaw;
     }
   }
 }

@@ -215,6 +215,43 @@ describe('steer (per-creature brain)', () => {
     expect(mk(1000)).toBe(mk(0)); // age ignored entirely when off
   });
 
+  it('feeds repro-readiness (progress through the breeding band) when readinessSense is on', () => {
+    const thrustAtEnergy = (e: number): number => {
+      const s = new OrganismStore(4);
+      const i = s.alloc();
+      s.heading[i] = 0;
+      s.energy[i] = e;
+      setBrain(s, i, { READINESS_THRUST: 1.0 }); // readier → more thrust (for the test)
+      s.rebuildLive();
+      steer(s, false, 0.2, false, defaultConfig({ brainGatedEating: false }));
+      return Math.hypot(s.forceX[i]!, s.forceY[i]!);
+    };
+    // setBrain seeds REPRO_THRESHOLD 60 → energy below the repro bar gives readiness 0; well above the bar
+    // saturates readiness at 1. So a near-breeding creature thrusts more than a just-surviving one.
+    expect(thrustAtEnergy(30)).toBe(0); // below the repro bar → readiness 0
+    expect(thrustAtEnergy(200)).toBeGreaterThan(thrustAtEnergy(30)); // near/over the breeding bar → readiness up
+  });
+
+  it('readinessSense off → breeding energy does not affect the motor', () => {
+    const mk = (e: number): number => {
+      const s = new OrganismStore(4);
+      const i = s.alloc();
+      s.heading[i] = 0;
+      s.energy[i] = e;
+      setBrain(s, i, { READINESS_THRUST: 1.0 });
+      s.rebuildLive();
+      steer(
+        s,
+        false,
+        0.2,
+        false,
+        defaultConfig({ readinessSense: false, brainGatedEating: false }),
+      );
+      return Math.hypot(s.forceX[i]!, s.forceY[i]!);
+    };
+    expect(mk(200)).toBe(mk(30)); // readiness ignored entirely when off
+  });
+
   it('a positive WALL_FWD_THRUST weight converts a forward wall-gradient into forward thrust', () => {
     const s = new OrganismStore(4);
     const i = s.alloc();
