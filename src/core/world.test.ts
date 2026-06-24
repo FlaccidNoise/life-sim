@@ -408,6 +408,10 @@ describe('sexual reproduction — determinism + liveness', () => {
       sexualReproduction: true,
       worldWidth: 2048,
       worldHeight: 2048,
+      // Pin the founder count for this 2048² test world (independent of the demo's initialPopulation
+      // default, which is tuned for the 8192² demo): 90 founders concentrated here is dense enough for
+      // mate encounters yet light enough that 1500 ticks stay under the 20s test timeout.
+      initialPopulation: 90,
       foodPatchCount: 40,
       foodPatchRadius: 8,
       breedCooldown: 150,
