@@ -204,13 +204,16 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
   let sizeN = 0;
   let dietN = 0;
   let crowdN = 0;
+  let fertN = 0;
   if (cfg.bodySense) {
     sizeN = store.scalarGenes[sg + ScalarGene.SIZE]! / (2 * cfg.cellRadius);
     dietN = store.scalarGenes[sg + ScalarGene.DIET]!;
     crowdN = Math.min(store.crowding[slot]! / cfg.crowdSenseNorm, 1);
+    fertN = Math.min(store.fertHere[slot]! / cfg.foodCap, 1);
     inputs.push(node('size', sizeN, Brain.SIZE_TURN, Brain.SIZE_THRUST, HiddenInput.SIZE));
     inputs.push(node('diet', dietN, Brain.DIET_TURN, Brain.DIET_THRUST, HiddenInput.DIET));
     inputs.push(node('crowd', crowdN, Brain.CROWD_TURN, Brain.CROWD_THRUST, HiddenInput.CROWD));
+    inputs.push(node('fert', fertN, Brain.FERT_TURN, Brain.FERT_THRUST, HiddenInput.FERT));
   }
   // Glow-sense nodes (slice F3): linear-only receiver weights (no hidden input → hidIdx -1, drawn as direct
   // edges below). Always present (the synapses are always drawn); the gradient is 0 when the field is off.
@@ -248,7 +251,7 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
       sizeN,
       dietN,
       crowdN, // CROWD (A1b): 0 when !bodySense (mirrors steer's hidIn[HiddenInput.CROWD])
-      0, // FERT (A1c): inert until steer() reads fertHere (Task 3) — steer leaves this hidIn slot 0 too
+      fertN, // FERT (A1c): 0 when !bodySense (mirrors steer's hidIn[HiddenInput.FERT])
       1, // BIAS (now HiddenInput slot 23)
     ];
     for (let j = 0; j < HIDDEN_UNITS; j++) {
