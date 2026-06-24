@@ -92,6 +92,12 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
     const cy = store.scentSenseY[sc + c]!;
     scentGrad.push(cx * dx + cy * dy, -cx * dy + cy * dx);
   }
+  // Glow-sense gradient (slice F3) — the ∇G of the glow field in the heading frame. LINEAR-only (no hidden
+  // input); shown as its own fwd/lat nodes below.
+  const glx = store.glowSenseX[slot]!;
+  const gly = store.glowSenseY[slot]!;
+  const glFwd = glx * dx + gly * dy;
+  const glLat = -glx * dy + gly * dx;
 
   const node = (
     label: string,
@@ -148,8 +154,19 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
     node('wall lat', wLat, Brain.WALL_LAT_TURN, Brain.WALL_LAT_THRUST, HiddenInput.WALL_LAT),
     node('flow fwd', flFwd, Brain.FLOW_FWD_TURN, Brain.FLOW_FWD_THRUST, HiddenInput.FLOW_FWD),
     node('flow lat', flLat, Brain.FLOW_LAT_TURN, Brain.FLOW_LAT_THRUST, HiddenInput.FLOW_LAT),
-    node('bias', 1, Brain.TURN_BIAS, Brain.THRUST_BIAS, HiddenInput.BIAS, Brain.EAT_GATE_BIAS),
   ];
+  // 4-channel identity scent (slice F2): each channel's heading-frame gradient on its own fwd/lat node, so the
+  // 16 linear synapses + the 8 hidden-layer inputs are VISIBLE (they were summed but never drawn). Channels:
+  // prey (∝1−diet), pred (∝diet), kin·c/kin·s (hue compass → kin clustering). Base synapse for channel c =
+  // PHERO_C0_LAT_TURN + c*4 → {lat_turn, fwd_turn, lat_thrust, fwd_thrust}; hidden input = SCENT_C0_* + c*2.
+  const SCENT_LABELS = ['prey', 'pred', 'kin·c', 'kin·s'];
+  for (let c = 0; c < SCENT_CHANNELS; c++) {
+    const pb = Brain.PHERO_C0_LAT_TURN + c * 4;
+    const name = SCENT_LABELS[c] ?? `sc${c}`;
+    inputs.push(node(`${name} fwd`, scentGrad[c * 2]!, pb + 1, pb + 3, HiddenInput.SCENT_C0_FWD + c * 2));
+    inputs.push(node(`${name} lat`, scentGrad[c * 2 + 1]!, pb, pb + 2, HiddenInput.SCENT_C0_LAT + c * 2));
+  }
+  inputs.push(node('bias', 1, Brain.TURN_BIAS, Brain.THRUST_BIAS, HiddenInput.BIAS, Brain.EAT_GATE_BIAS));
   // Interoceptive scalars — hoisted to function scope so the hidden layer below can read them (steer parity).
   // Each is 0 unless its lever is on, exactly mirroring steer().
   let hunger = 0;
@@ -182,33 +199,20 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
       node('ready', readiness, Brain.READINESS_TURN, Brain.READINESS_THRUST, HiddenInput.READINESS),
     );
   }
+  // Glow-sense nodes (slice F3): linear-only receiver weights (no hidden input → hidIdx -1, drawn as direct
+  // edges below). Always present (the synapses are always drawn); the gradient is 0 when the field is off.
+  inputs.push(node('glow fwd', glFwd, GLOW_SENSE_FWD_TURN, GLOW_SENSE_FWD_THRUST, -1));
+  inputs.push(node('glow lat', glLat, GLOW_SENSE_LAT_TURN, GLOW_SENSE_LAT_THRUST, -1));
 
+  // Linear sum over EVERY input node (food/sight/wall/flow + 4-channel scent + bias + interoceptive +
+  // glow-sense) — scent and glow are now nodes, so this single loop reproduces steer()'s full linear map
+  // (no separate scent/glow sum needed). The hidden layer adds its nonlinear correction below.
   let turnRaw = 0;
   let thrustRaw = 0;
   for (const n of inputs) {
     turnRaw += n.value * n.turnW;
     thrustRaw += n.value * n.thrustW;
   }
-  // The 16 linear identity-scent synapses (PHERO_C0..C3) — not shown as input nodes yet, but steer() sums
-  // them into turn/thrust, so the inspector must too or its motor diverges from the sim whenever scent is
-  // active. Per-channel base = PHERO_C0_LAT_TURN + c*4 → {lat_turn, fwd_turn, lat_thrust, fwd_thrust};
-  // scentGrad is laid out [c0_fwd, c0_lat, c1_fwd, c1_lat, …] (mirrors brain.ts steer's scent loop).
-  for (let c = 0; c < SCENT_CHANNELS; c++) {
-    const cFwd = scentGrad[c * 2]!;
-    const cLat = scentGrad[c * 2 + 1]!;
-    const pb = b + Brain.PHERO_C0_LAT_TURN + c * 4;
-    turnRaw += lb[pb]! * cLat + lb[pb + 1]! * cFwd;
-    thrustRaw += lb[pb + 2]! * cLat + lb[pb + 3]! * cFwd;
-  }
-  // Glow-sense (slice F3): the ∇G glow-field gradient on 4 LINEAR-only weights (not in the hidden layer).
-  // steer() sums these (brain.ts) but the inspector did not → the displayed motor diverged from the sim
-  // whenever glowSense is active (default ON). Mirror steer's glow-sense terms exactly.
-  const glx = store.glowSenseX[slot]!;
-  const gly = store.glowSenseY[slot]!;
-  const glFwd = glx * dx + gly * dy;
-  const glLat = -glx * dy + gly * dx;
-  turnRaw += lb[b + GLOW_SENSE_LAT_TURN]! * glLat + lb[b + GLOW_SENSE_FWD_TURN]! * glFwd;
-  thrustRaw += lb[b + GLOW_SENSE_LAT_THRUST]! * glLat + lb[b + GLOW_SENSE_FWD_THRUST]! * glFwd;
 
   // Hidden layer (slice E): the nonlinear correction on top of the linear sum, mirroring steer() exactly —
   // same 20 inputs (HiddenInput order: 8 sense pairs incl. the unshown 4-channel scent + bias=1), same tanh,
@@ -399,6 +403,13 @@ export class BrainView {
       for (let i = 0; i < inN; i++) {
         const n = st.inputs[i]!;
         const iy = inY(i);
+        if (n.hidIdx < 0) {
+          // Linear-only input (glow-sense): no hidden row, so draw its direct edges to turn/thrust — the
+          // only place its wiring shows in the 3-layer view (other inputs' skip edges are intentionally hidden).
+          edge(inX, iy, outX, outY(0), n.turnW, n.value * n.turnW);
+          edge(inX, iy, outX, outY(1), n.thrustW, n.value * n.thrustW);
+          continue;
+        }
         for (let j = 0; j < hidN; j++) {
           const wgt = lbw[hb + HIDDEN_W1 + n.hidIdx * HIDDEN_UNITS + j]!;
           edge(inX, iy, hidX, hidY(j), wgt, n.value * wgt);
@@ -424,7 +435,11 @@ export class BrainView {
       }
     }
 
-    ctx.font = `${Math.round(10 * dpr)}px ui-monospace, monospace`;
+    // Input label font scales down to the row spacing so the (up to 22) labels never overlap — the full
+    // input set is food/sight/wall/flow + 4-channel scent + bias + interoceptive + glow-sense.
+    const rowGap = (bot - top) / Math.max(1, inN - 1); // device px between input rows
+    const inLabelPx = Math.max(6.5, Math.min(10, (rowGap / dpr) * 0.92));
+    ctx.font = `${Math.round(inLabelPx * dpr)}px ui-monospace, monospace`;
     ctx.textBaseline = 'middle';
 
     // Input nodes: fill by sign/strength of the live value; label on the left, value on the node.
@@ -458,7 +473,8 @@ export class BrainView {
       ctx.fill();
     }
 
-    // Output nodes.
+    // Output nodes (reset to the standard font — only 4 outputs, plenty of room).
+    ctx.font = `${Math.round(10 * dpr)}px ui-monospace, monospace`;
     const drawOut = (o: number, label: string, value: number): void => {
       const oy = outY(o);
       const v = Math.tanh(value);
