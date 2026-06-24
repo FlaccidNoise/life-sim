@@ -14,6 +14,7 @@ import {
   mutateScalarGenes,
   scalarGeneGatedOff,
   geneUpkeep,
+  geneticDistance,
 } from './genome';
 
 describe('genome', () => {
@@ -110,6 +111,23 @@ describe('genome', () => {
       expect(hue[1]!).toBeGreaterThanOrEqual(0);
       expect(hue[1]!).toBeLessThan(1);
     }
+  });
+
+  it('geneticDistance: 0 for identical, symmetric, DIET-dominated, display-blind', () => {
+    const cfg = defaultConfig({ mateDietWeight: 5 });
+    const N = SCALAR_GENE_COUNT;
+    const genes = new Float32Array(4 * N);
+    // slot 0 and 1 identical grazers; slot 2 = grazer differing only in DISPLAY; slot 3 = predator (DIET 1).
+    for (let s = 0; s < 4; s++) {
+      genes[s * N + ScalarGene.DIET] = 0;
+      genes[s * N + ScalarGene.MAX_SPEED] = 5;
+    }
+    genes[2 * N + ScalarGene.DISPLAY] = 1; // only the sexual axis differs
+    genes[3 * N + ScalarGene.DIET] = 1; // predator
+    expect(geneticDistance(genes, 0, 1, cfg)).toBe(0);
+    expect(geneticDistance(genes, 0, 1, cfg)).toBe(geneticDistance(genes, 1, 0, cfg)); // symmetric
+    expect(geneticDistance(genes, 0, 2, cfg)).toBe(0); // DISPLAY weighted 0 → same species
+    expect(geneticDistance(genes, 0, 3, cfg)).toBeGreaterThan(2); // predator vs prey ≫ threshold (~0.6)
   });
 });
 

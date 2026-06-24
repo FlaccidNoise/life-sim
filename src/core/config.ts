@@ -105,6 +105,8 @@ export interface Config {
   /** FOUNDER CENTER for the per-creature reproThreshold gene: the survival↔reproductive boundary (the
    *  learn-gate floor; where a parent lands after breeding). Each creature evolves its own. */
   reproThreshold: number;
+  /** DIET up-weight in the mate genetic-distance metric (predator/prey isolation). */
+  mateDietWeight: number;
   /** FOUNDER CENTER for the per-creature satiatedThreshold gene: the "full" bar — stop eating (leave
    *  biomass), peak learning, and BREED ("breed at the top"). Each creature evolves its own (r/K). */
   satiatedThreshold: number;
@@ -528,6 +530,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     // Slow breeding (long generation vs the starvation clock) damps the boom-bust toward a sustained,
     // turning-over population instead of an overshoot-to-extinction. Tuned headlessly.
     reproThreshold: 60, // gene center: survival↔reproductive boundary
+    mateDietWeight: 5,
     satiatedThreshold: 100, // gene center: breed-at-the-top trigger + eat-stop + peak learning
     reproOverhead: 15, // energy lost per birth beyond provisioning (parent pays birthEnergy + this)
     birthEnergy: 25, // gene center: offspring provisioning
