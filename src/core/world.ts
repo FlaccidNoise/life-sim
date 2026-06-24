@@ -297,6 +297,7 @@ export class World {
       this.wallSenseGenes,
       this.flowSenseGenes,
       this.walls,
+      this.hash,
     );
     this.totalBirths += this.lastBirths;
     this.totalDeaths += this.lastDeaths;

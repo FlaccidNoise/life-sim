@@ -18,6 +18,9 @@ import { type Walls } from './walls';
 import {
   mutateGenome,
   mutateScalarGenes,
+  crossoverScalarGenes,
+  crossoverBrain,
+  geneticDistance,
   geneUpkeep,
   ScalarGene,
   SCALAR_GENE_COUNT,
@@ -328,14 +331,79 @@ export function cullDead(store: OrganismStore): number {
   return deaths;
 }
 
+/** Find the best compatible mate for mother `p` within mateContactRange (RNG-free, deterministic). Scans
+ *  the post-MOVE hash 3×3 neighbourhood (cell ≥ contact range). A candidate is alive, mature, within range,
+ *  and genetically compatible (distance < threshold). Among candidates, picks the one best matching the
+ *  mother's PREFERENCE (min |display − preference|), tie-broken by lowest slot. Returns the slot or -1. */
+function findMate(store: OrganismStore, p: number, cfg: Config, hash: SpatialHash): number {
+  const { x, y, scalarGenes, age } = store;
+  const N = SCALAR_GENE_COUNT;
+  const range2 = cfg.mateContactRange * cfg.mateContactRange;
+  const pref = scalarGenes[p * N + ScalarGene.PREFERENCE]!;
+  const ww = cfg.worldWidth;
+  const wh = cfg.worldHeight;
+  let best = -1;
+  let bestScore = Infinity;
+  hash.forEachNeighbor(x[p]!, y[p]!, (j) => {
+    if (j === p || !store.isAlive(j)) return;
+    if (cfg.ageStages && age[j]! < scalarGenes[j * N + ScalarGene.MATURITY_AGE]!) return; // juvenile
+    const dx = wrapDelta(x[j]! - x[p]!, ww);
+    const dy = wrapDelta(y[j]! - y[p]!, wh);
+    if (dx * dx + dy * dy > range2) return; // out of contact range
+    if (geneticDistance(scalarGenes, p, j, cfg) >= cfg.mateCompatThreshold) return; // incompatible
+    const score = Math.abs(scalarGenes[j * N + ScalarGene.DISPLAY]! - pref);
+    if (score < bestScore || (score === bestScore && j < best)) { bestScore = score; best = j; }
+  });
+  return best;
+}
+
+/** Allocate + place a child near its mother (spawn-angle RNG, toroidal wrap, wall fallback, inherit
+ *  kinematics). Returns the child slot, or -1 if the store is full. The ONLY RNG draw here is the angle —
+ *  drawn first, matching the legacy asexual order so the determinism stream is unchanged. */
+function spawnChildSlot(
+  store: OrganismStore,
+  mom: number,
+  rng: Rng,
+  cfg: Config,
+  walls: Walls | null,
+): number {
+  const child = store.alloc();
+  if (child < 0) return -1;
+  const { x, y, vx, vy, heading } = store;
+  const angle = rng.range(0, Math.PI * 2);
+  let cx = x[mom]! + Math.cos(angle) * cfg.offspringOffset;
+  let cy = y[mom]! + Math.sin(angle) * cfg.offspringOffset;
+  cx %= cfg.worldWidth; if (cx < 0) cx += cfg.worldWidth;
+  cy %= cfg.worldHeight; if (cy < 0) cy += cfg.worldHeight;
+  if (walls !== null && walls.active && walls.isSolidAt(cx, cy)) { cx = x[mom]!; cy = y[mom]!; }
+  x[child] = cx; y[child] = cy; vx[child] = vx[mom]!; vy[child] = vy[mom]!; heading[child] = heading[mom]!;
+  return child;
+}
+
+/** After the child's genome is written: reset its learning state, provision it to its BIRTH_ENERGY gene
+ *  (capped by the mother's spare energy — energy-conserving), debit the mother (provisioning + reproOverhead),
+ *  start the mother's breed cooldown, and fire the onBirth hook. RNG-free. Called once the genome (mutate or
+ *  crossover) has set the child's genes. */
+function provisionAndFinalize(store: OrganismStore, mom: number, child: number, cfg: Config): void {
+  store.resetLearned(child);
+  const { energy, scalarGenes } = store;
+  const childBirth = scalarGenes[child * SCALAR_GENE_COUNT + ScalarGene.BIRTH_ENERGY]!;
+  const childEnergy = Math.min(childBirth, energy[mom]! - cfg.reproOverhead);
+  energy[child] = childEnergy;
+  store.prevEnergy[child] = childEnergy;
+  energy[mom] = energy[mom]! - childEnergy - cfg.reproOverhead;
+  if (cfg.breedCooldown > 0) store.breedCooldownLeft[mom] = cfg.breedCooldown;
+  cfg.onBirth?.(mom, store.genId[mom]!, child, store.genId[child]!);
+}
+
 /**
- * Asexual reproduction, "breed at the top": an organism that has climbed to ITS OWN satiated bar (a
- * life-history gene) spawns a child near it, provisions the child up to the child's BIRTH_ENERGY gene
- * (capped by what the parent can spare), and pays that provisioning + reproOverhead — which drops it
- * back into its reproductive band, so it must forage up again (climb-time rate-limits breeding). Energy
- * is conserved (provisioning moves parent→child; only reproOverhead is lost). The child INHERITS the
- * parent's genome with Gaussian mutation. Children allocated this tick first act next tick. RNG drawn
- * in ascending order. Returns births. r/K strategies emerge from the satiated + birthEnergy genes.
+ * Reproduction, "breed at the top": an organism that has climbed to ITS OWN satiated bar (a life-history
+ * gene) breeds. Asexual (sexualReproduction off): it clones itself with Gaussian mutation. Sexual (on): it
+ * enters a mate-seeking window and, when a compatible neighbour is in contact range, produces a crossover
+ * child (mother = p, father = mate). Either way the child is provisioned up to its BIRTH_ENERGY gene (capped
+ * by what the mother can spare) and the mother pays that + reproOverhead, dropping back into its reproductive
+ * band. Energy is conserved (provisioning moves mother→child; only reproOverhead is lost). Children allocated
+ * this tick first act next tick. RNG drawn in ascending order. Returns births.
  */
 export function reproduce(
   store: OrganismStore,
@@ -344,13 +412,13 @@ export function reproduce(
   wallSenseGenes: boolean,
   flowSenseGenes: boolean,
   walls: Walls | null,
+  hash: SpatialHash,
 ): number {
-  const { reproOverhead, offspringOffset, worldWidth, worldHeight } = cfg;
   // Snapshot the parents up front: alloc() mutates liveIndices' backing only via rebuildLive (not
   // here), but children land in freed slots — iterating a fixed count avoids touching them anyway.
   const parents = store.liveIndices;
   const n = store.liveCount;
-  const { x, y, vx, vy, heading, energy, scalarGenes, age } = store;
+  const { energy, scalarGenes, age } = store;
   let births = 0;
   for (let k = 0; k < n; k++) {
     const p = parents[k]!;
@@ -368,61 +436,54 @@ export function reproduce(
       store.breedCooldownLeft[p] = store.breedCooldownLeft[p]! - 1;
       continue;
     }
-    // Breed at the parent's OWN size-scaled satiated bar (bigger body = deeper reserve to fill first).
-    if (energy[p]! < satiatedBar(scalarGenes, p, cfg)) continue; // not full yet → keep foraging
-    const child = store.alloc();
-    if (child < 0) break; // store full — stop (population is buffer-capped)
-    const angle = rng.range(0, Math.PI * 2);
-    let cx = x[p]! + Math.cos(angle) * offspringOffset;
-    let cy = y[p]! + Math.sin(angle) * offspringOffset;
-    cx %= worldWidth;
-    if (cx < 0) cx += worldWidth;
-    cy %= worldHeight;
-    if (cy < 0) cy += worldHeight;
-    // Never spawn a child inside solid terrain (the parent's pos is already a valid open cell, so fall
-    // back to it; soft-repulsion then separates them). RNG-free, so the per-child draw count is fixed —
-    // with walls off (null / inactive) this never fires and the run stays byte-identical.
-    if (walls !== null && walls.active && walls.isSolidAt(cx, cy)) {
-      cx = x[p]!;
-      cy = y[p]!;
+
+    if (!cfg.sexualReproduction) {
+      if (energy[p]! < satiatedBar(scalarGenes, p, cfg)) continue; // not full yet
+      const child = spawnChildSlot(store, p, rng, cfg, walls);
+      if (child < 0) break; // store full
+      mutateGenome(
+        store.brain, store.hue, child, p, rng, cfg.mutationSigma, cfg.hueMutationSigma,
+        wallSenseGenes, flowSenseGenes, cfg.hungerSense, cfg.pheromoneEnabled,
+      );
+      mutateScalarGenes(store.scalarGenes, child, p, rng, cfg);
+      provisionAndFinalize(store, p, child, cfg);
+      births++;
+      continue;
     }
-    x[child] = cx;
-    y[child] = cy;
-    vx[child] = vx[p]!;
-    vy[child] = vy[p]!;
-    heading[child] = heading[p]!;
-    // Inherit the genome with mutation FIRST (brain + hue, then scalar genes) so the child's
-    // BIRTH_ENERGY gene is known before we provision it. RNG drawn in a fixed order per child.
-    mutateGenome(
-      store.brain,
-      store.hue,
-      child,
-      p,
-      rng,
-      cfg.mutationSigma,
-      cfg.hueMutationSigma,
-      wallSenseGenes,
-      flowSenseGenes,
-      cfg.hungerSense,
-      cfg.pheromoneEnabled,
-    );
-    mutateScalarGenes(store.scalarGenes, child, p, rng, cfg);
-    // No-Lamarck: the child's runtime brain starts from its freshly-mutated GENOME, not the parent's
-    // learned weights. Learning never crosses the generation boundary.
-    store.resetLearned(child);
-    // Provision the child up to its BIRTH_ENERGY gene, capped by the parent's spare energy (energy-
-    // conserving; parent stays ≥ 0 since the satiated bar it just cleared > reproOverhead).
-    const childBirth = scalarGenes[child * SCALAR_GENE_COUNT + ScalarGene.BIRTH_ENERGY]!;
-    const childEnergy = Math.min(childBirth, energy[p]! - reproOverhead);
-    energy[child] = childEnergy;
-    store.prevEnergy[child] = childEnergy; // first-tick learning reward = 0 for the newborn
-    energy[p] = energy[p]! - childEnergy - reproOverhead;
-    births++;
-    // Start this parent's breeding refractory (gated → no-op + byte-identical when off).
-    if (cfg.breedCooldown > 0) store.breedCooldownLeft[p] = cfg.breedCooldown;
-    // Optional observation hook (off by default): hand the harness exact child→parent identity. Read-
-    // only by contract — no store/RNG/order effect — so the determinism hash is unchanged (see Config).
-    cfg.onBirth?.(p, store.genId[p]!, child, store.genId[child]!);
+
+    // ── Sexual path ──
+    const ready = energy[p]! >= satiatedBar(scalarGenes, p, cfg);
+    if (store.seeking[p]! === 1) {
+      if (!ready) { store.seeking[p] = 0; continue; } // dropped below the bar → abandon the search
+      const mate = findMate(store, p, cfg, hash);
+      if (mate < 0) {
+        store.seekTicksLeft[p] = store.seekTicksLeft[p]! - 1;
+        if (store.seekTicksLeft[p]! === 0) {
+          store.seeking[p] = 0;
+          if (cfg.breedCooldown > 0) store.breedCooldownLeft[p] = cfg.breedCooldown; // forage before retry
+        }
+        continue;
+      }
+      // Compatible mate found → crossover birth. Mother = p, father = mate. spawnChildSlot draws the
+      // angle FIRST, then crossover draws — same order as the asexual path above.
+      const child = spawnChildSlot(store, p, rng, cfg, walls);
+      if (child < 0) break;
+      crossoverBrain(
+        store.brain, store.hue, child, p, mate, rng, cfg.mutationSigma, cfg.hueMutationSigma,
+        wallSenseGenes, flowSenseGenes, cfg.hungerSense, cfg.pheromoneEnabled,
+      );
+      crossoverScalarGenes(store.scalarGenes, child, p, mate, rng, cfg);
+      provisionAndFinalize(store, p, child, cfg);
+      births++;
+      store.seeking[p] = 0;
+      // The father is consumed by this pairing too: clear its search so it doesn't independently spawn a
+      // second child the same tick (one birth per pair) and re-enters seeking fresh next tick. RNG-free.
+      store.seeking[mate] = 0;
+      store.seekTicksLeft[mate] = 0;
+    } else if (ready) {
+      store.seeking[p] = 1; // become a seeker; the steer picks it up next tick, mate attempt starts then
+      store.seekTicksLeft[p] = cfg.mateSeekWindow;
+    }
   }
   return births;
 }
