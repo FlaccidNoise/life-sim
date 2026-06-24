@@ -80,8 +80,13 @@ export const ScalarGene = {
   // Tail-gated like FORAGE_PREF/PHERO_DEPOSIT → drawn only when ageStages, so the OFF stream is byte-identical.
   MATURITY_AGE: 22, // below this age a creature can't breed (juvenile); uncosted (cost = delayed breeding)
   SENESCENCE_AGE: 23, // at/above this age the basal senescence tax begins (elder); costed (longevity tradeoff)
+  // Sexual-selection genes (life-sim-xa90): a pure mate signal + the preference for it. Heritable, 0..1.
+  // DISPLAY drives a render cue and is what mates are chosen on; PREFERENCE is the display value this
+  // creature finds attractive. Neither is an ecological/species axis, so geneticDistance weights them 0.
+  DISPLAY: 24,
+  PREFERENCE: 25,
 } as const;
-export const SCALAR_GENE_COUNT = 24;
+export const SCALAR_GENE_COUNT = 26;
 
 /** Minimum reproductive-band width: satiated is read as max(satiatedGene, reproGene + this) so the two
  *  life-history bars can mutate independently without inverting (which would break the learn gate). */
@@ -111,7 +116,9 @@ interface ScalarGeneSpec {
     | 'foragePrefC'
     | 'pheroDeposit'
     | 'maturityAge'
-    | 'senescenceAge';
+    | 'senescenceAge'
+    | 'display'
+    | 'preference';
   /** Config key for the per-unit-above-center basal cost coeff, or null for a non-upkeep gene. */
   costKey:
     | 'maxSpeedCost'
@@ -184,6 +191,9 @@ export const SCALAR_GENE_SPECS: readonly ScalarGeneSpec[] = [
   // tradeoff, not free upward drift. Appended at the TAIL so every prior gene's RNG draw is unchanged.
   { centerKey: 'maturityAge', costKey: null, min: 0, max: 800 },
   { centerKey: 'senescenceAge', costKey: 'senescenceAgeCost', min: 50, max: 4000 },
+  // Sexual-selection genes — costKey null (no upkeep in v1; DISPLAY's "cost" is being conspicuous to mates).
+  { centerKey: 'display', costKey: null, min: 0, max: 1 },
+  { centerKey: 'preference', costKey: null, min: 0, max: 1 },
 ];
 
 /** Tail-gated scalar genes: each takes its founder CENTER (seed) / parent value (mutate) WITHOUT drawing
