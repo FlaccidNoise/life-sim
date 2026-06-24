@@ -140,6 +140,29 @@ describe('computeBrainState', () => {
     expect(Math.abs(st.turn)).toBeGreaterThan(1e-6); // guard: the size→turn path is actually exercised
   });
 
+  it('adds a local-CROWDING node that matches a real steer() run (A1b, non-saturated)', () => {
+    const s = new OrganismStore(8);
+    const i = s.alloc();
+    s.heading[i] = 0;
+    const base = i * SCALAR_GENE_COUNT;
+    for (let g = 0; g < SCALAR_GENE_COUNT; g++)
+      s.scalarGenes[base + g] = cfg[SCALAR_GENE_SPECS[g]!.centerKey];
+    s.crowding[i] = 4; // crowdN = min(4 / crowdSenseNorm(8), 1) = 0.5
+    const b = i * BRAIN_GENES;
+    s.brain[b + Brain.CROWD_TURN] = 0.06;
+    s.brain[b + Brain.CROWD_THRUST] = 0.04;
+    s.resetLearned(i);
+    s.rebuildLive();
+    const h0 = s.heading[i]!;
+    const st = computeBrainState(s, cfg, i);
+    steer(s, false, cfg.eligLambda, cfg.motorSquash, cfg);
+    expect(st.turn).toBeCloseTo(s.heading[i]! - h0, 10);
+    expect(st.thrust).toBeCloseTo(Math.hypot(s.forceX[i]!, s.forceY[i]!), 10);
+    const crowdNode = st.inputs.find((n) => n.label === 'crowd')!;
+    expect(crowdNode.value).toBeCloseTo(0.5, 10);
+    expect(Math.abs(st.turn)).toBeGreaterThan(1e-6); // guard: the crowd→turn path is exercised
+  });
+
   it('exposes the base inputs incl. age in the documented order with their live values', () => {
     const s = setup();
     const st = computeBrainState(s, cfg, 0); // default cfg: ageSense on, hungerSense off
@@ -165,6 +188,7 @@ describe('computeBrainState', () => {
       'ready',
       'size',
       'diet',
+      'crowd',
       'glow fwd',
       'glow lat',
     ]);
@@ -230,6 +254,7 @@ describe('computeBrainState', () => {
       'ready',
       'size',
       'diet',
+      'crowd',
       'glow fwd',
       'glow lat',
     ]);

@@ -70,6 +70,7 @@ export function steer(
     eatGate,
     glow,
     age,
+    crowding,
   } = store;
   const { wallSenseX, wallSenseY, flowSenseX, flowSenseY, scentSenseX, scentSenseY } = store;
   const { glowSenseX, glowSenseY } = store;
@@ -86,6 +87,7 @@ export function steer(
   const readinessSense = cfg.readinessSense; // feed repro-readiness (clamped to the breeding band)
   const bodySense = cfg.bodySense; // A1a: feed own-SIZE/own-DIET as interoceptive inputs
   const cellRadius = cfg.cellRadius; // SIZE normalization divisor (2·cellRadius)
+  const crowdSenseNorm = cfg.crowdSenseNorm; // A1b: local-crowding count → [0,1] divisor
   const hiddenLayer = cfg.hiddenLayer; // nonlinear tanh layer (conditional logic) on top of the linear map
   const moodGlow = cfg.moodGlow; // bioluminescence output read from the hidden "mood" layer (display + signal)
   // Per-creature scratch for the hidden layer (reused each iteration — no per-creature allocation).
@@ -224,12 +226,17 @@ export function steer(
     // positive-feedback runaway learn() excludes biases for). Gated, not +0'd, so the OFF path is untouched.
     let sizeN = 0;
     let dietN = 0;
+    let crowdN = 0;
     if (bodySense) {
       sizeN = genes[sg + ScalarGene.SIZE]! / (2 * cellRadius);
       dietN = genes[sg + ScalarGene.DIET]!;
+      crowdN = crowding[i]! / crowdSenseNorm;
+      if (crowdN > 1) crowdN = 1;
       turnRaw += learnedBrain[b + Brain.SIZE_TURN]! * sizeN + learnedBrain[b + Brain.DIET_TURN]! * dietN;
       thrustRaw +=
         learnedBrain[b + Brain.SIZE_THRUST]! * sizeN + learnedBrain[b + Brain.DIET_THRUST]! * dietN;
+      turnRaw += learnedBrain[b + Brain.CROWD_TURN]! * crowdN;
+      thrustRaw += learnedBrain[b + Brain.CROWD_THRUST]! * crowdN;
     }
 
     // Hidden layer (slice E): a tanh layer adding a NONLINEAR correction on top of the linear map above
@@ -251,6 +258,7 @@ export function steer(
       hidIn[HiddenInput.READINESS] = readiness;
       hidIn[HiddenInput.SIZE] = sizeN; // 0 when !bodySense → no hidden contribution either
       hidIn[HiddenInput.DIET] = dietN;
+      hidIn[HiddenInput.CROWD] = crowdN; // 0 when !bodySense
       hidIn[HiddenInput.BIAS] = 1;
       const w1 = b + HIDDEN_W1;
       for (let j = 0; j < HIDDEN_UNITS; j++) {
@@ -414,6 +422,13 @@ export function steer(
         keep * elig[b + Brain.READINESS_TURN]! + eligLambda * readiness * turnRaw;
       elig[b + Brain.READINESS_THRUST] =
         keep * elig[b + Brain.READINESS_THRUST]! + eligLambda * readiness * thrustRaw;
+    }
+    // Local-crowding eligibility (A1b): pre = crowdN, post = motor output. CROWD VARIES within a life, so it
+    // LEARNS (unlike A1a's constant own-size/diet, which get NO elig). Gated on bodySense.
+    if (bodySense) {
+      elig[b + Brain.CROWD_TURN] = keep * elig[b + Brain.CROWD_TURN]! + eligLambda * crowdN * turnRaw;
+      elig[b + Brain.CROWD_THRUST] =
+        keep * elig[b + Brain.CROWD_THRUST]! + eligLambda * crowdN * thrustRaw;
     }
     // Hidden→output eligibility (slice E): ONLY the output layer learns (pre = hidden activation, post =
     // the motor output). The input→hidden weights get NO elig → they stay at the genome (evolved-only),
