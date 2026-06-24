@@ -455,13 +455,17 @@ export const Brain = {
   // VARIES within a life → it LEARNS (eligibility in steer). Seeded 0; the settle/leave response evolves.
   FERT_TURN: 51,
   FERT_THRUST: 52,
+  // A2a brain-gated predation: a sigmoid biteGate output (hidden-layer column) read by hunt() to scale the
+  // bite drain — predation becomes a DECISION. This is the named BIAS gene; the per-unit hidden→output
+  // weights live in the W2 block at output column 3. Seeded gate-OPEN (bite by default); the gate LEARNS.
+  BITE_GATE_BIAS: 53,
 } as const;
 /** Senses-core brain weights (food + sight) — the count present before walls/flow/hunger, and the RNG-draw
  *  count when all gated blocks are off. Each gated block extends the array but draws RNG only when on. */
 export const BRAIN_CORE_GENES = 10;
 /** Number of named (non-hidden) brain weights — the linear sensor→motor map above (slots 0..44). The hidden
  *  layer's weight blocks start here. */
-export const NAMED_BRAIN_GENES = 53;
+export const NAMED_BRAIN_GENES = 54;
 
 /** Order of the HIDDEN_INPUTS scalars fed into the hidden layer (slice E) — the same heading-frame inputs
  *  turn/thrust read, plus own-SIZE/own-DIET (A1a) and a constant bias. The single pre-merge PHERO pair is
@@ -508,7 +512,7 @@ export const HiddenInput = {
  *  pass is skipped when off); the weights are always drawn (on-by-default policy). */
 export const HIDDEN_UNITS = 4; // escape hatch: bump to 6 only if 4 bottlenecks — not speculatively
 export const HIDDEN_INPUTS = 24; // +SIZE +DIET (A1a) +CROWD (A1b) +FERT (A1c)
-export const HIDDEN_OUTPUTS = 3; // turn=0, thrust=1, eatGate=2
+export const HIDDEN_OUTPUTS = 4; // turn=0, thrust=1, eatGate=2, biteGate=3 (A2a)
 export const HIDDEN_W1 = NAMED_BRAIN_GENES; // input→hidden block start (derived; see genome.test layout lock)
 export const HIDDEN_W2 = HIDDEN_W1 + HIDDEN_INPUTS * HIDDEN_UNITS; // hidden→output block start (derived)
 
@@ -566,6 +570,8 @@ const FOUNDER_BRAIN: readonly number[] = [
   0, 0,
   // A1c fertility-under-foot (51-52): FERT_TURN, FERT_THRUST — seed 0 (the settle/leave response evolves + learns).
   0, 0,
+  // A2a BITE_GATE_BIAS (53): seeded gate-OPEN (sigmoid(4)≈0.98 → bite by default; evolution/learning refine).
+  4,
   // Hidden layer (slice E): HIDDEN_INPUTS·HIDDEN_UNITS (80) input→hidden + HIDDEN_UNITS·HIDDEN_OUTPUTS (12)
   // hidden→output weights, all seeded 0 — the founder Gaussian noise at seed breaks the unit symmetry.
   ...new Array<number>(HIDDEN_INPUTS * HIDDEN_UNITS + HIDDEN_UNITS * HIDDEN_OUTPUTS).fill(0),

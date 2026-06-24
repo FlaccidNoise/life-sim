@@ -423,6 +423,10 @@ export interface Config {
    *  — graze (fed but slow + catchable) vs lift the head to flee at full speed. Off = legacy unconditional
    *  eating with no mobility cost (its ablation switch). */
   brainGatedEating: boolean;
+  /** A2a brain-gated predation: when on, hunt()'s bite drain is scaled by the creature's biteGate (0..1)
+   *  sigmoid output, so biting is a DECISION (graze-only vs strike). Seeded gate-open → founding predation is
+   *  unchanged; the gate learns + evolves. Off → unconditional auto-bite (the legacy reflex), ×1 byte-identical. */
+  brainGatedBiting: boolean;
   /** How hard active eating cuts thrust (the mobility cost that makes the eat-gate matter). 0 = eating is
    *  free (gate only throttles intake); 0.4 = a full-gate grazer moves at ~60% thrust. */
   eatMovePenalty: number;
@@ -776,6 +780,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     motorSquash: false,
     reverseThrustFraction: 0.5, // ON by default: creatures can back away at half forward power
     brainGatedEating: true, // ON by default: eating is a decision — graze slow vs lift the head to flee fast
+    brainGatedBiting: true, // ON by default: predation is a brain decision (seeded bite-open; learns)
     eatMovePenalty: 0.25, // eased from 0.4: eating still costs mobility (gate ON) but ~3× healthier population
     ageSense: true, // ON by default: the brain can sense its own maturity (life-stage behaviour)
     ageNorm: 1000, // ~average lifespan at the shipped economy → maturity reaches ~1 near mid-late life
