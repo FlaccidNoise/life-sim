@@ -108,10 +108,14 @@ export class LineageModal {
       view.prunedLeaves > 0
         ? `<div class="ln-foot muted">… ${view.prunedLeaves} old dead leaves pruned (counts still exact)</div>`
         : '';
+    const orphans =
+      view.orphanBirths > 0
+        ? `<div class="ln-foot muted">⚠ ${view.orphanBirths} orphan birth(s) — parent not in forest</div>`
+        : '';
     return (
       `<div class="ln-sec muted">ANCESTRY · founder → selected</div>${spine}` +
       `<div class="ln-sec">CHILDREN (${view.directChildren}) · dynasty ${view.dynasty}</div>${childRows}` +
-      `<div class="ln-foot muted">founder ${view.founderKey} · click a live node to inspect</div>${pruned}`
+      `<div class="ln-foot muted">founder ${view.founderKey} · click a live node to inspect</div>${pruned}${orphans}`
     );
   }
 }

@@ -153,4 +153,24 @@ describe('Lineage recorder', () => {
     expect(f0.prunedLeaves).toBe(1); // surfaced, not silent
     expect(lin.queryBySlot(2, 1, store)).toBeNull(); // the pruned node is gone
   });
+
+  it('surfaces an orphan birth (parent not in forest) as a counted gen-1 root', () => {
+    const { store, put, setLive } = makeStore();
+    put(0, 1, 0.2, 0.1); // a live founder, as the other tests set up
+    setLive([0]);
+    const lin = new Lineage();
+    lin.reset(store);
+
+    // Birth attributed to parent 99:9, which was never snapshotted/born.
+    put(5, 1, 0.3, 0.3);
+    lin.onBirth(99, 9, 5, 1);
+    lin.commit(store, 100);
+
+    const v = lin.queryBySlot(5, 1, store)!;
+    expect(v).not.toBeNull();
+    expect(v.ancestors).toHaveLength(1); // no parent → it's its own root
+    expect(v.ancestors[0]!.generation).toBe(1); // gen-1 root, not gen-0 founder
+    expect(v.founderKey).toBe('5:1');
+    expect(v.orphanBirths).toBe(1); // surfaced, not silently misattributed
+  });
 });

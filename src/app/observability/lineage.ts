@@ -55,6 +55,7 @@ export interface LineageView {
   directChildren: number; // authoritative (≥ children.length if some were pruned)
   founderKey: string;
   prunedLeaves: number; // total dead leaves pruned this run (cap visibility)
+  orphanBirths: number; // births whose parent wasn't in the forest (should be 0; surfaced if not)
 }
 
 const DEFAULT_MAX_NODES = 50_000;
@@ -67,6 +68,7 @@ export class Lineage {
   private nodes = new Map<string, LineageNode>();
   private pending: Array<{ pKey: string; cSlot: number; cGen: number }> = [];
   private prunedLeaves = 0;
+  private orphanBirths = 0;
 
   constructor(private readonly maxNodes: number = DEFAULT_MAX_NODES) {}
 
@@ -82,6 +84,7 @@ export class Lineage {
     this.nodes.clear();
     this.pending.length = 0;
     this.prunedLeaves = 0;
+    this.orphanBirths = 0;
     for (let k = 0; k < store.liveCount; k++) {
       const slot = store.liveIndices[k]!;
       const gen = store.genId[slot]!;
@@ -108,9 +111,12 @@ export class Lineage {
     if (this.pending.length === 0) return;
     for (const b of this.pending) {
       const cKey = keyOf(b.cSlot, b.cGen);
-      // Parent should always be present (founders are snapshotted before any step); a missing parent
-      // is the only orphan case → record the child as a gen-1 root rather than dropping the birth.
+      // The parent is normally present: founders are snapshotted before any step, and a node is
+      // never pruned while it has children, so this fallback should not fire in the default flow.
+      // If it ever does, the child is recorded as a gen-1 root and counted in orphanBirths so the
+      // anomaly is surfaced (see LineageView/modal) rather than silently corrupting a dynasty.
       const parent = this.nodes.get(b.pKey);
+      if (parent === undefined) this.orphanBirths++;
       this.nodes.set(cKey, {
         key: cKey,
         slot: b.cSlot,
@@ -199,6 +205,7 @@ export class Lineage {
       directChildren: node.directChildren,
       founderKey: chain[0]!.key,
       prunedLeaves: this.prunedLeaves,
+      orphanBirths: this.orphanBirths,
     };
   }
 
