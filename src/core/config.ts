@@ -438,6 +438,10 @@ export interface Config {
    *  Distinct from hunger (whose denominator is the full bar): this one is clamped to the breeding BAND.
    *  Off = the brain can't sense breeding readiness. */
   readinessSense: boolean;
+  /** A1a interoceptive body sense: feed own-SIZE (= SIZE/(2·cellRadius)) and own-DIET (0..1) as brain inputs
+   *  (both the linear map and the hidden layer), so behaviour can be conditional on the body. Gates only the
+   *  steer() forward pass; the synapses are always drawn (on-by-default policy). */
+  bodySense: boolean;
   /** Hidden layer (slice E): when on, a fixed H-unit tanh layer adds a NONLINEAR correction on top of the
    *  linear sensor→motor map (skip-connection), giving the brain conditional logic ("flee only if a predator
    *  is close AND I'm cornered"). Off = the pure linear brain (the hidden forward pass is skipped). The
@@ -770,6 +774,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     ageSense: true, // ON by default: the brain can sense its own maturity (life-stage behaviour)
     ageNorm: 1000, // ~average lifespan at the shipped economy → maturity reaches ~1 near mid-late life
     readinessSense: true, // ON by default: the brain can sense how close it is to breeding (the repro band)
+    bodySense: true, // ON by default: the brain senses its own size + diet (A1a interoceptive inputs)
     hiddenLayer: true, // ON by default: the nonlinear hidden layer (conditional logic — the emergent-behavior substrate)
     moodGlow: true, // ON by default: bioluminescence read from the hidden mood layer (display + comms signal)
 
