@@ -5,7 +5,24 @@
  */
 import { World } from '../core/world';
 import { defaultConfig, type Config } from '../core/config';
+import { ScalarGene, SCALAR_GENE_COUNT } from '../core/genome';
 import { DEMO_OVERRIDES } from './life-history';
+
+/** mean + population std of a scalar gene over the live creatures (a divergence indicator). */
+function geneStats(world: World, gene: number): { mean: number; std: number } {
+  const s = world.store;
+  const { liveIndices, liveCount, scalarGenes } = s;
+  if (liveCount === 0) return { mean: NaN, std: NaN };
+  let sum = 0;
+  for (let k = 0; k < liveCount; k++) sum += scalarGenes[liveIndices[k]! * SCALAR_GENE_COUNT + gene]!;
+  const mean = sum / liveCount;
+  let v = 0;
+  for (let k = 0; k < liveCount; k++) {
+    const d = scalarGenes[liveIndices[k]! * SCALAR_GENE_COUNT + gene]! - mean;
+    v += d * d;
+  }
+  return { mean, std: Math.sqrt(v / liveCount) };
+}
 
 const TICKS = Number(process.argv[2] ?? 4000);
 const SEEDS = Number(process.argv[3] ?? 3);
@@ -26,8 +43,12 @@ for (let seed = 1; seed <= SEEDS; seed++) {
   for (let t = 0; t < TICKS; t++) world.step();
   const endPop = world.population;
   if (endPop <= 0) allLive = false;
+  const pref = geneStats(world, ScalarGene.FORAGE_PREF);
+  const diet = geneStats(world, ScalarGene.DIET);
   process.stdout.write(
-    `seed ${seed}: start ${startPop} → end ${endPop} pop · births ${world.totalBirths} · deaths ${world.totalDeaths}\n`,
+    `seed ${seed}: start ${startPop} → end ${endPop} pop · births ${world.totalBirths} · deaths ${world.totalDeaths}\n` +
+      `         FORAGE_PREF mean ${pref.mean.toFixed(2)} std ${pref.std.toFixed(2)} (std↑ = specialised/diverged) · ` +
+      `DIET mean ${diet.mean.toFixed(2)} std ${diet.std.toFixed(2)}\n`,
   );
 }
 process.stdout.write(allLive ? 'LIVENESS: PASS (no extinction)\n' : 'LIVENESS: FAIL (extinction)\n');

@@ -68,6 +68,7 @@ let config: Config = defaultConfig({
   pocketDriftSpeed: 0.6,
   // Pheromones (delayed-feedback substrate).
   pheromoneEnabled: true,
+  hungerSense: true, // DEMO: the brain senses its own energy deficit (dead in default config — audit)
   scentIdentity: true,
   // Sight-only drifting food parcels + the census-proven vision-cost cut → the dead vision genes get a
   // reason to evolve up (this tuning lives in the demo so defaultConfig stays byte-identical to legacy).

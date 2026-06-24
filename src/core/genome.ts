@@ -235,6 +235,15 @@ export function seedScalarGenes(genes: Float32Array, slot: number, rng: Rng, cfg
       genes[base + g] = center;
       continue;
     }
+    // FORAGE_PREF seeds UNIFORM over [0,1] (not clustered at the 0.5 center) so the founding pool already
+    // holds committed A- and B-specialists, not just generalists. With the generalist penalty on, those
+    // specialists thrive from t=0 and carry the population while it sorts into niches — without the spread an
+    // all-generalist founding pool eats the penalty en masse and crashes before specialists emerge. One RNG
+    // draw (rng.float()), like the gaussian path it replaces, so it stays at the tail-safe draw position.
+    if (g === ScalarGene.FORAGE_PREF) {
+      genes[base + g] = rng.float();
+      continue;
+    }
     genes[base + g] = clampTo(
       center + rng.gaussian(0, cfg.founderSigma * center),
       spec.min,

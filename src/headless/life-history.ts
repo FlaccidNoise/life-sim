@@ -156,6 +156,7 @@ export const DEMO_OVERRIDES: Partial<Config> = {
   foodChannelAWallTied: true,
   foodChannelBDriftMult: 3,
   pheromoneEnabled: true,
+  hungerSense: true, // DEMO: the brain senses its own energy deficit (dead in default config — audit)
   scentIdentity: true,
   parcelsEnabled: true,
   parcelEnergy: 80,
