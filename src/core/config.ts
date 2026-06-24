@@ -96,6 +96,12 @@ export interface Config {
    *  channel). 0 = ablation (no specialization incentive; income ceiling = single-channel, so the only
    *  difference left is the split resource pool itself). Only read when foodChannels===2. */
   forageSpecBonus: number;
+  /** Generalist energy FLOOR — the conversion multiplier a fully-indifferent forager (FORAGE_PREF=0.5)
+   *  earns, vs 1+forageSpecBonus for a full specialist. <1 PENALISES generalism: spec ramps linearly
+   *  from this floor (indifferent) up to 1+forageSpecBonus (committed), so a generalist earns less energy
+   *  per grazed unit than a specialist eating its own channel. This is what pulls FORAGE_PREF off 0.5 and
+   *  into two niches (the owner's "everyone is gray" fix). 1 = no penalty (legacy). Read at foodChannels≥2. */
+  forageGeneralistFloor: number;
   /** Max biomass an organism ingests per tick from its current cell (→ energy 1:1). */
   eatRate: number;
   /** Basal metabolic cost per tick (the starvation clock — high enough that not-eating kills). */
@@ -616,6 +622,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     foodChannels: 1, // single resource (byte-identical OFF state); 2 = niche-partitioning second channel
     foodChannelRatio: 0.5, // symmetric A/B split when channels===2 (total per-cell cap unchanged)
     forageSpecBonus: 0.5, // specialists convert up to 1.5× energy (the disruptive niche-split pressure)
+    forageGeneralistFloor: 0.85, // gentle generalist penalty: pulls FORAGE_PREF off 0.5 without a t=0 founder crash
     eatRate: 2,
     basalCost: 0.12, // low starvation clock → longer lives + a SOFTER early crash, so predator founders
     // survive the sparse phase long enough to reach the prey boom (predator-viability fix; was 0.2)
@@ -759,7 +766,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     motorSquash: false,
     reverseThrustFraction: 0.5, // ON by default: creatures can back away at half forward power
     brainGatedEating: true, // ON by default: eating is a decision — graze slow vs lift the head to flee fast
-    eatMovePenalty: 0.4,
+    eatMovePenalty: 0.25, // eased from 0.4: eating still costs mobility (gate ON) but ~3× healthier population
     ageSense: true, // ON by default: the brain can sense its own maturity (life-stage behaviour)
     ageNorm: 1000, // ~average lifespan at the shipped economy → maturity reaches ~1 near mid-late life
     readinessSense: true, // ON by default: the brain can sense how close it is to breeding (the repro band)

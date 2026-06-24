@@ -196,7 +196,11 @@ export function metabolize(store: OrganismStore, food: FoodField, hash: SpatialH
       // generalist. No biomass is created — the field depletes by exactly (takeA+takeB); the bonus is a
       // conversion efficiency. This is the disruptive pressure that pulls FORAGE_PREF apart into two niches.
       const pref = scalarGenes[sg + ScalarGene.FORAGE_PREF]!;
-      const spec = 1 + cfg.forageSpecBonus * (2 * Math.abs(pref - 0.5));
+      // spec ramps from the generalist floor (s01=0, indifferent) to 1+bonus (s01=1, committed specialist),
+      // so a generalist earns LESS per grazed unit than a specialist eating its own channel — the penalty
+      // that pulls FORAGE_PREF off 0.5 into two niches.
+      const s01 = 2 * Math.abs(pref - 0.5);
+      const spec = cfg.forageGeneralistFloor + (1 + cfg.forageSpecBonus - cfg.forageGeneralistFloor) * s01;
       const budget = effEatRate * herbivory;
       const takeA = food.grazeAt(x[i]!, y[i]!, budget * (1 - pref));
       const takeB = food.grazeAt2(x[i]!, y[i]!, budget * pref);
@@ -215,7 +219,8 @@ export function metabolize(store: OrganismStore, food: FoodField, hash: SpatialH
       const wB = pref * (1 - prefC);
       const wA = (1 - pref) * (1 - prefC);
       const maxW = wA > wB ? (wA > wC ? wA : wC) : wB > wC ? wB : wC;
-      const spec = 1 + cfg.forageSpecBonus * ((maxW - 1 / 3) / (2 / 3));
+      const s01 = (maxW - 1 / 3) / (2 / 3); // 0 = even (generalist) … 1 = all-in on one channel
+      const spec = cfg.forageGeneralistFloor + (1 + cfg.forageSpecBonus - cfg.forageGeneralistFloor) * s01;
       const budget = effEatRate * herbivory;
       // Availability-weighted split: e_ch = w_ch · localBiomass_ch, renormalized so Σ = budget. The budget
       // flows to present-and-preferred resources; nothing is wasted on an empty channel.

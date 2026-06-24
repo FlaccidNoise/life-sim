@@ -265,11 +265,12 @@ describe('metabolize two-channel niche split (lever B)', () => {
     satiatedThreshold: 1000,
     foodChannels: 2,
     forageSpecBonus: 0.5,
+    forageGeneralistFloor: 0.7,
   });
   // K=10 split 0.5/0.5 → each channel's cap = 5, both full. eatRate 2 = center → no gene upkeep.
   const dualFood = (): FoodField => new FoodField(W, H, 16, 16, 10, 1, 2, 0.5);
 
-  it('a generalist (pref 0.5) grazes BOTH channels equally at base conversion (spec=1)', () => {
+  it('a generalist (pref 0.5) grazes BOTH channels but is PENALISED to the generalist floor (0.7×)', () => {
     const s = new OrganismStore(4);
     const i = s.alloc();
     s.x[i] = 10;
@@ -279,9 +280,30 @@ describe('metabolize two-channel niche split (lever B)', () => {
     s.rebuildLive();
     const food = dualFood();
     metabolize(s, food, hashOf(s), cfg);
-    expect(s.energy[i]).toBeCloseTo(5 + 2); // take 1 from A + 1 from B, spec=1 → gained 2
-    expect(food.sampleAt(10, 10)).toBeCloseTo(5 - 1);
+    expect(s.energy[i]).toBeCloseTo(5 + 1.4); // take 1 from A + 1 from B = 2, ×floor 0.7 → gained 1.4
+    expect(food.sampleAt(10, 10)).toBeCloseTo(5 - 1); // biomass still depletes by the grazed amount (no windfall)
     expect(food.sampleAt2(10, 10)).toBeCloseTo(5 - 1);
+  });
+
+  it('forageGeneralistFloor=1 restores the legacy no-penalty generalist (spec=1)', () => {
+    const cfgNoPenalty = defaultConfig({
+      basalCost: 0,
+      moveCost: 0,
+      satiatedThreshold: 1000,
+      foodChannels: 2,
+      forageSpecBonus: 0.5,
+      forageGeneralistFloor: 1,
+    });
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.x[i] = 10;
+    s.y[i] = 10;
+    s.energy[i] = 5;
+    genes(s, i, cfgNoPenalty, { [ScalarGene.EAT_RATE]: 2, [ScalarGene.FORAGE_PREF]: 0.5 });
+    s.rebuildLive();
+    const food = dualFood();
+    metabolize(s, food, hashOf(s), cfgNoPenalty);
+    expect(s.energy[i]).toBeCloseTo(5 + 2); // spec=1 → gained 2 (legacy)
   });
 
   it('a hard B-specialist (pref 1) eats only channel B and converts at the 1.5× bonus', () => {
@@ -332,6 +354,7 @@ describe('metabolize three-channel place-coupled niche (F1)', () => {
     foodChannels: 3,
     foodPocketChannelMode: 1,
     forageSpecBonus: 0.5,
+    forageGeneralistFloor: 0.7,
   });
   // Replays a fixed RNG sequence → three well-separated pockets so cell (16,16)→A, (48,48)→B, (80,80)→C.
   class QueueRng {
@@ -413,9 +436,10 @@ describe('metabolize three-channel place-coupled niche (F1)', () => {
     });
     s.rebuildLive();
     metabolize(s, food, hashOf(s), cfg);
-    // Only C present → eSum = wC·avC, so takeC = budget·(eC/eSum) = budget = 2. maxW = 0.5 → spec = 1.125.
-    // gained = 2·1.125 = 2.25 (vs the old waste-the-A/B-share model's 1.125).
-    expect(s.energy[i]).toBeCloseTo(5 + 2.25);
+    // Only C present → eSum = wC·avC, so takeC = budget·(eC/eSum) = budget = 2 (availability-weighting works).
+    // maxW = 0.5 → s01 = 0.25 → spec = floor 0.7 + (1.5−0.7)·0.25 = 0.9 (the generalist penalty applies).
+    // gained = 2·0.9 = 1.8.
+    expect(s.energy[i]).toBeCloseTo(5 + 1.8);
   });
 });
 
