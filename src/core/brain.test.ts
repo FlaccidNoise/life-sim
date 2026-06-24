@@ -683,7 +683,9 @@ describe('hunger-gated food drive (satiation → stop seeking food)', () => {
   // cfg.hungerGatesFood scales the FOOD gradient by hunger = clamp(1−energy/satiatedBar, 0, 1): a full
   // creature (hunger→0) stops responding to food and steers on its other drives (→ wanders); a starving
   // one seeks at full strength. ONLY the food gradient is scaled (not sight/wall/flow). OFF = byte-identical.
-  const GATE_ON = defaultConfig({ hungerGatesFood: true });
+  // brainGatedEating off so the motor output IS the (food-drive-gated) thrust, isolated from the orthogonal
+  // eat-gate mobility penalty (which is on by default and would scale thrust by 1−eatGate·eatMovePenalty).
+  const GATE_ON = defaultConfig({ hungerGatesFood: true, brainGatedEating: false });
 
   // Pure food-driven thrust (no bias/sight), so the motor output IS the (gated) food response.
   const foodThrust = (energy: number, cfg: Config): number => {
@@ -737,7 +739,11 @@ describe('hunger-gated food drive (satiation → stop seeking food)', () => {
   it('foodGateThreshold ≤ 0 falls back to the raw-linear gate (drive = hunger)', () => {
     // threshold 0 → no saturating ramp: drive IS hunger. satiatedBar floors at 65 (SIZE 0), so energy 20
     // → hunger ≈ 0.69 → thrust ≈ FWD_THRUST(2)·0.69, i.e. linearly throttled (not the full 2 a ramp gives).
-    const LINEAR = defaultConfig({ hungerGatesFood: true, foodGateThreshold: 0 });
+    const LINEAR = defaultConfig({
+      hungerGatesFood: true,
+      foodGateThreshold: 0,
+      brainGatedEating: false,
+    });
     expect(foodThrust(20, LINEAR)).toBeCloseTo(2 * (1 - 20 / 65), 1);
   });
 });
