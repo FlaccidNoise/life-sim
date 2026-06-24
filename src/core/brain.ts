@@ -16,7 +16,18 @@
 import { type OrganismStore } from './store';
 import { type Config } from './config';
 import { satiatedBar } from './economy';
-import { Brain, BRAIN_GENES, ScalarGene, SCALAR_GENE_COUNT } from './genome';
+import {
+  Brain,
+  BRAIN_GENES,
+  ScalarGene,
+  SCALAR_GENE_COUNT,
+  HiddenInput,
+  HIDDEN_UNITS,
+  HIDDEN_INPUTS,
+  HIDDEN_OUTPUTS,
+  HIDDEN_W1,
+  HIDDEN_W2,
+} from './genome';
 
 /**
  * Run each creature's runtime brain: food gradient (heading frame) → turn + thrust. Turns the heading
@@ -62,6 +73,10 @@ export function steer(
   const ageSense = cfg.ageSense; // feed maturity = min(age/ageNorm,1) as an interoceptive input
   const ageNorm = cfg.ageNorm;
   const readinessSense = cfg.readinessSense; // feed repro-readiness (clamped to the breeding band)
+  const hiddenLayer = cfg.hiddenLayer; // nonlinear tanh layer (conditional logic) on top of the linear map
+  // Per-creature scratch for the hidden layer (reused each iteration — no per-creature allocation).
+  const hidIn = new Float64Array(HIDDEN_INPUTS);
+  const hAct = new Float64Array(HIDDEN_UNITS);
   for (let k = 0; k < liveCount; k++) {
     const i = liveIndices[k]!;
     const sg = i * SCALAR_GENE_COUNT;
@@ -154,6 +169,40 @@ export function steer(
       thrustRaw += learnedBrain[b + Brain.READINESS_THRUST]! * readiness;
     }
 
+    // Hidden layer (slice E): a tanh layer adding a NONLINEAR correction on top of the linear map above
+    // (skip-connection). Computed once per creature; its units feed turn + thrust here, eatGate below, and
+    // are reused for the hidden→output eligibility traces. Input→hidden is frozen (evolved); hidden→output
+    // learns. Skipped entirely when off → the pure linear brain (byte-identical motor to pre-hidden).
+    if (hiddenLayer) {
+      hidIn[HiddenInput.FOOD_FWD] = fwd;
+      hidIn[HiddenInput.FOOD_LAT] = lat;
+      hidIn[HiddenInput.SIGHT_FWD] = sFwd;
+      hidIn[HiddenInput.SIGHT_LAT] = sLat;
+      hidIn[HiddenInput.WALL_FWD] = wFwd;
+      hidIn[HiddenInput.WALL_LAT] = wLat;
+      hidIn[HiddenInput.FLOW_FWD] = flFwd;
+      hidIn[HiddenInput.FLOW_LAT] = flLat;
+      hidIn[HiddenInput.PHERO_FWD] = pFwd;
+      hidIn[HiddenInput.PHERO_LAT] = pLat;
+      hidIn[HiddenInput.HUNGER] = hunger;
+      hidIn[HiddenInput.AGE] = aged;
+      hidIn[HiddenInput.READINESS] = readiness;
+      hidIn[HiddenInput.BIAS] = 1;
+      const w1 = b + HIDDEN_W1;
+      for (let j = 0; j < HIDDEN_UNITS; j++) {
+        let s = 0;
+        for (let ii = 0; ii < HIDDEN_INPUTS; ii++)
+          s += hidIn[ii]! * learnedBrain[w1 + ii * HIDDEN_UNITS + j]!;
+        hAct[j] = Math.tanh(s);
+      }
+      const w2 = b + HIDDEN_W2;
+      for (let j = 0; j < HIDDEN_UNITS; j++) {
+        const a = hAct[j]!;
+        turnRaw += a * learnedBrain[w2 + j * HIDDEN_OUTPUTS + 0]!;
+        thrustRaw += a * learnedBrain[w2 + j * HIDDEN_OUTPUTS + 1]!;
+      }
+    }
+
     let turn: number;
     let thrust: number;
     let eatGateRaw = 0; // eat-gate pre-sigmoid sum (slice B); stays 0 when brainGatedEating is off
@@ -193,6 +242,12 @@ export function steer(
         learnedBrain[b + Brain.EAT_GATE_LAT]! * lat +
         learnedBrain[b + Brain.EAT_GATE_SIGHT_FWD]! * sFwd +
         learnedBrain[b + Brain.EAT_GATE_SIGHT_LAT]! * sLat;
+      if (hiddenLayer) {
+        // Hidden layer also feeds the eat decision (output index 2) — conditional "stop eating when …".
+        const w2 = b + HIDDEN_W2;
+        for (let j = 0; j < HIDDEN_UNITS; j++)
+          eatGateRaw += hAct[j]! * learnedBrain[w2 + j * HIDDEN_OUTPUTS + 2]!;
+      }
       const gate = 1 / (1 + Math.exp(-eatGateRaw)); // 0 (head up, fast) … 1 (head down, eating, slow)
       eatGate[i] = gate;
       thrust *= 1 - gate * eatMovePenalty; // eating costs mobility — lift the head to flee at full speed
@@ -271,6 +326,19 @@ export function steer(
         keep * elig[b + Brain.READINESS_TURN]! + eligLambda * readiness * turnRaw;
       elig[b + Brain.READINESS_THRUST] =
         keep * elig[b + Brain.READINESS_THRUST]! + eligLambda * readiness * thrustRaw;
+    }
+    // Hidden→output eligibility (slice E): ONLY the output layer learns (pre = hidden activation, post =
+    // the motor output). The input→hidden weights get NO elig → they stay at the genome (evolved-only),
+    // because the Hebbian rule cannot credit-assign reward back through a hidden unit.
+    if (hiddenLayer) {
+      const w2 = b + HIDDEN_W2;
+      for (let j = 0; j < HIDDEN_UNITS; j++) {
+        const a = hAct[j]!;
+        const o = w2 + j * HIDDEN_OUTPUTS;
+        elig[o + 0] = keep * elig[o + 0]! + eligLambda * a * turnRaw;
+        elig[o + 1] = keep * elig[o + 1]! + eligLambda * a * thrustRaw;
+        elig[o + 2] = keep * elig[o + 2]! + eligLambda * a * eatGateRaw;
+      }
     }
   }
 }

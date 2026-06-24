@@ -13,7 +13,17 @@
 import { type OrganismStore } from '../../core/store';
 import { type Config } from '../../core/config';
 import { satiatedBar } from '../../core/economy';
-import { Brain, BRAIN_GENES, ScalarGene, SCALAR_GENE_COUNT } from '../../core/genome';
+import {
+  Brain,
+  BRAIN_GENES,
+  ScalarGene,
+  SCALAR_GENE_COUNT,
+  HIDDEN_UNITS,
+  HIDDEN_INPUTS,
+  HIDDEN_OUTPUTS,
+  HIDDEN_W1,
+  HIDDEN_W2,
+} from '../../core/genome';
 
 export interface BrainInputNode {
   label: string;
@@ -34,6 +44,7 @@ export interface BrainState {
   turn: number; // applied turn (clamped to ±maxTurn gene)
   thrust: number; // applied thrust (reverse floor … maxThrust, ×metabolic efficiency, ×eat-gate penalty)
   eatGate: number; // eat-gate output 0..1 (slice B): 1 = head-down eating (slow), 0 = head-up (full speed)
+  hidden: number[]; // hidden-unit activations (slice E), one per HIDDEN_UNITS; empty when hiddenLayer off
   drift: number; // Σ|learned − instinct| over all brain weights (within-life learning so far)
 }
 
@@ -62,6 +73,11 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
   const fy = store.flowSenseY[slot]!;
   const flFwd = fx * dx + fy * dy;
   const flLat = -fx * dy + fy * dx;
+  // Phero gradient — not shown as an input node, but the hidden layer reads it (must match steer's 14 inputs).
+  const px = store.pheroSenseX[slot]!;
+  const py = store.pheroSenseY[slot]!;
+  const pFwd = px * dx + py * dy;
+  const pLat = -px * dy + py * dx;
 
   const node = (
     label: string,
@@ -90,18 +106,23 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
     node('flow lat', flLat, Brain.FLOW_LAT_TURN, Brain.FLOW_LAT_THRUST),
     node('bias', 1, Brain.TURN_BIAS, Brain.THRUST_BIAS, Brain.EAT_GATE_BIAS),
   ];
+  // Interoceptive scalars — hoisted to function scope so the hidden layer below can read them (steer parity).
+  // Each is 0 unless its lever is on, exactly mirroring steer().
+  let hunger = 0;
+  let aged = 0;
+  let readiness = 0;
   // Hunger input only exists when the lever is on — mirror steer()'s gate so the picture matches the
   // sim (off: the term isn't summed at all, exactly as in steer()).
   if (cfg.hungerSense) {
     const sb = satiatedBar(store.scalarGenes, slot, cfg);
-    let hunger = sb > 0 ? 1 - store.energy[slot]! / sb : 1;
+    hunger = sb > 0 ? 1 - store.energy[slot]! / sb : 1;
     if (hunger < 0) hunger = 0;
     else if (hunger > 1) hunger = 1;
     inputs.push(node('hunger', hunger, Brain.HUNGER_TURN, Brain.HUNGER_THRUST));
   }
   // Age input (slice C): maturity = min(age/ageNorm, 1), mirroring steer()'s gate. Climbs over a life.
   if (cfg.ageSense) {
-    let aged = cfg.ageNorm > 0 ? store.age[slot]! / cfg.ageNorm : 0; // mirror steer's ageNorm≤0 guard
+    aged = cfg.ageNorm > 0 ? store.age[slot]! / cfg.ageNorm : 0; // mirror steer's ageNorm≤0 guard
     if (aged > 1) aged = 1;
     inputs.push(node('age', aged, Brain.AGE_TURN, Brain.AGE_THRUST));
   }
@@ -110,7 +131,7 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
   if (cfg.readinessSense) {
     const repro = store.scalarGenes[slot * SCALAR_GENE_COUNT + ScalarGene.REPRO_THRESHOLD]!;
     const band = satiatedBar(store.scalarGenes, slot, cfg) - repro;
-    let readiness = band > 0 ? (store.energy[slot]! - repro) / band : 0;
+    readiness = band > 0 ? (store.energy[slot]! - repro) / band : 0;
     if (readiness < 0) readiness = 0;
     else if (readiness > 1) readiness = 1;
     inputs.push(node('ready', readiness, Brain.READINESS_TURN, Brain.READINESS_THRUST));
@@ -121,6 +142,38 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
   for (const n of inputs) {
     turnRaw += n.value * n.turnW;
     thrustRaw += n.value * n.thrustW;
+  }
+
+  // Hidden layer (slice E): the nonlinear correction on top of the linear sum, mirroring steer() exactly —
+  // same 14 inputs (HiddenInput order, incl. the unshown phero pair + bias=1), same tanh, same W1/W2 blocks.
+  const hidden: number[] = [];
+  if (cfg.hiddenLayer) {
+    const hin = [
+      fwd,
+      lat,
+      sFwd,
+      sLat,
+      wFwd,
+      wLat,
+      flFwd,
+      flLat,
+      pFwd,
+      pLat,
+      hunger,
+      aged,
+      readiness,
+      1,
+    ];
+    for (let j = 0; j < HIDDEN_UNITS; j++) {
+      let s = 0;
+      for (let ii = 0; ii < HIDDEN_INPUTS; ii++)
+        s += hin[ii]! * lb[b + HIDDEN_W1 + ii * HIDDEN_UNITS + j]!;
+      hidden.push(Math.tanh(s));
+    }
+    for (let j = 0; j < HIDDEN_UNITS; j++) {
+      turnRaw += hidden[j]! * lb[b + HIDDEN_W2 + j * HIDDEN_OUTPUTS + 0]!;
+      thrustRaw += hidden[j]! * lb[b + HIDDEN_W2 + j * HIDDEN_OUTPUTS + 1]!;
+    }
   }
 
   const maxTurn = store.scalarGenes[sg + ScalarGene.MAX_TURN]!;
@@ -147,12 +200,16 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
   // Eat-gate (slice B): mirror steer() — eating throttles the body. Sigmoid gate from food + sight + bias.
   let eatGate = 1;
   if (cfg.brainGatedEating) {
-    const eatGateRaw =
+    let eatGateRaw =
       lb[b + Brain.EAT_GATE_BIAS]! +
       lb[b + Brain.EAT_GATE_FWD]! * fwd +
       lb[b + Brain.EAT_GATE_LAT]! * lat +
       lb[b + Brain.EAT_GATE_SIGHT_FWD]! * sFwd +
       lb[b + Brain.EAT_GATE_SIGHT_LAT]! * sLat;
+    if (cfg.hiddenLayer) {
+      for (let j = 0; j < HIDDEN_UNITS; j++)
+        eatGateRaw += hidden[j]! * lb[b + HIDDEN_W2 + j * HIDDEN_OUTPUTS + 2]!;
+    }
     eatGate = 1 / (1 + Math.exp(-eatGateRaw));
     thrust *= 1 - eatGate * cfg.eatMovePenalty;
   }
@@ -160,7 +217,7 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
   let drift = 0;
   for (let g = 0; g < BRAIN_GENES; g++) drift += Math.abs(lb[b + g]! - ib[b + g]!);
 
-  return { inputs, turnRaw, thrustRaw, turn, thrust, eatGate, drift };
+  return { inputs, turnRaw, thrustRaw, turn, thrust, eatGate, hidden, drift };
 }
 
 // Edge thickness maps |weight| → [0,1] against this reference (weights are O(1–2)); purely cosmetic.

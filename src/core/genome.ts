@@ -321,7 +321,47 @@ export const Brain = {
 /** Senses-core brain weights (food + sight) — the count present before walls/flow/hunger, and the RNG-draw
  *  count when all gated blocks are off. Each gated block extends the array but draws RNG only when on. */
 export const BRAIN_CORE_GENES = 10;
-export const BRAIN_GENES = 33;
+
+/** Number of named (non-hidden) brain weights — the linear sensor→motor map above (slots 0..32). The hidden
+ *  layer's weight blocks start here. */
+export const NAMED_BRAIN_GENES = 33;
+
+/** Order of the 14 scalars fed into the hidden layer (slice E) — the same heading-frame inputs turn/thrust
+ *  read, plus a constant bias. Index into the W1 input→hidden block. */
+export const HiddenInput = {
+  FOOD_FWD: 0,
+  FOOD_LAT: 1,
+  SIGHT_FWD: 2,
+  SIGHT_LAT: 3,
+  WALL_FWD: 4,
+  WALL_LAT: 5,
+  FLOW_FWD: 6,
+  FLOW_LAT: 7,
+  PHERO_FWD: 8,
+  PHERO_LAT: 9,
+  HUNGER: 10,
+  AGE: 11,
+  READINESS: 12,
+  BIAS: 13,
+} as const;
+
+/** Hidden layer (slice E): a fixed H-unit tanh layer adding a NONLINEAR correction ON TOP of the linear
+ *  sensor→motor map (skip-connection / residual), giving the brain conditional logic ("flee only if a
+ *  predator is close AND I'm cornered") the single linear layer cannot express. H is a COMPILE-TIME constant
+ *  (it sizes the genome stride, so it can't be a live knob). Two contiguous weight blocks after the named
+ *  genes, addressed by index math:
+ *    - W1 input→hidden:  HIDDEN_W1 + i*HIDDEN_UNITS + j     (HIDDEN_INPUTS × HIDDEN_UNITS)
+ *    - W2 hidden→output: HIDDEN_W2 + j*HIDDEN_OUTPUTS + o   (HIDDEN_UNITS × HIDDEN_OUTPUTS)
+ *  Inputs ordered by HiddenInput; outputs are turn(0)/thrust(1)/eatGate(2). All seed 0 (+founder noise breaks
+ *  symmetry). Plasticity is asymmetric: input→hidden is EVOLVED-only (frozen within life — the Hebbian rule
+ *  can't credit-assign through a hidden unit), hidden→output LEARNS. Gated by cfg.hiddenLayer (the forward
+ *  pass is skipped when off); the weights are always drawn (on-by-default policy). */
+export const HIDDEN_UNITS = 4;
+export const HIDDEN_INPUTS = 14;
+export const HIDDEN_OUTPUTS = 3; // turn=0, thrust=1, eatGate=2
+export const HIDDEN_W1 = NAMED_BRAIN_GENES; // input→hidden block start (slot 33)
+export const HIDDEN_W2 = HIDDEN_W1 + HIDDEN_INPUTS * HIDDEN_UNITS; // hidden→output block start (slot 89)
+export const BRAIN_GENES = HIDDEN_W2 + HIDDEN_UNITS * HIDDEN_OUTPUTS; // 101
 
 /** Founder brain ≈ the hand-tuned chemotaxis controller (turn toward lateral food, thrust up-gradient,
  *  gentle cruise) + ACTIVE sight: turn toward & thrust along the appeal-signed sight vector. Because that
@@ -341,8 +381,42 @@ export const BRAIN_GENES = 33;
  *   lift head + regain mobility); the age input seeds AGE_THRUST 0.3 (older → a touch more thrust), AGE_TURN
  *   0; the repro-readiness pair seeds 0 (the repro-timing response evolves); every other weight 0. */
 const FOUNDER_BRAIN: readonly number[] = [
-  1.2, 0, 0, 1.5, 0, 0.3, 1.0, 0, 0, 1.2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 2, 0,
-  0, 0.3, 0, 0,
+  1.2,
+  0,
+  0,
+  1.5,
+  0,
+  0.3,
+  1.0,
+  0,
+  0,
+  1.2,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  4,
+  0,
+  0,
+  2,
+  0,
+  0,
+  0.3,
+  0,
+  0,
+  // Hidden layer (slice E): HIDDEN_INPUTS·HIDDEN_UNITS (56) input→hidden + HIDDEN_UNITS·HIDDEN_OUTPUTS (12)
+  // hidden→output weights, all seeded 0 — the founder Gaussian noise at seed breaks the unit symmetry.
+  ...new Array<number>(HIDDEN_INPUTS * HIDDEN_UNITS + HIDDEN_UNITS * HIDDEN_OUTPUTS).fill(0),
 ];
 
 /** Seed a founder's genome: founder brain + Gaussian spread, random hue (lineage colors diverge).

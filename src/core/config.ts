@@ -398,6 +398,11 @@ export interface Config {
    *  Distinct from hunger (whose denominator is the full bar): this one is clamped to the breeding BAND.
    *  Off = the brain can't sense breeding readiness. */
   readinessSense: boolean;
+  /** Hidden layer (slice E): when on, a fixed H-unit tanh layer adds a NONLINEAR correction on top of the
+   *  linear sensor→motor map (skip-connection), giving the brain conditional logic ("flee only if a predator
+   *  is close AND I'm cornered"). Off = the pure linear brain (the hidden forward pass is skipped). The
+   *  hidden weights always exist in the genome either way; this just toggles whether they're computed. */
+  hiddenLayer: boolean;
 
   // ── Walls (env pass 1) ─────────────────────────────────────────────────────
   /** FINE wall-grid resolution (decoupled from the food grid for creature-scale nooks). */
@@ -667,6 +672,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     ageSense: true, // ON by default: the brain can sense its own maturity (life-stage behaviour)
     ageNorm: 1000, // ~average lifespan at the shipped economy → maturity reaches ~1 near mid-late life
     readinessSense: true, // ON by default: the brain can sense how close it is to breeding (the repro band)
+    hiddenLayer: true, // ON by default: the nonlinear hidden layer (conditional logic — the emergent-behavior substrate)
 
     // Walls: 5 biome regions over a 512² fine grid (16u cells), ~35% solid, vision-occluding.
     // Default OFF (wallRegionCount 0) so defaultConfig stays a TRUE no-op — byte-identical to the

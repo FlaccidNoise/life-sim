@@ -1,7 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import { OrganismStore } from './store';
 import { defaultConfig, type Config } from './config';
-import { Brain, BRAIN_GENES, ScalarGene, SCALAR_GENE_COUNT } from './genome';
+import {
+  Brain,
+  BRAIN_GENES,
+  ScalarGene,
+  SCALAR_GENE_COUNT,
+  HIDDEN_UNITS,
+  HIDDEN_OUTPUTS,
+  HIDDEN_W1,
+  HIDDEN_W2,
+} from './genome';
 import { steer, learn } from './brain';
 
 // Default config for the motor-mechanics steer() tests below. brainGatedEating is OFF here to ISOLATE
@@ -250,6 +259,47 @@ describe('steer (per-creature brain)', () => {
       return Math.hypot(s.forceX[i]!, s.forceY[i]!);
     };
     expect(mk(200)).toBe(mk(30)); // readiness ignored entirely when off
+  });
+
+  it('hidden layer adds a tanh nonlinear contribution on top of the linear map (skip-connection)', () => {
+    const mk = (hidden: boolean): number => {
+      const s = new OrganismStore(4);
+      const i = s.alloc();
+      s.heading[i] = 0;
+      s.senseX[i] = 1; // food fwd = 1 (HiddenInput.FOOD_FWD = 0)
+      setBrain(s, i, {});
+      const b = i * BRAIN_GENES;
+      s.brain[b + HIDDEN_W1 + 0 * HIDDEN_UNITS + 0] = 2; // input0 → hidden0, weight 2 → h0 = tanh(2·1)
+      s.brain[b + HIDDEN_W2 + 0 * HIDDEN_OUTPUTS + 1] = 3; // hidden0 → thrust, weight 3
+      s.resetLearned(i);
+      s.rebuildLive();
+      steer(s, false, 0.2, false, defaultConfig({ hiddenLayer: hidden, brainGatedEating: false }));
+      return Math.hypot(s.forceX[i]!, s.forceY[i]!);
+    };
+    expect(mk(false)).toBe(0); // hidden off + no linear thrust weights → zero
+    expect(mk(true)).toBeCloseTo(3 * Math.tanh(2)); // hidden on → thrust = W2 · tanh(W1·input)
+  });
+
+  it('hidden layer learns output-side only: hidden→output (W2) drifts, input→hidden (W1) stays frozen', () => {
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.heading[i] = 0;
+    s.senseX[i] = 1; // food fwd drives hidden unit 0
+    setBrain(s, i, { THRUST_BIAS: 1 }); // a nonzero motor output so the W2 eligibility (pre·post) is live
+    const b = i * BRAIN_GENES;
+    s.brain[b + HIDDEN_W1 + 0 * HIDDEN_UNITS + 0] = 1; // input0 → hidden0 (a live hidden unit)
+    s.resetLearned(i);
+    s.rebuildLive();
+    const w1Idx = b + HIDDEN_W1 + 0 * HIDDEN_UNITS + 0;
+    const w2Idx = b + HIDDEN_W2 + 0 * HIDDEN_OUTPUTS + 1; // hidden0 → thrust
+    for (let t = 0; t < 200; t++) {
+      s.prevEnergy[i] = 50;
+      s.energy[i] = 60; // sustained reward
+      steer(s, true, 0.5, false, defaultConfig({ brainGatedEating: false }));
+      learn(s, 1.0, 0.0, 0.5, 5);
+    }
+    expect(s.learnedBrain[w1Idx]!).toBe(s.brain[w1Idx]!); // input→hidden frozen (evolved-only, no credit path)
+    expect(s.learnedBrain[w2Idx]!).not.toBe(s.brain[w2Idx]!); // hidden→output consolidated within life
   });
 
   it('a positive WALL_FWD_THRUST weight converts a forward wall-gradient into forward thrust', () => {

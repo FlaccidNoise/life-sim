@@ -64,8 +64,8 @@ describe('genome', () => {
     const hue = new Float32Array(1);
     seedGenome(brain, hue, 0, a, 0.3, false, false, false, false);
     for (let g = 0; g < BRAIN_CORE_GENES; g++) b.gaussian(0, 0.3);
-    // eat-gate block (slice B) is ALWAYS drawn (on-by-default policy, not gated) — eat-gate (5) + age (2) + readiness (2), always-drawn, after the core.
-    for (let g = Brain.EAT_GATE_BIAS; g <= Brain.READINESS_THRUST; g++) b.gaussian(0, 0.3);
+    // eat-gate block (slice B) is ALWAYS drawn (on-by-default policy, not gated) — eat-gate (5) + age (2) + readiness (2) + hidden (68), always-drawn, after the core.
+    for (let g = Brain.EAT_GATE_BIAS; g < BRAIN_GENES; g++) b.gaussian(0, 0.3);
     b.float();
     expect(a.state).toBe(b.state);
     // and the unused hunger weights are left at their founder 0
@@ -80,8 +80,8 @@ describe('genome', () => {
     const hue = new Float32Array(2);
     mutateGenome(brain, hue, 1, 0, a, 0.05, 0.02, false, false, false, false);
     for (let g = 0; g < BRAIN_CORE_GENES; g++) b.gaussian(0, 0.05);
-    // eat-gate block (slice B) is ALWAYS drawn (on-by-default policy, not gated) — eat-gate (5) + age (2) + readiness (2), always-drawn, after the core.
-    for (let g = Brain.EAT_GATE_BIAS; g <= Brain.READINESS_THRUST; g++) b.gaussian(0, 0.05);
+    // eat-gate block (slice B) is ALWAYS drawn (on-by-default policy, not gated) — eat-gate (5) + age (2) + readiness (2) + hidden (68), always-drawn, after the core.
+    for (let g = Brain.EAT_GATE_BIAS; g < BRAIN_GENES; g++) b.gaussian(0, 0.05);
     b.gaussian(0, 0.02); // hue mutation draw
     expect(a.state).toBe(b.state);
   });
@@ -107,9 +107,9 @@ describe('env-sense brain genes (wall + flow — RNG-gated)', () => {
     const b = new Rng(5);
     seedGenome(brain, hue, 0, a, 0.3, false, false, false, false); // all gated off
     for (let g = Brain.WALL_LAT_TURN; g <= Brain.FLOW_FWD_THRUST; g++) expect(brain[g]).toBe(0);
-    // a parallel rng that draws the 10 base weights + the always-drawn eat-gate + age + readiness blocks + hue → SAME state.
+    // a parallel rng that draws the 10 base weights + the always-drawn eat-gate + age + readiness + hidden blocks + hue → SAME state.
     for (let g = 0; g < 10; g++) b.gaussian(0, 0.3);
-    for (let g = Brain.EAT_GATE_BIAS; g <= Brain.READINESS_THRUST; g++) b.gaussian(0, 0.3);
+    for (let g = Brain.EAT_GATE_BIAS; g < BRAIN_GENES; g++) b.gaussian(0, 0.3);
     b.float();
     expect(a.state).toBe(b.state); // gated blocks skip when off; eat-gate (always on) is drawn
   });
