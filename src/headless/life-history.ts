@@ -156,6 +156,7 @@ export const DEMO_OVERRIDES: Partial<Config> = {
   foodChannelAWallTied: true,
   foodChannelBDriftMult: 3,
   pheromoneEnabled: true,
+  scentIdentity: true,
   parcelsEnabled: true,
   parcelEnergy: 80,
   parcelSpawnInterval: 6,

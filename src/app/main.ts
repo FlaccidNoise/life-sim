@@ -8,6 +8,7 @@
  * speed scales work, not a time delta — determinism holds.
  */
 import { World } from '../core/world';
+import { Scent } from '../core/scent-field';
 import { defaultConfig, type Config } from '../core/config';
 import { scanHealth } from '../core/health';
 import { Renderer, ColorMode, FoodLayer } from '../render/renderer';
@@ -37,7 +38,7 @@ const hudBody = el('hud-body');
 //   • motorSquash          — legibility: graded tanh steering (kills the motor-saturation spin/vibrate)
 //   • foodChannels 3 +     — multi-resource: 3 resources, each grown in its OWN pockets (round-robin), so diet
 //     pocketChannelMode 1     couples to PLACE — a specialist must live in its resource's island (allopatry).
-//   • pheromoneEnabled     — a diffusing deposit-and-sense field (on-graze); the delayed-feedback substrate.
+//   • pheromoneEnabled     — a 4-channel identity-bearing scent field (role + hue signature, per-tick deposit).
 //   • flowPushStrength     — mixing: the current carries bodies between pockets.
 //   • bioluminescence      — render glow (set below). NB the 3-channel world runs SPARSER + loses predators
 //     vs ch2 (food is segregated); it stays alive on all tested seeds. Tune live across seeds to taste.
@@ -55,8 +56,9 @@ let config: Config = defaultConfig({
   foodPocketChannelMode: 1,
   foodChannelAWallTied: true,
   foodChannelBDriftMult: 3,
-  // Pheromones (delayed-feedback substrate).
+  // Identity-bearing scent (4-channel: prey/predator role + hue signature; passive per-tick deposit).
   pheromoneEnabled: true,
+  scentIdentity: true,
   // Sight-only drifting food parcels + the census-proven vision-cost cut → the dead vision genes get a
   // reason to evolve up (this tuning lives in the demo so defaultConfig stays byte-identical to legacy).
   parcelsEnabled: true,
@@ -138,7 +140,7 @@ const FOOD_LAYER_NAMES: Record<number, string> = {
   [FoodLayer.CHANNEL_A]: 'channel A',
   [FoodLayer.CHANNEL_B]: 'channel B',
   [FoodLayer.CHANNEL_C]: 'channel C',
-  [FoodLayer.PHEROMONE]: 'pheromone',
+  [FoodLayer.PHEROMONE]: 'prey-scent',
 };
 const COLOR_MODE_NAMES = ['lineage', 'diet', 'energy', 'forage'];
 const foodLayerLabel = el('food-layer-label');
@@ -150,7 +152,7 @@ function availableFoodLayers(): FoodLayer[] {
   const ring: FoodLayer[] = [FoodLayer.OFF, FoodLayer.TOTAL, FoodLayer.CHANNEL_A];
   if (config.foodChannels >= 2) ring.push(FoodLayer.CHANNEL_B);
   if (config.foodChannels >= 3) ring.push(FoodLayer.CHANNEL_C);
-  if (world.phero) ring.push(FoodLayer.PHEROMONE);
+  if (world.scent) ring.push(FoodLayer.PHEROMONE);
   return ring;
 }
 
@@ -489,7 +491,7 @@ function frame(): void {
   renderer.draw(
     world.store,
     world.food,
-    world.phero,
+    world.scent ? world.scent.channel(Scent.PREY) : null, // overlay shows the PREY channel (V1)
     world.walls,
     foodLayer,
     showWalls,
