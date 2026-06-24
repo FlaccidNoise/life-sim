@@ -361,7 +361,15 @@ export const HIDDEN_INPUTS = 14;
 export const HIDDEN_OUTPUTS = 3; // turn=0, thrust=1, eatGate=2
 export const HIDDEN_W1 = NAMED_BRAIN_GENES; // input→hidden block start (slot 33)
 export const HIDDEN_W2 = HIDDEN_W1 + HIDDEN_INPUTS * HIDDEN_UNITS; // hidden→output block start (slot 89)
-export const BRAIN_GENES = HIDDEN_W2 + HIDDEN_UNITS * HIDDEN_OUTPUTS; // 101
+
+/** Mood-glow output (slice F): bioluminescence = sigmoid(GLOW_BIAS + Σ_j hidden_j·GLOW_HID_j), reading the
+ *  hidden "mood" layer + a bias. DISPLAY-ONLY (no motor/energy effect) and EVOLVE-ONLY (no within-life
+ *  learning). The hidden→glow weights seed at 0 + founder noise, so each LINEAGE drifts to its OWN glow
+ *  trigger — different species evolve different glow mechanisms. Hue stays for lineage; glow is a separate
+ *  channel. Always drawn (on-by-default policy); the forward pass is gated on cfg.moodGlow. */
+export const GLOW_BIAS = HIDDEN_W2 + HIDDEN_UNITS * HIDDEN_OUTPUTS; // 101 (after the hidden W2 block)
+export const GLOW_HID = GLOW_BIAS + 1; // 102; hidden→glow weights (HIDDEN_UNITS of them)
+export const BRAIN_GENES = GLOW_HID + HIDDEN_UNITS; // 106
 
 /** Founder brain ≈ the hand-tuned chemotaxis controller (turn toward lateral food, thrust up-gradient,
  *  gentle cruise) + ACTIVE sight: turn toward & thrust along the appeal-signed sight vector. Because that
@@ -417,6 +425,10 @@ const FOUNDER_BRAIN: readonly number[] = [
   // Hidden layer (slice E): HIDDEN_INPUTS·HIDDEN_UNITS (56) input→hidden + HIDDEN_UNITS·HIDDEN_OUTPUTS (12)
   // hidden→output weights, all seeded 0 — the founder Gaussian noise at seed breaks the unit symmetry.
   ...new Array<number>(HIDDEN_INPUTS * HIDDEN_UNITS + HIDDEN_UNITS * HIDDEN_OUTPUTS).fill(0),
+  // Mood-glow (slice F): GLOW_BIAS dim baseline (sigmoid(−1.5)≈0.18 — glow is the exception, not the norm);
+  // the HIDDEN_UNITS hidden→glow weights seed 0 (founder noise → each lineage drifts to its own trigger).
+  -1.5,
+  ...new Array<number>(HIDDEN_UNITS).fill(0),
 ];
 
 /** Seed a founder's genome: founder brain + Gaussian spread, random hue (lineage colors diverge).

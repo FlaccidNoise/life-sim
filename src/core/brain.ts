@@ -27,6 +27,8 @@ import {
   HIDDEN_OUTPUTS,
   HIDDEN_W1,
   HIDDEN_W2,
+  GLOW_BIAS,
+  GLOW_HID,
 } from './genome';
 
 /**
@@ -61,6 +63,7 @@ export function steer(
     forceX,
     forceY,
     eatGate,
+    glow,
     age,
   } = store;
   const { wallSenseX, wallSenseY, flowSenseX, flowSenseY, pheroSenseX, pheroSenseY } = store;
@@ -74,6 +77,7 @@ export function steer(
   const ageNorm = cfg.ageNorm;
   const readinessSense = cfg.readinessSense; // feed repro-readiness (clamped to the breeding band)
   const hiddenLayer = cfg.hiddenLayer; // nonlinear tanh layer (conditional logic) on top of the linear map
+  const moodGlow = cfg.moodGlow; // bioluminescence output read from the hidden "mood" layer (display + signal)
   // Per-creature scratch for the hidden layer (reused each iteration — no per-creature allocation).
   const hidIn = new Float64Array(HIDDEN_INPUTS);
   const hAct = new Float64Array(HIDDEN_UNITS);
@@ -254,6 +258,18 @@ export function steer(
     }
     forceX[i] = thrust * Math.cos(nh);
     forceY[i] = thrust * Math.sin(nh);
+
+    // Mood-glow (slice F): a display/signal output read from the hidden "mood" layer — glow =
+    // sigmoid(GLOW_BIAS + Σ_j hAct_j·GLOW_HID_j). DOES NOT affect the motor (display-only). Evolve-only (no
+    // elig below). Each lineage's hidden→glow weights diverge, so different species glow for different reasons.
+    if (moodGlow) {
+      let glowRaw = learnedBrain[b + GLOW_BIAS]!;
+      if (hiddenLayer) {
+        for (let j = 0; j < HIDDEN_UNITS; j++)
+          glowRaw += hAct[j]! * learnedBrain[b + GLOW_HID + j]!;
+      }
+      glow[i] = 1 / (1 + Math.exp(-glowRaw));
+    }
 
     if (!learn) continue;
     // Eligibility trace per synapse = pre·post (decayed). pre is the synapse's input (lat/fwd food,

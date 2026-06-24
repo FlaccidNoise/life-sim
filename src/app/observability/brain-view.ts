@@ -24,6 +24,8 @@ import {
   HIDDEN_OUTPUTS,
   HIDDEN_W1,
   HIDDEN_W2,
+  GLOW_BIAS,
+  GLOW_HID,
 } from '../../core/genome';
 
 export interface BrainInputNode {
@@ -47,6 +49,7 @@ export interface BrainState {
   thrust: number; // applied thrust (reverse floor … maxThrust, ×metabolic efficiency, ×eat-gate penalty)
   eatGate: number; // eat-gate output 0..1 (slice B): 1 = head-down eating (slow), 0 = head-up (full speed)
   hidden: number[]; // hidden-unit activations (slice E), one per HIDDEN_UNITS; empty when hiddenLayer off
+  glow: number; // mood-glow output 0..1 (slice F): bioluminescence read from the hidden layer; 0 when moodGlow off
   drift: number; // Σ|learned − instinct| over all brain weights (within-life learning so far)
 }
 
@@ -248,10 +251,21 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
     thrust *= 1 - eatGate * cfg.eatMovePenalty;
   }
 
+  // Mood-glow (slice F): mirror steer() — glow = sigmoid(GLOW_BIAS + Σ_j hidden_j·GLOW_HID_j) from the
+  // hidden "mood" layer. Display-only; 0 when off.
+  let glow = 0;
+  if (cfg.moodGlow) {
+    let glowRaw = lb[b + GLOW_BIAS]!;
+    if (cfg.hiddenLayer) {
+      for (let j = 0; j < hidden.length; j++) glowRaw += hidden[j]! * lb[b + GLOW_HID + j]!;
+    }
+    glow = 1 / (1 + Math.exp(-glowRaw));
+  }
+
   let drift = 0;
   for (let g = 0; g < BRAIN_GENES; g++) drift += Math.abs(lb[b + g]! - ib[b + g]!);
 
-  return { inputs, turnRaw, thrustRaw, turn, thrust, eatGate, hidden, drift };
+  return { inputs, turnRaw, thrustRaw, turn, thrust, eatGate, hidden, glow, drift };
 }
 
 // Edge thickness maps |weight| → [0,1] against this reference (weights are O(1–2)); purely cosmetic.
@@ -313,7 +327,7 @@ export class BrainView {
     const bot = h - 12 * dpr;
     const inN = st.inputs.length;
     const inY = (i: number): number => top + ((bot - top) * i) / (inN - 1);
-    const outY = (o: number): number => top + ((bot - top) * (o + 1)) / 4; // 3 outputs: turn, thrust, eat
+    const outY = (o: number): number => top + ((bot - top) * (o + 1)) / 5; // 4 outputs: turn, thrust, eat, glow
     const hidN = st.hidden.length;
     const hidY = (j: number): number => top + ((bot - top) * (j + 0.5)) / Math.max(1, hidN); // centered cells
     const nodeR = 5 * dpr;
@@ -367,6 +381,9 @@ export class BrainView {
           const wgt = lbw[hb + HIDDEN_W2 + j * HIDDEN_OUTPUTS + o]!;
           edge(hidX, hidY(j), outX, outY(o), wgt, a * wgt);
         }
+        // hidden→glow (slice F): glow is a 4th output (index 3) reading the hidden layer via the GLOW_HID block.
+        const gwgt = lbw[hb + GLOW_HID + j]!;
+        edge(hidX, hidY(j), outX, outY(3), gwgt, a * gwgt);
       }
     } else {
       for (let i = 0; i < inN; i++) {
@@ -430,13 +447,14 @@ export class BrainView {
     drawOut(0, 'turn', st.turn);
     drawOut(1, 'thrust', st.thrust);
     drawOut(2, 'eat', st.eatGate); // eat-gate output (slice B): 1 = head-down eating, 0 = head-up fleeing
+    drawOut(3, 'glow', st.glow); // mood-glow output (slice F): bioluminescence from the hidden mood layer
 
     // Header: raw outputs + learning drift.
     ctx.fillStyle = 'rgba(150,170,190,0.8)';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillText(
-      `turn ${st.turnRaw.toFixed(2)}→${st.turn.toFixed(2)}  thrust ${st.thrustRaw.toFixed(2)}→${st.thrust.toFixed(2)}  eat ${st.eatGate.toFixed(2)}  drift ${st.drift.toFixed(2)}`,
+      `turn ${st.turnRaw.toFixed(2)}→${st.turn.toFixed(2)}  thrust ${st.thrustRaw.toFixed(2)}→${st.thrust.toFixed(2)}  eat ${st.eatGate.toFixed(2)}  glow ${st.glow.toFixed(2)}  drift ${st.drift.toFixed(2)}`,
       6 * dpr,
       6 * dpr,
     );

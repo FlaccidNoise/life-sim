@@ -31,6 +31,11 @@ export class OrganismStore {
   // Not hashed (derived). Defaults to 1 (full eating) on alloc for the edge-case pre-steer read.
   readonly eatGate: Float64Array;
 
+  // Transient per-tick MOOD-GLOW actuator (0..1): the brain's bioluminescence output (slice F). Recomputed
+  // each tick in steer() from the hidden "mood" layer; read by the renderer (biolum brightness) and, when
+  // the glow-sense channel is on, deposited into the glow field. Not hashed (derived).
+  readonly glow: Float64Array;
+
   // Transient per-tick sensed food gradient (world frame), recomputed each tick from positions+food.
   // Not hashed (derived). Surfaced in the inspector so you can see what an organism perceives.
   readonly senseX: Float64Array;
@@ -92,6 +97,7 @@ export class OrganismStore {
     this.forceX = new Float64Array(capacity);
     this.forceY = new Float64Array(capacity);
     this.eatGate = new Float64Array(capacity);
+    this.glow = new Float64Array(capacity);
     this.senseX = new Float64Array(capacity);
     this.senseY = new Float64Array(capacity);
     this.sightX = new Float64Array(capacity);
