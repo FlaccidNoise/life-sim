@@ -9,7 +9,7 @@
  */
 import { type OrganismStore } from './store';
 import { type FoodField } from './food-field';
-import { type PheroField } from './phero-field';
+import { type ScentField } from './scent-field';
 import { type SpatialHash } from './spatial-hash';
 import { type Parcels } from './parcels';
 import { type Rng } from './rng';
@@ -60,12 +60,7 @@ function wrapDelta(d: number, size: number): number {
  * off, less carnivorous than the hunter. Prey driven to ≤ 0 die in the next cull. Ascending slot order +
  * the prev-built hash (scan radius sized to biteRange), so it's deterministic.
  */
-export function hunt(
-  store: OrganismStore,
-  hash: SpatialHash,
-  cfg: Config,
-  phero: PheroField | null,
-): void {
+export function hunt(store: OrganismStore, hash: SpatialHash, cfg: Config): void {
   const { biteRange, worldWidth, worldHeight, cannibalism, predationGain, huntSizeRatio } = cfg;
   const { counterBiteFraction } = cfg;
   const { liveIndices, liveCount, x, y, energy, scalarGenes } = store;
@@ -117,14 +112,6 @@ export function hunt(
     const drain = Math.min(scalarGenes[sg + ScalarGene.DAMAGE]! * diet, energy[best]!);
     if (drain <= 0) continue; // toothless, or prey already drained to nothing this tick
     energy[best] = energy[best]! - drain;
-    // Alarm-on-bite (secondary pheromone source, default OFF since bites are rare at 8192² scale): the
-    // BITTEN prey broadcasts an alarm into the field at its own cell, scaled by its own PHERO_DEPOSIT gene.
-    // Gated on the field being allocated AND pheroAlarmStrength>0 → byte-identical when off. RNG-free.
-    if (phero !== null && cfg.pheroAlarmStrength > 0) {
-      const dep =
-        scalarGenes[best * SCALAR_GENE_COUNT + ScalarGene.PHERO_DEPOSIT]! * cfg.pheroAlarmStrength;
-      if (dep > 0) phero.deposit(x[best]!, y[best]!, dep);
-    }
     // Meat is concentrated energy: the predator absorbs the drain × predationGain. With gain > 1 this
     // deliberately CREATES energy (not strictly conserved) so hunting is a big payoff vs. grazing — the
     // incentive to seek prey instead of sitting on the food field.
@@ -148,13 +135,27 @@ export function hunt(
  * above-baseline "more-is-costly" genes — together the selection pressure on the traits. Ascending
  * order so depletion is deterministic when organisms share a cell. Mutates energy.
  */
-export function metabolize(
-  store: OrganismStore,
-  food: FoodField,
-  hash: SpatialHash,
-  cfg: Config,
-  phero: PheroField | null,
-): void {
+/**
+ * Per-tick passive scent deposit: every live creature broadcasts its signature (a projection of its DIET
+ * gene + hue) into the field, scaled by its PHERO_DEPOSIT gene × pheroDepositStrength. Ascending live-slot,
+ * RNG-free. The continuous trail (vs on-graze) so predators — who gain via hunt, not graze — also lay scent.
+ * When cfg.scentIdentity is false the deposit is identity-blind (equal into all channels) — the ablation.
+ */
+export function depositScent(store: OrganismStore, scent: ScentField, cfg: Config): void {
+  const { liveIndices, liveCount, x, y, hue, scalarGenes } = store;
+  const strength = cfg.pheroDepositStrength;
+  const identity = cfg.scentIdentity;
+  for (let k = 0; k < liveCount; k++) {
+    const i = liveIndices[k]!;
+    const sg = i * SCALAR_GENE_COUNT;
+    const amount = scalarGenes[sg + ScalarGene.PHERO_DEPOSIT]! * strength;
+    if (amount <= 0) continue;
+    const diet = scalarGenes[sg + ScalarGene.DIET]!;
+    scent.deposit(x[i]!, y[i]!, diet, hue[i]!, amount, identity);
+  }
+}
+
+export function metabolize(store: OrganismStore, food: FoodField, hash: SpatialHash, cfg: Config): void {
   const { liveIndices, liveCount, x, y, vx, vy, energy, age, scalarGenes } = store;
   const { basalCost, moveCost, deadWaterCost } = cfg;
   const { crowdingMortality, crowdThreshold, crowdRadius, worldWidth, worldHeight } = cfg;
@@ -232,14 +233,6 @@ export function metabolize(
       }
     } else {
       gained = food.grazeAt(x[i]!, y[i]!, eatRate * herbivory); // single channel (byte-identical original)
-    }
-    // DEPOSIT (default pheromone source = on-graze): a creature that actually ate broadcasts into the
-    // field at its own cell, scaled by its PHERO_DEPOSIT gene × pheroGrazeStrength. This is the ubiquitous
-    // source so the field populates at 8192² where bites are rare. Gated on the field being allocated AND
-    // pheroDepositOnGraze AND gained>0 → byte-identical when off. Ascending live-slot (this loop), RNG-free.
-    if (phero !== null && cfg.pheroDepositOnGraze && gained > 0) {
-      const dep = scalarGenes[sg + ScalarGene.PHERO_DEPOSIT]! * cfg.pheroGrazeStrength;
-      if (dep > 0) phero.deposit(x[i]!, y[i]!, dep);
     }
     const speed2 = vx[i]! * vx[i]! + vy[i]! * vy[i]!;
     // Bigger bodies are costlier to move (mass): the speed² cost scales by (size/cellRadius)^sizeMoveCostExp.
