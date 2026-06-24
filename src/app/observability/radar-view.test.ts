@@ -79,8 +79,15 @@ describe('computeRadar', () => {
 });
 
 describe('radar lenses', () => {
-  it('registers ordered lenses with capability first + default', () => {
-    expect(LENSES.map((l) => l.key)).toEqual(['capability', 'lifeHistory']);
+  it('registers the ordered subsystem lenses with capability first + default', () => {
+    expect(LENSES.map((l) => l.key)).toEqual([
+      'capability',
+      'body',
+      'senses',
+      'metabolism',
+      'foraging',
+      'social',
+    ]);
     expect(DEFAULT_LENS).toBe('capability');
     expect(LENSES[0]!.axes).toBe(CAPABILITY_AXES);
   });
@@ -96,6 +103,18 @@ describe('radar lenses', () => {
     }
   });
 
+  it('the subsystem lenses (everything past capability) cover every heritable gene', () => {
+    // Capability is a curated overview; the remaining lenses are the genome walk and together must
+    // surface all 26 scalar genes so the dropdown gives a full read of a creature.
+    const covered = new Set<number>();
+    for (const lens of LENSES) {
+      if (lens.key === 'capability') continue;
+      for (const ax of lens.axes) covered.add(ax.gene);
+    }
+    expect(covered.size).toBe(SCALAR_GENE_COUNT);
+    for (let g = 0; g < SCALAR_GENE_COUNT; g++) expect(covered.has(g)).toBe(true);
+  });
+
   it('computeRadar honors an explicit axis-set (the active lens)', () => {
     const st = computeRadar(centered(), cfg, 0, LENSES[1]!.axes);
     expect(st.axes.map((a) => a.label)).toEqual(LENSES[1]!.axes.map((a) => a.label));
@@ -104,5 +123,17 @@ describe('radar lenses', () => {
   it('defaults to the capability lens when no axis-set is passed', () => {
     const st = computeRadar(centered(), cfg, 0);
     expect(st.axes.map((a) => a.label)).toEqual(CAPABILITY_AXES.map((a) => a.label));
+  });
+
+  it('carries a compact rim value string scaled to each gene range', () => {
+    const s = centered();
+    setGene(s, 0, ScalarGene.DIET, 0.37); // small-range gene → 2 decimals
+    setGene(s, 0, ScalarGene.SENESCENCE_AGE, 1840.6); // large-range gene → rounded integer
+    const body = computeRadar(s, cfg, 0, [
+      { gene: ScalarGene.DIET, label: 'diet', color: '#fff' },
+      { gene: ScalarGene.SENESCENCE_AGE, label: 'lifespan', color: '#fff' },
+    ]);
+    expect(body.axes[0]!.display).toBe('0.37');
+    expect(body.axes[1]!.display).toBe('1841');
   });
 });
