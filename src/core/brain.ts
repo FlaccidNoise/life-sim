@@ -17,6 +17,7 @@ import { type OrganismStore } from './store';
 import { type Config } from './config';
 import { satiatedBar } from './economy';
 import { Brain, BRAIN_GENES, ScalarGene, SCALAR_GENE_COUNT } from './genome';
+import { SCENT_CHANNELS } from './scent-field';
 
 /**
  * Run each creature's runtime brain: food gradient (heading frame) → turn + thrust. Turns the heading
@@ -40,7 +41,7 @@ export function steer(
   cfg: Config,
 ): void {
   const { liveIndices, liveCount, heading, senseX, senseY, sightX, sightY, forceX, forceY } = store;
-  const { wallSenseX, wallSenseY, flowSenseX, flowSenseY, pheroSenseX, pheroSenseY } = store;
+  const { wallSenseX, wallSenseY, flowSenseX, flowSenseY, scentSenseX, scentSenseY } = store;
   const { learnedBrain, elig, energy } = store;
   const genes = store.scalarGenes;
   const hungerSense = cfg.hungerSense;
@@ -93,12 +94,8 @@ export function steer(
     const flowVy = flowSenseY[i]!;
     const flFwd = flowVx * dx + flowVy * dy; // current/flow vector ahead
     const flLat = -flowVx * dy + flowVy * dx; // current/flow vector to the left
-    const pheroVx = pheroSenseX[i]!;
-    const pheroVy = pheroSenseY[i]!;
-    const pFwd = pheroVx * dx + pheroVy * dy; // pheromone gradient ahead (∇P)
-    const pLat = -pheroVx * dy + pheroVy * dx; // pheromone gradient to the left
-
     const b = i * BRAIN_GENES;
+    const sb = i * SCENT_CHANNELS;
     // Turn/thrust = food-gradient + sight + wall + flow responses (+ hunger when on); all heading-frame.
     let turnRaw =
       learnedBrain[b + Brain.LAT_TURN]! * lat +
@@ -109,8 +106,6 @@ export function steer(
       learnedBrain[b + Brain.WALL_FWD_TURN]! * wFwd +
       learnedBrain[b + Brain.FLOW_LAT_TURN]! * flLat +
       learnedBrain[b + Brain.FLOW_FWD_TURN]! * flFwd +
-      learnedBrain[b + Brain.PHERO_LAT_TURN]! * pLat +
-      learnedBrain[b + Brain.PHERO_FWD_TURN]! * pFwd +
       learnedBrain[b + Brain.TURN_BIAS]!;
     let thrustRaw =
       learnedBrain[b + Brain.LAT_THRUST]! * lat +
@@ -121,9 +116,19 @@ export function steer(
       learnedBrain[b + Brain.WALL_FWD_THRUST]! * wFwd +
       learnedBrain[b + Brain.FLOW_LAT_THRUST]! * flLat +
       learnedBrain[b + Brain.FLOW_FWD_THRUST]! * flFwd +
-      learnedBrain[b + Brain.PHERO_LAT_THRUST]! * pLat +
-      learnedBrain[b + Brain.PHERO_FWD_THRUST]! * pFwd +
       learnedBrain[b + Brain.THRUST_BIAS]!;
+    // F2 scent: each channel's gradient (heading frame) on its own 4 synapses. N-generic loop. Base for
+    // channel c = PHERO_C0_LAT_TURN + c*4 → {lat_turn, fwd_turn, lat_thrust, fwd_thrust}. Seeded 0 so the
+    // sign evolves (climb prey-scent / descend predator-scent / cluster on kin-hue).
+    for (let c = 0; c < SCENT_CHANNELS; c++) {
+      const cvx = scentSenseX[sb + c]!;
+      const cvy = scentSenseY[sb + c]!;
+      const cFwd = cvx * dx + cvy * dy;
+      const cLat = -cvx * dy + cvy * dx;
+      const pb = b + Brain.PHERO_C0_LAT_TURN + c * 4;
+      turnRaw += learnedBrain[pb]! * cLat + learnedBrain[pb + 1]! * cFwd;
+      thrustRaw += learnedBrain[pb + 2]! * cLat + learnedBrain[pb + 3]! * cFwd;
+    }
 
     // Interoceptive hunger (lever E2): the shared hunger scalar (computed above) on its own pair of
     // synapses. Gated, not +0'd, so the OFF path leaves turn/thrust byte-identical (hunger stays 0 / was
@@ -190,14 +195,17 @@ export function steer(
       keep * elig[b + Brain.FLOW_LAT_THRUST]! + eligLambda * flLat * thrustRaw;
     elig[b + Brain.FLOW_FWD_THRUST] =
       keep * elig[b + Brain.FLOW_FWD_THRUST]! + eligLambda * flFwd * thrustRaw;
-    elig[b + Brain.PHERO_LAT_TURN] =
-      keep * elig[b + Brain.PHERO_LAT_TURN]! + eligLambda * pLat * turnRaw;
-    elig[b + Brain.PHERO_FWD_TURN] =
-      keep * elig[b + Brain.PHERO_FWD_TURN]! + eligLambda * pFwd * turnRaw;
-    elig[b + Brain.PHERO_LAT_THRUST] =
-      keep * elig[b + Brain.PHERO_LAT_THRUST]! + eligLambda * pLat * thrustRaw;
-    elig[b + Brain.PHERO_FWD_THRUST] =
-      keep * elig[b + Brain.PHERO_FWD_THRUST]! + eligLambda * pFwd * thrustRaw;
+    for (let c = 0; c < SCENT_CHANNELS; c++) {
+      const cvx = scentSenseX[sb + c]!;
+      const cvy = scentSenseY[sb + c]!;
+      const cFwd = cvx * dx + cvy * dy;
+      const cLat = -cvx * dy + cvy * dx;
+      const pb = b + Brain.PHERO_C0_LAT_TURN + c * 4;
+      elig[pb] = keep * elig[pb]! + eligLambda * cLat * turnRaw;
+      elig[pb + 1] = keep * elig[pb + 1]! + eligLambda * cFwd * turnRaw;
+      elig[pb + 2] = keep * elig[pb + 2]! + eligLambda * cLat * thrustRaw;
+      elig[pb + 3] = keep * elig[pb + 3]! + eligLambda * cFwd * thrustRaw;
+    }
     elig[b + Brain.THRUST_BIAS] = keep * elig[b + Brain.THRUST_BIAS]! + eligLambda * thrustRaw;
     if (hungerSense) {
       elig[b + Brain.HUNGER_TURN] =

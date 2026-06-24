@@ -11,7 +11,7 @@ import { type SpatialHash } from './spatial-hash';
 import { type Config } from './config';
 import { type Walls } from './walls';
 import { type FlowField } from './flow-field';
-import { type PheroField } from './phero-field';
+import { type ScentField, SCENT_CHANNELS } from './scent-field';
 import { type Parcels } from './parcels';
 import { ScalarGene, SCALAR_GENE_COUNT } from './genome';
 
@@ -119,16 +119,16 @@ export function senseEnv(
   store: OrganismStore,
   walls: Walls | null,
   flow: FlowField | null,
-  phero: PheroField | null,
+  scent: ScentField | null,
   cfg: Config,
 ): void {
   const { liveIndices, liveCount, x, y, wallSenseX, wallSenseY, flowSenseX, flowSenseY } = store;
-  const { pheroSenseX, pheroSenseY, scalarGenes } = store;
+  const { scentSenseX, scentSenseY, scalarGenes } = store;
   const wallsOn = walls !== null && walls.active;
   const flowOn = flow !== null && cfg.flowStrength > 0;
-  // Pheromone sense is live only when the field is allocated (cfg.pheromoneEnabled). Sampled at the
-  // creature's own SENSE_RANGE gene (the same smell half-step as the food gradient), so the perception
-  // is at the creature's evolved scale. When off, pheroSenseX/Y stay 0 → the PHERO brain inputs are inert.
+  // Scent sense is live only when the field is allocated (cfg.pheromoneEnabled). Each of the N channels'
+  // ∇P is sampled at the creature's own SENSE_RANGE gene (the same smell half-step as the food gradient),
+  // so the perception is at the creature's evolved scale. When off, all channels stay 0 → PHERO inputs inert.
   for (let k = 0; k < liveCount; k++) {
     const i = liveIndices[k]!;
     if (wallsOn) {
@@ -146,14 +146,15 @@ export function senseEnv(
       flowSenseX[i] = 0;
       flowSenseY[i] = 0;
     }
-    if (phero !== null) {
+    if (scent !== null) {
       const step = scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.SENSE_RANGE]!;
-      const g = phero.gradientAt(x[i]!, y[i]!, step);
-      pheroSenseX[i] = g.gx;
-      pheroSenseY[i] = g.gy;
+      scent.gradientsInto(x[i]!, y[i]!, step, scentSenseX, scentSenseY, i * SCENT_CHANNELS);
     } else {
-      pheroSenseX[i] = 0;
-      pheroSenseY[i] = 0;
+      const b = i * SCENT_CHANNELS;
+      for (let c = 0; c < SCENT_CHANNELS; c++) {
+        scentSenseX[b + c] = 0;
+        scentSenseY[b + c] = 0;
+      }
     }
   }
 }
