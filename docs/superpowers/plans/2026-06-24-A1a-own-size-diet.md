@@ -154,17 +154,19 @@ git commit -m "feat(brain): A1a layout — own-SIZE/own-DIET genome slots + body
 
 ---
 
-### Task 2: Wire own-SIZE + own-DIET into `steer()`
+### Task 2: Wire own-SIZE + own-DIET into `steer()` AND inspector parity (one task — they are coupled)
 
-Read the two genes, normalize, gate on `cfg.bodySense`, add to the linear motor sum and the hidden-layer inputs. No eligibility traces (evolve-only).
+Read the two genes in `steer()`, normalize, gate on `cfg.bodySense`, add to the linear motor sum and the hidden-layer inputs (no eligibility — evolve-only). **In the SAME task**, update the inspector (`computeBrainState`) to compute the real `sizeN/dietN` and draw the two nodes — because the moment `steer()` reads size/diet (nonzero), the existing inspector parity test (`reproduces the turn and thrust that steer() applies`) FAILS until `computeBrainState` matches. (Task 1 left a `0, 0` stub in the inspector's `hin[]` to keep the suite green while steer was inert; this task replaces it.)
 
 **Files:**
 - Modify: `src/core/brain.ts` — `steer()` (flag destructure ~line 78-88; new linear block after the readiness block ~line 218; hidden-input writes ~line 234-237).
-- Test: `src/core/world.test.ts` — add a `bodySense` ablation test (after the `readinessSense`/`ageStages` tests, ~line 97).
+- Modify: `src/app/observability/brain-view.ts` — `computeBrainState` (compute sizeN/dietN after the readiness block ~line 201; push the size/diet nodes BEFORE the glow-sense nodes ~line 204; replace the `0, 0` stub in the `hin` array with `sizeN, dietN` ~line 235).
+- Test: `src/core/world.test.ts` — `bodySense` ablation + determinism tests (~line 97).
+- Test: `src/app/observability/brain-view.test.ts` — size/diet non-saturated parity test.
 
 **Interfaces:**
 - Consumes: `Brain.SIZE_TURN/SIZE_THRUST/DIET_TURN/DIET_THRUST`, `HiddenInput.SIZE/DIET`, `cfg.bodySense`, `cfg.cellRadius` (Task 1).
-- Produces: `steer()` adds `w·sizeN + w·dietN` to turn/thrust and the hidden inputs when `bodySense`; SIZE/DIET get no eligibility.
+- Produces: `steer()` and `computeBrainState` BOTH add `w·sizeN + w·dietN` to turn/thrust + the hidden inputs when `bodySense`; SIZE/DIET get no eligibility.
 
 - [ ] **Step 1: Write the failing ablation test**
 
@@ -239,38 +241,14 @@ In `src/core/brain.ts`, in the `if (hiddenLayer)` block, after `hidIn[HiddenInpu
 
 (Do NOT add eligibility traces for SIZE/DIET in the `if (!learn) continue;` block — they are evolve-only.)
 
-- [ ] **Step 6: Run the ablation + determinism tests**
+- [ ] **Step 6: Run the ablation + determinism tests; confirm the inspector parity break**
 
 Run: `npx vitest run src/core/world.test.ts -t bodySense`
 Expected: BOTH PASS (ON now diverges from OFF; ON is deterministic).
+Run: `npx vitest run src/app/observability/brain-view.test.ts -t "reproduces the turn and thrust"`
+Expected: this existing parity test now **FAILS** — steer() includes the size/diet contribution but `computeBrainState` still uses Task 1's `0, 0` stub. This is the coupling; the next steps fix it.
 
-- [ ] **Step 7: Run type/lint + the brain/world suites**
-
-Run: `npx tsc --noEmit` → clean. `npx eslint src/core/brain.ts src/core/world.test.ts` → clean.
-Run: `npx vitest run src/core/brain.test.ts src/core/world.test.ts` → ALL green.
-
-- [ ] **Step 8: Commit**
-
-```bash
-git add src/core/brain.ts src/core/world.test.ts
-git commit -m "feat(brain): A1a steer — read own-SIZE/own-DIET (linear + hidden), evolve-only; bodySense ablation"
-```
-
----
-
-### Task 3: Inspector parity (brain-view)
-
-Extend `computeBrainState` so the two new inputs draw as nodes and contribute to the linear sum + hidden layer exactly as `steer()` does. Pin with a non-saturated parity test.
-
-**Files:**
-- Modify: `src/app/observability/brain-view.ts` — `computeBrainState` (compute sizeN/dietN ~line 170; push nodes after the readiness node ~line 201, BEFORE the glow-sense nodes at 204; extend the `hin` array ~line 222).
-- Test: `src/app/observability/brain-view.test.ts` — add a size/diet parity test (mirror the hunger test at lines 169-207).
-
-**Interfaces:**
-- Consumes: the Task 1/2 layout + `cfg.bodySense`.
-- Produces: `computeBrainState` reproduces `steer()`'s turn/thrust with SIZE/DIET active.
-
-- [ ] **Step 1: Write the failing parity test**
+- [ ] **Step 7: Write the new failing size/diet parity test**
 
 In `src/app/observability/brain-view.test.ts`, add inside the `describe('computeBrainState', …)` block. This mirrors the existing glow-sense parity test (lines 87-111) exactly — same inline single-creature setup, the module-level `cfg` (which has `bodySense:true`, `motorSquash:false` by default), small non-saturated weights:
 
@@ -304,16 +282,11 @@ In `src/app/observability/brain-view.test.ts`, add inside the `describe('compute
   });
 ```
 
-This needs no new imports (`OrganismStore`, `Brain`, `ScalarGene`, `SCALAR_GENE_COUNT`, `SCALAR_GENE_SPECS`, `BRAIN_GENES`, `steer`, `cfg` are all already imported at the top of the file).
+This needs no new imports (`OrganismStore`, `Brain`, `ScalarGene`, `SCALAR_GENE_COUNT`, `SCALAR_GENE_SPECS`, `BRAIN_GENES`, `steer`, `cfg` are all already imported at the top of the file). Run it: it FAILS (no `size`/`diet` node yet; the inspector still misses the size/diet terms).
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [ ] **Step 8: Compute sizeN/dietN + push the nodes in `computeBrainState`**
 
-Run: `npx vitest run src/app/observability/brain-view.test.ts -t "own-SIZE"`
-Expected: FAIL (no `size`/`diet` node; the hidden layer reads 22 inputs in steer but computeBrainState's `hin` has only 20 → parity mismatch on `st.turn`).
-
-- [ ] **Step 3: Compute sizeN/dietN in `computeBrainState`**
-
-In `src/app/observability/brain-view.ts`, after the `readiness` block closes (after line 201, before the glow-sense nodes at line 202) add:
+In `src/app/observability/brain-view.ts`, after the `readiness` block closes (before the glow-sense node pushes ~line 204) add:
 
 ```ts
   // Interoceptive own-body inputs (A1a): own normalized SIZE + own DIET, mirroring steer()'s gate (0 when
@@ -328,49 +301,40 @@ In `src/app/observability/brain-view.ts`, after the `readiness` block closes (af
   }
 ```
 
-- [ ] **Step 4: Extend the hidden-input array**
+- [ ] **Step 9: Replace the Task 1 `0, 0` stub in the `hin` array with the real values**
 
-In `src/app/observability/brain-view.ts`, change the `hin` array (lines 222-236) to insert `sizeN, dietN` before the trailing `1`:
+In `src/app/observability/brain-view.ts`, in the `hin` array, replace the two stub lines Task 1 inserted:
 
 ```ts
-    const hin = [
-      fwd,
-      lat,
-      sFwd,
-      sLat,
-      wFwd,
-      wLat,
-      flFwd,
-      flLat,
-      ...scentGrad,
-      hunger,
-      aged,
-      readiness,
-      sizeN,
-      dietN,
-      1,
-    ];
+      0, // SIZE (A1a): inert until steer() reads own-size (Task 2) — steer leaves this hidIn slot 0 too
+      0, // DIET (A1a): inert until steer() reads own-diet (Task 2) — keeps inspector↔steer hidden parity
 ```
 
-- [ ] **Step 5: Run the parity test + the full brain-view suite**
+with the computed values:
 
-Run: `npx vitest run src/app/observability/brain-view.test.ts`
-Expected: ALL PASS — the new test, AND the existing parity/hunger/drift tests (the hunger test's `inputs[17]` is preserved because size/diet are pushed after readiness, before glow; the drift test references `BRAIN_GENES` so it auto-adjusts to 158).
+```ts
+      sizeN,
+      dietN,
+```
 
-- [ ] **Step 6: Run type/lint**
+(Leave the trailing `1, // BIAS` line as-is.)
 
-Run: `npx tsc --noEmit` → clean. `npx eslint src/app/observability/brain-view.ts` → clean.
+- [ ] **Step 10: Run the full suite + type/lint**
 
-- [ ] **Step 7: Commit**
+Run: `npx vitest run src/app/observability/brain-view.test.ts` → ALL PASS (the new size/diet test, AND the previously-broken `reproduces the turn and thrust` parity test now green; the hunger test's `inputs[17]` is preserved because size/diet push after readiness, before glow; the drift test references `BRAIN_GENES` so it auto-adjusts to 158).
+Run: `npx tsc --noEmit` → clean. `npx eslint src/core/brain.ts src/core/world.test.ts src/app/observability/brain-view.ts` → clean.
+Run: `NODE_OPTIONS=--expose-gc npx vitest run` → FULL suite green.
+
+- [ ] **Step 11: Commit**
 
 ```bash
-git add src/app/observability/brain-view.ts src/app/observability/brain-view.test.ts
-git commit -m "feat(ui): A1a inspector — draw own-SIZE/own-DIET nodes; non-saturated steer parity"
+git add src/core/brain.ts src/core/world.test.ts src/app/observability/brain-view.ts src/app/observability/brain-view.test.ts
+git commit -m "feat(brain): A1a — steer reads own-SIZE/own-DIET (evolve-only) + inspector parity + bodySense ablation"
 ```
 
 ---
 
-### Task 4: Liveness guardrail + honest measurement
+### Task 3: Liveness guardrail + honest measurement
 
 Prove the world survives with A1a on, and measure honestly whether own-SIZE/own-DIET actually shift behavior (vs "wired but inert").
 
@@ -488,7 +452,7 @@ Write the measured numbers + the honest verdict into the A1a section of the road
 
 - Spec "own-SIZE/own-DIET feed both linear + hidden, seeded 0, evolve-only" → Tasks 1-2. ✓
 - Spec "always-drawn, forward-pass-gated, no golden hash" → Task 1 (always-drawn weights), Task 2 (`bodySense` gates forward pass only). ✓
-- Spec "inspector parity, non-saturated" → Task 3. ✓
-- Spec "ablation `false !== true`, determinism, liveness, parity" → Tasks 2-4. ✓
-- Spec "measure honestly" → Task 4 (intero-probe + honest-verdict gate). ✓
+- Spec "inspector parity, non-saturated" → Task 2 (merged with steer — they are coupled). ✓
+- Spec "ablation `false !== true`, determinism, liveness, parity" → Tasks 2-3. ✓
+- Spec "measure honestly" → Task 3 (intero-probe + honest-verdict gate). ✓
 - Spec normalization `size/(2·cellRadius)`, `dietN=diet` → Task 2 Step 4. ✓
