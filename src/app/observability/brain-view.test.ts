@@ -53,9 +53,9 @@ describe('computeBrainState', () => {
     expect(st.thrust).toBeCloseTo(appliedThrust, 10); // brain-view thrust already includes ×efficiency
   });
 
-  it('exposes 9 inputs in the documented order with their live values', () => {
+  it('exposes the base inputs incl. age in the documented order with their live values', () => {
     const s = setup();
-    const st = computeBrainState(s, cfg, 0);
+    const st = computeBrainState(s, cfg, 0); // default cfg: ageSense on, hungerSense off
     expect(st.inputs.map((n) => n.label)).toEqual([
       'food fwd',
       'food lat',
@@ -66,8 +66,10 @@ describe('computeBrainState', () => {
       'flow fwd',
       'flow lat',
       'bias',
+      'age',
     ]);
     expect(st.inputs[8]!.value).toBe(1); // bias is constant 1
+    expect(st.inputs[9]!.label).toBe('age'); // interoceptive maturity input (slice C)
   });
 
   it('exposes the eat-gate output (slice B): 1 when off, the sigmoid of its inputs when on', () => {
@@ -112,6 +114,7 @@ describe('computeBrainState', () => {
       'flow lat',
       'bias',
       'hunger',
+      'age',
     ]);
     expect(st.inputs[9]!.value).toBeCloseTo(0.5, 10); // fractional drive, genuinely exercised (idx 9 = hunger)
     // The hunger node must reproduce the turn/thrust steer() actually applies under the SAME mode.

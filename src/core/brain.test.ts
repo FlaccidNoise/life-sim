@@ -185,6 +185,36 @@ describe('steer (per-creature brain)', () => {
     expect(Math.hypot(s.forceX[i]!, s.forceY[i]!)).toBeCloseTo(1); // full cruise, no eat penalty
   });
 
+  it('feeds maturity (min(age/ageNorm,1)) as an interoceptive input when ageSense is on', () => {
+    const thrustAtAge = (ageTicks: number): number => {
+      const s = new OrganismStore(4);
+      const i = s.alloc();
+      s.heading[i] = 0;
+      s.age[i] = ageTicks;
+      setBrain(s, i, { AGE_THRUST: 1.0 }); // older → more thrust
+      s.rebuildLive();
+      // brainGatedEating off to isolate the age term from the eat-immobilize penalty; ageNorm = 1000.
+      steer(s, false, 0.2, false, defaultConfig({ brainGatedEating: false, ageNorm: 1000 }));
+      return Math.hypot(s.forceX[i]!, s.forceY[i]!);
+    };
+    expect(thrustAtAge(1000)).toBeGreaterThan(thrustAtAge(0)); // a mature creature thrusts more
+    expect(thrustAtAge(0)).toBe(0); // a newborn (aged 0) gets no age contribution
+  });
+
+  it('ageSense off → age does not affect the motor', () => {
+    const mk = (ageTicks: number): number => {
+      const s = new OrganismStore(4);
+      const i = s.alloc();
+      s.heading[i] = 0;
+      s.age[i] = ageTicks;
+      setBrain(s, i, { AGE_THRUST: 1.0 });
+      s.rebuildLive();
+      steer(s, false, 0.2, false, defaultConfig({ ageSense: false, brainGatedEating: false }));
+      return Math.hypot(s.forceX[i]!, s.forceY[i]!);
+    };
+    expect(mk(1000)).toBe(mk(0)); // age ignored entirely when off
+  });
+
   it('a positive WALL_FWD_THRUST weight converts a forward wall-gradient into forward thrust', () => {
     const s = new OrganismStore(4);
     const i = s.alloc();
