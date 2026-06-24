@@ -4,8 +4,9 @@ import { defaultConfig, type Config } from './config';
 import { Brain, BRAIN_GENES, ScalarGene, SCALAR_GENE_COUNT } from './genome';
 import { steer, learn } from './brain';
 
-// Default config (hungerSense OFF) for every steer() call below; the hunger lever has its own block.
-const CFG = defaultConfig();
+// Default config for the motor-mechanics steer() tests below. brainGatedEating is OFF here to ISOLATE
+// turn/thrust from the eat-immobilize penalty (slice B) — the eat-gate has its own test block that opts in.
+const CFG = defaultConfig({ brainGatedEating: false });
 
 /** Set a creature's genome brain weights (slot), seed generous movement genes (so steer's per-creature
  *  maxTurn/maxThrust clamps + the efficiency multiplier don't interfere), and sync the runtime brain. */
@@ -131,7 +132,7 @@ describe('steer (per-creature brain)', () => {
   });
 
   it('reverse cap also applies under motorSquash', () => {
-    const cfg = defaultConfig({ reverseThrustFraction: 0.5 });
+    const cfg = defaultConfig({ reverseThrustFraction: 0.5, brainGatedEating: false }); // isolate reverse
     const s = new OrganismStore(4);
     const i = s.alloc();
     s.heading[i] = 0;
@@ -140,6 +141,48 @@ describe('steer (per-creature brain)', () => {
     steer(s, false, 0.2, true, cfg); // motorSquash = true
     expect(s.forceX[i]!).toBeCloseTo(-2.5); // floored at 0.5·5
     expect(s.forceY[i]!).toBeCloseTo(0);
+  });
+
+  it('eating slows the body (eat-gate thrust penalty) when brainGatedEating is on', () => {
+    const cruise = (cfg: Config): number => {
+      const s = new OrganismStore(4);
+      const i = s.alloc();
+      s.heading[i] = 0;
+      setBrain(s, i, { THRUST_BIAS: 1, EAT_GATE_BIAS: 10 }); // gate≈1 (head down, eating) + cruise thrust
+      s.rebuildLive();
+      steer(s, false, 0.2, false, cfg);
+      return Math.hypot(s.forceX[i]!, s.forceY[i]!);
+    };
+    const on = cruise(defaultConfig({ eatMovePenalty: 0.4 }));
+    const off = cruise(defaultConfig({ brainGatedEating: false }));
+    expect(on).toBeLessThan(off); // eating costs mobility
+    expect(on).toBeCloseTo(off * (1 - 0.4)); // gate≈1 → thrust ×(1−penalty)
+  });
+
+  it('a threat ahead lowers the eat-gate (lift the head → regain mobility)', () => {
+    const gateWith = (sightFwd: number): number => {
+      const s = new OrganismStore(4);
+      const i = s.alloc();
+      s.heading[i] = 0; // facing +x → sFwd === sightX
+      s.sightX[i] = sightFwd; // appeal-signed sight fwd: negative = threat ahead
+      s.sightY[i] = 0;
+      setBrain(s, i, { EAT_GATE_BIAS: 4, EAT_GATE_SIGHT_FWD: 2 }); // founder-style seed
+      s.rebuildLive();
+      steer(s, false, 0.2, false, defaultConfig());
+      return s.eatGate[i]!;
+    };
+    expect(gateWith(-2)).toBeLessThan(gateWith(0)); // threat ahead drops the gate (stop eating)
+    expect(gateWith(-2)).toBeLessThan(0.6); // and meaningfully so
+  });
+
+  it('brainGatedEating off leaves thrust unpenalized (legacy motor)', () => {
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.heading[i] = 0;
+    setBrain(s, i, { THRUST_BIAS: 1, EAT_GATE_BIAS: 10 });
+    s.rebuildLive();
+    steer(s, false, 0.2, false, defaultConfig({ brainGatedEating: false }));
+    expect(Math.hypot(s.forceX[i]!, s.forceY[i]!)).toBeCloseTo(1); // full cruise, no eat penalty
   });
 
   it('a positive WALL_FWD_THRUST weight converts a forward wall-gradient into forward thrust', () => {
@@ -286,6 +329,26 @@ describe('Baldwin within-life learning (reward-modulated)', () => {
     // Biases stay at instinct no matter how hard/long we reinforce (Float32-exact equality to the seed).
     expect(s.learnedBrain[b + Brain.TURN_BIAS]!).toBe(s.brain[b + Brain.TURN_BIAS]!);
     expect(s.learnedBrain[b + Brain.THRUST_BIAS]!).toBe(s.brain[b + Brain.THRUST_BIAS]!);
+  });
+
+  it('does NOT make EAT_GATE_BIAS plastic either (slice B — same constant-input runaway guard)', () => {
+    const cfgEat = defaultConfig({ brainGatedEating: true }); // eat-gate ON so its elig path is exercised
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.heading[i] = 0;
+    s.senseX[i] = 1; // food fwd = 1 → eat-gate FWD weight has a live input to consolidate on
+    setBrain(s, i, { EAT_GATE_BIAS: 1.0 });
+    s.rebuildLive();
+    const b = i * BRAIN_GENES;
+    for (let t = 0; t < 200; t++) {
+      s.prevEnergy[i] = 50;
+      s.energy[i] = 60;
+      steer(s, true, 0.5, false, cfgEat);
+      learn(s, 1.0, 0.0, 0.5, 5);
+    }
+    expect(s.learnedBrain[b + Brain.EAT_GATE_BIAS]!).toBe(s.brain[b + Brain.EAT_GATE_BIAS]!); // pinned
+    // …while a non-bias eat-gate weight DID consolidate, proving the elig path is live (not vacuous).
+    expect(s.learnedBrain[b + Brain.EAT_GATE_FWD]!).not.toBe(s.brain[b + Brain.EAT_GATE_FWD]!);
   });
 
   it('resetLearned restores the runtime brain to the genome (no Lamarck across birth)', () => {

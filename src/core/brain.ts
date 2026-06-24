@@ -39,12 +39,25 @@ export function steer(
   motorSquash: boolean,
   cfg: Config,
 ): void {
-  const { liveIndices, liveCount, heading, senseX, senseY, sightX, sightY, forceX, forceY } = store;
+  const {
+    liveIndices,
+    liveCount,
+    heading,
+    senseX,
+    senseY,
+    sightX,
+    sightY,
+    forceX,
+    forceY,
+    eatGate,
+  } = store;
   const { wallSenseX, wallSenseY, flowSenseX, flowSenseY, pheroSenseX, pheroSenseY } = store;
   const { learnedBrain, elig, energy } = store;
   const genes = store.scalarGenes;
   const hungerSense = cfg.hungerSense;
   const reverseFrac = cfg.reverseThrustFraction; // 0 = forward-only (legacy); 0.5 = back away at half power
+  const brainGatedEating = cfg.brainGatedEating; // eatGate output throttles intake + costs mobility
+  const eatMovePenalty = cfg.eatMovePenalty; // thrust ×= 1 − eatGate·penalty while eating
   for (let k = 0; k < liveCount; k++) {
     const i = liveIndices[k]!;
     const sg = i * SCALAR_GENE_COUNT;
@@ -116,6 +129,7 @@ export function steer(
 
     let turn: number;
     let thrust: number;
+    let eatGateRaw = 0; // eat-gate pre-sigmoid sum (slice B); stays 0 when brainGatedEating is off
     // Reverse floor: a creature may push backward down to −reverseFrac·maxThrust (0 ⇒ forward-only, the
     // legacy motor). Capped below the forward max so backing away is a slower retreat, not a launch. The
     // `>0` guard keeps the floor at +0 (not −0) when off, so reverseFrac 0 is bit-identical to the old motor.
@@ -142,6 +156,20 @@ export function steer(
     const nh = h + turn;
     heading[i] = nh;
     thrust *= efficiency; // metabolic-efficiency tradeoff: thrifty (low-e) bodies produce less push
+    // Eat-gate (slice B): a sigmoid 0..1 throttle from food + sight + bias. Eating slows the body so
+    // grazing is a real decision (graze slow vs lift the head to flee at full speed); metabolize throttles
+    // intake by the same gate. Gated by brainGatedEating so the OFF path leaves thrust/force untouched.
+    if (brainGatedEating) {
+      eatGateRaw =
+        learnedBrain[b + Brain.EAT_GATE_BIAS]! +
+        learnedBrain[b + Brain.EAT_GATE_FWD]! * fwd +
+        learnedBrain[b + Brain.EAT_GATE_LAT]! * lat +
+        learnedBrain[b + Brain.EAT_GATE_SIGHT_FWD]! * sFwd +
+        learnedBrain[b + Brain.EAT_GATE_SIGHT_LAT]! * sLat;
+      const gate = 1 / (1 + Math.exp(-eatGateRaw)); // 0 (head up, fast) … 1 (head down, eating, slow)
+      eatGate[i] = gate;
+      thrust *= 1 - gate * eatMovePenalty; // eating costs mobility — lift the head to flee at full speed
+    }
     forceX[i] = thrust * Math.cos(nh);
     forceY[i] = thrust * Math.sin(nh);
 
@@ -193,6 +221,17 @@ export function steer(
       elig[b + Brain.HUNGER_THRUST] =
         keep * elig[b + Brain.HUNGER_THRUST]! + eligLambda * hunger * thrustRaw;
     }
+    // Eat-gate output-layer eligibility (slice B): pre = the sense input, post = eatGateRaw (pre-sigmoid).
+    if (brainGatedEating) {
+      elig[b + Brain.EAT_GATE_FWD] =
+        keep * elig[b + Brain.EAT_GATE_FWD]! + eligLambda * fwd * eatGateRaw;
+      elig[b + Brain.EAT_GATE_LAT] =
+        keep * elig[b + Brain.EAT_GATE_LAT]! + eligLambda * lat * eatGateRaw;
+      elig[b + Brain.EAT_GATE_SIGHT_FWD] =
+        keep * elig[b + Brain.EAT_GATE_SIGHT_FWD]! + eligLambda * sFwd * eatGateRaw;
+      elig[b + Brain.EAT_GATE_SIGHT_LAT] =
+        keep * elig[b + Brain.EAT_GATE_SIGHT_LAT]! + eligLambda * sLat * eatGateRaw;
+    }
   }
 }
 
@@ -229,7 +268,7 @@ export function learn(
       // Biases are NOT plastic: their input is the constant 1, so Hebbian pre·post just accumulates the
       // motor output's own sign → a positive-feedback runaway that saturates turn/thrust (= spinning in
       // place). Sensorimotor synapses self-correct (their input vanishes as the creature aligns).
-      if (g === Brain.TURN_BIAS || g === Brain.THRUST_BIAS) continue;
+      if (g === Brain.TURN_BIAS || g === Brain.THRUST_BIAS || g === Brain.EAT_GATE_BIAS) continue;
       const w0 = brain[b + g]!; // genome instinct = the anchor the deviation relaxes toward
       let dev = (learnedBrain[b + g]! - w0) * keep + learningRate * reward * elig[b + g]!;
       if (dev > maxLearnDeviation) dev = maxLearnDeviation;

@@ -378,6 +378,14 @@ export interface Config {
    *  motor); 0.5 = can back away from a threat at half forward power while still facing it. This is its
    *  OWN ablation knob — set to 0 and the motor is byte-identical to the pre-reverse engine. */
   reverseThrustFraction: number;
+  /** Brain-gated eating (slice B): when on, a creature's eatGate brain output (0..1) throttles its graze
+   *  intake AND eating slows the body (thrust ×= 1 − eatGate·eatMovePenalty), so grazing is a real decision
+   *  — graze (fed but slow + catchable) vs lift the head to flee at full speed. Off = legacy unconditional
+   *  eating with no mobility cost (its ablation switch). */
+  brainGatedEating: boolean;
+  /** How hard active eating cuts thrust (the mobility cost that makes the eat-gate matter). 0 = eating is
+   *  free (gate only throttles intake); 0.4 = a full-gate grazer moves at ~60% thrust. */
+  eatMovePenalty: number;
 
   // ── Walls (env pass 1) ─────────────────────────────────────────────────────
   /** FINE wall-grid resolution (decoupled from the food grid for creature-scale nooks). */
@@ -642,6 +650,8 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     // smoothly tanh-squash turn/thrust → graded, legible steering (kills the motor-saturation spin).
     motorSquash: false,
     reverseThrustFraction: 0.5, // ON by default: creatures can back away at half forward power
+    brainGatedEating: true, // ON by default: eating is a decision — graze slow vs lift the head to flee fast
+    eatMovePenalty: 0.4,
 
     // Walls: 5 biome regions over a 512² fine grid (16u cells), ~35% solid, vision-occluding.
     // Default OFF (wallRegionCount 0) so defaultConfig stays a TRUE no-op — byte-identical to the

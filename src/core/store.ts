@@ -26,6 +26,11 @@ export class OrganismStore {
   readonly forceX: Float64Array;
   readonly forceY: Float64Array;
 
+  // Transient per-tick EAT-GATE actuator (0..1): the brain's grazing throttle (slice B). Recomputed each
+  // tick in steer(); read by metabolize (intake) and applied as a thrust penalty (eating slows the body).
+  // Not hashed (derived). Defaults to 1 (full eating) on alloc for the edge-case pre-steer read.
+  readonly eatGate: Float64Array;
+
   // Transient per-tick sensed food gradient (world frame), recomputed each tick from positions+food.
   // Not hashed (derived). Surfaced in the inspector so you can see what an organism perceives.
   readonly senseX: Float64Array;
@@ -86,6 +91,7 @@ export class OrganismStore {
     this.energy = new Float64Array(capacity);
     this.forceX = new Float64Array(capacity);
     this.forceY = new Float64Array(capacity);
+    this.eatGate = new Float64Array(capacity);
     this.senseX = new Float64Array(capacity);
     this.senseY = new Float64Array(capacity);
     this.sightX = new Float64Array(capacity);
@@ -131,6 +137,7 @@ export class OrganismStore {
     this.alive[slot] = 1;
     this.genId[slot] = (this.genId[slot]! + 1) >>> 0;
     this.age[slot] = 0;
+    this.eatGate[slot] = 1; // default full eating until steer() recomputes (avoids a stale pre-steer read)
     return slot;
   }
 

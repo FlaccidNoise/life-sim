@@ -1,7 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { OrganismStore } from '../../core/store';
 import { defaultConfig } from '../../core/config';
-import { ScalarGene, SCALAR_GENE_COUNT, SCALAR_GENE_SPECS, BRAIN_GENES } from '../../core/genome';
+import {
+  Brain,
+  ScalarGene,
+  SCALAR_GENE_COUNT,
+  SCALAR_GENE_SPECS,
+  BRAIN_GENES,
+} from '../../core/genome';
 import { steer } from '../../core/brain';
 import { satiatedBar } from '../../core/economy';
 import { computeBrainState } from './brain-view';
@@ -62,6 +68,28 @@ describe('computeBrainState', () => {
       'bias',
     ]);
     expect(st.inputs[8]!.value).toBe(1); // bias is constant 1
+  });
+
+  it('exposes the eat-gate output (slice B): 1 when off, the sigmoid of its inputs when on', () => {
+    const s = new OrganismStore(2);
+    const i = s.alloc();
+    s.heading[i] = 0; // heading 0 → fwd = senseX, sFwd = sightX
+    s.senseX[i] = 1;
+    s.senseY[i] = 0;
+    s.sightX[i] = -1; // appeal-signed sight: negative = threat ahead
+    s.sightY[i] = 0;
+    const b = i * BRAIN_GENES;
+    s.brain[b + Brain.EAT_GATE_BIAS] = 4;
+    s.brain[b + Brain.EAT_GATE_SIGHT_FWD] = 2; // threat ahead pulls the gate down
+    s.resetLearned(i);
+    s.rebuildLive();
+    // Off → no throttle, gate reads 1.
+    expect(computeBrainState(s, defaultConfig({ brainGatedEating: false }), i).eatGate).toBe(1);
+    // On → sigmoid(EAT_GATE_BIAS + EAT_GATE_SIGHT_FWD·sFwd) = sigmoid(4 + 2·(−1)) = sigmoid(2).
+    expect(computeBrainState(s, defaultConfig({ brainGatedEating: true }), i).eatGate).toBeCloseTo(
+      1 / (1 + Math.exp(-2)),
+      10,
+    );
   });
 
   it('adds a 6th hunger input that matches a real steer() run when hungerSense is on', () => {
