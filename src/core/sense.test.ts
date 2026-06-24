@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { OrganismStore } from './store';
 import { FoodField } from './food-field';
 import { SpatialHash } from './spatial-hash';
-import { senseFood, senseCreatures, senseEnv, senseCrowding } from './sense';
+import { senseFood, senseCreatures, senseEnv, senseCrowding, senseFertility } from './sense';
 import { PheroField } from './phero-field';
 import { Walls } from './walls';
 import { defaultConfig } from './config';
@@ -500,5 +500,36 @@ describe('senseCrowding', () => {
     hash.build(s);
     senseCrowding(s, hash, cfg);
     expect(s.crowding[0]).toBe(0); // skipped → stays at its zero-init
+  });
+});
+
+describe('senseFertility', () => {
+  it('senseFertility sums local biomass across active channels into fertHere (A1c)', () => {
+    const cfg = defaultConfig({ bodySense: true, foodChannels: 2 });
+    const s = new OrganismStore(4);
+    s.alloc();
+    s.x[0] = 100;
+    s.y[0] = 100;
+    s.alloc();
+    s.x[1] = 300;
+    s.y[1] = 300;
+    s.rebuildLive();
+    const food = new FoodField(512, 512, 64, 64, cfg.foodCap, 1, 2, 0.5); // 2 channels, full, symmetric split
+    senseFertility(s, food, cfg);
+    // fertHere is exactly the sum of the two channels' biomass at the body (the value steer will normalize).
+    expect(s.fertHere[0]).toBeCloseTo(food.sampleAt(100, 100) + food.sampleAt2(100, 100), 10);
+    expect(s.fertHere[1]).toBeCloseTo(food.sampleAt(300, 300) + food.sampleAt2(300, 300), 10);
+  });
+
+  it('senseFertility leaves fertHere untouched when bodySense is off', () => {
+    const cfg = defaultConfig({ bodySense: false, foodChannels: 2 });
+    const s = new OrganismStore(4);
+    s.alloc();
+    s.x[0] = 100;
+    s.y[0] = 100;
+    s.rebuildLive();
+    const food = new FoodField(512, 512, 64, 64, cfg.foodCap, 1, 2, 0.5);
+    senseFertility(s, food, cfg);
+    expect(s.fertHere[0]).toBe(0); // skipped → stays at its zero-init
   });
 });

@@ -68,6 +68,10 @@ export class OrganismStore {
   // senseCrowding each tick (0 when bodySense off). Recomputed each tick; not hashed (derived).
   readonly crowding: Float64Array;
 
+  // Transient per-tick FERTILITY-UNDER-FOOT (A1c): total food biomass at the body (summed over active
+  // channels), written by senseFertility each tick (0 when bodySense off). Recomputed each tick; not hashed.
+  readonly fertHere: Float64Array;
+
   // Genome (heritable, mutated at birth): the brain weights (BRAIN_GENES per slot) + the hue gene
   // + the scalar genes (SCALAR_GENE_COUNT per slot — see genome.ScalarGene).
   readonly brain: Float32Array;
@@ -130,6 +134,7 @@ export class OrganismStore {
     this.glowSenseX = new Float64Array(capacity);
     this.glowSenseY = new Float64Array(capacity);
     this.crowding = new Float64Array(capacity);
+    this.fertHere = new Float64Array(capacity);
     this.brain = new Float32Array(capacity * BRAIN_GENES);
     this.hue = new Float32Array(capacity);
     this.scalarGenes = new Float32Array(capacity * SCALAR_GENE_COUNT);
