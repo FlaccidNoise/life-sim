@@ -64,6 +64,10 @@ export class OrganismStore {
   readonly glowSenseX: Float64Array;
   readonly glowSenseY: Float64Array;
 
+  // Transient per-tick LOCAL-CROWDING count (A1b): live neighbors within cfg.crowdSenseRange, written by
+  // senseCrowding each tick (0 when bodySense off). Recomputed each tick; not hashed (derived).
+  readonly crowding: Float64Array;
+
   // Genome (heritable, mutated at birth): the brain weights (BRAIN_GENES per slot) + the hue gene
   // + the scalar genes (SCALAR_GENE_COUNT per slot — see genome.ScalarGene).
   readonly brain: Float32Array;
@@ -125,6 +129,7 @@ export class OrganismStore {
     this.scentSenseY = new Float64Array(capacity * SCENT_CHANNELS);
     this.glowSenseX = new Float64Array(capacity);
     this.glowSenseY = new Float64Array(capacity);
+    this.crowding = new Float64Array(capacity);
     this.brain = new Float32Array(capacity * BRAIN_GENES);
     this.hue = new Float32Array(capacity);
     this.scalarGenes = new Float32Array(capacity * SCALAR_GENE_COUNT);

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { OrganismStore } from './store';
 import { FoodField } from './food-field';
 import { SpatialHash } from './spatial-hash';
-import { senseFood, senseCreatures, senseEnv } from './sense';
+import { senseFood, senseCreatures, senseEnv, senseCrowding } from './sense';
 import { PheroField } from './phero-field';
 import { Walls } from './walls';
 import { defaultConfig } from './config';
@@ -459,5 +459,46 @@ describe('senseCreatures (sight)', () => {
     s.seeking[a] = 1;
     senseCreatures(s, hash, cfg, null, null);
     expect(s.sightX[a]!).toBeGreaterThan(baseX);
+  });
+});
+
+describe('senseCrowding', () => {
+  it('senseCrowding counts live neighbors within crowdSenseRange (A1b)', () => {
+    const cfg = defaultConfig({ bodySense: true, crowdSenseRange: 36, worldWidth: 512, worldHeight: 512 });
+    const s = new OrganismStore(8);
+    // Place 4 creatures: i0 at origin; i1,i2 within 36u; i3 at ~100u (outside).
+    const place = (slot: number, x: number, y: number): void => {
+      s.alloc();
+      s.x[slot] = x;
+      s.y[slot] = y;
+    };
+    place(0, 100, 100);
+    place(1, 110, 100); // 10u from i0 — inside
+    place(2, 100, 130); // 30u — inside
+    place(3, 100, 200); // 100u — outside
+    s.rebuildLive();
+    // SpatialHash signature is (worldWidth, worldHeight, cellSize, capacity); cellSize = 2·cellRadius (12u)
+    // is the house convention (sense.test.ts already uses it). cr = ceil(36/12)=3 cells covers the 36u range.
+    const hash = new SpatialHash(cfg.worldWidth, cfg.worldHeight, 2 * cfg.cellRadius, s.capacity);
+    hash.build(s);
+    senseCrowding(s, hash, cfg);
+    expect(s.crowding[0]).toBe(2); // i1 + i2 within 36u, i3 excluded
+    expect(s.crowding[3]).toBe(0); // i3 is alone within 36u
+  });
+
+  it('senseCrowding leaves crowding untouched when bodySense is off', () => {
+    const cfg = defaultConfig({ bodySense: false });
+    const s = new OrganismStore(4);
+    s.alloc();
+    s.alloc();
+    s.x[0] = 10;
+    s.y[0] = 10;
+    s.x[1] = 12;
+    s.y[1] = 10;
+    s.rebuildLive();
+    const hash = new SpatialHash(cfg.worldWidth, cfg.worldHeight, 2 * cfg.cellRadius, s.capacity);
+    hash.build(s);
+    senseCrowding(s, hash, cfg);
+    expect(s.crowding[0]).toBe(0); // skipped → stays at its zero-init
   });
 });
