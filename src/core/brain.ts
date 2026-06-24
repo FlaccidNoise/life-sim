@@ -71,6 +71,7 @@ export function steer(
     glow,
     age,
     crowding,
+    fertHere,
   } = store;
   const { wallSenseX, wallSenseY, flowSenseX, flowSenseY, scentSenseX, scentSenseY } = store;
   const { glowSenseX, glowSenseY } = store;
@@ -88,6 +89,7 @@ export function steer(
   const bodySense = cfg.bodySense; // A1a: feed own-SIZE/own-DIET as interoceptive inputs
   const cellRadius = cfg.cellRadius; // SIZE normalization divisor (2·cellRadius)
   const crowdSenseNorm = cfg.crowdSenseNorm; // A1b: local-crowding count → [0,1] divisor
+  const foodCap = cfg.foodCap; // A1c: fertility-under-foot normalization divisor (local biomass → [0,1])
   const hiddenLayer = cfg.hiddenLayer; // nonlinear tanh layer (conditional logic) on top of the linear map
   const moodGlow = cfg.moodGlow; // bioluminescence output read from the hidden "mood" layer (display + signal)
   // Per-creature scratch for the hidden layer (reused each iteration — no per-creature allocation).
@@ -227,6 +229,7 @@ export function steer(
     let sizeN = 0;
     let dietN = 0;
     let crowdN = 0;
+    let fertN = 0;
     if (bodySense) {
       sizeN = genes[sg + ScalarGene.SIZE]! / (2 * cellRadius);
       dietN = genes[sg + ScalarGene.DIET]!;
@@ -237,6 +240,12 @@ export function steer(
         learnedBrain[b + Brain.SIZE_THRUST]! * sizeN + learnedBrain[b + Brain.DIET_THRUST]! * dietN;
       turnRaw += learnedBrain[b + Brain.CROWD_TURN]! * crowdN;
       thrustRaw += learnedBrain[b + Brain.CROWD_THRUST]! * crowdN;
+      // A1c fertility-under-foot: total local biomass / foodCap, clamped to 1. VARIES within a life →
+      // gets eligibility below (unlike A1a's constant size/diet). 0 when !bodySense (fertHere stays stale).
+      fertN = fertHere[i]! / foodCap;
+      if (fertN > 1) fertN = 1;
+      turnRaw += learnedBrain[b + Brain.FERT_TURN]! * fertN;
+      thrustRaw += learnedBrain[b + Brain.FERT_THRUST]! * fertN;
     }
 
     // Hidden layer (slice E): a tanh layer adding a NONLINEAR correction on top of the linear map above
@@ -259,6 +268,7 @@ export function steer(
       hidIn[HiddenInput.SIZE] = sizeN; // 0 when !bodySense → no hidden contribution either
       hidIn[HiddenInput.DIET] = dietN;
       hidIn[HiddenInput.CROWD] = crowdN; // 0 when !bodySense
+      hidIn[HiddenInput.FERT] = fertN; // 0 when !bodySense
       hidIn[HiddenInput.BIAS] = 1;
       const w1 = b + HIDDEN_W1;
       for (let j = 0; j < HIDDEN_UNITS; j++) {
@@ -429,6 +439,11 @@ export function steer(
       elig[b + Brain.CROWD_TURN] = keep * elig[b + Brain.CROWD_TURN]! + eligLambda * crowdN * turnRaw;
       elig[b + Brain.CROWD_THRUST] =
         keep * elig[b + Brain.CROWD_THRUST]! + eligLambda * crowdN * thrustRaw;
+      // Fertility-under-foot eligibility (A1c): pre = fertN, post = motor output. FERT VARIES within a life,
+      // so it LEARNS (like CROWD; unlike A1a's constant own-size/diet, which get NO elig).
+      elig[b + Brain.FERT_TURN] = keep * elig[b + Brain.FERT_TURN]! + eligLambda * fertN * turnRaw;
+      elig[b + Brain.FERT_THRUST] =
+        keep * elig[b + Brain.FERT_THRUST]! + eligLambda * fertN * thrustRaw;
     }
     // Hidden→output eligibility (slice E): ONLY the output layer learns (pre = hidden activation, post =
     // the motor output). The input→hidden weights get NO elig → they stay at the genome (evolved-only),
