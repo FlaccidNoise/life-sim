@@ -107,6 +107,41 @@ describe('steer (per-creature brain)', () => {
     expect(Math.hypot(s.forceX[i]!, s.forceY[i]!)).toBeCloseTo(2); // thrust = SIGHT_FWD_THRUST·sFwd·eff
   });
 
+  it('reverses (backward force) when thrust intent is negative, capped at reverseThrustFraction·maxThrust', () => {
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.heading[i] = 0; // facing +x → backward force is -x
+    setBrain(s, i, { THRUST_BIAS: -10 }); // strong negative thrust intent (maxThrust 5 from setBrain)
+    s.rebuildLive();
+    steer(s, false, 0.2, false, CFG); // CFG.reverseThrustFraction = 0.5
+    expect(s.forceX[i]!).toBeCloseTo(-2.5); // backward, capped at 0.5·5·eff(1)
+    expect(s.forceY[i]!).toBeCloseTo(0);
+  });
+
+  it('reverseThrustFraction=0 reproduces forward-only (negative thrust intent → zero force)', () => {
+    const cfg0 = defaultConfig({ reverseThrustFraction: 0 });
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.heading[i] = 0;
+    setBrain(s, i, { THRUST_BIAS: -10 });
+    s.rebuildLive();
+    steer(s, false, 0.2, false, cfg0);
+    expect(s.forceX[i]!).toBe(0);
+    expect(s.forceY[i]!).toBe(0);
+  });
+
+  it('reverse cap also applies under motorSquash', () => {
+    const cfg = defaultConfig({ reverseThrustFraction: 0.5 });
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.heading[i] = 0;
+    setBrain(s, i, { THRUST_BIAS: -100 }); // tanh saturates toward -maxThrust, then floored at -0.5·max
+    s.rebuildLive();
+    steer(s, false, 0.2, true, cfg); // motorSquash = true
+    expect(s.forceX[i]!).toBeCloseTo(-2.5); // floored at 0.5·5
+    expect(s.forceY[i]!).toBeCloseTo(0);
+  });
+
   it('a positive WALL_FWD_THRUST weight converts a forward wall-gradient into forward thrust', () => {
     const s = new OrganismStore(4);
     const i = s.alloc();
@@ -328,15 +363,16 @@ describe('motorSquash (smooth tanh saturation — the legibility knob)', () => {
     expect(force(true)).toBeLessThan(force(false));
   });
 
-  it('negative thrust stays floored at 0 under squash (no reverse thrust)', () => {
+  it('negative thrust stays floored at 0 under squash when reverse is OFF (reverseThrustFraction=0)', () => {
+    const cfg0 = defaultConfig({ reverseThrustFraction: 0 }); // reverse disabled → legacy forward-only motor
     const s = new OrganismStore(4);
     const i = s.alloc();
     s.heading[i] = 0;
     s.senseX[i] = 1;
-    setBrain(s, i, { FWD_THRUST: -3 }); // thrustRaw = −3 (would be reverse)
+    setBrain(s, i, { FWD_THRUST: -3 }); // thrustRaw = −3 (would be reverse if enabled)
     s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.MAX_THRUST] = 1;
     s.rebuildLive();
-    steer(s, false, 0.2, true, CFG);
+    steer(s, false, 0.2, true, cfg0);
     expect(s.forceX[i]!).toBe(0); // floored, not negative
     expect(s.forceY[i]!).toBe(0);
   });

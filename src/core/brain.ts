@@ -44,6 +44,7 @@ export function steer(
   const { learnedBrain, elig, energy } = store;
   const genes = store.scalarGenes;
   const hungerSense = cfg.hungerSense;
+  const reverseFrac = cfg.reverseThrustFraction; // 0 = forward-only (legacy); 0.5 = back away at half power
   for (let k = 0; k < liveCount; k++) {
     const i = liveIndices[k]!;
     const sg = i * SCALAR_GENE_COUNT;
@@ -115,20 +116,27 @@ export function steer(
 
     let turn: number;
     let thrust: number;
+    // Reverse floor: a creature may push backward down to −reverseFrac·maxThrust (0 ⇒ forward-only, the
+    // legacy motor). Capped below the forward max so backing away is a slower retreat, not a launch. The
+    // `>0` guard keeps the floor at +0 (not −0) when off, so reverseFrac 0 is bit-identical to the old motor.
+    const reverseFloor = reverseFrac > 0 ? -reverseFrac * maxThrust : 0;
     if (motorSquash) {
       // Smooth saturation: out = max·tanh(raw/max). Slope→1 near 0 (small signals steer ~linearly), eases
       // asymptotically into ±max — no bang-bang snap to the limit (the saturated-rudder spin). Guard the
       // max≤0 edge: tanh(raw/0) is ±1/NaN, so a zero gene would otherwise poison the output → force 0.
       turn = maxTurn > 0 ? maxTurn * Math.tanh(turnRaw / maxTurn) : 0;
-      thrust = thrustRaw > 0 && maxThrust > 0 ? maxThrust * Math.tanh(thrustRaw / maxThrust) : 0;
+      // tanh is symmetric, so negative thrustRaw yields a negative (reverse) thrust; floor it at the reverse
+      // cap. With reverseFrac 0 the floor is 0, reproducing the old forward-only squash exactly.
+      thrust = maxThrust > 0 ? maxThrust * Math.tanh(thrustRaw / maxThrust) : 0;
+      if (thrust < reverseFloor) thrust = reverseFloor;
     } else {
-      // Hard clamp (default): a strong signal snaps to the per-creature limit. Byte-identical to the
-      // pre-shaping behavior, so the determinism hash is unchanged when motorSquash is off.
+      // Hard clamp (default): a strong signal snaps to the per-creature limit. With reverseFrac 0 the floor
+      // is 0, so this is byte-identical to the pre-reverse motor; with reverseFrac>0 it permits backward push.
       turn = turnRaw;
       if (turn > maxTurn) turn = maxTurn;
       else if (turn < -maxTurn) turn = -maxTurn;
       thrust = thrustRaw;
-      if (thrust < 0) thrust = 0;
+      if (thrust < reverseFloor) thrust = reverseFloor;
       else if (thrust > maxThrust) thrust = maxThrust;
     }
     const nh = h + turn;

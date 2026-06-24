@@ -57,3 +57,6 @@ full design rationale lives in `docs/superpowers/specs/`.
 ## UI / Visualization
 - 2026-06-22: Dot encoding remap — trophic role → SHAPE (○◇△), color → "color-by" mode (lineage default, `c` cycles lineage/diet/energy); one `palette.ts` source of truth → [ui-visualization.md](ui-visualization.md)
 - 2026-06-22: Legend → floating/closeable/dynamic; distributions → distinct hues + 18-gene picker → [ui-visualization.md](ui-visualization.md)
+
+## Conventions
+- 2026-06-23: New features ship ON by default; determinism (same `(config, seed)` → same hash) is the only invariant; the off-by-default ablation gate + frozen golden hash are RETIRED; existing OFF features are NOT blanket-flipped → [simulation-design.md](simulation-design.md)
