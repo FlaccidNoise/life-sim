@@ -6,7 +6,7 @@ import { applyFlowForce, computeRepulsion, integrate } from './physics';
 import { FoodField } from './food-field';
 import { Walls } from './walls';
 import { FlowField } from './flow-field';
-import { PheroField } from './phero-field';
+import { ScentField } from './scent-field';
 import { Parcels } from './parcels';
 import { senseFood, senseCreatures, senseEnv } from './sense';
 import { steer, learn } from './brain';
@@ -17,7 +17,7 @@ import {
   SCALAR_GENE_COUNT,
   SCALAR_GENE_SPECS,
 } from './genome';
-import { metabolize, hunt, eatParcels, cullDead, reproduce } from './economy';
+import { metabolize, hunt, eatParcels, cullDead, reproduce, depositScent } from './economy';
 import { Hasher } from './hash';
 
 /**
@@ -37,10 +37,10 @@ export class World {
   readonly food: FoodField;
   readonly walls: Walls;
   readonly flow: FlowField;
-  /** The pheromone field — a diffusing deposit-and-sense scalar grid. Allocated ONLY when
-   *  cfg.pheromoneEnabled; null otherwise, so the OFF path never deposits/senses/steps/hashes and stays
-   *  byte-identical. */
-  readonly phero: PheroField | null;
+  /** The identity-bearing scent field — a 4-channel diffusing deposit-and-sense grid (role + hue
+   *  signature). Allocated ONLY when cfg.pheromoneEnabled; null otherwise, so the OFF path never
+   *  deposits/senses/steps/hashes and stays byte-identical. */
+  readonly scent: ScentField | null;
   /** Drifting SIGHT-ONLY food parcels — discrete, smell-less, high-value motes that only the sight system
    *  perceives (giving the VISION genes a payoff). Allocated ONLY when cfg.parcelsEnabled; null otherwise,
    *  so the OFF path never spawns/drifts/senses/eats/hashes parcels and stays byte-identical. All parcel
@@ -103,9 +103,9 @@ export class World {
       config.foodRows,
       config,
     );
-    // Pheromone field sized to the food grid. Built ONLY when enabled → null is the byte-identical OFF path.
-    this.phero = config.pheromoneEnabled
-      ? new PheroField(config.worldWidth, config.worldHeight, config.foodCols, config.foodRows)
+    // Scent field sized to the food grid. Built ONLY when enabled → null is the byte-identical OFF path.
+    this.scent = config.pheromoneEnabled
+      ? new ScentField(config.worldWidth, config.worldHeight, config.foodCols, config.foodRows)
       : null;
     // Parcels built ONLY when enabled → null is the byte-identical OFF path. Its forked spawn RNG is
     // created here (cfg.seed ^ SALT), independent of world.rng.
@@ -142,6 +142,15 @@ export class World {
         // near-wall pockets get channel A. Only consulted when foodChannelAWallTied is ON; passing it
         // unconditionally is harmless (the food field ignores it on the legacy path → byte-identical).
         (x, y) => this.walls.proximityAt(x, y),
+        // Migrating pockets: drift params + a FORKED velocity rng (stream 0x5eed, distinct from lever-C's
+        // 0xc) for the two per-channel directions. With fertilityDriftRate 0 the field draws NO velocity rng
+        // and never moves → byte-identical. The fork never advances this.rng → the organism stream is untouched.
+        cfg.fertilityDriftRate,
+        cfg.fertilityDriftInterval,
+        cfg.foodPocketDriftRateA,
+        cfg.foodPocketDriftRateB,
+        cfg.pocketDriftSpeed,
+        this.rng.fork(0x5eed),
       );
     } else {
       this.food.reset();
@@ -258,6 +267,11 @@ export class World {
     const s = this.store;
     s.rebuildLive();
     this.hash.build(s);
+    // MIGRATING POCKETS: advance the food-pocket centres (channel A slow along dirA, channel B normal along
+    // dirB) + periodically recarve the fertility map, BEFORE sense/metabolize so this tick perceives + eats
+    // the moved food. Gated: fertilityDriftRate 0 → no-op (byte-identical OFF). All velocity randomness was
+    // drawn from a forked rng at seed time, so this hot-loop call is RNG-free (the determinism contract).
+    if (cfg.fertilityDriftRate > 0) this.food.driftPockets(this.tick);
     // SENSE → THINK/ACT: perceive the food gradient (per-creature sense range) + SIGHT (nearby creatures
     // within the vision cone; uses the start-of-tick hash), then steer (per-creature genes; sets thrust).
     // Drifting sight-only parcels: spawn (forked RNG) + advect on the flow BEFORE the sight scan, so the
@@ -267,7 +281,7 @@ export class World {
       this.parcels.step(cfg.flowStrength > 0 ? this.flow : null, cfg.dt);
     }
     senseFood(s, this.food, cfg);
-    senseEnv(s, this.walls, cfg.flowStrength > 0 ? this.flow : null, this.phero, cfg);
+    senseEnv(s, this.walls, cfg.flowStrength > 0 ? this.flow : null, this.scent, cfg);
     senseCreatures(s, this.hash, cfg, this.walls, this.parcels);
     steer(s, cfg.learningEnabled, cfg.eligLambda, cfg.motorSquash, cfg);
     // MOVE: flow push (size-scaled current) then repulsion add onto the thrust force, then integrate.
@@ -287,13 +301,13 @@ export class World {
     // HUNT: predators (diet>0) bite nearby creatures. Rebuild the hash at post-MOVE positions first so
     // bites use where creatures actually are this tick.
     this.hash.build(s);
-    hunt(s, this.hash, cfg, this.phero);
+    hunt(s, this.hash, cfg);
     // EAT PARCELS: a creature that its sight steered onto a parcel now cashes the intercept (post-MOVE
     // positions, ascending live-slot order, RNG-free). Gated (null = OFF, byte-identical).
     if (this.parcels !== null) eatParcels(s, this.parcels, cfg);
     // METABOLIZE → LEARN → REPRO/DIE. Energy (the band the creature is in) is known after metabolize,
     // so the energy-gated within-life consolidation runs here (eligibility traces were laid in steer).
-    metabolize(s, this.food, this.hash, cfg, this.phero);
+    metabolize(s, this.food, this.hash, cfg);
     if (cfg.learningEnabled)
       learn(s, cfg.learningRate, cfg.weightDecay, cfg.maxLearnDeviation, cfg.learnRewardClamp);
     this.lastDeaths = cullDead(s);
@@ -316,14 +330,16 @@ export class World {
       cfg.flowStrength > 0 ? this.flow : null,
       this.walls.active ? this.walls.foodBlockedMask() : null,
     );
-    // Pheromone diffuse + decay, IMMEDIATELY after the food field (this tick's deposits, laid in
-    // metabolize/hunt, now spread + forget). Null when disabled → skipped entirely (byte-identical OFF).
-    if (this.phero !== null)
-      this.phero.step(
+    // SCENT: every live creature lays its signature at its post-move position (ascending live-slot,
+    // RNG-free), then each channel diffuses + forgets. Null when disabled → skipped (byte-identical OFF).
+    if (this.scent !== null) {
+      depositScent(s, this.scent, cfg);
+      this.scent.stepAll(
         cfg.pheroDiffuse,
         cfg.pheroDecay,
         this.walls.active ? this.walls.foodBlockedMask() : null,
       );
+    }
     this.tick++;
   }
 
@@ -333,7 +349,7 @@ export class World {
     this.store.clear();
     this.tick = 0;
     this.lastBirths = this.lastDeaths = this.totalBirths = this.totalDeaths = 0;
-    if (this.phero !== null) this.phero.reset();
+    if (this.scent !== null) this.scent.reset();
     if (this.parcels !== null) this.parcels.reset();
     this.setup();
   }
@@ -364,8 +380,8 @@ export class World {
       h.u32(seekTicksLeft[i]!);
     }
     this.food.hashInto(h); // food is part of the sim state
-    // The pheromone field is part of sim state ONLY when active (after food, gated) → byte-identical when off.
-    if (this.phero !== null) this.phero.hashInto(h);
+    // The scent field is part of sim state ONLY when active (after food, gated) → byte-identical when off.
+    if (this.scent !== null) this.scent.hashInto(h);
     // Parcels are part of sim state ONLY when active (after the field hashes, gated) → byte-identical OFF.
     if (this.parcels !== null) this.parcels.hashInto(h);
     return h.hex();

@@ -259,6 +259,110 @@
       .lg-valbar {
         background: linear-gradient(90deg, #14202c, #cfe8f5);
       }
+      /* Family-tree modal — centered floating overlay, opened from the inspector 🌳 button or 't'. */
+      #lineage-panel {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 300px;
+        max-height: 72vh;
+        overflow-y: auto;
+        z-index: 20; /* above the side panels (z 10) and legend (z 5) */
+        display: none;
+        font-size: 11px;
+        line-height: 1.5;
+      }
+      .insp-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .ln-btn {
+        font-size: 10px;
+        padding: 2px 7px;
+        text-transform: none;
+        letter-spacing: 0;
+      }
+      .ln-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        color: var(--muted);
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        margin-bottom: 8px;
+      }
+      .ln-x {
+        background: none;
+        border: none;
+        color: var(--muted);
+        cursor: pointer;
+        font: inherit;
+        padding: 0 2px;
+        line-height: 1;
+      }
+      .ln-x:hover {
+        color: var(--accent);
+      }
+      .ln-sec {
+        color: var(--muted);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        font-size: 10px;
+        margin: 10px 0 5px;
+      }
+      .ln-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 3px 5px;
+        border-radius: 4px;
+        border: 1px solid transparent;
+      }
+      .ln-live {
+        cursor: pointer;
+      }
+      .ln-live:hover {
+        border-color: var(--border);
+        background: rgba(120, 170, 210, 0.08);
+      }
+      .ln-sel {
+        border-color: var(--accent);
+        background: rgba(120, 170, 210, 0.14);
+      }
+      .ln-sw {
+        width: 11px;
+        height: 11px;
+        border-radius: 3px;
+        flex: 0 0 auto;
+      }
+      .ln-gl {
+        color: var(--text);
+      }
+      .ln-id {
+        color: var(--text);
+        min-width: 38px;
+      }
+      .ln-gen,
+      .ln-bt {
+        color: var(--muted);
+      }
+      .ln-dead {
+        color: var(--danger, #e08a8a);
+      }
+      .ln-conn {
+        color: var(--muted);
+        padding-left: 9px;
+        line-height: 1;
+        height: 9px;
+      }
+      .ln-foot {
+        margin-top: 9px;
+        font-size: 10px;
+        word-break: break-all;
+      }
       /* Below ~880px the two 280px side panels leave too little centre gap — the legend would overlap
          them, so hide it (and its pill) rather than collide. */
       @media (max-width: 880px) {
@@ -457,8 +561,8 @@
       <h1>ecosim · archipelago</h1>
       <div id="hud-body" class="muted">
         evolving swimmers in fertility pockets across a huge ocean. scroll = zoom · drag = pan ·
-        click = inspect · <b>f</b> = food layer · <b>o</b> = creature overlay · <b>v</b> = flow ·
-        <b>c</b> = color mode · <b>l</b> = follow + record.
+        click = inspect · <b>f</b> = food layer (<b>shift+f</b> = back) · <b>o</b> = creature overlay · <b>v</b> = flow ·
+        <b>c</b> = color mode · <b>l</b> = follow + record · <b>t</b> = family tree.
         <div class="muted">
           food layer: <b id="food-layer-label">total</b> · color mode:
           <b id="color-mode-label">lineage</b>
@@ -484,12 +588,15 @@
       <h2>morphotype</h2>
       <select id="radar-lens"></select>
       <canvas id="radar"></canvas>
-      <h2>inspector</h2>
+      <h2 class="insp-head">inspector
+        <button id="lineage-open" class="btn ln-btn" title="family tree (t)">🌳 tree</button>
+      </h2>
       <div id="inspector"></div>
     </div>
 
     <div id="legend-panel" class="panel"></div>
     <button id="legend-pill">legend</button>
+    <div id="lineage-panel" class="panel"></div>
 
     <!-- Manual mode flip (no auto-detect); label shows the mode you'll switch TO. -->
     <button id="mode-toggle" aria-label="Toggle mobile / desktop layout">📱 mobile</button>

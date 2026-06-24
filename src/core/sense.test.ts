@@ -6,6 +6,7 @@ import { senseFood, senseCreatures, senseEnv } from './sense';
 import { Walls } from './walls';
 import { defaultConfig } from './config';
 import { ScalarGene, SCALAR_GENE_COUNT } from './genome';
+import { ScentField, SCENT_CHANNELS, Scent } from './scent-field';
 
 const W = 256;
 const H = 256;
@@ -129,6 +130,20 @@ describe('senseEnv', () => {
     expect(s.wallSenseY[i]).toBe(0);
     expect(s.flowSenseX[i]).toBe(0);
     expect(s.flowSenseY[i]).toBe(0);
+  });
+
+  it('writes per-channel scent gradients when the field is active', () => {
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.rebuildLive();
+    s.x[i] = 590;
+    s.y[i] = 500;
+    s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.SENSE_RANGE] = 20;
+    const scent = new ScentField(1000, 1000, 50, 50);
+    scent.deposit(610, 500, 0, 0, 100, true); // PREY blob one cell to the +x (590±20 straddles it)
+    senseEnv(s, null, null, scent, defaultConfig({ pheromoneEnabled: true }));
+    expect(s.scentSenseX[i * SCENT_CHANNELS + Scent.PREY]!).toBeGreaterThan(0); // gradient toward the blob
+    expect(s.scentSenseX[i * SCENT_CHANNELS + Scent.PRED]!).toBe(0); // PRED channel empty → flat
   });
 });
 
