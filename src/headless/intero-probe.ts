@@ -19,7 +19,7 @@ const SEED = Number(process.argv[3] ?? 1);
 
 interface Bin { n: number; turnAbs: number; fwd: number; }
 
-function measure(bodySense: boolean): { pop: number; bins: Bin[] } {
+function measure(bodySense: boolean): { pop: number; bins: Bin[]; world: World } {
   const config: Config = defaultConfig({ seed: SEED, ...(DEMO_OVERRIDES as Partial<Config>), bodySense });
   const world = new World(config);
   for (let t = 0; t < TICKS; t++) world.step();
@@ -49,11 +49,11 @@ function measure(bodySense: boolean): { pop: number; bins: Bin[] } {
     // turn magnitude proxy: |force lateral| (off-heading push) — a fleeing/casting body turns more.
     bins[bin]!.turnAbs += Math.abs(-forceX[i]! * dy + forceY[i]! * dx);
   }
-  return { pop: liveCount, bins };
+  return { pop: liveCount, bins, world };
 }
 
 for (const bodySense of [false, true]) {
-  const { pop, bins } = measure(bodySense);
+  const { pop, bins, world } = measure(bodySense);
   process.stdout.write(`bodySense ${bodySense ? 'ON ' : 'OFF'} — pop ${pop}\n`);
   bins.forEach((b, idx) => {
     const lbl = ['small', 'mid  ', 'large'][idx];
@@ -61,7 +61,27 @@ for (const bodySense of [false, true]) {
     const fwd = b.n ? (b.fwd / b.n).toFixed(3) : 'n/a';
     process.stdout.write(`   ${lbl} (n=${b.n}): mean|lat-force| ${turn}  mean fwd-thrust ${fwd}\n`);
   });
+  // A1b density-wall readout: over the live population, how much crowding actually registers at demo scale.
+  // senseCrowding is gated on bodySense, so this is 0 across the board when OFF (sanity), and the real
+  // measurement when ON — does any creature have a neighbor inside crowdSenseRange at 8192²?
+  if (bodySense) {
+    const s = world.store;
+    let sum = 0,
+      max = 0,
+      nonzero = 0;
+    for (let k = 0; k < s.liveCount; k++) {
+      const c = s.crowding[s.liveIndices[k]!]!;
+      sum += c;
+      if (c > max) max = c;
+      if (c > 0) nonzero++;
+    }
+    process.stdout.write(
+      `   crowding @range=${world.config.crowdSenseRange}: mean ${(sum / Math.max(1, s.liveCount)).toFixed(2)} ` +
+        `max ${max} nonzero ${((100 * nonzero) / Math.max(1, s.liveCount)).toFixed(1)}% of ${s.liveCount}\n`,
+    );
+  }
 }
 process.stdout.write(
-  'INTERPRET: compare the small→large slope ON vs OFF. ON≈OFF ⇒ wired+live but not yet recruited — say so.\n',
+  'INTERPRET: compare the small→large slope ON vs OFF. ON≈OFF ⇒ wired+live but not yet recruited — say so.\n' +
+    'INTERPRET: crowding mean/nonzero% ≈ 0 ⇒ wired+live but INERT at 8192² (density wall: NND ≫ crowdSenseRange).\n',
 );
