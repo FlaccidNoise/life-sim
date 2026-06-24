@@ -199,6 +199,16 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
       node('ready', readiness, Brain.READINESS_TURN, Brain.READINESS_THRUST, HiddenInput.READINESS),
     );
   }
+  // Interoceptive own-body inputs (A1a): own normalized SIZE + own DIET, mirroring steer()'s gate (0 when
+  // !bodySense). Pushed BEFORE the glow-sense nodes so existing positional input assertions are preserved.
+  let sizeN = 0;
+  let dietN = 0;
+  if (cfg.bodySense) {
+    sizeN = store.scalarGenes[sg + ScalarGene.SIZE]! / (2 * cfg.cellRadius);
+    dietN = store.scalarGenes[sg + ScalarGene.DIET]!;
+    inputs.push(node('size', sizeN, Brain.SIZE_TURN, Brain.SIZE_THRUST, HiddenInput.SIZE));
+    inputs.push(node('diet', dietN, Brain.DIET_TURN, Brain.DIET_THRUST, HiddenInput.DIET));
+  }
   // Glow-sense nodes (slice F3): linear-only receiver weights (no hidden input → hidIdx -1, drawn as direct
   // edges below). Always present (the synapses are always drawn); the gradient is 0 when the field is off.
   inputs.push(node('glow fwd', glFwd, GLOW_SENSE_FWD_TURN, GLOW_SENSE_FWD_THRUST, -1));
@@ -232,8 +242,8 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
       hunger,
       aged,
       readiness,
-      0, // SIZE (A1a): inert until steer() reads own-size (Task 2) — steer leaves this hidIn slot 0 too
-      0, // DIET (A1a): inert until steer() reads own-diet (Task 2) — keeps inspector↔steer hidden parity
+      sizeN,
+      dietN,
       1, // BIAS (now HiddenInput slot 21)
     ];
     for (let j = 0; j < HIDDEN_UNITS; j++) {

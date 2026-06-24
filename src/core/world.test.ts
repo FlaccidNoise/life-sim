@@ -96,6 +96,29 @@ describe('World — Phase 0 determinism contract', () => {
     expect(on.stateHash()).not.toBe(baseline.stateHash());
   });
 
+  it('bodySense OFF vs ON diverge — own-SIZE/own-DIET are read by steer (A1a wired, always-drawn)', () => {
+    // Always-drawn pattern: OFF and ON share an IDENTICAL seeded genome (the weights draw regardless of the
+    // flag), so divergence proves the steer() forward pass actually reads the inputs — NOT the off===baseline
+    // byte-identity the draw-skip features assert.
+    const off = new World(defaultConfig({ seed: 1, bodySense: false }));
+    const on = new World(defaultConfig({ seed: 1, bodySense: true }));
+    for (let t = 0; t < 1000; t++) {
+      off.step();
+      on.step();
+    }
+    expect(on.stateHash()).not.toBe(off.stateHash());
+  });
+
+  it('bodySense ON is deterministic (same config+seed → identical hash run-to-run)', () => {
+    const a = new World(defaultConfig({ seed: 5, bodySense: true }));
+    const b = new World(defaultConfig({ seed: 5, bodySense: true }));
+    for (let t = 0; t < 300; t++) {
+      a.step();
+      b.step();
+    }
+    expect(a.stateHash()).toBe(b.stateHash());
+  });
+
   it('ageStages OFF: MATURITY_AGE/SENESCENCE_AGE stay exactly at their centers after a long run (ablation)', () => {
     // The tail-gated-draw contract: with ageStages off, seed/mutateScalarGenes pin both genes to their
     // config centers WITHOUT drawing RNG — so after a long run every live creature (founders + all

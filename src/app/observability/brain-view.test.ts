@@ -110,6 +110,36 @@ describe('computeBrainState', () => {
     expect(Math.abs(st.turn)).toBeGreaterThan(1e-6); // guard: the glow-sense path is actually exercised
   });
 
+  it('adds own-SIZE + own-DIET nodes that match a real steer() run (A1a, non-saturated)', () => {
+    // own-SIZE/own-DIET feed the linear map + hidden layer; small weights so no saturation masks a missing
+    // term (the consolidation lesson). Pins the inspector to steer()'s body-sense contribution.
+    const s = new OrganismStore(8);
+    const i = s.alloc();
+    s.heading[i] = 0;
+    const base = i * SCALAR_GENE_COUNT;
+    for (let g = 0; g < SCALAR_GENE_COUNT; g++)
+      s.scalarGenes[base + g] = cfg[SCALAR_GENE_SPECS[g]!.centerKey];
+    s.scalarGenes[base + ScalarGene.SIZE] = 12; // sizeN = 12/(2·cellRadius=12) = 1.0
+    s.scalarGenes[base + ScalarGene.DIET] = 0.8;
+    const b = i * BRAIN_GENES;
+    s.brain[b + Brain.SIZE_TURN] = 0.05;
+    s.brain[b + Brain.DIET_THRUST] = 0.07;
+    s.resetLearned(i);
+    s.rebuildLive();
+    const h0 = s.heading[i]!;
+    const st = computeBrainState(s, cfg, i);
+    steer(s, false, cfg.eligLambda, cfg.motorSquash, cfg);
+    expect(st.turn).toBeCloseTo(s.heading[i]! - h0, 10);
+    expect(st.thrust).toBeCloseTo(Math.hypot(s.forceX[i]!, s.forceY[i]!), 10);
+    const sizeNode = st.inputs.find((n) => n.label === 'size')!;
+    const dietNode = st.inputs.find((n) => n.label === 'diet')!;
+    expect(sizeNode.value).toBeCloseTo(1.0, 10); // SIZE 12 / (2·cellRadius 6) = 1.0 (exact in Float32)
+    // DIET is read from the Float32 scalarGenes store, so 0.8 round-trips to 0.80000001 — pin to the
+    // stored value, not the literal (the inspector must surface exactly what steer() reads).
+    expect(dietNode.value).toBeCloseTo(s.scalarGenes[base + ScalarGene.DIET]!, 10);
+    expect(Math.abs(st.turn)).toBeGreaterThan(1e-6); // guard: the size→turn path is actually exercised
+  });
+
   it('exposes the base inputs incl. age in the documented order with their live values', () => {
     const s = setup();
     const st = computeBrainState(s, cfg, 0); // default cfg: ageSense on, hungerSense off
@@ -133,6 +163,8 @@ describe('computeBrainState', () => {
       'bias',
       'age',
       'ready',
+      'size',
+      'diet',
       'glow fwd',
       'glow lat',
     ]);
@@ -196,6 +228,8 @@ describe('computeBrainState', () => {
       'hunger',
       'age',
       'ready',
+      'size',
+      'diet',
       'glow fwd',
       'glow lat',
     ]);
@@ -225,8 +259,9 @@ describe('computeBrainState', () => {
   });
 
   it('matches steer() under motorSquash and eases below the limit (ON-mode contract)', () => {
-    // hiddenLayer off so the large setup() hidden weights don't saturate tanh — isolate the squash mechanic.
-    const sq = defaultConfig({ motorSquash: true, hiddenLayer: false });
+    // hiddenLayer off so the large setup() hidden weights don't saturate tanh; bodySense off so the A1a
+    // size/diet linear terms don't add enough signal to tip tanh to EXACT 1.0 — isolate the squash mechanic.
+    const sq = defaultConfig({ motorSquash: true, hiddenLayer: false, bodySense: false });
     const s = setup();
     const i = 0;
     // Drive turn into the saturation region so the tanh path (not the ~linear toe) is exercised.
