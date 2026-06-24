@@ -79,9 +79,31 @@ for (const bodySense of [false, true]) {
       `   crowding @range=${world.config.crowdSenseRange}: mean ${(sum / Math.max(1, s.liveCount)).toFixed(2)} ` +
         `max ${max} nonzero ${((100 * nonzero) / Math.max(1, s.liveCount)).toFixed(1)}% of ${s.liveCount}\n`,
     );
+    // A1c fertility-under-foot readout: biomass at the body (summed over active channels) and the actual
+    // normalized brain input min(fertHere/foodCap,1). Expected to be the first GENUINELY-live A1 input —
+    // most creatures sit on SOME biomass. fertHere is gated on bodySense (0 when OFF), so this is the ON read.
+    const cap = world.config.foodCap;
+    let fsum = 0,
+      fmax = 0,
+      fnonzero = 0,
+      nsum = 0;
+    for (let k = 0; k < s.liveCount; k++) {
+      const f = s.fertHere[s.liveIndices[k]!]!;
+      fsum += f;
+      if (f > fmax) fmax = f;
+      if (f > 0) fnonzero++;
+      nsum += Math.min(f / cap, 1);
+    }
+    process.stdout.write(
+      `   fertHere: mean ${(fsum / Math.max(1, s.liveCount)).toFixed(2)} max ${fmax.toFixed(1)} ` +
+        `nonzero ${((100 * fnonzero) / Math.max(1, s.liveCount)).toFixed(1)}% | normalized-input mean ` +
+        `${(nsum / Math.max(1, s.liveCount)).toFixed(3)} (foodCap ${cap})\n`,
+    );
   }
 }
 process.stdout.write(
   'INTERPRET: compare the small→large slope ON vs OFF. ON≈OFF ⇒ wired+live but not yet recruited — say so.\n' +
-    'INTERPRET: crowding mean/nonzero% ≈ 0 ⇒ wired+live but INERT at 8192² (density wall: NND ≫ crowdSenseRange).\n',
+    'INTERPRET: crowding mean/nonzero% ≈ 0 ⇒ wired+live but INERT at 8192² (density wall: NND ≫ crowdSenseRange).\n' +
+    'INTERPRET: fertHere nonzero% high + normalized-input mean ≫ 0 with spread ⇒ the first GENUINELY-LIVE A1\n' +
+    '           input (the value REGISTERS). Whether evolution RECRUITS it into settle/leave is separate+unproven.\n',
 );
