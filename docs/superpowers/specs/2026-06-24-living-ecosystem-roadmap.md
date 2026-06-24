@@ -73,6 +73,9 @@ Makes creatures *perceive their own body* and *decide* their consequential actio
 A2 (bite-gate) is the lever Bucket B needs, and A1 (own-size/diet) shapes divergent predator/prey strategy.
 
 ### A1 — Interoceptive INPUTS (safe, do first)
+**Progress (2026-06-24):** sliced A1a/A1b/A1c (spec: `docs/superpowers/specs/2026-06-24-A1-interoceptive-inputs-design.md`).
+✅ **A1a (own-SIZE + own-DIET) SHIPPED to main `a7421fe`** — both feed linear+hidden, evolve-only (no elig — constant-within-life bias-runaway avoided), behind `cfg.bodySense` (ON); `BRAIN_GENES 146→158`; 374 green, liveness PASS, final review clean. Measured: mechanism live (ablation) but not cleanly recruited (size→motor sign-inconsistent across seeds; own-DIET grazer-pinned by the predation ceiling). ⏳ A1b (local-CROWDING) in progress; A1c (fertility-under-foot) queued.
+
 Add as gated hidden+linear inputs (seeded 0 → additive, liveness-safe; they evolve in): **own-SIZE**
 (normalize by ~2·cfg.cellRadius), **own-DIET** (the gene is already 0..1), **local-CROWDING** (the hash
 neighbor-count scan already exists in `economy.metabolize` — plumb a sense-time count into a store buffer),
