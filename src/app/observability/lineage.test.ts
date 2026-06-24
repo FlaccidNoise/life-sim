@@ -126,4 +126,31 @@ describe('Lineage recorder', () => {
     expect(lin.size).toBe(1);
     expect(lin.queryBySlot(2, 1, store)).toBeNull();
   });
+
+  it('prunes oldest dead-childless leaves over cap, preserving dynasty/direct counts', () => {
+    const { store, put, kill, setLive } = makeStore();
+    // Two founders (always alive → never pruned).
+    put(0, 1, 0.2, 0.1);
+    put(1, 1, 0.7, 0.9);
+    setLive([0, 1]);
+    const lin = new Lineage(3); // tiny cap to force pruning
+
+    lin.reset(store); // 2 founders
+    put(2, 1, 0.3, 0.4); // founder 0 begets 2:1 at t10
+    lin.onBirth(0, 1, 2, 1);
+    lin.commit(store, 10); // size = 3 (at cap)
+    kill(2, 1); // 2:1 dies → a dead, childless leaf
+
+    put(3, 1, 0.5, 0.6); // founder 1 begets 3:1 at t20 → size 4 > cap → prune
+    lin.onBirth(1, 1, 3, 1);
+    lin.commit(store, 20);
+
+    expect(lin.size).toBe(3); // back under cap: 2:1 pruned
+    const f0 = lin.queryBySlot(0, 1, store)!;
+    expect(f0.directChildren).toBe(1); // count survives the prune
+    expect(f0.dynasty).toBe(1); // 2:1 still counted in the dynasty total
+    expect(f0.children).toHaveLength(0); // …but its row is gone from the listing
+    expect(f0.prunedLeaves).toBe(1); // surfaced, not silent
+    expect(lin.queryBySlot(2, 1, store)).toBeNull(); // the pruned node is gone
+  });
 });
