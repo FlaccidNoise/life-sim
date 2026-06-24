@@ -4,6 +4,12 @@ import { defaultConfig } from './config';
 import { Brain, BRAIN_GENES, ScalarGene, SCALAR_GENE_COUNT } from './genome';
 
 describe('World — Phase 0 determinism contract', () => {
+  it('sexualReproduction defaults on and is a config knob', () => {
+    expect(defaultConfig({}).sexualReproduction).toBe(true);
+    expect(defaultConfig({}).mateSeekWindow).toBe(120);
+    expect(defaultConfig({ sexualReproduction: false }).sexualReproduction).toBe(false);
+  });
+
   it('same (config, seed) → byte-identical hash after N ticks', () => {
     const a = new World(defaultConfig({ seed: 3 }));
     const b = new World(defaultConfig({ seed: 3 }));
