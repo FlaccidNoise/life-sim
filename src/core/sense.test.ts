@@ -387,4 +387,34 @@ describe('senseCreatures (sight)', () => {
     senseCreatures(s, hashOf(s), cfgNoOcc, walls, null);
     expect(Math.abs(s.sightX[0]!)).toBeGreaterThan(0); // ablation off → wall ignored, target seen
   });
+
+  it('a seeking creature is pulled toward a similar-hue same-class neighbour', () => {
+    const cfg = defaultConfig({ mateSenseAttraction: 2, cohesionGain: 0, shelterGain: 0 });
+    const s = new OrganismStore(4);
+    const N = SCALAR_GENE_COUNT;
+    const a = s.alloc();
+    const b = s.alloc();
+    s.x[a] = 100;
+    s.y[a] = 100;
+    s.heading[a] = 0;
+    s.x[b] = 130;
+    s.y[b] = 100; // directly ahead (+x)
+    for (const slot of [a, b]) {
+      s.scalarGenes[slot * N + ScalarGene.VISION_RANGE] = 100;
+      s.scalarGenes[slot * N + ScalarGene.VISION_ACUITY] = 1;
+      s.scalarGenes[slot * N + ScalarGene.VISION_FOV] = 3;
+      s.scalarGenes[slot * N + ScalarGene.DIET] = 0;
+      s.hue[slot] = 0.5;
+    }
+    s.rebuildLive();
+    const hash = new SpatialHash(cfg.worldWidth, cfg.worldHeight, 2 * cfg.cellRadius, s.capacity);
+    hash.build(s);
+    // not seeking → baseline sight
+    senseCreatures(s, hash, cfg, null, null);
+    const baseX = s.sightX[a]!;
+    // seeking → stronger forward pull toward b
+    s.seeking[a] = 1;
+    senseCreatures(s, hash, cfg, null, null);
+    expect(s.sightX[a]!).toBeGreaterThan(baseX);
+  });
 });

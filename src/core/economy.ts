@@ -436,6 +436,15 @@ export function reproduce(
       store.breedCooldownLeft[p] = store.breedCooldownLeft[p]! - 1;
       continue;
     }
+    // Reproductive-viability gate: provisionAndFinalize clamps the child to energy[p]−reproOverhead and the
+    // mother pays child+reproOverhead, so when childBirth ≥ energy[p]−reproOverhead the mother is drained to
+    // EXACTLY 0 — a zombie left live until next tick's cull (reproduce runs AFTER cullDead) → health-scan
+    // breach. Require the mother to afford a full child of her OWN BIRTH_ENERGY gene + reproOverhead and stay
+    // strictly positive, so both mother and child end > 0. RNG-free, before any alloc → consumes no RNG; in
+    // normal regimes satiatedBar ≫ this cost so it only bites the degenerate satiated≈reproOverhead config.
+    if (energy[p]! <= scalarGenes[p * SCALAR_GENE_COUNT + ScalarGene.BIRTH_ENERGY]! + cfg.reproOverhead) {
+      continue;
+    }
 
     if (!cfg.sexualReproduction) {
       if (energy[p]! < satiatedBar(scalarGenes, p, cfg)) continue; // not full yet
