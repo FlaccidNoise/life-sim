@@ -430,6 +430,19 @@ export interface Config {
   parcelAppeal: number;
   /** Eat radius (world units): a creature within this of a live parcel consumes it for parcelEnergy. */
   parcelEatRange: number;
+  /** CLUSTERED parcel spawning: spawn parcels in a few drifting hotspots instead of uniformly, so a
+   *  creature's see-farther annulus sometimes overlaps a dense jackpot a short-range creature misses
+   *  (a cluster's summed weak-pulls is a strong far-beacon that defeats the (1−d/range) falloff) — the
+   *  lever that makes VISION_RANGE pay at 8192². false (default) = parcels spawn at a UNIFORM world
+   *  position (the 2-draw legacy path), so cluster RNG never advances and the parcel stream is identical
+   *  to pre-clustering → byte-identical OFF ablation. Only ever active when parcelsEnabled. */
+  parcelClustering: boolean;
+  /** Number of spawn hotspots when parcelClustering is on (cluster centers drawn once from the parcel
+   *  forked RNG at construction; static for now — parcels still drift away from their center). */
+  parcelClusterCount: number;
+  /** Cluster radius (world units): a spawned parcel lands uniformly in a disk of this radius about its
+   *  chosen cluster center (then toroidally wrapped). */
+  parcelClusterRadius: number;
 
   // ── Interoceptive hunger brain input (lever E2 — ablation knob; OFF by default = byte-identical) ───
   /** Adds a HUNGER sense to the brain: a creature feels its own energy deficit (1 − energy/satiatedBar,
@@ -656,6 +669,12 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     parcelDriftMult: 1, // drift at the full local flow velocity (needs flowStrength>0 to actually move)
     parcelAppeal: 1, // sight pull toward a parcel (≈ the creature-appeal scale)
     parcelEatRange: 8, // intercept reach to consume a parcel
+    // Clustered parcel spawning: OFF by default (uniform spawn = the 2-draw legacy path, cluster RNG never
+    // advances) → byte-identical. Flip on (with parcelsEnabled) to concentrate the same parcel budget into a
+    // few hotspots so seeing FAR to spot a distant jackpot pays — the lever that revives VISION_RANGE.
+    parcelClustering: false,
+    parcelClusterCount: 8, // spawn hotspots when clustering is on
+    parcelClusterRadius: 120, // parcels land within this radius (world units) of a cluster center
     // Interoceptive hunger brain input (lever E2): OFF = byte-identical (hunger synapses unseeded/unread).
     // Flip on to give the brain its own energy-deficit sense, evolving from a neutral 0.
     hungerSense: false,

@@ -129,6 +129,91 @@ describe('World — Phase 0 determinism contract', () => {
     }
   });
 
+  it('parcelClustering ON diverges from clustering-OFF (the spawn-distribution lever is wired + live)', () => {
+    // Clustering changes ONLY where parcels spawn (forked parcelRng), so vs a parcels-on/clustering-off
+    // world the parcel layout — and, via sight steering + intercepts, the organisms — diverge. flow on so
+    // parcels drift; appeal/eatRange at demo defaults so eyes actually steer onto + eat them.
+    const off = new World(
+      defaultConfig({ seed: 1, flowStrength: 0.15, parcelsEnabled: true, parcelClustering: false }),
+    );
+    const on = new World(
+      defaultConfig({ seed: 1, flowStrength: 0.15, parcelsEnabled: true, parcelClustering: true }),
+    );
+    for (let t = 0; t < 300; t++) {
+      off.step();
+      on.step();
+    }
+    expect(on.stateHash()).not.toBe(off.stateHash());
+  });
+
+  it('parcelClustering ON leaves the ORGANISM RNG stream byte-identical (cluster draws are forked, not world.rng)', () => {
+    // The cardinal guarantee for the clustering lever: cluster-center seeding + the 3-draw clustered spawn
+    // all draw from the dedicated parcelRng, NEVER world.rng. With the sight/eat payoff neutralized
+    // (parcelAppeal 0 → no steering, parcelEatRange 0 → never eaten), the ONLY difference clustering makes
+    // is the parcel positions in the separate pool — the organism kinematics/energy + world.rng must be
+    // bit-for-bit identical to clustering-off at the same tick.
+    const off = new World(
+      defaultConfig({
+        seed: 7,
+        parcelsEnabled: true,
+        parcelClustering: false,
+        parcelAppeal: 0,
+        parcelEatRange: 0,
+      }),
+    );
+    const on = new World(
+      defaultConfig({
+        seed: 7,
+        parcelsEnabled: true,
+        parcelClustering: true,
+        parcelAppeal: 0,
+        parcelEatRange: 0,
+      }),
+    );
+    for (let t = 0; t < 300; t++) {
+      off.step();
+      on.step();
+    }
+    expect(on.rng.state).toBe(off.rng.state); // world.rng untouched by the cluster path
+    expect(on.store.liveCount).toBe(off.store.liveCount);
+    const a = off.store;
+    const b = on.store;
+    for (let k = 0; k < a.liveCount; k++) {
+      const i = a.liveIndices[k]!;
+      const j = b.liveIndices[k]!;
+      expect(j).toBe(i);
+      expect(b.x[j]).toBe(a.x[i]);
+      expect(b.y[j]).toBe(a.y[i]);
+      expect(b.energy[j]).toBe(a.energy[i]);
+    }
+  });
+
+  it('fractional parcelClusterCount produces no NaN parcel positions (count is floored to an integer)', () => {
+    // Regression: a non-integer count (reachable via the census --count arg) must not desync the cluster
+    // array length (Float64Array truncates) from the spawn index range (parcelRng.int) → out-of-bounds
+    // read → NaN positions that poison the determinism hash. The Math.floor in the Parcels ctor pins this.
+    const w = new World(
+      defaultConfig({
+        seed: 5,
+        parcelsEnabled: true,
+        parcelClustering: true,
+        parcelClusterCount: 3.7,
+      }),
+    );
+    for (let t = 0; t < 200; t++) w.step();
+    const p = w.parcels!;
+    expect(p).not.toBeNull();
+    let live = 0;
+    for (let i = 0; i < p.capacity; i++) {
+      if (p.alive[i] === 1) {
+        live++;
+        expect(Number.isFinite(p.x[i]!)).toBe(true);
+        expect(Number.isFinite(p.y[i]!)).toBe(true);
+      }
+    }
+    expect(live).toBeGreaterThan(0); // parcels actually spawned (the test isn't vacuous)
+  });
+
   it('pheromoneEnabled OFF: the 4 PHERO brain genes stay exactly 0 after a long run (ablation)', () => {
     const w = new World(defaultConfig({ seed: 13, pheromoneEnabled: false }));
     for (let t = 0; t < 500; t++) w.step();
