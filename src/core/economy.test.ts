@@ -679,9 +679,12 @@ describe('reproduce (breed at the per-creature satiated bar)', () => {
     mutationSigma: 0,
     hueMutationSigma: 0,
     offspringOffset: 8,
+    sexualReproduction: false,
     worldWidth: W,
     worldHeight: H,
   });
+  const emptyHash = (s: OrganismStore, c: Config): SpatialHash =>
+    new SpatialHash(c.worldWidth, c.worldHeight, 2 * c.cellRadius, s.capacity);
 
   it('provisions the child to its birthEnergy gene; parent pays that + reproOverhead', () => {
     const s = new OrganismStore(4);
@@ -691,7 +694,7 @@ describe('reproduce (breed at the per-creature satiated bar)', () => {
     s.energy[p] = 100;
     genes(s, p, cfg); // parent genes at centers (satiated 60, birthEnergy 25)
     s.rebuildLive();
-    const births = reproduce(s, new Rng(1), cfg, false, false, null);
+    const births = reproduce(s, new Rng(1), cfg, false, false, null, emptyHash(s, cfg));
     expect(births).toBe(1);
     expect(s.energy[p]).toBeCloseTo(100 - 25 - 15); // paid childBirthEnergy(25) + reproOverhead(15)
     s.rebuildLive();
@@ -712,6 +715,7 @@ describe('reproduce (breed at the per-creature satiated bar)', () => {
       reproOverhead: 15,
       mutationSigma: 0,
       breedCooldown: 3,
+      sexualReproduction: false,
       worldWidth: W,
       worldHeight: H,
     });
@@ -723,7 +727,8 @@ describe('reproduce (breed at the per-creature satiated bar)', () => {
     genes(s, p, c);
     s.rebuildLive(); // liveIndices = [p]; not rebuilt again, so p is the only parent considered
     const rng = new Rng(1);
-    const seq = [0, 1, 2, 3, 4].map(() => reproduce(s, rng, c, false, false, null));
+    const ch = emptyHash(s, c);
+    const seq = [0, 1, 2, 3, 4].map(() => reproduce(s, rng, c, false, false, null, ch));
     // first breed (newborn starts ready), then 3 blocked ticks, then breeds again
     expect(seq).toEqual([1, 0, 0, 0, 1]);
   });
@@ -734,7 +739,7 @@ describe('reproduce (breed at the per-creature satiated bar)', () => {
     s.energy[p] = 59; // < satiated gene 60
     genes(s, p, cfg);
     s.rebuildLive();
-    expect(reproduce(s, new Rng(1), cfg, false, false, null)).toBe(0);
+    expect(reproduce(s, new Rng(1), cfg, false, false, null, emptyHash(s, cfg))).toBe(0);
   });
 
   it('breeds at the parent’s OWN satiated GENE, not the config default', () => {
@@ -744,6 +749,7 @@ describe('reproduce (breed at the per-creature satiated bar)', () => {
       satiatedThreshold: 100,
       reproOverhead: 15,
       mutationSigma: 0,
+      sexualReproduction: false,
       worldWidth: W,
       worldHeight: H,
     });
@@ -758,11 +764,11 @@ describe('reproduce (breed at the per-creature satiated bar)', () => {
       [ScalarGene.BIRTH_ENERGY]: 20,
     });
     s.rebuildLive();
-    expect(reproduce(s, new Rng(1), cfgHigh, false, false, null)).toBe(1); // breeds on its gene, not the config 100
+    expect(reproduce(s, new Rng(1), cfgHigh, false, false, null, emptyHash(s, cfgHigh))).toBe(1); // breeds on its gene, not the config 100
   });
 
   it('breed bar is reproGene+MIN_BAND when the satiated gene is below the repro gene', () => {
-    const c = defaultConfig({ reproOverhead: 15, mutationSigma: 0, worldWidth: W, worldHeight: H });
+    const c = defaultConfig({ reproOverhead: 15, mutationSigma: 0, sexualReproduction: false, worldWidth: W, worldHeight: H });
     const breeds = (energy: number): number => {
       const s = new OrganismStore(4);
       const p = s.alloc();
@@ -775,7 +781,7 @@ describe('reproduce (breed at the per-creature satiated bar)', () => {
         [ScalarGene.BIRTH_ENERGY]: 20,
       });
       s.rebuildLive();
-      return reproduce(s, new Rng(1), c, false, false, null);
+      return reproduce(s, new Rng(1), c, false, false, null, emptyHash(s, c));
     };
     expect(breeds(60 + MIN_BAND - 1)).toBe(0); // below the guarded bar (NOT the inverted satiated 40)
     expect(breeds(60 + MIN_BAND + 1)).toBe(1); // above it → breeds
@@ -788,6 +794,7 @@ describe('reproduce (breed at the per-creature satiated bar)', () => {
       satiatedThreshold: 60,
       reproOverhead: 15,
       mutationSigma: 0.5,
+      sexualReproduction: false,
       worldWidth: W,
       worldHeight: H,
     });
@@ -798,7 +805,7 @@ describe('reproduce (breed at the per-creature satiated bar)', () => {
     s.energy[p] = 500;
     genes(s, p, c, { [ScalarGene.BIRTH_ENERGY]: 30 });
     s.rebuildLive();
-    expect(reproduce(s, new Rng(5), c, false, false, null)).toBe(1);
+    expect(reproduce(s, new Rng(5), c, false, false, null, emptyHash(s, c))).toBe(1);
     s.rebuildLive();
     const child = s.liveIndices[1]!;
     const childGene = s.scalarGenes[child * SCALAR_GENE_COUNT + ScalarGene.BIRTH_ENERGY]!;
@@ -813,6 +820,7 @@ describe('reproduce (breed at the per-creature satiated bar)', () => {
       satiatedThreshold: 60,
       reproOverhead: 15,
       offspringOffset: 8,
+      sexualReproduction: false,
       worldWidth: W,
       worldHeight: H,
     });
@@ -830,10 +838,10 @@ describe('reproduce (breed at the per-creature satiated bar)', () => {
       return s;
     };
     const s1 = make();
-    reproduce(s1, new Rng(7), detCfg, false, false, null);
+    reproduce(s1, new Rng(7), detCfg, false, false, null, emptyHash(s1, detCfg));
     s1.rebuildLive();
     const s2 = make();
-    reproduce(s2, new Rng(7), detCfg, false, false, null);
+    reproduce(s2, new Rng(7), detCfg, false, false, null, emptyHash(s2, detCfg));
     s2.rebuildLive();
     for (let k = 0; k < s1.liveCount; k++) {
       const i = s1.liveIndices[k]!;
@@ -950,6 +958,7 @@ describe('reproduce maturity gate (age stages)', () => {
     offspringOffset: 8,
     ageStages: true,
     maturityAge: 100,
+    sexualReproduction: false,
     worldWidth: W,
     worldHeight: H,
   });
@@ -962,7 +971,9 @@ describe('reproduce maturity gate (age stages)', () => {
     genes(s, p, c, { [ScalarGene.MATURITY_AGE]: 100 });
     s.age[p] = age;
     s.rebuildLive();
-    return reproduce(s, new Rng(1), c, false, false, null);
+    const ch = new SpatialHash(c.worldWidth, c.worldHeight, 2 * c.cellRadius, s.capacity);
+    ch.build(s);
+    return reproduce(s, new Rng(1), c, false, false, null, ch);
   };
 
   it('a juvenile (age < MATURITY_AGE) at the satiated bar does NOT breed', () => {
@@ -976,5 +987,88 @@ describe('reproduce maturity gate (age stages)', () => {
 
   it('ageStages false → a young creature breeds as today (byte-identical OFF path)', () => {
     expect(breedsAtAge(50, defaultConfig({ ...cfg, ageStages: false }))).toBe(1);
+  });
+});
+
+describe('sexual reproduction (crossover + compatibility + seeking)', () => {
+  // Helper: a store with two adjacent satiated adults, scalar genes seeded compatible or not.
+  function twoAdults(dietA: number, dietB: number) {
+    const cfg = defaultConfig({
+      sexualReproduction: true, ageStages: false, breedCooldown: 0,
+      satiatedThreshold: 100, reproThreshold: 40, mateContactRange: 50, mateSeekWindow: 5,
+    });
+    const s = new OrganismStore(8);
+    const N = SCALAR_GENE_COUNT;
+    for (let i = 0; i < 2; i++) {
+      const slot = s.alloc();
+      s.x[slot] = 100 + i * 5; s.y[slot] = 100; // 5u apart, within mateContactRange
+      s.energy[slot] = 200; // above satiatedBar
+      for (let g = 0; g < N; g++) s.scalarGenes[slot * N + g] = defaultConfig({})[
+        SCALAR_GENE_SPECS[g]!.centerKey
+      ] as number;
+      s.scalarGenes[slot * N + ScalarGene.SATIATED_THRESHOLD] = 100;
+      s.scalarGenes[slot * N + ScalarGene.REPRO_THRESHOLD] = 40;
+      s.scalarGenes[slot * N + ScalarGene.BIRTH_ENERGY] = 30;
+    }
+    s.scalarGenes[0 * N + ScalarGene.DIET] = dietA;
+    s.scalarGenes[1 * N + ScalarGene.DIET] = dietB;
+    s.rebuildLive();
+    const hash = new SpatialHash(cfg.worldWidth, cfg.worldHeight, 2 * cfg.cellRadius, s.capacity);
+    const tick = () => {
+      hash.build(s);
+      const b = reproduce(s, new Rng(1), cfg, false, false, null, hash);
+      s.rebuildLive();
+      return b;
+    };
+    return { cfg, s, tick };
+  }
+
+  it('compatible adults: enter seeking, then mate on a later tick', () => {
+    const { s, tick } = twoAdults(0, 0); // identical diet → compatible
+    expect(tick()).toBe(0); // tick 1: both enter SEEKING, no birth yet
+    expect(s.seeking[0]).toBe(1);
+    let births = 0;
+    for (let t = 0; t < 5; t++) births += tick();
+    expect(births).toBeGreaterThan(0); // mate on a seeking tick
+  });
+
+  it('predator × prey never breed (compatibility gate)', () => {
+    const { tick } = twoAdults(0, 1); // grazer + predator → incompatible (DIET-dominated distance)
+    let births = 0;
+    for (let t = 0; t < 10; t++) births += tick();
+    expect(births).toBe(0);
+  });
+
+  it('a lone satiated adult seeks then times out without breeding', () => {
+    // window 9 so the 10-tick loop below ends on the timeout tick (enter t0 → exit t9). With a shorter
+    // window the seeker would re-enter (breedCooldown 0 → no forage pause in this isolated harness) and
+    // the loop would catch it mid-search; the behaviour under test is "seek → time out → exit", not the
+    // re-entry cadence (which the real sim gates via the post-metabolize cooldown).
+    const { cfg } = twoAdults(0, 0);
+    cfg.mateSeekWindow = 9;
+    const s = new OrganismStore(4);
+    const N = SCALAR_GENE_COUNT;
+    const slot = s.alloc();
+    s.x[slot] = 100; s.y[slot] = 100; s.energy[slot] = 200;
+    for (let g = 0; g < N; g++) s.scalarGenes[slot * N + g] = 1;
+    s.scalarGenes[slot * N + ScalarGene.SATIATED_THRESHOLD] = 100;
+    s.scalarGenes[slot * N + ScalarGene.REPRO_THRESHOLD] = 40;
+    s.rebuildLive();
+    const hash = new SpatialHash(cfg.worldWidth, cfg.worldHeight, 2 * cfg.cellRadius, s.capacity);
+    let births = 0;
+    for (let t = 0; t < 10; t++) { hash.build(s); births += reproduce(s, new Rng(1), cfg, false, false, null, hash); }
+    expect(births).toBe(0);
+    expect(s.seeking[slot]).toBe(0); // timed out, exited seeking
+  });
+
+  it('energy is conserved on a sexual birth (mother pays, father unchanged)', () => {
+    const { s, tick } = twoAdults(0, 0);
+    const before = s.energy[0]! + s.energy[1]!;
+    let bornSlot = -1;
+    for (let t = 0; t < 6 && bornSlot < 0; t++) { tick(); if (s.liveCount > 2) bornSlot = 2; }
+    expect(bornSlot).toBe(2);
+    const after = s.energy[0]! + s.energy[1]! + s.energy[2]!;
+    // total drops by exactly reproOverhead (provisioning is an internal transfer mother→child).
+    expect(before - after).toBeCloseTo(defaultConfig({}).reproOverhead, 5);
   });
 });
