@@ -57,6 +57,11 @@ export class OrganismStore {
   // 4 PHERO brain genes.
   readonly pheroSenseX: Float64Array;
   readonly pheroSenseY: Float64Array;
+  // Transient per-tick GLOW sense (world frame): the local ∇G gradient of the glow field. Recomputed each
+  // tick by senseEnv when the field is active (else left 0); not hashed (derived). Wired into steer via the
+  // 4 GLOW_SENSE brain genes (slice F3 — the receiver side of the glow communication channel).
+  readonly glowSenseX: Float64Array;
+  readonly glowSenseY: Float64Array;
 
   // Genome (heritable, mutated at birth): the brain weights (BRAIN_GENES per slot) + the hue gene
   // + the scalar genes (SCALAR_GENE_COUNT per slot — see genome.ScalarGene).
@@ -108,6 +113,8 @@ export class OrganismStore {
     this.flowSenseY = new Float64Array(capacity);
     this.pheroSenseX = new Float64Array(capacity);
     this.pheroSenseY = new Float64Array(capacity);
+    this.glowSenseX = new Float64Array(capacity);
+    this.glowSenseY = new Float64Array(capacity);
     this.brain = new Float32Array(capacity * BRAIN_GENES);
     this.hue = new Float32Array(capacity);
     this.scalarGenes = new Float32Array(capacity * SCALAR_GENE_COUNT);
