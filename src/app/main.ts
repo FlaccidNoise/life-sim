@@ -20,6 +20,8 @@ import { RadarView, LENSES, DEFAULT_LENS } from './observability/radar-view';
 import { Distributions } from './observability/distributions';
 import { Legend } from './observability/legend';
 import { FollowRecorder } from './observability/follow-recorder';
+import { Lineage } from './observability/lineage';
+import { LineageModal } from './observability/lineage-modal';
 import { TimeSeriesGraph } from './observability/graph';
 
 function el<T extends HTMLElement>(id: string): T {
@@ -76,6 +78,13 @@ let config: Config = defaultConfig({
 });
 let world = new World(config);
 
+// Lineage recorder — fed by the read-only onBirth hook (pure observation, determinism-safe). The
+// hook lives on the config object the world holds; the spreads in reset/Knobs preserve the function
+// reference, and economy.ts reads cfg.onBirth live, so it survives rebuild().
+const lineage = new Lineage();
+config.onBirth = lineage.onBirth;
+lineage.reset(world.store); // snapshot the seeded population as gen-0 founders
+
 let renderer: Renderer;
 try {
   renderer = new Renderer(canvas, config.worldWidth, config.worldHeight, config.maxOrganisms);
@@ -111,6 +120,10 @@ const distributions = new Distributions(el<HTMLCanvasElement>('dist'));
 distributions.mountPicker(el('dist-fields'));
 const legend = new Legend(el('legend-panel'), el('legend-pill'));
 const recorder = new FollowRecorder();
+const lineageModal = new LineageModal(el('lineage-panel'), lineage, (slot, gen) =>
+  selectCreature(slot, gen),
+);
+el<HTMLButtonElement>('lineage-open').addEventListener('click', () => lineageModal.setOpen(true));
 
 let running = false;
 let speed = 1; // sim ticks per animation frame; <1 = slow-mo (interpolated for fluid motion)
@@ -188,6 +201,7 @@ function clearTrail(): void {
 // Advance the per-tick follow recording + trail together (called once per sim tick).
 function followTick(): void {
   recorder.record(world.store, config, world.tick);
+  lineage.commit(world.store, world.tick); // drain this tick's births into the family-tree forest
   if (recorder.isFollowedAlive(world.store))
     pushTrail(world.store.x[recorder.followedSlot]!, world.store.y[recorder.followedSlot]!);
 }
@@ -303,6 +317,8 @@ mbarStats.addEventListener('click', () =>
 
 function rebuild(): void {
   world = new World(config);
+  lineage.reset(world.store); // new world → re-snapshot founders, drop the old forest
+  lineageModal.select(-1, 0); // clear the modal's target (it stays open if it was open)
   selected = null;
   inspector.clear();
   brainView.clear();
@@ -330,12 +346,17 @@ function selectAt(clientX: number, clientY: number): void {
       best = i;
     }
   }
-  if (best >= 0) {
-    selected = { slot: best, gen: s.genId[best]! };
-    inspector.select(best, selected.gen);
-    brainView.select(best, selected.gen);
-    radar.select(best, selected.gen);
-  }
+  if (best >= 0) selectCreature(best, s.genId[best]!);
+}
+
+// Centralized selection: re-roots the whole inspector shell + the lineage modal onto one individual.
+// Used by click-to-inspect AND by clicking a live node inside the family-tree modal.
+function selectCreature(slot: number, gen: number): void {
+  selected = { slot, gen };
+  inspector.select(slot, gen);
+  brainView.select(slot, gen);
+  radar.select(slot, gen);
+  lineageModal.select(slot, gen);
 }
 
 // Scroll to zoom, around the cursor (the world point under the cursor stays put).
@@ -403,6 +424,7 @@ globalThis.addEventListener('keydown', (e) => {
       clearTrail();
     }
   }
+  if (e.key === 't' || e.key === 'T') lineageModal.toggle(); // family tree of the selection
 });
 
 // tps measurement (display only — never fed back into the sim).
@@ -583,6 +605,7 @@ function frame(): void {
   inspector.render(world.store, config);
   brainView.render(world.store, config);
   radar.render(world.store, config);
+  lineageModal.render(world.store); // family-tree modal (no-op while closed)
 
   const now = performance.now();
   if (now - lastT >= 500) {
