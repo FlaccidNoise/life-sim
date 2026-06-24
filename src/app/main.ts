@@ -8,7 +8,6 @@
  * speed scales work, not a time delta — determinism holds.
  */
 import { World } from '../core/world';
-import { Scent } from '../core/scent-field';
 import { defaultConfig, type Config } from '../core/config';
 import { scanHealth } from '../core/health';
 import { Renderer, ColorMode, FoodLayer } from '../render/renderer';
@@ -145,7 +144,7 @@ el<HTMLButtonElement>('lineage-open').addEventListener('click', () => lineageMod
 
 let running = false;
 let speed = 1; // sim ticks per animation frame; <1 = slow-mo (interpolated for fluid motion)
-// Food-field overlay layer (cycled with 'f'): off → total → channel A/B/C → pheromone → off, skipping
+// Food-field overlay layer (cycled with 'f'): off → total → channel A/B/C → scent prey/predator/kin → off, skipping
 // layers that don't exist for the current config so the user never lands on a blank.
 let foodLayer: FoodLayer = FoodLayer.TOTAL;
 let showWalls = true; // wall slate layer (toggle with 'w')
@@ -162,19 +161,29 @@ const FOOD_LAYER_NAMES: Record<number, string> = {
   [FoodLayer.CHANNEL_A]: 'channel A',
   [FoodLayer.CHANNEL_B]: 'channel B',
   [FoodLayer.CHANNEL_C]: 'channel C',
-  [FoodLayer.PHEROMONE]: 'prey-scent',
+  [FoodLayer.SCENT_PREY]: 'scent: prey',
+  [FoodLayer.SCENT_PRED]: 'scent: predator',
+  [FoodLayer.SCENT_KIN_COS]: 'scent: kin (cos)',
+  [FoodLayer.SCENT_KIN_SIN]: 'scent: kin (sin)',
 };
 const COLOR_MODE_NAMES = ['lineage', 'diet', 'energy', 'forage'];
 const foodLayerLabel = el('food-layer-label');
 const colorModeLabel = el('color-mode-label');
 
 /** The ring of layers that actually have data for the current world, in cycle order. Off is always in
- *  the ring; channels B/C only when foodChannels covers them; pheromone only when the field exists. */
+ *  the ring; channels B/C only when foodChannels covers them; the 4 scent channels only when the field exists. */
 function availableFoodLayers(): FoodLayer[] {
   const ring: FoodLayer[] = [FoodLayer.OFF, FoodLayer.TOTAL, FoodLayer.CHANNEL_A];
   if (config.foodChannels >= 2) ring.push(FoodLayer.CHANNEL_B);
   if (config.foodChannels >= 3) ring.push(FoodLayer.CHANNEL_C);
-  if (world.scent) ring.push(FoodLayer.PHEROMONE);
+  if (world.scent) {
+    ring.push(
+      FoodLayer.SCENT_PREY,
+      FoodLayer.SCENT_PRED,
+      FoodLayer.SCENT_KIN_COS,
+      FoodLayer.SCENT_KIN_SIN,
+    );
+  }
   return ring;
 }
 
@@ -522,7 +531,7 @@ function frame(): void {
   renderer.draw(
     world.store,
     world.food,
-    world.scent ? world.scent.channel(Scent.PREY) : null, // overlay shows the PREY channel (V1)
+    world.scent, // the renderer picks the channel from the active SCENT_* foodLayer
     world.walls,
     foodLayer,
     showWalls,
