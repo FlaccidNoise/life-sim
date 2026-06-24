@@ -125,6 +125,18 @@ export interface Config {
    *  — and spaces reproduction into a real life-cycle. The FIRST breed is never gated (newborns start ready),
    *  so getting established is unaffected. 0 = OFF: no gating, byte-identical to pre-cooldown (the contract). */
   breedCooldown: number;
+  /** Master toggle: sexual reproduction (crossover of two compatible parents). Default ON; false → the
+   *  legacy asexual clone+mutate path (ablation). The ONLY behavioural gate for this feature. */
+  sexualReproduction: boolean;
+  /** Ticks a satiated creature stays in the mate-SEEKING state before giving up this cycle. */
+  mateSeekWindow: number;
+  /** World-unit radius for a mating contact (≈ one spatial-hash cell; covered by the 3×3 scan). */
+  mateContactRange: number;
+  /** Max geneticDistance for two creatures to be a compatible (interbreeding) pair — the species gate.
+   *  Smaller = stricter isolation / easier speciation; too small risks crashing births. */
+  mateCompatThreshold: number;
+  /** Strength of the sight pull toward similar-looking creatures while seeking (bounded like cohesion). */
+  mateSenseAttraction: number;
 
   // ── Steering + evolution (per-creature heritable brain) ─────────────────────────────────────────
   /** Gradient sample half-step in world units (central difference of the food field). */
@@ -536,6 +548,11 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     birthEnergy: 25, // gene center: offspring provisioning
     offspringOffset: 8,
     breedCooldown: 0, // OFF: no breeding refractory → byte-identical; >0 spaces reproduction (the dwell lever)
+    sexualReproduction: true,
+    mateSeekWindow: 120,
+    mateContactRange: 12,
+    mateCompatThreshold: 0.6,
+    mateSenseAttraction: 1.0,
 
     // Steering + evolution. Founders seeded near a chemotaxis brain (genome.ts FOUNDER_BRAIN) with a
     // spread; offspring mutate. senseStep ≈ one food cell (64u) so the gradient reads across cells.
