@@ -67,9 +67,11 @@ describe('computeBrainState', () => {
       'flow lat',
       'bias',
       'age',
+      'ready',
     ]);
     expect(st.inputs[8]!.value).toBe(1); // bias is constant 1
     expect(st.inputs[9]!.label).toBe('age'); // interoceptive maturity input (slice C)
+    expect(st.inputs[10]!.label).toBe('ready'); // interoceptive repro-readiness input (slice D)
   });
 
   it('exposes the eat-gate output (slice B): 1 when off, the sigmoid of its inputs when on', () => {
@@ -115,6 +117,7 @@ describe('computeBrainState', () => {
       'bias',
       'hunger',
       'age',
+      'ready',
     ]);
     expect(st.inputs[9]!.value).toBeCloseTo(0.5, 10); // fractional drive, genuinely exercised (idx 9 = hunger)
     // The hunger node must reproduce the turn/thrust steer() actually applies under the SAME mode.

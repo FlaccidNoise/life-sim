@@ -105,6 +105,16 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
     if (aged > 1) aged = 1;
     inputs.push(node('age', aged, Brain.AGE_TURN, Brain.AGE_THRUST));
   }
+  // Repro-readiness input (slice D): clamp((energy − reproThreshold)/(satiatedBar − reproThreshold), 0, 1),
+  // mirroring steer()'s gate. Climbs as the creature nears its breeding bar.
+  if (cfg.readinessSense) {
+    const repro = store.scalarGenes[slot * SCALAR_GENE_COUNT + ScalarGene.REPRO_THRESHOLD]!;
+    const band = satiatedBar(store.scalarGenes, slot, cfg) - repro;
+    let readiness = band > 0 ? (store.energy[slot]! - repro) / band : 0;
+    if (readiness < 0) readiness = 0;
+    else if (readiness > 1) readiness = 1;
+    inputs.push(node('ready', readiness, Brain.READINESS_TURN, Brain.READINESS_THRUST));
+  }
 
   let turnRaw = 0;
   let thrustRaw = 0;

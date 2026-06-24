@@ -392,6 +392,12 @@ export interface Config {
   ageSense: boolean;
   /** Reference lifespan (ticks) the age input normalizes against — age/ageNorm saturates at 1 here. */
   ageNorm: number;
+  /** Repro-readiness sense (slice D): feed clamp((energy − reproThreshold)/(satiatedBar − reproThreshold),
+   *  0, 1) — 0 while just surviving, ramping to 1 as the creature nears its breeding bar — on its own
+   *  turn/thrust synapses, so behaviour can change as reproduction approaches (e.g. settle before breeding).
+   *  Distinct from hunger (whose denominator is the full bar): this one is clamped to the breeding BAND.
+   *  Off = the brain can't sense breeding readiness. */
+  readinessSense: boolean;
 
   // ── Walls (env pass 1) ─────────────────────────────────────────────────────
   /** FINE wall-grid resolution (decoupled from the food grid for creature-scale nooks). */
@@ -660,6 +666,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     eatMovePenalty: 0.4,
     ageSense: true, // ON by default: the brain can sense its own maturity (life-stage behaviour)
     ageNorm: 1000, // ~average lifespan at the shipped economy → maturity reaches ~1 near mid-late life
+    readinessSense: true, // ON by default: the brain can sense how close it is to breeding (the repro band)
 
     // Walls: 5 biome regions over a 512² fine grid (16u cells), ~35% solid, vision-occluding.
     // Default OFF (wallRegionCount 0) so defaultConfig stays a TRUE no-op — byte-identical to the
