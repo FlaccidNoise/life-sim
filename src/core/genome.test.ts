@@ -17,6 +17,24 @@ import {
 } from './genome';
 
 describe('genome', () => {
+  it('DISPLAY and PREFERENCE are seeded in range and counted', () => {
+    expect(SCALAR_GENE_COUNT).toBe(26);
+    expect(ScalarGene.DISPLAY).toBe(24);
+    expect(ScalarGene.PREFERENCE).toBe(25);
+    const cfg = defaultConfig({ seed: 1 });
+    const genes = new Float32Array(8 * SCALAR_GENE_COUNT);
+    const rng = new Rng(1);
+    for (let s = 0; s < 8; s++) seedScalarGenes(genes, s, rng, cfg);
+    for (let s = 0; s < 8; s++) {
+      const d = genes[s * SCALAR_GENE_COUNT + ScalarGene.DISPLAY]!;
+      const p = genes[s * SCALAR_GENE_COUNT + ScalarGene.PREFERENCE]!;
+      expect(d).toBeGreaterThanOrEqual(0);
+      expect(d).toBeLessThanOrEqual(1);
+      expect(p).toBeGreaterThanOrEqual(0);
+      expect(p).toBeLessThanOrEqual(1);
+    }
+  });
+
   it('seedGenome spreads founder brains around the seed (initial variation)', () => {
     const brain = new Float32Array(10 * BRAIN_GENES);
     const hue = new Float32Array(10);

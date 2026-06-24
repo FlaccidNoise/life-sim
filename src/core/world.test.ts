@@ -14,14 +14,14 @@ describe('World — Phase 0 determinism contract', () => {
     expect(a.stateHash()).toBe(b.stateHash());
   });
 
-  it('OFF-state golden hash: default config is byte-identical to the pre-feature engine', () => {
-    // Pins the load-bearing invariant: every new knob (per-pocket richness, deadWaterCost, founding-
-    // protection, food channels, …) defaults OFF → the seeded world is byte-identical to legacy. The
-    // comparative tests above would silently pass if a future edit reordered an RNG draw at the default;
-    // this one fails LOUDLY. Constant verified against the engine before these features (commit 55f899e).
+  it('default-config determinism pin: stable hash after 1000 ticks', () => {
+    // Re-pinned constant (life-sim-xa90): the default config now includes on-by-default features
+    // (incl. the sexual-repro genes), so it is no longer byte-identical to the pre-feature engine. This
+    // pin still fails LOUDLY on any UNINTENDED RNG reorder; recompute deliberately when the genome layout
+    // changes. The real invariant (same seed → same hash run-to-run) is the test above.
     const w = new World(defaultConfig({ seed: 3 }));
     for (let t = 0; t < 1000; t++) w.step();
-    expect(w.stateHash()).toBe('a32e9375');
+    expect(w.stateHash()).toBe('23a80e2f');
   });
 
   it('different seeds → different hash (seed actually controls the world)', () => {

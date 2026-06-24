@@ -460,6 +460,10 @@ export interface Config {
    *  to run every tick (disposable-soma / antagonistic-pleiotropy), so longevity is a genuine tradeoff —
    *  a balanced polymorphism rather than free upward drift toward immortality. */
   senescenceAgeCost: number;
+  /** DISPLAY gene founder CENTER (sexual-selection ornament, 0..1). */
+  display: number;
+  /** PREFERENCE gene founder CENTER (preferred DISPLAY value, 0..1). */
+  preference: number;
 
   // ── Observation hooks (optional; OFF by default — pure instrumentation, never affects the sim) ────
   /** Fired once per successful birth inside reproduce(), in ascending parent-slot order, BEFORE the
@@ -686,6 +690,8 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     maturityAge: 100, // MATURITY_AGE gene center (ticks): ≈ under the first-breed median → the gate bites
     senescenceAge: 400, // SENESCENCE_AGE gene center (ticks): ≈ mean lifespan → only the long tail gets capped
     senescenceAgeCost: 0.0005, // basal upkeep per unit SENESCENCE_AGE above center (the longevity tradeoff)
+    display: 0.5,
+    preference: 0.5,
     ...overrides,
   };
 }
