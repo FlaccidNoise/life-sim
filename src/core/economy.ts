@@ -381,14 +381,18 @@ function spawnChildSlot(
 }
 
 /** After the child's genome is written: reset its learning state, provision it to its BIRTH_ENERGY gene
- *  (capped by the mother's spare energy — energy-conserving), debit the mother (provisioning + reproOverhead),
- *  start the mother's breed cooldown, and fire the onBirth hook. RNG-free. Called once the genome (mutate or
- *  crossover) has set the child's genes. */
+ *  (capped by the mother's spare energy above her reserved REPRO_THRESHOLD survival floor — energy-conserving),
+ *  debit the mother (provisioning + reproOverhead), start the mother's breed cooldown, and fire the onBirth
+ *  hook. RNG-free. Called once the genome (mutate or crossover) has set the child's genes. */
 function provisionAndFinalize(store: OrganismStore, mom: number, child: number, cfg: Config): void {
   store.resetLearned(child);
   const { energy, scalarGenes } = store;
   const childBirth = scalarGenes[child * SCALAR_GENE_COUNT + ScalarGene.BIRTH_ENERGY]!;
-  const childEnergy = Math.min(childBirth, energy[mom]! - cfg.reproOverhead);
+  // Reserve the mother's REPRO_THRESHOLD survival floor: breeding returns her to her reproductive band,
+  // never below it (and never to ≤ 0). The viability gate guarantees energy[mom] > reproOverhead + reproFloor,
+  // so childEnergy > 0 and the mother ends at ≥ reproFloor. Energy stays conserved (only reproOverhead is lost).
+  const reproFloor = scalarGenes[mom * SCALAR_GENE_COUNT + ScalarGene.REPRO_THRESHOLD]!;
+  const childEnergy = Math.min(childBirth, energy[mom]! - cfg.reproOverhead - reproFloor);
   energy[child] = childEnergy;
   store.prevEnergy[child] = childEnergy;
   energy[mom] = energy[mom]! - childEnergy - cfg.reproOverhead;
@@ -436,13 +440,16 @@ export function reproduce(
       store.breedCooldownLeft[p] = store.breedCooldownLeft[p]! - 1;
       continue;
     }
-    // Reproductive-viability gate: provisionAndFinalize clamps the child to energy[p]−reproOverhead and the
-    // mother pays child+reproOverhead, so when childBirth ≥ energy[p]−reproOverhead the mother is drained to
-    // EXACTLY 0 — a zombie left live until next tick's cull (reproduce runs AFTER cullDead) → health-scan
-    // breach. Require the mother to afford a full child of her OWN BIRTH_ENERGY gene + reproOverhead and stay
-    // strictly positive, so both mother and child end > 0. RNG-free, before any alloc → consumes no RNG; in
-    // normal regimes satiatedBar ≫ this cost so it only bites the degenerate satiated≈reproOverhead config.
-    if (energy[p]! <= scalarGenes[p * SCALAR_GENE_COUNT + ScalarGene.BIRTH_ENERGY]! + cfg.reproOverhead) {
+    // Reproductive-viability gate (owner directive 2026-06-23): a creature breeds only when it can pay the
+    // reproduction cost AND stay in its reproductive band — it never breeds itself low enough to die. It must
+    // afford reproOverhead and keep its REPRO_THRESHOLD survival floor; provisionAndFinalize reserves that
+    // floor, so the mother ends at ≥ REPRO_THRESHOLD (> 0) and the child gets a strictly positive share. RNG-
+    // free, before any alloc → consumes no RNG. Airtight (no child-gene dependency): a too-poor creature
+    // forages instead of breeding into death. In normal regimes satiatedBar ≫ this cost so it rarely bites.
+    if (
+      energy[p]! <=
+      cfg.reproOverhead + scalarGenes[p * SCALAR_GENE_COUNT + ScalarGene.REPRO_THRESHOLD]!
+    ) {
       continue;
     }
 
