@@ -341,7 +341,7 @@ export class World {
     h.u32(this.tick);
     h.u32(this.rng.state);
     h.u32(s.liveCount);
-    const { liveIndices, liveCount, x, y, vx, vy, heading, energy, age, genId } = s;
+    const { liveIndices, liveCount, x, y, vx, vy, heading, energy, age, genId, seeking, seekTicksLeft } = s;
     for (let k = 0; k < liveCount; k++) {
       const i = liveIndices[k]!;
       h.f(x[i]!);
@@ -352,6 +352,8 @@ export class World {
       h.f(energy[i]!);
       h.u32(age[i]!);
       h.u32(genId[i]!);
+      h.u32(seeking[i]!);
+      h.u32(seekTicksLeft[i]!);
     }
     this.food.hashInto(h); // food is part of the sim state
     // The pheromone field is part of sim state ONLY when active (after food, gated) → byte-identical when off.

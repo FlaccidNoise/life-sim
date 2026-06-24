@@ -73,6 +73,11 @@ export class OrganismStore {
   // (the determinism golden hash stays byte-identical when the cooldown feature is off).
   readonly breedCooldownLeft: Uint32Array;
 
+  /** Mate-seeking state (life-sim-xa90): 1 while actively looking for a mate; seekTicksLeft counts the
+   *  current search window down. Hashed (part of the determinism contract — they steer future behaviour). */
+  readonly seeking: Uint8Array;
+  readonly seekTicksLeft: Uint32Array;
+
   /** Free slots available for allocation (LIFO). Reuse is genId-guarded. */
   private readonly freeStack: number[] = [];
 
@@ -110,6 +115,8 @@ export class OrganismStore {
     this.genId = new Uint32Array(capacity);
     this.alive = new Uint8Array(capacity);
     this.breedCooldownLeft = new Uint32Array(capacity);
+    this.seeking = new Uint8Array(capacity);
+    this.seekTicksLeft = new Uint32Array(capacity);
     this.liveIndices = new Uint32Array(capacity);
     this.clear();
   }
@@ -125,6 +132,8 @@ export class OrganismStore {
     this.age.fill(0);
     this.genId.fill(0);
     this.breedCooldownLeft.fill(0);
+    this.seeking.fill(0);
+    this.seekTicksLeft.fill(0);
     this.freeStack.length = 0;
     for (let i = this.capacity - 1; i >= 0; i--) this.freeStack.push(i);
     this.liveCount = 0;
@@ -138,6 +147,8 @@ export class OrganismStore {
     this.genId[slot] = (this.genId[slot]! + 1) >>> 0;
     this.age[slot] = 0;
     this.breedCooldownLeft[slot] = 0; // a newborn is breeding-ready (first breed is never gated)
+    this.seeking[slot] = 0;
+    this.seekTicksLeft[slot] = 0;
     return slot;
   }
 

@@ -21,7 +21,7 @@ describe('World — Phase 0 determinism contract', () => {
     // changes. The real invariant (same seed → same hash run-to-run) is the test above.
     const w = new World(defaultConfig({ seed: 3 }));
     for (let t = 0; t < 1000; t++) w.step();
-    expect(w.stateHash()).toBe('23a80e2f');
+    expect(w.stateHash()).toBe('be0ffc6f');
   });
 
   it('different seeds → different hash (seed actually controls the world)', () => {
@@ -334,6 +334,17 @@ describe('World — Phase 0 determinism contract', () => {
         expect(s.brain[base + g]!).toBe(0);
       }
     }
+  });
+
+  it('seeking store fields are reset-deterministic and hashed', () => {
+    const w = new World(defaultConfig({ seed: 3 }));
+    for (let t = 0; t < 200; t++) w.step();
+    const h1 = w.stateHash();
+    w.reset();
+    for (let t = 0; t < 200; t++) w.step();
+    expect(w.stateHash()).toBe(h1); // reset → byte-identical, incl. seeking state
+    expect(w.store.seeking.length).toBe(w.store.capacity);
+    expect(w.store.seekTicksLeft.length).toBe(w.store.capacity);
   });
 });
 
