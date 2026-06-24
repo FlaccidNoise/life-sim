@@ -244,7 +244,8 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
       readiness,
       sizeN,
       dietN,
-      1, // BIAS (now HiddenInput slot 21)
+      0, // CROWD (A1b): inert until steer() reads crowding (Task 3) — steer leaves this hidIn slot 0 too
+      1, // BIAS (now HiddenInput slot 22)
     ];
     for (let j = 0; j < HIDDEN_UNITS; j++) {
       let s = 0;
