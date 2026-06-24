@@ -203,11 +203,14 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
   // !bodySense). Pushed BEFORE the glow-sense nodes so existing positional input assertions are preserved.
   let sizeN = 0;
   let dietN = 0;
+  let crowdN = 0;
   if (cfg.bodySense) {
     sizeN = store.scalarGenes[sg + ScalarGene.SIZE]! / (2 * cfg.cellRadius);
     dietN = store.scalarGenes[sg + ScalarGene.DIET]!;
+    crowdN = Math.min(store.crowding[slot]! / cfg.crowdSenseNorm, 1);
     inputs.push(node('size', sizeN, Brain.SIZE_TURN, Brain.SIZE_THRUST, HiddenInput.SIZE));
     inputs.push(node('diet', dietN, Brain.DIET_TURN, Brain.DIET_THRUST, HiddenInput.DIET));
+    inputs.push(node('crowd', crowdN, Brain.CROWD_TURN, Brain.CROWD_THRUST, HiddenInput.CROWD));
   }
   // Glow-sense nodes (slice F3): linear-only receiver weights (no hidden input → hidIdx -1, drawn as direct
   // edges below). Always present (the synapses are always drawn); the gradient is 0 when the field is off.
@@ -244,7 +247,7 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
       readiness,
       sizeN,
       dietN,
-      0, // CROWD (A1b): inert until steer() reads crowding (Task 3) — steer leaves this hidIn slot 0 too
+      crowdN, // CROWD (A1b): 0 when !bodySense (mirrors steer's hidIn[HiddenInput.CROWD])
       1, // BIAS (now HiddenInput slot 22)
     ];
     for (let j = 0; j < HIDDEN_UNITS; j++) {
