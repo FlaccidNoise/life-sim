@@ -53,6 +53,41 @@ describe('metabolize', () => {
     expect(s.age[i]!).toBe(1);
   });
 
+  it('brain-gated eating throttles intake AND depletion by the eatGate actuator', () => {
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.x[i] = 10;
+    s.y[i] = 10;
+    s.energy[i] = 5;
+    s.eatGate[i] = 0.5; // half-throttle (head half-up)
+    genes(s, i, cfg, { [ScalarGene.EAT_RATE]: 2 });
+    s.rebuildLive();
+    const food = new FoodField(W, H, 16, 16, 10, 1);
+    metabolize(s, food, hashOf(s), cfg, null);
+    expect(s.energy[i]).toBeCloseTo(5 + 1 - 0.4); // eat 2·0.5 = 1
+    expect(food.sampleAt(10, 10)).toBeCloseTo(9); // only 1 grazed — depletion scales with the gate too
+  });
+
+  it('brainGatedEating off ignores the eatGate (unconditional eating)', () => {
+    const cfgOff = defaultConfig({
+      basalCost: 0.4,
+      moveCost: 0.01,
+      satiatedThreshold: 1000,
+      brainGatedEating: false,
+    });
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.x[i] = 10;
+    s.y[i] = 10;
+    s.energy[i] = 5;
+    s.eatGate[i] = 0; // would zero intake IF gating were on
+    genes(s, i, cfgOff, { [ScalarGene.EAT_RATE]: 2 });
+    s.rebuildLive();
+    const food = new FoodField(W, H, 16, 16, 10, 1);
+    metabolize(s, food, hashOf(s), cfgOff, null);
+    expect(s.energy[i]).toBeCloseTo(5 + 2 - 0.4); // full eat 2 despite eatGate 0
+  });
+
   it('a satiated creature stops eating (leaves biomass for others)', () => {
     const s = new OrganismStore(4);
     const i = s.alloc();

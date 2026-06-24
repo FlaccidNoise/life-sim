@@ -299,11 +299,20 @@ export const Brain = {
   PHERO_FWD_TURN: 21,
   PHERO_LAT_THRUST: 22,
   PHERO_FWD_THRUST: 23,
+  // Eat-gate OUTPUT (slice B): a 0..1 sigmoid throttle on grazing intake that ALSO costs mobility (eating
+  // slows the body), so eating is a decision — graze (fed, slow, catchable) vs lift the head to flee. Reads
+  // food + sight + bias. Seeded to default-eat (high bias) with a threat→suppress weight so prey lift their
+  // heads when a predator is ahead, then evolution/learning refine it. Always present (on-by-default policy).
+  EAT_GATE_BIAS: 24,
+  EAT_GATE_FWD: 25, // food gradient fwd → eat more when food is ahead
+  EAT_GATE_LAT: 26,
+  EAT_GATE_SIGHT_FWD: 27, // appeal-signed sight fwd → keep eating toward appeal, lift head from a threat ahead
+  EAT_GATE_SIGHT_LAT: 28,
 } as const;
 /** Senses-core brain weights (food + sight) — the count present before walls/flow/hunger, and the RNG-draw
  *  count when all gated blocks are off. Each gated block extends the array but draws RNG only when on. */
 export const BRAIN_CORE_GENES = 10;
-export const BRAIN_GENES = 24;
+export const BRAIN_GENES = 29;
 
 /** Founder brain ≈ the hand-tuned chemotaxis controller (turn toward lateral food, thrust up-gradient,
  *  gentle cruise) + ACTIVE sight: turn toward & thrust along the appeal-signed sight vector. Because that
@@ -316,9 +325,12 @@ export const BRAIN_GENES = 24;
  *   SIGHT_LAT_TURN, SIGHT_FWD_TURN, SIGHT_LAT_THRUST, SIGHT_FWD_THRUST,
  *   WALL_LAT_TURN, WALL_FWD_TURN, WALL_LAT_THRUST, WALL_FWD_THRUST,
  *   FLOW_LAT_TURN, FLOW_FWD_TURN, FLOW_LAT_THRUST, FLOW_FWD_THRUST, HUNGER_TURN, HUNGER_THRUST,
- *   PHERO_LAT_TURN, PHERO_FWD_TURN, PHERO_LAT_THRUST, PHERO_FWD_THRUST]. The 4 phero weights seed at 0. */
+ *   PHERO_LAT_TURN, PHERO_FWD_TURN, PHERO_LAT_THRUST, PHERO_FWD_THRUST,
+ *   EAT_GATE_BIAS, EAT_GATE_FWD, EAT_GATE_LAT, EAT_GATE_SIGHT_FWD, EAT_GATE_SIGHT_LAT]. The 4 phero weights
+ *   seed at 0; the eat-gate seeds BIAS 4 (sigmoid≈0.98 → eat ~fully by default) + SIGHT_FWD 2 (a threat
+ *   ahead pulls the gate down → lift head + regain mobility), the rest 0 (evolve). */
 const FOUNDER_BRAIN: readonly number[] = [
-  1.2, 0, 0, 1.5, 0, 0.3, 1.0, 0, 0, 1.2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  1.2, 0, 0, 1.5, 0, 0.3, 1.0, 0, 0, 1.2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 2, 0,
 ];
 
 /** Seed a founder's genome: founder brain + Gaussian spread, random hue (lineage colors diverge).

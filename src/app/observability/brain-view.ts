@@ -20,6 +20,7 @@ export interface BrainInputNode {
   value: number; // live sensory value (heading frame)
   turnW: number; // learned weight → turn
   thrustW: number; // learned weight → thrust
+  eatW: number; // learned weight → eat-gate (0 for inputs the eat-gate doesn't read)
   turnInst: number; // genome instinct weight → turn
   thrustInst: number; // genome instinct weight → thrust
 }
@@ -31,7 +32,8 @@ export interface BrainState {
   turnRaw: number; // pre-clamp network sum → turn
   thrustRaw: number; // pre-clamp network sum → thrust
   turn: number; // applied turn (clamped to ±maxTurn gene)
-  thrust: number; // applied thrust (clamped [0,maxThrust], ×metabolic efficiency)
+  thrust: number; // applied thrust (reverse floor … maxThrust, ×metabolic efficiency, ×eat-gate penalty)
+  eatGate: number; // eat-gate output 0..1 (slice B): 1 = head-down eating (slow), 0 = head-up (full speed)
   drift: number; // Σ|learned − instinct| over all brain weights (within-life learning so far)
 }
 
@@ -61,25 +63,32 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
   const flFwd = fx * dx + fy * dy;
   const flLat = -fx * dy + fy * dx;
 
-  const node = (label: string, value: number, turnG: number, thrustG: number): BrainInputNode => ({
+  const node = (
+    label: string,
+    value: number,
+    turnG: number,
+    thrustG: number,
+    eatG: number | null = null, // eat-gate gene index, or null when this input doesn't feed the eat-gate
+  ): BrainInputNode => ({
     label,
     value,
     turnW: lb[b + turnG]!,
     thrustW: lb[b + thrustG]!,
+    eatW: eatG !== null ? lb[b + eatG]! : 0,
     turnInst: ib[b + turnG]!,
     thrustInst: ib[b + thrustG]!,
   });
 
   const inputs: BrainInputNode[] = [
-    node('food fwd', fwd, Brain.FWD_TURN, Brain.FWD_THRUST),
-    node('food lat', lat, Brain.LAT_TURN, Brain.LAT_THRUST),
-    node('sight fwd', sFwd, Brain.SIGHT_FWD_TURN, Brain.SIGHT_FWD_THRUST),
-    node('sight lat', sLat, Brain.SIGHT_LAT_TURN, Brain.SIGHT_LAT_THRUST),
+    node('food fwd', fwd, Brain.FWD_TURN, Brain.FWD_THRUST, Brain.EAT_GATE_FWD),
+    node('food lat', lat, Brain.LAT_TURN, Brain.LAT_THRUST, Brain.EAT_GATE_LAT),
+    node('sight fwd', sFwd, Brain.SIGHT_FWD_TURN, Brain.SIGHT_FWD_THRUST, Brain.EAT_GATE_SIGHT_FWD),
+    node('sight lat', sLat, Brain.SIGHT_LAT_TURN, Brain.SIGHT_LAT_THRUST, Brain.EAT_GATE_SIGHT_LAT),
     node('wall fwd', wFwd, Brain.WALL_FWD_TURN, Brain.WALL_FWD_THRUST),
     node('wall lat', wLat, Brain.WALL_LAT_TURN, Brain.WALL_LAT_THRUST),
     node('flow fwd', flFwd, Brain.FLOW_FWD_TURN, Brain.FLOW_FWD_THRUST),
     node('flow lat', flLat, Brain.FLOW_LAT_TURN, Brain.FLOW_LAT_THRUST),
-    node('bias', 1, Brain.TURN_BIAS, Brain.THRUST_BIAS),
+    node('bias', 1, Brain.TURN_BIAS, Brain.THRUST_BIAS, Brain.EAT_GATE_BIAS),
   ];
   // Hunger input only exists when the lever is on — mirror steer()'s gate so the picture matches the
   // sim (off: the term isn't summed at all, exactly as in steer()).
@@ -101,26 +110,41 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
   const maxTurn = store.scalarGenes[sg + ScalarGene.MAX_TURN]!;
   const maxThrust = store.scalarGenes[sg + ScalarGene.MAX_THRUST]!;
   const eff = store.scalarGenes[sg + ScalarGene.METAB_EFF]!;
-  // Same saturation branch as steer() (brain.ts) so the picture matches the sim under either mode.
+  // Same saturation branch as steer() (brain.ts) so the picture matches the sim under either mode, including
+  // the reverse floor (slice A) and the eat-gate thrust penalty (slice B).
+  const reverseFloor = cfg.reverseThrustFraction > 0 ? -cfg.reverseThrustFraction * maxThrust : 0;
   let turn: number;
   let thrust: number;
   if (cfg.motorSquash) {
     turn = maxTurn > 0 ? maxTurn * Math.tanh(turnRaw / maxTurn) : 0;
-    thrust = thrustRaw > 0 && maxThrust > 0 ? maxThrust * Math.tanh(thrustRaw / maxThrust) : 0;
+    thrust = maxThrust > 0 ? maxThrust * Math.tanh(thrustRaw / maxThrust) : 0;
+    if (thrust < reverseFloor) thrust = reverseFloor;
   } else {
     turn = turnRaw;
     if (turn > maxTurn) turn = maxTurn;
     else if (turn < -maxTurn) turn = -maxTurn;
     thrust = thrustRaw;
-    if (thrust < 0) thrust = 0;
+    if (thrust < reverseFloor) thrust = reverseFloor;
     else if (thrust > maxThrust) thrust = maxThrust;
   }
   thrust *= eff;
+  // Eat-gate (slice B): mirror steer() — eating throttles the body. Sigmoid gate from food + sight + bias.
+  let eatGate = 1;
+  if (cfg.brainGatedEating) {
+    const eatGateRaw =
+      lb[b + Brain.EAT_GATE_BIAS]! +
+      lb[b + Brain.EAT_GATE_FWD]! * fwd +
+      lb[b + Brain.EAT_GATE_LAT]! * lat +
+      lb[b + Brain.EAT_GATE_SIGHT_FWD]! * sFwd +
+      lb[b + Brain.EAT_GATE_SIGHT_LAT]! * sLat;
+    eatGate = 1 / (1 + Math.exp(-eatGateRaw));
+    thrust *= 1 - eatGate * cfg.eatMovePenalty;
+  }
 
   let drift = 0;
   for (let g = 0; g < BRAIN_GENES; g++) drift += Math.abs(lb[b + g]! - ib[b + g]!);
 
-  return { inputs, turnRaw, thrustRaw, turn, thrust, drift };
+  return { inputs, turnRaw, thrustRaw, turn, thrust, eatGate, drift };
 }
 
 // Edge thickness maps |weight| → [0,1] against this reference (weights are O(1–2)); purely cosmetic.
@@ -178,13 +202,18 @@ export class BrainView {
     const bot = h - 12 * dpr;
     const inN = st.inputs.length;
     const inY = (i: number): number => top + ((bot - top) * i) / (inN - 1);
-    const outY = (o: number): number => top + ((bot - top) * (o === 0 ? 1 : 2)) / 3;
+    const outY = (o: number): number => top + ((bot - top) * (o + 1)) / 4; // 3 outputs: turn, thrust, eat
     const nodeR = 5 * dpr;
 
     // Normalize edge activity so the most-active synapse this frame reads full-bright.
     let maxAct = 1e-6;
     for (const n of st.inputs) {
-      maxAct = Math.max(maxAct, Math.abs(n.value * n.turnW), Math.abs(n.value * n.thrustW));
+      maxAct = Math.max(
+        maxAct,
+        Math.abs(n.value * n.turnW),
+        Math.abs(n.value * n.thrustW),
+        Math.abs(n.value * n.eatW),
+      );
     }
     const edge = (
       ix: number,
@@ -210,6 +239,7 @@ export class BrainView {
       const iy = inY(i);
       edge(inX, iy, outX, outY(0), n.turnW, n.value * n.turnW);
       edge(inX, iy, outX, outY(1), n.thrustW, n.value * n.thrustW);
+      if (n.eatW !== 0) edge(inX, iy, outX, outY(2), n.eatW, n.value * n.eatW); // eat-gate edges (subset)
     }
 
     ctx.font = `${Math.round(10 * dpr)}px ui-monospace, monospace`;
@@ -249,13 +279,14 @@ export class BrainView {
     };
     drawOut(0, 'turn', st.turn);
     drawOut(1, 'thrust', st.thrust);
+    drawOut(2, 'eat', st.eatGate); // eat-gate output (slice B): 1 = head-down eating, 0 = head-up fleeing
 
     // Header: raw outputs + learning drift.
     ctx.fillStyle = 'rgba(150,170,190,0.8)';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillText(
-      `turn ${st.turnRaw.toFixed(2)}→${st.turn.toFixed(2)}  thrust ${st.thrustRaw.toFixed(2)}→${st.thrust.toFixed(2)}  drift ${st.drift.toFixed(2)}`,
+      `turn ${st.turnRaw.toFixed(2)}→${st.turn.toFixed(2)}  thrust ${st.thrustRaw.toFixed(2)}→${st.thrust.toFixed(2)}  eat ${st.eatGate.toFixed(2)}  drift ${st.drift.toFixed(2)}`,
       6 * dpr,
       6 * dpr,
     );
