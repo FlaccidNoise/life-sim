@@ -48,3 +48,19 @@ Give each **distribution histogram its own hue** from the shared palette, and ad
 **Spec:** `docs/superpowers/specs/2026-06-22-ui-visual-polish-design.md`
 
 ---
+
+### [APPROVED] Lineage / family-tree inspector — closeable modal overlay
+**Date:** 2026-06-23
+**Context:** No ancestry is stored in the sim core; lineage must be recorded UI-side from the
+read-only `config.onBirth` hook. Needed a way to inspect/follow a clicked creature's family tree.
+**Decision:** Add a closeable modal (mirroring the Legend's panel/pill idiom) showing the
+**ancestor spine** founder→selected (highlighted) + direct children + transitive dynasty count, with
+per-node hue/diet/gen/birth-tick/age. A pure-JS `lineage.ts` recorder buffers `onBirth` ints and
+snapshots birth genes in a post-step `commit()` (contract-safe); bounded by a ~50k-node cap that
+prunes dead-childless leaves while incremental counters keep dynasty totals exact. Opens via `t` +
+an inspector button; live tree nodes are clickable to re-inspect. Observation-only → determinism
+unchanged.
+**Alternatives considered:** Inline inspector section (too cramped for a tree); full descendant
+subtree / node-link canvas graph (unbounded depth, more work — YAGNI).
+**Spec:** `docs/superpowers/specs/2026-06-23-lineage-inspector-design.md`
+---

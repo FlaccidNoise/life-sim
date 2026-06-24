@@ -55,6 +55,7 @@ full design rationale lives in `docs/superpowers/specs/`.
 - 2026-06-22: Ship predation as an OFF-by-default bundle; accept the engine's hollow-hunting ceiling → [simulation-design.md](simulation-design.md)
 
 ## UI / Visualization
+- 2026-06-23: Lineage / family-tree inspector — closeable modal overlay → [ui-visualization.md](ui-visualization.md)
 - 2026-06-22: Dot encoding remap — trophic role → SHAPE (○◇△), color → "color-by" mode (lineage default, `c` cycles lineage/diet/energy); one `palette.ts` source of truth → [ui-visualization.md](ui-visualization.md)
 - 2026-06-22: Legend → floating/closeable/dynamic; distributions → distinct hues + 18-gene picker → [ui-visualization.md](ui-visualization.md)
 
