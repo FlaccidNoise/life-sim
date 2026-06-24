@@ -135,6 +135,15 @@ export class World {
         // near-wall pockets get channel A. Only consulted when foodChannelAWallTied is ON; passing it
         // unconditionally is harmless (the food field ignores it on the legacy path → byte-identical).
         (x, y) => this.walls.proximityAt(x, y),
+        // Migrating pockets: drift params + a FORKED velocity rng (stream 0x5eed, distinct from lever-C's
+        // 0xc) for the two per-channel directions. With fertilityDriftRate 0 the field draws NO velocity rng
+        // and never moves → byte-identical. The fork never advances this.rng → the organism stream is untouched.
+        cfg.fertilityDriftRate,
+        cfg.fertilityDriftInterval,
+        cfg.foodPocketDriftRateA,
+        cfg.foodPocketDriftRateB,
+        cfg.pocketDriftSpeed,
+        this.rng.fork(0x5eed),
       );
     } else {
       this.food.reset();
@@ -251,6 +260,11 @@ export class World {
     const s = this.store;
     s.rebuildLive();
     this.hash.build(s);
+    // MIGRATING POCKETS: advance the food-pocket centres (channel A slow along dirA, channel B normal along
+    // dirB) + periodically recarve the fertility map, BEFORE sense/metabolize so this tick perceives + eats
+    // the moved food. Gated: fertilityDriftRate 0 → no-op (byte-identical OFF). All velocity randomness was
+    // drawn from a forked rng at seed time, so this hot-loop call is RNG-free (the determinism contract).
+    if (cfg.fertilityDriftRate > 0) this.food.driftPockets(this.tick);
     // SENSE → THINK/ACT: perceive the food gradient (per-creature sense range) + SIGHT (nearby creatures
     // within the vision cone; uses the start-of-tick hash), then steer (per-creature genes; sets thrust).
     // Drifting sight-only parcels: spawn (forked RNG) + advect on the flow BEFORE the sight scan, so the

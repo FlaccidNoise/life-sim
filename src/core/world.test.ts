@@ -14,15 +14,11 @@ describe('World — Phase 0 determinism contract', () => {
     expect(a.stateHash()).toBe(b.stateHash());
   });
 
-  it('OFF-state golden hash: default config is byte-identical to the pre-feature engine', () => {
-    // Pins the load-bearing invariant: every new knob (per-pocket richness, deadWaterCost, founding-
-    // protection, food channels, …) defaults OFF → the seeded world is byte-identical to legacy. The
-    // comparative tests above would silently pass if a future edit reordered an RNG draw at the default;
-    // this one fails LOUDLY. Constant verified against the engine before these features (commit 55f899e).
-    const w = new World(defaultConfig({ seed: 3 }));
-    for (let t = 0; t < 1000; t++) w.step();
-    expect(w.stateHash()).toBe('a32e9375');
-  });
+  // RETIRED 2026-06-23: the frozen "default config matches the pre-feature engine" golden hash
+  // (was `a32e9375`). The off-by-default ablation gate is gone — new features now ship ON by default, so
+  // the default world is SUPPOSED to move as features land (see docs/decisions/INDEX.md → Conventions).
+  // The surviving invariant is determinism: same (config, seed) → same hash, asserted by the first test
+  // above. Per-config reproducibility, not a frozen baseline, is what we pin.
 
   it('different seeds → different hash (seed actually controls the world)', () => {
     const a = new World(defaultConfig({ seed: 3 }));
@@ -183,6 +179,48 @@ describe('World — Phase 0 determinism contract', () => {
     }
     expect(a.stateHash()).toBe(b.stateHash()); // same (config, seed) → byte-identical
     expect(a.stateHash()).not.toBe(def.stateHash()); // the F1 genes draw → diverges from 1-channel default
+  });
+
+  it('fertilityDriftRate OFF is byte-identical to default; ON perturbs the world (migrating pockets gate)', () => {
+    const baseline = new World(defaultConfig({ seed: 1 }));
+    const off = new World(defaultConfig({ seed: 1, fertilityDriftRate: 0 }));
+    const on = new World(defaultConfig({ seed: 1, fertilityDriftRate: 1 }));
+    for (let t = 0; t < 1000; t++) {
+      baseline.step();
+      off.step();
+      on.step();
+    }
+    // explicit OFF == default → the drift machinery (forked velocity rng + recarve) is genuinely off-by-default
+    expect(off.stateHash()).toBe(baseline.stateHash());
+    // ON diverges → the pockets actually migrate + recarve, so the food field (sim state) changes
+    expect(on.stateHash()).not.toBe(baseline.stateHash());
+  }, 60000); // 3 full 8192² worlds × 1000 ticks (the ON one recarves 50×) → headroom over the 20s default
+
+  it('fertilityDriftRate ON leaves the ORGANISM RNG stream byte-identical (forked velocity rng)', () => {
+    // The cardinal guarantee: pocket-drift velocity randomness is on its OWN forked rng (stream 0x5eed), so
+    // turning drift on must NOT advance world.rng or shift any organism draw at a fixed tick. The food field
+    // (which the drift moves) is the ONLY thing that may differ — the organism kinematics/energy must be
+    // bit-for-bit identical to OFF (mirrors the parcels test). Compared at tick 200 before the field has fed
+    // back into organism positions enough to diverge via energy intake? No — the moved food DOES change what
+    // creatures eat, which changes their energy + steering. So this asserts only the seeding contract: the
+    // RNG STATE and the live-slot set are untouched at the FIRST tick (before drift has carved anything new —
+    // tick 0 driftPockets is a no-op), proving the fork never consumed world.rng during construction.
+    const off = new World(defaultConfig({ seed: 7, fertilityDriftRate: 0 }));
+    const on = new World(defaultConfig({ seed: 7, fertilityDriftRate: 1 }));
+    // At construction the only drift cost is the forked direction draw — it must NOT touch world.rng.
+    expect(on.rng.state).toBe(off.rng.state);
+    expect(on.store.liveCount).toBe(off.store.liveCount);
+    const a = off.store;
+    const b = on.store;
+    for (let k = 0; k < a.liveCount; k++) {
+      const i = a.liveIndices[k]!;
+      const j = b.liveIndices[k]!;
+      expect(j).toBe(i); // same founders in the same slots → seeding stream byte-identical
+      expect(b.x[j]).toBe(a.x[i]);
+      expect(b.y[j]).toBe(a.y[i]);
+      expect(b.energy[j]).toBe(a.energy[i]);
+      expect(b.genId[j]).toBe(a.genId[i]);
+    }
   });
 
   it('reset() reproduces the seeded run byte-for-byte', () => {

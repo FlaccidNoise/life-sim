@@ -298,6 +298,27 @@ export interface Config {
 
   // ── F2 identity-bearing scent (a 4-channel deposit-and-sense field; pheromoneEnabled master switch) ──
   /** Master switch for the ScentField + the 16 PHERO brain genes + PHERO_DEPOSIT scalar gene. false =
+  // ── Migrating food pockets (the pocket CENTRES drift over time so food moves; OFF default = byte-identical) ──
+  /** Master multiplier on pocket drift. 0 (default) = pockets are STATIC: driftPockets is a no-op, no
+   *  forked velocity RNG is drawn, no recarve runs → byte-identical to a fixed archipelago (the OFF state).
+   *  >0 scales every pocket's per-tick displacement: each channel's pockets sweep COHERENTLY along their own
+   *  global direction (dirA / dirB), so the two resource zones cross and rearrange. The forked velocity RNG
+   *  (seeded independently) draws the two directions, so the MAIN organism stream is untouched even when ON. */
+  fertilityDriftRate: number;
+  /** Recarve cadence: the fertility map + channelMask + Kcell are rebuilt from the moved pocket centres every
+   *  this-many ticks (NOT every tick — 40 Gaussians × 128² is ~650k exp). Biomass keeps regrowing/decaying in
+   *  place between recarves, so the pocket visibly migrates. Only read when fertilityDriftRate>0. */
+  fertilityDriftInterval: number;
+  /** Channel-A pocket drift rate multiplier (the SLOW seasonal current). Default 0.2 = A pockets creep. */
+  foodPocketDriftRateA: number;
+  /** Channel-B pocket drift rate multiplier (the NORMAL seasonal current). Default 1.0 = B pockets sweep. */
+  foodPocketDriftRateB: number;
+  /** Base pocket drift speed in world units/tick the per-channel rate scales. The displacement applied at a
+   *  recarve is pocketDriftSpeed · fertilityDriftRate · rate(channel) · fertilityDriftInterval along dir. */
+  pocketDriftSpeed: number;
+
+  // ── F2 pheromones (a diffusing deposit-and-sense field; OFF default pheromoneEnabled=false = byte-identical) ──
+  /** Master switch for the pheromone field + the 4 PHERO brain genes + PHERO_DEPOSIT scalar gene. false =
    *  the field is never allocated, the genes never draw RNG, and the sim is byte-identical to pre-feature. */
   pheromoneEnabled: boolean;
   /** PHERO_DEPOSIT gene center: baseline deposit loudness a creature broadcasts. Only drawn when enabled. */
@@ -360,6 +381,10 @@ export interface Config {
    *  the applied motor output — the eligibility trace still uses the pre-shaping raw signal, so within-life
    *  learning is unchanged. OFF by default so the determinism hash is byte-identical until you opt in. */
   motorSquash: boolean;
+  /** Fraction of MAX_THRUST a creature may apply in REVERSE (backward force). 0 = forward-only (legacy
+   *  motor); 0.5 = can back away from a threat at half forward power while still facing it. This is its
+   *  OWN ablation knob — set to 0 and the motor is byte-identical to the pre-reverse engine. */
+  reverseThrustFraction: number;
 
   // ── Walls (env pass 1) ─────────────────────────────────────────────────────
   /** FINE wall-grid resolution (decoupled from the food grid for creature-scale nooks). */
@@ -416,6 +441,19 @@ export interface Config {
   parcelAppeal: number;
   /** Eat radius (world units): a creature within this of a live parcel consumes it for parcelEnergy. */
   parcelEatRange: number;
+  /** CLUSTERED parcel spawning: spawn parcels in a few drifting hotspots instead of uniformly, so a
+   *  creature's see-farther annulus sometimes overlaps a dense jackpot a short-range creature misses
+   *  (a cluster's summed weak-pulls is a strong far-beacon that defeats the (1−d/range) falloff) — the
+   *  lever that makes VISION_RANGE pay at 8192². false (default) = parcels spawn at a UNIFORM world
+   *  position (the 2-draw legacy path), so cluster RNG never advances and the parcel stream is identical
+   *  to pre-clustering → byte-identical OFF ablation. Only ever active when parcelsEnabled. */
+  parcelClustering: boolean;
+  /** Number of spawn hotspots when parcelClustering is on (cluster centers drawn once from the parcel
+   *  forked RNG at construction; static for now — parcels still drift away from their center). */
+  parcelClusterCount: number;
+  /** Cluster radius (world units): a spawned parcel lands uniformly in a disk of this radius about its
+   *  chosen cluster center (then toroidally wrapped). */
+  parcelClusterRadius: number;
 
   // ── Interoceptive hunger brain input (lever E2 — ablation knob; OFF by default = byte-identical) ───
   /** Adds a HUNGER sense to the brain: a creature feels its own energy deficit (1 − energy/satiatedBar,
@@ -606,6 +644,15 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     foodChannelAWallTied: false, // ch2-diff OFF: legacy round-robin channel assignment → byte-identical
     foodChannelBDriftMult: 1, // ch2-diff OFF: uniform advection across channels → byte-identical
     // F2 identity-bearing scent (master OFF here; the demo turns pheromoneEnabled on — on-by-default policy).
+    // Migrating food pockets (OFF default: fertilityDriftRate=0 → driftPockets no-ops, no forked velocity RNG,
+    // no recarve → byte-identical to the static archipelago). Flip on to make the pockets MOVE: channel-A
+    // pockets creep along dirA (slow), channel-B pockets sweep along dirB (normal) — two crossing currents.
+    fertilityDriftRate: 0,
+    fertilityDriftInterval: 20, // recarve every 20 ticks (cheap: ~650k exp / 20 ticks ≈ 33k exp/tick)
+    foodPocketDriftRateA: 0.2, // channel A creeps (the slow seasonal current)
+    foodPocketDriftRateB: 1.0, // channel B sweeps at the normal rate
+    pocketDriftSpeed: 0.6, // base world-units/tick the per-channel rate scales
+    // F2 pheromones (OFF default: pheromoneEnabled=false → field never allocated, genes never draw → no-op).
     pheromoneEnabled: false,
     pheroDeposit: 1.0, // PHERO_DEPOSIT gene center (deposit loudness)
     pheroDepositCost: 0.01, // upkeep per unit above center
@@ -637,6 +684,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     // Steering output shaping: OFF = hard clamp (current behavior, byte-identical hash). Flip on to
     // smoothly tanh-squash turn/thrust → graded, legible steering (kills the motor-saturation spin).
     motorSquash: false,
+    reverseThrustFraction: 0.5, // ON by default: creatures can back away at half forward power
 
     // Walls: 5 biome regions over a 512² fine grid (16u cells), ~35% solid, vision-occluding.
     // Default OFF (wallRegionCount 0) so defaultConfig stays a TRUE no-op — byte-identical to the
@@ -669,6 +717,12 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     parcelDriftMult: 1, // drift at the full local flow velocity (needs flowStrength>0 to actually move)
     parcelAppeal: 1, // sight pull toward a parcel (≈ the creature-appeal scale)
     parcelEatRange: 8, // intercept reach to consume a parcel
+    // Clustered parcel spawning: OFF by default (uniform spawn = the 2-draw legacy path, cluster RNG never
+    // advances) → byte-identical. Flip on (with parcelsEnabled) to concentrate the same parcel budget into a
+    // few hotspots so seeing FAR to spot a distant jackpot pays — the lever that revives VISION_RANGE.
+    parcelClustering: false,
+    parcelClusterCount: 8, // spawn hotspots when clustering is on
+    parcelClusterRadius: 120, // parcels land within this radius (world units) of a cluster center
     // Interoceptive hunger brain input (lever E2): OFF = byte-identical (hunger synapses unseeded/unread).
     // Flip on to give the brain its own energy-deficit sense, evolving from a neutral 0.
     hungerSense: false,
