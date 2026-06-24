@@ -10,6 +10,8 @@ import {
   HIDDEN_OUTPUTS,
   HIDDEN_W1,
   HIDDEN_W2,
+  GLOW_BIAS,
+  GLOW_HID,
 } from './genome';
 import { steer, learn } from './brain';
 
@@ -300,6 +302,57 @@ describe('steer (per-creature brain)', () => {
     }
     expect(s.learnedBrain[w1Idx]!).toBe(s.brain[w1Idx]!); // input→hidden frozen (evolved-only, no credit path)
     expect(s.learnedBrain[w2Idx]!).not.toBe(s.brain[w2Idx]!); // hidden→output consolidated within life
+  });
+
+  it('mood-glow output = sigmoid of the hidden layer (display-only, does not move the body); off → 0', () => {
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.heading[i] = 0;
+    s.senseX[i] = 1; // drives hidden unit 0
+    setBrain(s, i, {});
+    const b = i * BRAIN_GENES;
+    s.brain[b + HIDDEN_W1 + 0 * HIDDEN_UNITS + 0] = 2; // input0 → hidden0 → h0 = tanh(2)
+    s.brain[b + GLOW_BIAS] = 0; // clean baseline for the expected value (override the dim default)
+    s.brain[b + GLOW_HID + 0] = 3; // hidden0 → glow, weight 3
+    s.resetLearned(i);
+    s.rebuildLive();
+    const fx0 = s.forceX[i];
+    steer(s, false, 0.2, false, defaultConfig({ moodGlow: true }));
+    expect(s.glow[i]!).toBeCloseTo(1 / (1 + Math.exp(-3 * Math.tanh(2)))); // sigmoid(GLOW_BIAS + h0·3)
+    // glow is display-only — it must not have perturbed the motor relative to a no-glow run.
+    const sNoGlow = new OrganismStore(4);
+    const k = sNoGlow.alloc();
+    sNoGlow.heading[k] = 0;
+    sNoGlow.senseX[k] = 1;
+    setBrain(sNoGlow, k, {});
+    sNoGlow.brain[k * BRAIN_GENES + HIDDEN_W1 + 0 * HIDDEN_UNITS + 0] = 2;
+    sNoGlow.resetLearned(k);
+    sNoGlow.rebuildLive();
+    steer(sNoGlow, false, 0.2, false, defaultConfig({ moodGlow: false }));
+    expect(s.forceX[i]!).toBe(sNoGlow.forceX[k]!); // motor identical with glow on vs off
+    expect(fx0).toBe(0);
+    // off → glow not computed (stays 0)
+    s.glow[i] = 0;
+    steer(s, false, 0.2, false, defaultConfig({ moodGlow: false }));
+    expect(s.glow[i]!).toBe(0);
+  });
+
+  it('different hidden→glow weights glow differently for the same state (lineage divergence)', () => {
+    const glowWith = (w: number): number => {
+      const s = new OrganismStore(4);
+      const i = s.alloc();
+      s.heading[i] = 0;
+      s.senseX[i] = 1;
+      setBrain(s, i, {});
+      const b = i * BRAIN_GENES;
+      s.brain[b + HIDDEN_W1 + 0 * HIDDEN_UNITS + 0] = 2; // same hidden encoding…
+      s.brain[b + GLOW_HID + 0] = w; // …different glow wiring
+      s.resetLearned(i);
+      s.rebuildLive();
+      steer(s, false, 0.2, false, defaultConfig({ moodGlow: true }));
+      return s.glow[i]!;
+    };
+    expect(glowWith(3)).not.toBeCloseTo(glowWith(-3)); // opposite glow triggers → different glow
   });
 
   it('a positive WALL_FWD_THRUST weight converts a forward wall-gradient into forward thrust', () => {

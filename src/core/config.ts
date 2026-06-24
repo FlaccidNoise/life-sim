@@ -403,6 +403,11 @@ export interface Config {
    *  is close AND I'm cornered"). Off = the pure linear brain (the hidden forward pass is skipped). The
    *  hidden weights always exist in the genome either way; this just toggles whether they're computed. */
   hiddenLayer: boolean;
+  /** Mood-glow (slice F): when on, a glow brain output = sigmoid(GLOW_BIAS + Σ hidden·GLOW_HID) reads the
+   *  hidden "mood" layer and drives bioluminescence brightness, so you can scan the population and see which
+   *  creatures are "lit up". Display-only + evolve-only; hidden→glow weights diverge per lineage, so different
+   *  species glow for different reasons. Off = no glow output computed. */
+  moodGlow: boolean;
 
   // ── Walls (env pass 1) ─────────────────────────────────────────────────────
   /** FINE wall-grid resolution (decoupled from the food grid for creature-scale nooks). */
@@ -673,6 +678,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     ageNorm: 1000, // ~average lifespan at the shipped economy → maturity reaches ~1 near mid-late life
     readinessSense: true, // ON by default: the brain can sense how close it is to breeding (the repro band)
     hiddenLayer: true, // ON by default: the nonlinear hidden layer (conditional logic — the emergent-behavior substrate)
+    moodGlow: true, // ON by default: bioluminescence read from the hidden mood layer (display + comms signal)
 
     // Walls: 5 biome regions over a 512² fine grid (16u cells), ~35% solid, vision-occluding.
     // Default OFF (wallRegionCount 0) so defaultConfig stays a TRUE no-op — byte-identical to the
