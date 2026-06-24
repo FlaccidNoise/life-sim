@@ -187,12 +187,14 @@ function availableFoodLayers(): FoodLayer[] {
   return ring;
 }
 
-/** Advance foodLayer to the next existing layer (skips blanks), then refresh the HUD label. */
-function cycleFoodLayer(): void {
+/** Step foodLayer to the next (dir=+1) or previous (dir=−1) existing layer (skips blanks), then refresh
+ *  the HUD label. 'f' steps forward, Shift+F steps backward. */
+function cycleFoodLayer(dir = 1): void {
   const ring = availableFoodLayers();
   const cur = ring.indexOf(foodLayer);
   // If the current layer vanished (e.g. a reset dropped a channel), restart the ring at off.
-  foodLayer = ring[(cur < 0 ? 0 : cur + 1) % ring.length]!;
+  const next = cur < 0 ? 0 : (cur + dir + ring.length) % ring.length;
+  foodLayer = ring[next]!;
   foodLayerLabel.textContent = FOOD_LAYER_NAMES[foodLayer] ?? 'off';
 }
 foodLayerLabel.textContent = FOOD_LAYER_NAMES[foodLayer] ?? 'off';
@@ -431,7 +433,7 @@ globalThis.addEventListener('resize', () => renderer.resize());
 
 // 'f' cycle food/field layer · 'w' wall layer · 'o' creature overlay · 'v' flow arrows · 'c' cycle dot color-mode · 'l' lock follow-cam + record.
 globalThis.addEventListener('keydown', (e) => {
-  if (e.key === 'f' || e.key === 'F') cycleFoodLayer();
+  if (e.key === 'f' || e.key === 'F') cycleFoodLayer(e.shiftKey ? -1 : 1); // Shift+F steps backward
   if (e.key === 'w' || e.key === 'W') showWalls = !showWalls;
   if (e.key === 'o' || e.key === 'O') showOverlay = !showOverlay;
   if (e.key === 'v' || e.key === 'V') showFlow = !showFlow;
