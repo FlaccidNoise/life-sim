@@ -174,6 +174,14 @@ export const DEMO_OVERRIDES: Partial<Config> = {
   bodySense: false, // RESILIENCE: bodySense CRASHES the demo — seed-1 end-pop 8 → 931, 1/8 extinction gone,
   // mean end-pop 226 → 347 (8 seeds). The size/diet interoceptive inputs were scale-walled yet tank survival.
   breedCooldown: 150,
+  // Migrating pockets (MIRROR FIX — these live in main.ts but had drifted OUT of this headless mirror, so the
+  // probe was measuring a STATIC-food world that's easier than the live demo). Food zones rearrange over time
+  // so creatures must follow the food (kills the "camp on a fixed gradient forever" equilibrium).
+  fertilityDriftRate: 1,
+  fertilityDriftInterval: 20,
+  foodPocketDriftRateA: 0.2,
+  foodPocketDriftRateB: 1.0,
+  pocketDriftSpeed: 0.6,
   // Age / life stages (life-sim-bd8a): juvenile breed-lock + elder senescence tax + costed longevity gene.
   ageStages: true,
 };
