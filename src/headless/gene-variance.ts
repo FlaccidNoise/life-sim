@@ -60,6 +60,7 @@ const GENE_LABELS: readonly string[] = [
   'senseRangeB',
   'senseRangeC',
   'pheroDeposit',
+  'damping',
 ];
 if (GENE_LABELS.length !== SCALAR_GENE_COUNT) {
   throw new Error(
