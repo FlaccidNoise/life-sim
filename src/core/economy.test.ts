@@ -710,6 +710,32 @@ describe('hunt (predation)', () => {
       expect(s.energy[pred]).toBeCloseTo(20 + 5 * cfg.predationGain); // 0.15×0 = 0 → same as OFF
     });
   });
+
+  it('brain-gated bite: biteGate 0 → no drain, biteGate 1 → full drain (A2a)', () => {
+    // A diet-1 predator above a diet-0 prey, within biteRange. With brainGatedBiting ON, the drain
+    // scales by biteGate: a shut gate (0) bites nothing, an open gate (1) lands the full bite.
+    const gated = { ...cfg, brainGatedBiting: true };
+    const preyEnergyAfter = (gate: number): number => {
+      const s = new OrganismStore(4);
+      const pred = s.alloc();
+      const prey = s.alloc();
+      s.x[pred] = 50;
+      s.y[pred] = 50;
+      s.energy[pred] = 50;
+      s.x[prey] = 54; // 4 units away, within biteRange 12
+      s.y[prey] = 50;
+      s.energy[prey] = 50;
+      genes(s, pred, cfg, { [ScalarGene.DIET]: 1, [ScalarGene.DAMAGE]: 5, [ScalarGene.SIZE]: 10 });
+      genes(s, prey, cfg, { [ScalarGene.DIET]: 0, [ScalarGene.SIZE]: 5 });
+      s.biteGate[pred] = gate;
+      s.biteGate[prey] = gate;
+      s.rebuildLive();
+      hunt(s, mkHash(s), gated);
+      return s.energy[prey]!;
+    };
+    expect(preyEnergyAfter(0)).toBe(50); // gate shut → no bite, prey untouched
+    expect(preyEnergyAfter(1)).toBeLessThan(50); // gate open → bite lands
+  });
 });
 
 describe('cullDead', () => {

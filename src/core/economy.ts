@@ -63,7 +63,8 @@ function wrapDelta(d: number, size: number): number {
 export function hunt(store: OrganismStore, hash: SpatialHash, cfg: Config): void {
   const { biteRange, worldWidth, worldHeight, cannibalism, predationGain, huntSizeRatio } = cfg;
   const { counterBiteFraction } = cfg;
-  const { liveIndices, liveCount, x, y, energy, scalarGenes } = store;
+  const { liveIndices, liveCount, x, y, energy, scalarGenes, biteGate } = store;
+  const brainGatedBiting = cfg.brainGatedBiting;
   const { cols, rows, bucketStart, sorted } = hash;
   const range2 = biteRange * biteRange;
   // Scan a hash neighborhood that actually covers biteRange (was a fixed 3×3 = ±1 cell, so any bite
@@ -109,8 +110,9 @@ export function hunt(store: OrganismStore, hash: SpatialHash, cfg: Config): void
       }
     }
     if (best < 0) continue; // nothing in reach
-    const drain = Math.min(scalarGenes[sg + ScalarGene.DAMAGE]! * diet, energy[best]!);
-    if (drain <= 0) continue; // toothless, or prey already drained to nothing this tick
+    let drain = Math.min(scalarGenes[sg + ScalarGene.DAMAGE]! * diet, energy[best]!);
+    if (brainGatedBiting) drain *= biteGate[i]!; // brain decides the strike (×1 when off = byte-identical)
+    if (drain <= 0) continue; // toothless, gate shut, or prey already drained to nothing this tick
     energy[best] = energy[best]! - drain;
     // Meat is concentrated energy: the predator absorbs the drain × predationGain. With gain > 1 this
     // deliberately CREATES energy (not strictly conserved) so hunting is a big payoff vs. grazing — the
