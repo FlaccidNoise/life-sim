@@ -149,8 +149,11 @@ export const DEMO_OVERRIDES: Partial<Config> = {
   flowPushStrength: 0.25,
   motorSquash: true,
   // Density + two differentiated resources (channel A wall-tied, B drifting) + parcels (vision-revival).
-  foodPatchCount: 40,
-  foodPatchRadius: 8,
+  // B-food-2: separate A/B patches (mode 1), blobbier (radius 8→14). count 40→24 (NOT the plan's 20: 20 went
+  // extinct on 2/3 seeds by 8000t — sparser drifting pockets strand the population; 24 is the measured floor
+  // that holds liveness at 8000t across 5 seeds while staying sparser+blobbier than 40/8). MUST mirror main.ts.
+  foodPatchCount: 24,
+  foodPatchRadius: 14,
   foodChannels: 2,
   foodPocketChannelMode: 1,
   foodChannelAWallTied: true,

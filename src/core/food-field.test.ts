@@ -865,4 +865,61 @@ describe('FoodField — migrating pockets (drifting centres)', () => {
     expect(mk(false)).toBeLessThanOrEqual(2); // per-channel: ≤ 2 global directions (here all channel A → 1)
     expect(mk(true)).toBeGreaterThan(2); // per-pocket: many distinct directions
   });
+
+  it('per-pocket drift keeps per-channel SPEED: A-pockets drift slower than B-pockets (mode 1) (B-food-2)', () => {
+    // channels=2, pocketChannelMode=1 → pockets alternate A/B (p%2). perPocketDrift=true gives each pocket its
+    // OWN direction, but the per-channel SPEED still applies: driftRateA (0.1) << driftRateB (1.0). So A-pockets
+    // must move less on average than B-pockets — the reviewer's B-food-1 gap (per-pocket DIR, per-channel SPEED).
+    const W = 1024;
+    const H = 1024;
+    const COUNT = 8;
+    const DRIFT_INTERVAL = 20;
+    // 8 spread-out centres (pc, pr per pocket); mode-1 round-robin → even=A, odd=B.
+    const centres = [
+      0.1, 0.1, 0.2, 0.6, 0.35, 0.85, 0.5, 0.2, 0.6, 0.7, 0.75, 0.4, 0.85, 0.9, 0.95, 0.15,
+    ];
+    const perPocketVels: number[] = [];
+    for (let p = 0; p < COUNT; p++) perPocketVels.push((p / COUNT + 0.07) % 1); // distinct angle per pocket
+    const f = new FoodField(W, H, 128, 128, K, 1, 2, 0.5, 1); // channels=2 mode 1
+    f.seedPatches(
+      COUNT,
+      4,
+      0,
+      new QueueRng(centres),
+      1,
+      0,
+      1,
+      0,
+      undefined,
+      undefined,
+      1, // driftRate > 0 → drift engages
+      DRIFT_INTERVAL,
+      0.1, // rateA small (channel A creeps)
+      1, // rateB large (channel B sweeps)
+      0.6,
+      velRng(...perPocketVels),
+      true, // perPocketDrift ON → per-pocket DIRECTION, per-channel SPEED
+    );
+    const before = f.patchCenters.map((c) => ({ x: c.x, y: c.y }));
+    // Classify each pocket by which channel carries biomass at its centre (even index → A under mode-1 round-robin).
+    const chanOf = f.patchCenters.map((c) => (f.sampleAt(c.x, c.y) >= f.sampleAt2(c.x, c.y) ? 0 : 1));
+    for (let t = 0; t <= DRIFT_INTERVAL * 10; t++) f.driftPockets(t);
+    let aSum = 0;
+    let aN = 0;
+    let bSum = 0;
+    let bN = 0;
+    f.patchCenters.forEach((c, i) => {
+      const d = toroDisp(before[i]!.x, before[i]!.y, c.x, c.y, W, H);
+      if (chanOf[i] === 0) {
+        aSum += d.mag;
+        aN++;
+      } else {
+        bSum += d.mag;
+        bN++;
+      }
+    });
+    expect(aN).toBeGreaterThan(0);
+    expect(bN).toBeGreaterThan(0);
+    expect(aSum / aN).toBeLessThan(bSum / bN); // A (rate 0.1) drifts less than B (rate 1.0) — LOAD-BEARING
+  });
 });
