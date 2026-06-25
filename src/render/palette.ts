@@ -135,6 +135,17 @@ export function scentTintRgb(channel: number): RGB {
   return tintRgb01(SCENT_HUE[channel] ?? 0.5);
 }
 
+// ── Metabolic-efficiency saturation (freed from vision-range; see creature-visuals spec) ──────────
+// Eye SIZE now carries vision range, so colour saturation is reassigned to METAB_EFF: efficient
+// creatures are vivid, inefficient ones washed-out. `fear` (from diet) nudges the ceiling so
+// predators read a touch more saturated. The Tier-0 GLSL mirrors this exact formula.
+export const METAB_MIN = 0.5;
+export const METAB_MAX = 1.5;
+
+export function metabSaturation(metab: number, fear: number): number {
+  return clamp01((fear > 0.5 ? 0.85 : 0.72) * (0.6 + 0.4 * ((metab - 0.5) * 2)));
+}
+
 // ── Distribution field hues ───────────────────────────────────────────────────────────────────
 // A stable, perceptually-spread hue per field (golden-angle so adjacent indices look distinct).
 // Keyed by the field's index in the registry, NOT its position in the selected set, so a field keeps

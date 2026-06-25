@@ -12,6 +12,7 @@ import { defaultConfig, type Config } from '../core/config';
 import { scanHealth } from '../core/health';
 import { Renderer, ColorMode, FoodLayer } from '../render/renderer';
 import { buildOverlaySegments } from '../render/overlay';
+import { DetailOverlay } from '../render/detail-overlay';
 import { Controls } from './observability/controls';
 import { SettingsModal } from './observability/settings-modal';
 import { GuideModal } from './observability/guide-modal';
@@ -137,6 +138,8 @@ try {
 // zero sim impact; toggle live with 'g'.
 renderer.setGlow(true, 1);
 
+const overlay = new DetailOverlay(canvas, config.worldWidth, config.worldHeight);
+
 const graph = new TimeSeriesGraph(el<HTMLCanvasElement>('graph'), [
   { label: 'pop', color: '#8ad9f2' }, // cyan
   { label: 'food', color: '#7fe0a0' }, // green
@@ -174,6 +177,7 @@ let foodLayer: FoodLayer = FoodLayer.TOTAL;
 let showWalls = true; // wall slate layer (toggle with 'w')
 let showOverlay = true; // per-creature debug overlay on the selection (toggle with 'o')
 let showFlow = false; // flow-field current arrows (toggle with 'v') — OFF by default; the current's effect reads in the drifting food, the arrow overlay is opt-in
+let showCone = false; // vision cones on the detail overlay (toggle with 'e')
 let colorMode: ColorMode = ColorMode.LINEAGE; // dot hue source (cycle with 'c'): lineage → diet → energy → forage
 let selected: { slot: number; gen: number } | null = null;
 
@@ -545,9 +549,12 @@ globalThis.addEventListener('mouseup', (e) => {
   dragging = false;
 });
 
-globalThis.addEventListener('resize', () => renderer.resize());
+globalThis.addEventListener('resize', () => {
+  renderer.resize();
+  overlay.resize();
+});
 
-// 'f' cycle food/field layer · 'w' wall layer · 'o' creature overlay · 'v' flow arrows · 'c' cycle dot color-mode · 'l' lock follow-cam + record.
+// 'f' cycle food/field layer · 'w' wall layer · 'o' creature overlay · 'v' flow arrows · 'e' vision cones · 'c' cycle dot color-mode · 'l' lock follow-cam + record.
 globalThis.addEventListener('keydown', (e) => {
   // Ignore shortcuts while typing in a field (the settings seed input, speed select, etc.).
   const tgt = e.target as HTMLElement | null;
@@ -557,6 +564,10 @@ globalThis.addEventListener('keydown', (e) => {
   if (e.key === 'w' || e.key === 'W') actWalls();
   if (e.key === 'o' || e.key === 'O') actOverlay();
   if (e.key === 'v' || e.key === 'V') actFlow();
+  if (e.key === 'e' || e.key === 'E') {
+    showCone = !showCone;
+    overlay.setShowCone(showCone);
+  }
   if (e.key === 'g' || e.key === 'G') actGlow(); // bioluminescence
   if (e.key === 'c' || e.key === 'C') actColor();
   if (e.key === 'l' || e.key === 'L') toggleFollow();
@@ -675,6 +686,8 @@ function frame(): void {
     }
     if (v >= 2) renderer.drawLines(parcelScratch, v);
   }
+  overlay.setCamera(camX, camY, zoom);
+  overlay.draw(world.store);
   // Path trail of the followed creature (fading old→new; seam-crossing segments skipped so toroidal
   // wraps don't streak). A tight loop = spinning in place; a directed line = foraging.
   if (showOverlay && recorder.following && trailX.length > 1) {
@@ -773,10 +786,7 @@ function frame(): void {
   // Trailing 100-tick rates: append this frame's cumulative sample, drop samples beyond the window
   // (keeping the one that still spans it), then average per tick over the covered span.
   vitalSamples.push({ tick: world.tick, b: world.totalBirths, d: world.totalDeaths });
-  while (
-    vitalSamples.length > 2 &&
-    world.tick - vitalSamples[1]!.tick >= VITAL_WINDOW_TICKS
-  ) {
+  while (vitalSamples.length > 2 && world.tick - vitalSamples[1]!.tick >= VITAL_WINDOW_TICKS) {
     vitalSamples.shift();
   }
   const head = vitalSamples[0]!;

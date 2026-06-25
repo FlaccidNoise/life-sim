@@ -9,6 +9,9 @@ import {
   energyColor,
   fieldHue,
   fieldColor,
+  metabSaturation,
+  METAB_MIN,
+  METAB_MAX,
   DIET_HUE_HERB,
   DIET_HUE_OMNI,
   DIET_HUE_PRED,
@@ -119,6 +122,21 @@ describe('glow core (GLSL drift guard)', () => {
       expect(c).toBeGreaterThanOrEqual(0);
       expect(c).toBeLessThanOrEqual(1);
     }
+  });
+});
+
+describe('metabSaturation (Tier-0 ↔ Tier-1/2 lockstep)', () => {
+  it('rises with metabolic efficiency', () => {
+    const lo = metabSaturation(METAB_MIN, 0);
+    const hi = metabSaturation(METAB_MAX, 0);
+    expect(hi).toBeGreaterThan(lo);
+  });
+  it('is clamped to [0,1]', () => {
+    expect(metabSaturation(10, 1)).toBeLessThanOrEqual(1);
+    expect(metabSaturation(-10, 0)).toBeGreaterThanOrEqual(0);
+  });
+  it('fearsome creatures are more saturated at equal metab', () => {
+    expect(metabSaturation(1, 1)).toBeGreaterThan(metabSaturation(1, 0));
   });
 });
 
