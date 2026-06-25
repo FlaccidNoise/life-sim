@@ -82,6 +82,16 @@ describe('scanHealth', () => {
     expect(r.violations.some((v) => v.kind === 'gene' && v.field.includes('diet'))).toBe(true);
   });
 
+  it('does not flag a gene resting exactly at its hard clamp cap (Float32 rounding)', () => {
+    const w = smallWorld();
+    const i = w.store.liveIndices[0]!;
+    // DAMPING max is 0.98, which is not exactly representable in Float32 — the store rounds it to
+    // ~0.98000001907, a hair above the double bound. The eps must absorb that, not flag it.
+    w.store.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.DAMPING] = 0.98;
+    const r = scanHealth(w);
+    expect(r.byKind.gene).toBe(0);
+  });
+
   it('catches a non-finite brain weight', () => {
     const w = smallWorld();
     const i = w.store.liveIndices[0]!;
