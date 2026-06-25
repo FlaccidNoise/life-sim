@@ -201,6 +201,11 @@ export interface Config {
    *  scattered) so a hunter lineage starts together on a dense prey reservoir and survives the bootstrap —
    *  the founding lottery is the real gate on big-world predation. 0 = OFF (scattered, byte-identical). */
   predatorSeedClusters: number;
+  /** Predator founder size bias [0,1]: seeds predator founders in the UPPER size band — their SIZE is drawn
+   *  from [lo + predatorSizeBoost·(hi−lo), hi] instead of the full [lo,hi]. Big bodies are the predator's
+   *  WEAPON (huntSizeRatio: can only eat prey smaller than size/ratio), so seeding hunters big lets them
+   *  actually catch prey from t0 instead of starving small. 0 = OFF (full band, byte-identical). */
+  predatorSizeBoost: number;
   /** Bite reach in world units: a predator drains the nearest creature within this radius. */
   biteRange: number;
   /** Big-eats-small gate: a predator can only bite prey at least this many times SMALLER than itself
@@ -718,6 +723,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     damageCost: 0.05, // upkeep per damage above center
     predatorFraction: 0.15,
     predatorSeedClusters: 0, // OFF: predators scattered (byte-identical); >0 = cluster into N deepest pockets
+    predatorSizeBoost: 0, // OFF: predators drawn from the full size band (byte-identical); >0 seeds them big
     biteRange: 16, // reach to land a sight-guided kill (hunt now scans a neighborhood sized to this)
     huntSizeRatio: 1.15, // must be ≥15% bigger than prey to eat it → size is a refuge + a weapon
     predationGain: 1.8, // meat is concentrated: a bite yields 1.8× the drain, so even RARE kills pay

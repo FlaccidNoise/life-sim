@@ -184,6 +184,9 @@ export const DEMO_OVERRIDES: Partial<Config> = {
   pocketDriftSpeed: 0.3,
   // Age / life stages (life-sim-bd8a): juvenile breed-lock + elder senescence tax + costed longevity gene.
   ageStages: true,
+  // PREDATOR REVIVAL is OFF by default (mirrors main.ts): the bundle (predatorSizeBoost 0.85 + herbivoryExp 0.7
+  // + predationGain 3) revives predators on ~half the seeds but crashes seed-1's world (1076→60), so the demo
+  // keeps the stable all-grazer regime. Override on the CLI to study predators: predatorSizeBoost=0.85 etc.
 };
 
 // ── One seed: run the sim, observe every tick, build the per-seed report, return structured stats ──────
