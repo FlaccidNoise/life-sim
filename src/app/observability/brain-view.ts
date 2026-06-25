@@ -55,6 +55,7 @@ export interface BrainState {
   eatGate: number; // eat-gate output 0..1 (slice B): 1 = head-down eating (slow), 0 = head-up (full speed)
   biteGate: number; // bite-gate output 0..1 (A2a): the predation decision read from the hidden layer; 0 when off
   scentGate: number; // scent-gate output 0..1 (A2b): the broadcast decision read from the hidden layer; 0 when off
+  breedGate: number; // breed-gate output 0..1 (A2c): the breeding-timing decision read from the hidden layer; 0 when off
   hidden: number[]; // hidden-unit activations (slice E), one per HIDDEN_UNITS; empty when hiddenLayer off
   glow: number; // mood-glow output 0..1 (slice F): bioluminescence read from the hidden layer; 0 when moodGlow off
   drift: number; // Σ|learned − instinct| over all brain weights (within-life learning so far)
@@ -330,6 +331,18 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
     scentGate = 1 / (1 + Math.exp(-scentGateRaw));
   }
 
+  // Breed-gate (A2c): mirror steer() — breedGate = sigmoid(BREED_GATE_BIAS + Σ_j hidden_j·W2[col 5]) from the
+  // hidden "mood" layer. The breeding-timing decision (read by reproduce); does not affect the motor here. 0 when off.
+  let breedGate = 0;
+  if (cfg.brainGatedBreeding) {
+    let breedGateRaw = lb[b + Brain.BREED_GATE_BIAS]!;
+    if (cfg.hiddenLayer) {
+      for (let j = 0; j < HIDDEN_UNITS; j++)
+        breedGateRaw += hidden[j]! * lb[b + HIDDEN_W2 + j * HIDDEN_OUTPUTS + 5]!;
+    }
+    breedGate = 1 / (1 + Math.exp(-breedGateRaw));
+  }
+
   // Mood-glow (slice F): mirror steer() — glow = sigmoid(GLOW_BIAS + Σ_j hidden_j·GLOW_HID_j) from the
   // hidden "mood" layer. Display-only; 0 when off.
   let glow = 0;
@@ -344,7 +357,20 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
   let drift = 0;
   for (let g = 0; g < BRAIN_GENES; g++) drift += Math.abs(lb[b + g]! - ib[b + g]!);
 
-  return { inputs, turnRaw, thrustRaw, turn, thrust, eatGate, biteGate, scentGate, hidden, glow, drift };
+  return {
+    inputs,
+    turnRaw,
+    thrustRaw,
+    turn,
+    thrust,
+    eatGate,
+    biteGate,
+    scentGate,
+    breedGate,
+    hidden,
+    glow,
+    drift,
+  };
 }
 
 // Edge thickness maps |weight| → [0,1] against this reference (weights are O(1–2)); purely cosmetic.
@@ -406,7 +432,7 @@ export class BrainView {
     const bot = h - 12 * dpr;
     const inN = st.inputs.length;
     const inY = (i: number): number => top + ((bot - top) * i) / (inN - 1);
-    const outY = (o: number): number => top + ((bot - top) * (o + 1)) / 7; // 6 outputs: turn, thrust, eat, glow, bite, scent
+    const outY = (o: number): number => top + ((bot - top) * (o + 1)) / 8; // 7 outputs: turn, thrust, eat, glow, bite, scent, breed
     const hidN = st.hidden.length;
     const hidY = (j: number): number => top + ((bot - top) * (j + 0.5)) / Math.max(1, hidN); // centered cells
     const nodeR = 5 * dpr;
@@ -465,9 +491,10 @@ export class BrainView {
         const a = st.hidden[j]!;
         for (let o = 0; o < HIDDEN_OUTPUTS; o++) {
           const wgt = lbw[hb + HIDDEN_W2 + j * HIDDEN_OUTPUTS + o]!;
-          // W2 columns: 0=turn, 1=thrust, 2=eat, 3=biteGate, 4=scentGate. Glow (node 3) reads the separate
-          // GLOW_HID block, so route biteGate col (3)→node 4 and scentGate col (4)→node 5; keep turn/thrust/eat at 0..2.
-          edge(hidX, hidY(j), outX, outY(o === 3 ? 4 : o === 4 ? 5 : o), wgt, a * wgt);
+          // W2 columns: 0=turn, 1=thrust, 2=eat, 3=biteGate, 4=scentGate, 5=breedGate. Glow (node 3) reads the
+          // separate GLOW_HID block, so route biteGate col (3)→node 4, scentGate col (4)→node 5, breedGate col
+          // (5)→node 6; keep turn/thrust/eat at 0..2.
+          edge(hidX, hidY(j), outX, outY(o === 3 ? 4 : o === 4 ? 5 : o === 5 ? 6 : o), wgt, a * wgt);
         }
         // hidden→glow (slice F): glow is output node 3, reading the hidden layer via the GLOW_HID block.
         const gwgt = lbw[hb + GLOW_HID + j]!;
@@ -521,7 +548,7 @@ export class BrainView {
       ctx.fill();
     }
 
-    // Output nodes (reset to the standard font — 6 outputs: turn/thrust/eat/glow/bite/scent, plenty of room).
+    // Output nodes (reset to the standard font — 7 outputs: turn/thrust/eat/glow/bite/scent/breed, plenty of room).
     ctx.font = `${Math.round(10 * dpr)}px ui-monospace, monospace`;
     const drawOut = (o: number, label: string, value: number): void => {
       const oy = outY(o);
@@ -543,13 +570,14 @@ export class BrainView {
     drawOut(3, 'glow', st.glow); // mood-glow output (slice F): bioluminescence from the hidden mood layer
     drawOut(4, 'bite', st.biteGate); // bite-gate output (A2a): the predation decision read from the hidden layer
     drawOut(5, 'scent', st.scentGate); // scent-gate output (A2b): the broadcast decision read from the hidden layer
+    drawOut(6, 'breed', st.breedGate); // breed-gate output (A2c): the breeding-timing decision read from the hidden layer
 
     // Header: raw outputs + learning drift.
     ctx.fillStyle = 'rgba(150,170,190,0.8)';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillText(
-      `turn ${st.turnRaw.toFixed(2)}→${st.turn.toFixed(2)}  thrust ${st.thrustRaw.toFixed(2)}→${st.thrust.toFixed(2)}  eat ${st.eatGate.toFixed(2)}  glow ${st.glow.toFixed(2)}  bite ${st.biteGate.toFixed(2)}  scent ${st.scentGate.toFixed(2)}  drift ${st.drift.toFixed(2)}`,
+      `turn ${st.turnRaw.toFixed(2)}→${st.turn.toFixed(2)}  thrust ${st.thrustRaw.toFixed(2)}→${st.thrust.toFixed(2)}  eat ${st.eatGate.toFixed(2)}  glow ${st.glow.toFixed(2)}  bite ${st.biteGate.toFixed(2)}  scent ${st.scentGate.toFixed(2)}  breed ${st.breedGate.toFixed(2)}  drift ${st.drift.toFixed(2)}`,
       6 * dpr,
       6 * dpr,
     );

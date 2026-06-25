@@ -347,6 +347,30 @@ describe('computeBrainState', () => {
     expect(st.scentGate).toBeLessThan(0.7); // non-saturated; a wrong W2 column (e.g. 3) changes the value
   });
 
+  it('computes a breedGate output that matches a real steer() run, exercising the hidden→breed column (A2c)', () => {
+    const c = defaultConfig({ brainGatedBreeding: true, hiddenLayer: true });
+    const s = new OrganismStore(8);
+    const i = s.alloc();
+    s.heading[i] = 0;
+    const base = i * SCALAR_GENE_COUNT;
+    for (let g = 0; g < SCALAR_GENE_COUNT; g++)
+      s.scalarGenes[base + g] = c[SCALAR_GENE_SPECS[g]!.centerKey];
+    const b = i * BRAIN_GENES;
+    s.brain[b + Brain.BREED_GATE_BIAS] = 0.3;
+    s.brain[b + HIDDEN_W1 + HiddenInput.FOOD_FWD * HIDDEN_UNITS + 0] = 0.8; // food-fwd → hidden unit 0
+    s.brain[b + HIDDEN_W2 + 0 * HIDDEN_OUTPUTS + 5] = 0.6; // hidden unit 0 → breedGate column (5)
+    s.senseX[i] = 0.5; // fwd 0.5 → hAct[0] = tanh(0.4) ≈ 0.38
+    s.resetLearned(i);
+    s.rebuildLive();
+    const st = computeBrainState(s, c, i);
+    steer(s, false, c.eligLambda, c.motorSquash, c);
+    expect(st.breedGate).toBeCloseTo(s.breedGate[i]!, 10);
+    // Correct (col 5, w 0.6) → sigmoid(0.3+0.38·0.6) ≈ 0.629; bias-only/wrong-column → sigmoid(0.3) ≈ 0.574.
+    // The >0.6 lower bound (not 0.5) is what actually catches a wrong W2 column.
+    expect(st.breedGate).toBeGreaterThan(0.6);
+    expect(st.breedGate).toBeLessThan(0.7);
+  });
+
   it('reports learning drift = Σ|learned − instinct|', () => {
     const s = setup();
     const st = computeBrainState(s, cfg, 0);
