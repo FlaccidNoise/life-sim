@@ -77,6 +77,7 @@ export class Inspector {
       ['gene·maxTurn', g(ScalarGene.MAX_TURN)],
       ['gene·maxThrust', g(ScalarGene.MAX_THRUST)],
       ['gene·metabEff', g(ScalarGene.METAB_EFF)],
+      ['gene·damping', g(ScalarGene.DAMPING)],
       ['gene·reproBar', g(ScalarGene.REPRO_THRESHOLD)],
       ['gene·satiated', g(ScalarGene.SATIATED_THRESHOLD)],
       ['gene·birthEnergy', g(ScalarGene.BIRTH_ENERGY)],
