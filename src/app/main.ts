@@ -71,6 +71,10 @@ try {
 renderer.setGlow(true, 1);
 
 const overlay = new DetailOverlay(canvas, config.worldWidth, config.worldHeight);
+// Per-creature Canvas2D sprite/detail pass (the zoomed-in detailed bodies) — DISABLED for now: it's
+// O(visible creatures) on the CPU each frame and tanks the frame rate in a dense pocket. Toggle live with 'd'.
+let detailOn = false;
+overlay.setEnabled(detailOn);
 
 const graph = new TimeSeriesGraph(el<HTMLCanvasElement>('graph'), [
   { label: 'pop', color: '#8ad9f2' }, // cyan
@@ -504,6 +508,10 @@ globalThis.addEventListener('keydown', (e) => {
   if (e.key === 'c' || e.key === 'C') actColor();
   if (e.key === 'l' || e.key === 'L') toggleFollow();
   if (e.key === 't' || e.key === 'T') lineageModal.toggle(); // family tree of the selection
+  if (e.key === 'd' || e.key === 'D') {
+    detailOn = !detailOn;
+    overlay.setEnabled(detailOn); // toggle the zoomed-in sprite/detail rendering (off by default for perf)
+  }
 });
 
 // tps measurement (display only — never fed back into the sim).
