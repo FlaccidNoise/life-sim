@@ -6,6 +6,7 @@ import {
   BRAIN_GENES,
   ScalarGene,
   SCALAR_GENE_COUNT,
+  HiddenInput,
   HIDDEN_UNITS,
   HIDDEN_OUTPUTS,
   HIDDEN_W1,
@@ -13,6 +14,7 @@ import {
   GLOW_BIAS,
   GLOW_HID,
 } from './genome';
+import { SCENT_CHANNELS } from './scent-field';
 import { steer, learn } from './brain';
 
 // Default config for the motor-mechanics steer() tests below. brainGatedEating is OFF here to ISOLATE
@@ -676,5 +678,102 @@ describe('interoceptive hunger input (lever E2)', () => {
     const b = i * BRAIN_GENES;
     expect(s.elig[b + Brain.HUNGER_THRUST]!).toBe(0); // trace untouched
     expect(s.elig[b + Brain.HUNGER_TURN]!).toBe(0);
+  });
+});
+
+describe('scent feeds the hidden layer (consolidation mandate 1)', () => {
+  // The 4 identity scent channels must reach the NONLINEAR hidden layer, not just the linear synapses.
+  // Wire ONLY a hidden path: SCENT_C0_FWD → hidden unit 0 (W1=1) → turn (W2=1). All linear synapses 0.
+  const turnFromScentC0 = (gradient: number): number => {
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.heading[i] = 0; // facing +x, so scentSenseX projects entirely onto the forward axis
+    setBrain(s, i, {}); // all named synapses 0
+    const b = i * BRAIN_GENES;
+    // W1: SCENT_C0_FWD (HiddenInput row 8) → hidden unit 0
+    s.brain[b + HIDDEN_W1 + HiddenInput.SCENT_C0_FWD * HIDDEN_UNITS + 0] = 1;
+    // W2: hidden unit 0 → turn (output 0)
+    s.brain[b + HIDDEN_W2 + 0 * HIDDEN_OUTPUTS + 0] = 1;
+    s.resetLearned(i);
+    s.scentSenseX[i * SCENT_CHANNELS + 0] = gradient; // PREY channel gradient ahead
+    s.rebuildLive();
+    steer(s, false, 0.2, false, CFG); // CFG has hiddenLayer on (default)
+    return s.heading[i]!; // started at 0, so this IS the turn applied
+  };
+
+  it('a scent gradient drives the hidden layer → a turn (not a vestigial linear path)', () => {
+    expect(turnFromScentC0(1)).toBeGreaterThan(0.5); // tanh(1)·1 ≈ 0.76 turn
+  });
+  it('with no scent gradient the hidden contribution is zero (baseline)', () => {
+    expect(turnFromScentC0(0)).toBe(0);
+  });
+});
+
+describe('hunger-gated food drive (satiation → stop seeking food)', () => {
+  // cfg.hungerGatesFood scales the FOOD gradient by hunger = clamp(1−energy/satiatedBar, 0, 1): a full
+  // creature (hunger→0) stops responding to food and steers on its other drives (→ wanders); a starving
+  // one seeks at full strength. ONLY the food gradient is scaled (not sight/wall/flow). OFF = byte-identical.
+  // brainGatedEating off so the motor output IS the (food-drive-gated) thrust, isolated from the orthogonal
+  // eat-gate mobility penalty (which is on by default and would scale thrust by 1−eatGate·eatMovePenalty).
+  const GATE_ON = defaultConfig({ hungerGatesFood: true, brainGatedEating: false });
+
+  // Pure food-driven thrust (no bias/sight), so the motor output IS the (gated) food response.
+  const foodThrust = (energy: number, cfg: Config): number => {
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.heading[i] = 0; // facing +x
+    s.senseX[i] = 1; // food gradient straight ahead
+    s.senseY[i] = 0;
+    setBrain(s, i, { FWD_THRUST: 2 });
+    s.energy[i] = energy;
+    s.rebuildLive();
+    steer(s, false, 0.2, false, cfg);
+    return Math.hypot(s.forceX[0]!, s.forceY[0]!);
+  };
+
+  it('a full creature stops thrusting toward food; a starving one drives at full strength (gate on)', () => {
+    expect(foodThrust(1e6, GATE_ON)).toBeCloseTo(0); // full → hunger 0 → food drive gated to nothing
+    expect(foodThrust(0, GATE_ON)).toBeCloseTo(2); // empty → hunger 1 → full food drive (FWD_THRUST·1·1)
+  });
+
+  it('with the gate OFF the food response is identical regardless of energy (ablation/byte-clean)', () => {
+    expect(foodThrust(0, CFG)).toBe(foodThrust(1e6, CFG)); // food gradient never scaled by energy
+  });
+
+  it('a still-hungry creature forages at FULL strength — the gate only eases off near satiation', () => {
+    // satiatedBar floors at repro+MIN_BAND = 65 here (SIZE 0). energy 20 → hunger ≈ 0.69, well above the
+    // 0.4 threshold → drive clamps to 1 (full). A raw-linear gate would throttle it to ~0.69·2; the
+    // threshold shape must NOT. This is what keeps the income-poor majority foraging hard.
+    expect(foodThrust(20, GATE_ON)).toBeCloseTo(2);
+  });
+
+  it('gates ONLY the food gradient — a full creature still steers on its sight vector', () => {
+    const sightThrust = (energy: number): number => {
+      const s = new OrganismStore(4);
+      const i = s.alloc();
+      s.heading[i] = 0;
+      s.senseX[i] = 0; // no food
+      s.senseY[i] = 0;
+      s.sightX[i] = 1; // prey straight ahead
+      s.sightY[i] = 0;
+      setBrain(s, i, { SIGHT_FWD_THRUST: 2 });
+      s.energy[i] = energy;
+      s.rebuildLive();
+      steer(s, false, 0.2, false, GATE_ON);
+      return Math.hypot(s.forceX[0]!, s.forceY[0]!);
+    };
+    expect(sightThrust(1e6)).toBeCloseTo(sightThrust(0)); // sight is NOT gated by hunger
+    expect(sightThrust(1e6)).toBeCloseTo(2); // a full creature still chases on sight
+  });
+
+  it('foodGateThreshold ≤ 0 falls back to the raw-linear gate (drive = hunger)', () => {
+    // threshold 0 → no saturating ramp: drive IS hunger. satiatedBar floors at 65 (SIZE 0), so energy 20
+    // → hunger ≈ 0.69 → thrust ≈ FWD_THRUST(2)·0.69, i.e. linearly throttled (not the full 2 a ramp gives).
+    const LINEAR = defaultConfig({
+      hungerGatesFood: true,
+      foodGateThreshold: 0,
+      brainGatedEating: false,
+    });
+    expect(foodThrust(20, LINEAR)).toBeCloseTo(2 * (1 - 20 / 65), 1);
   });
 });

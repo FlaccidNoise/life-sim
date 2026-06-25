@@ -60,6 +60,10 @@ const GENE_LABELS: readonly string[] = [
   'senseRangeB',
   'senseRangeC',
   'pheroDeposit',
+  'maturityAge',
+  'senescenceAge',
+  'display',
+  'preference',
   'damping',
 ];
 if (GENE_LABELS.length !== SCALAR_GENE_COUNT) {

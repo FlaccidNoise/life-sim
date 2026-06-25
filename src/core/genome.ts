@@ -76,13 +76,24 @@ export const ScalarGene = {
   SENSE_RANGE_C: 20, // smell range for channel C
   // F2 pheromone (gated cfg.pheromoneEnabled): how strongly this creature deposits into the pheromone field.
   PHERO_DEPOSIT: 21,
+  // Age / life stages (gated cfg.ageStages): the juvenile→adult and adult→elder age boundaries, in ticks.
+  // Tail-gated like FORAGE_PREF/PHERO_DEPOSIT → drawn only when ageStages, so the OFF stream is byte-identical.
+  MATURITY_AGE: 22, // below this age a creature can't breed (juvenile); uncosted (cost = delayed breeding)
+  SENESCENCE_AGE: 23, // at/above this age the basal senescence tax begins (elder); costed (longevity tradeoff)
+  // Sexual-selection genes (life-sim-xa90): a pure mate signal + the preference for it. Heritable, 0..1.
+  // DISPLAY is what mates are chosen on; PREFERENCE is the display value this creature finds attractive.
+  // Neither is an ecological/species axis, so geneticDistance weights them 0. NOTE (interconnection audit
+  // 2026-06-24): DISPLAY has NO render cue and NO radar axis yet — an ornament nothing can perceive (a
+  // wired-but-invisible gap for the visibility phase); PREFERENCE is likewise invisible + not an NN input.
+  DISPLAY: 24,
+  PREFERENCE: 25,
   // Movement-style gene: per-creature velocity retention (drift ↔ dart). Read by physics.integrate when
   // cfg.evolvableDamping is on, replacing the global cfg.damping. High = coasts on momentum (drifter);
-  // low = velocity dies fast (darter). Always drawn (ungated) and appended at the TAIL so genes 0–21's
-  // RNG draws are unchanged → the food-channel ablation byte-identity holds.
-  DAMPING: 22,
+  // low = velocity dies fast (darter). Always drawn (ungated) and appended at the TAIL so genes 0–25's
+  // RNG draws are unchanged → every prior tail-gated gene's draw-skip stream is preserved.
+  DAMPING: 26,
 } as const;
-export const SCALAR_GENE_COUNT = 23;
+export const SCALAR_GENE_COUNT = 27;
 
 /** Minimum reproductive-band width: satiated is read as max(satiatedGene, reproGene + this) so the two
  *  life-history bars can mutate independently without inverting (which would break the learn gate). */
@@ -111,6 +122,10 @@ interface ScalarGeneSpec {
     | 'foragePref'
     | 'foragePrefC'
     | 'pheroDeposit'
+    | 'maturityAge'
+    | 'senescenceAge'
+    | 'display'
+    | 'preference'
     | 'damping';
   /** Config key for the per-unit-above-center basal cost coeff, or null for a non-upkeep gene. */
   costKey:
@@ -127,6 +142,7 @@ interface ScalarGeneSpec {
     | 'shelterDriveCost'
     | 'cohesionDriveCost'
     | 'pheroDepositCost'
+    | 'senescenceAgeCost'
     | null;
   /** Hard clamp range the gene value is kept within (at seed and at every mutation). */
   min: number;
@@ -178,6 +194,14 @@ export const SCALAR_GENE_SPECS: readonly ScalarGeneSpec[] = [
   { centerKey: 'senseStep', costKey: 'senseRangeCost', min: 8, max: 256 },
   // F2: pheromone deposit strength — costed (no free chemical broadcast); the tradeoff for signalling.
   { centerKey: 'pheroDeposit', costKey: 'pheroDepositCost', min: 0, max: 5 },
+  // Age / life stages — MATURITY_AGE uncosted (its cost is the opportunity cost of delayed breeding);
+  // SENESCENCE_AGE costed (senescenceAgeCost) so a durable long-lived body pays upkeep — longevity is a real
+  // tradeoff, not free upward drift. Appended at the TAIL so every prior gene's RNG draw is unchanged.
+  { centerKey: 'maturityAge', costKey: null, min: 0, max: 800 },
+  { centerKey: 'senescenceAge', costKey: 'senescenceAgeCost', min: 50, max: 4000 },
+  // Sexual-selection genes — costKey null (no upkeep in v1; DISPLAY's "cost" is being conspicuous to mates).
+  { centerKey: 'display', costKey: null, min: 0, max: 1 },
+  { centerKey: 'preference', costKey: null, min: 0, max: 1 },
   // DAMPING — per-creature velocity retention. costKey null: the tradeoff is pure physics (coasting saves
   // thrust-energy but overshoots food/walls), not an upkeep tax. Center reuses cfg.damping (0.9); range
   // gives a ~20× coast-distance spread (1/(1−d): 0.6→~2.5 ticks, 0.98→~50). Upper bound < 1 for stability.
@@ -186,9 +210,9 @@ export const SCALAR_GENE_SPECS: readonly ScalarGeneSpec[] = [
 
 /** Tail-gated scalar genes: each takes its founder CENTER (seed) / parent value (mutate) WITHOUT drawing
  *  RNG when its gate is off, so the draw stream is byte-identical for any OFF subset (the FORAGE_PREF
- *  pattern generalized). Every gated gene lives at the tail (17..21) after all always-drawn genes; the
+ *  pattern generalized). Every gated gene lives at the tail (17..23) after all always-drawn genes; the
  *  gates are monotonic in foodChannels so widening FORAGE_PREF's gate from `!==2` to `<2` preserves the
- *  channels=1 (skip) and channels=2 (draw) streams exactly. (22/DAMPING is always-drawn, ungated.) */
+ *  channels=1 (skip) and channels=2 (draw) streams exactly. (26/DAMPING is always-drawn, ungated.) */
 export function scalarGeneGatedOff(g: number, cfg: Config): boolean {
   if (g === ScalarGene.FORAGE_PREF) return cfg.foodChannels < 2;
   if (
@@ -198,6 +222,7 @@ export function scalarGeneGatedOff(g: number, cfg: Config): boolean {
   )
     return cfg.foodChannels < 3;
   if (g === ScalarGene.PHERO_DEPOSIT) return !cfg.pheromoneEnabled;
+  if (g === ScalarGene.MATURITY_AGE || g === ScalarGene.SENESCENCE_AGE) return !cfg.ageStages;
   return false;
 }
 
@@ -218,6 +243,15 @@ export function seedScalarGenes(genes: Float32Array, slot: number, rng: Rng, cfg
     // scalarGeneGatedOff). They live at the tail so skipping their draw never shifts an earlier gene.
     if (scalarGeneGatedOff(g, cfg)) {
       genes[base + g] = center;
+      continue;
+    }
+    // FORAGE_PREF seeds UNIFORM over [0,1] (not clustered at the 0.5 center) so the founding pool already
+    // holds committed A- and B-specialists, not just generalists. With the generalist penalty on, those
+    // specialists thrive from t=0 and carry the population while it sorts into niches — without the spread an
+    // all-generalist founding pool eats the penalty en masse and crashes before specialists emerge. One RNG
+    // draw (rng.float()), like the gaussian path it replaces, so it stays at the tail-safe draw position.
+    if (g === ScalarGene.FORAGE_PREF) {
+      genes[base + g] = rng.float();
       continue;
     }
     genes[base + g] = clampTo(
@@ -255,6 +289,60 @@ export function mutateScalarGenes(
   }
 }
 
+/** Sexual crossover of scalar genes: each gene is independently inherited from mom OR dad (uniform pick —
+ *  preserves discrete allele combinations, unlike a blend, which speciation needs), then mutated + clamped
+ *  exactly like mutateScalarGenes. Gated genes (forage/phero/age off) inherit from MOM with no draw, so
+ *  the gating still skips RNG. One pick-draw per active gene; called per child in ascending mother order. */
+export function crossoverScalarGenes(
+  genes: Float32Array,
+  child: number,
+  mom: number,
+  dad: number,
+  rng: Rng,
+  cfg: Config,
+): void {
+  const cb = child * SCALAR_GENE_COUNT;
+  const mb = mom * SCALAR_GENE_COUNT;
+  const db = dad * SCALAR_GENE_COUNT;
+  for (let g = 0; g < SCALAR_GENE_COUNT; g++) {
+    const spec = SCALAR_GENE_SPECS[g]!;
+    if (scalarGeneGatedOff(g, cfg)) {
+      genes[cb + g] = genes[mb + g]!; // gated → inherit from mom, no draw
+      continue;
+    }
+    const parentBase = rng.float() < 0.5 ? mb : db; // uniform per-gene pick
+    const center = cfg[spec.centerKey];
+    genes[cb + g] = clampTo(
+      genes[parentBase + g]! + rng.gaussian(0, cfg.mutationSigma * center),
+      spec.min,
+      spec.max,
+    );
+  }
+}
+
+/** Sexual brain inheritance. v1: inherit the MOTHER's brain (+ hue), mutated — a modular seam. A separate
+ *  session is changing the NN topology; once it lands this becomes real per-weight brain crossover with the
+ *  dad parameter, without touching reproduce(). */
+export function crossoverBrain(
+  brain: Float32Array,
+  hue: Float32Array,
+  child: number,
+  mom: number,
+  _dad: number,
+  rng: Rng,
+  sigma: number,
+  hueSigma: number,
+  wallSenseGenes: boolean,
+  flowSenseGenes: boolean,
+  hungerSense: boolean,
+  pheroSenseGenes: boolean,
+): void {
+  mutateGenome(
+    brain, hue, child, mom, rng, sigma, hueSigma,
+    wallSenseGenes, flowSenseGenes, hungerSense, pheroSenseGenes,
+  );
+}
+
 /** Extra basal upkeep this creature pays for its costed genes: Σ max(0, gene − center)·costCoeff. */
 export function geneUpkeep(genes: Float32Array, slot: number, cfg: Config): number {
   const base = slot * SCALAR_GENE_COUNT;
@@ -266,6 +354,27 @@ export function geneUpkeep(genes: Float32Array, slot: number, cfg: Config): numb
     if (over > 0) cost += over * cfg[spec.costKey];
   }
   return cost;
+}
+
+/** Genetic distance between two creatures: normalised L2 over the ECOLOGICAL scalar genes (DIET up-
+ *  weighted by cfg.mateDietWeight so trophic role dominates → predator/prey reproductive isolation falls
+ *  out of the metric). DISPLAY/PREFERENCE are sexual-selection axes, NOT species axes, so they weight 0.
+ *  A brain-weight term can be added here when the NN topology change lands (per-weight distance over the
+ *  brain block) without touching this function's callers. This is the compatibility metric the mate gate
+ *  thresholds on. */
+export function geneticDistance(genes: Float32Array, a: number, b: number, cfg: Config): number {
+  const ab = a * SCALAR_GENE_COUNT;
+  const bb = b * SCALAR_GENE_COUNT;
+  let sum = 0;
+  for (let g = 0; g < SCALAR_GENE_COUNT; g++) {
+    if (g === ScalarGene.DISPLAY || g === ScalarGene.PREFERENCE) continue; // sexual axes ≠ species axes
+    const spec = SCALAR_GENE_SPECS[g]!;
+    const range = spec.max - spec.min || 1;
+    const d = (genes[ab + g]! - genes[bb + g]!) / range;
+    const w = g === ScalarGene.DIET ? cfg.mateDietWeight : 1;
+    sum += w * d * d;
+  }
+  return Math.sqrt(sum);
 }
 
 /** Brain weight layout (index into the per-creature brain block). Two sensory gradients in the heading
@@ -302,42 +411,77 @@ export const Brain = {
   // pre-feature stream, byte-identical to legacy.
   HUNGER_TURN: 18, // hunger scalar → turn (e.g. wander/cast more when starving)
   HUNGER_THRUST: 19, // hunger scalar → thrust (e.g. forage harder when starving)
-  // F2 pheromone-sense weights: the pheromone gradient ∇P (lateral, forward) in the heading frame → turn +
-  // thrust. Gated on pheroSenseGenes; seed at 0 so evolution picks the SIGN — flee a crowd or aggregate.
-  // Kept LAST so each gated block (wall/flow/hunger/phero) draws RNG only when on; OFF stream byte-identical.
-  PHERO_LAT_TURN: 20,
-  PHERO_FWD_TURN: 21,
-  PHERO_LAT_THRUST: 22,
-  PHERO_FWD_THRUST: 23,
+  // F2 identity-bearing scent: 4 channels × (lat/fwd × turn/thrust) = 16 synapses. The per-channel
+  // gradient ∇P_c (lateral, forward) in the heading frame → turn + thrust. Gated on pheroSenseGenes; seed
+  // at 0 so evolution picks each channel's SIGN — climb prey-scent / descend predator-scent / cluster on
+  // kin-hue. Per-channel base = PHERO_C0_LAT_TURN+c*4. These 16 weights ALSO feed the hidden layer (the 8
+  // SCENT_C* HiddenInput slots) — the same dual linear+hidden path every other sense uses.
+  PHERO_C0_LAT_TURN: 20,
+  PHERO_C0_FWD_TURN: 21,
+  PHERO_C0_LAT_THRUST: 22,
+  PHERO_C0_FWD_THRUST: 23,
+  PHERO_C1_LAT_TURN: 24,
+  PHERO_C1_FWD_TURN: 25,
+  PHERO_C1_LAT_THRUST: 26,
+  PHERO_C1_FWD_THRUST: 27,
+  PHERO_C2_LAT_TURN: 28,
+  PHERO_C2_FWD_TURN: 29,
+  PHERO_C2_LAT_THRUST: 30,
+  PHERO_C2_FWD_THRUST: 31,
+  PHERO_C3_LAT_TURN: 32,
+  PHERO_C3_FWD_TURN: 33,
+  PHERO_C3_LAT_THRUST: 34,
+  PHERO_C3_FWD_THRUST: 35,
   // Eat-gate OUTPUT (slice B): a 0..1 sigmoid throttle on grazing intake that ALSO costs mobility (eating
   // slows the body), so eating is a decision — graze (fed, slow, catchable) vs lift the head to flee. Reads
   // food + sight + bias. Seeded to default-eat (high bias) with a threat→suppress weight so prey lift their
   // heads when a predator is ahead, then evolution/learning refine it. Always present (on-by-default policy).
-  EAT_GATE_BIAS: 24,
-  EAT_GATE_FWD: 25, // food gradient fwd → eat more when food is ahead
-  EAT_GATE_LAT: 26,
-  EAT_GATE_SIGHT_FWD: 27, // appeal-signed sight fwd → keep eating toward appeal, lift head from a threat ahead
-  EAT_GATE_SIGHT_LAT: 28,
+  EAT_GATE_BIAS: 36,
+  EAT_GATE_FWD: 37, // food gradient fwd → eat more when food is ahead
+  EAT_GATE_LAT: 38,
+  EAT_GATE_SIGHT_FWD: 39, // appeal-signed sight fwd → keep eating toward appeal, lift head from a threat ahead
+  EAT_GATE_SIGHT_LAT: 40,
   // Interoceptive AGE input (slice C): the creature's maturity (min(age/ageNorm,1), 0=newborn…1=old) drives
   // turn + thrust on its own synapses, so life-stage behaviour can evolve. Always present (on-by-default).
-  AGE_TURN: 29,
-  AGE_THRUST: 30, // seeded slightly + so older creatures roam a touch more (restless elders); evolution tunes
+  AGE_TURN: 41,
+  AGE_THRUST: 42, // seeded slightly + so older creatures roam a touch more (restless elders); evolution tunes
   // Interoceptive REPRO-READINESS input (slice D): clamp((energy−reproThreshold)/(satiatedBar−reproThreshold),
   // 0,1) — 0 while just surviving … 1 near the breeding bar — on its own synapses. Distinct from hunger (it
   // is clamped to the breeding BAND, not the full bar). Seeded 0; the repro-timing response evolves.
-  READINESS_TURN: 31,
-  READINESS_THRUST: 32,
+  READINESS_TURN: 43,
+  READINESS_THRUST: 44,
+  // A1a interoceptive own-body inputs: the creature senses its own SIZE (normalized) and DIET on their own
+  // turn/thrust synapses. Appended after the named tail (untouched draw-skip ranges at 10..35) so only the
+  // derived hidden offsets shift. Seeded 0 → additive; evolve-only (constant-within-life → no eligibility).
+  SIZE_TURN: 45,
+  SIZE_THRUST: 46,
+  DIET_TURN: 47,
+  DIET_THRUST: 48,
+  // A1b interoceptive local-CROWDING input: count of live neighbors within cfg.crowdSenseRange (normalized).
+  // Unlike own-SIZE/own-DIET this VARIES within a life → it LEARNS (eligibility traces in steer). Seeded 0.
+  CROWD_TURN: 49,
+  CROWD_THRUST: 50,
+  // A1c interoceptive fertility-under-foot input: total food biomass at the body (normalized by foodCap).
+  // VARIES within a life → it LEARNS (eligibility in steer). Seeded 0; the settle/leave response evolves.
+  FERT_TURN: 51,
+  FERT_THRUST: 52,
+  // A2a brain-gated predation: a sigmoid biteGate output (hidden-layer column) read by hunt() to scale the
+  // bite drain — predation becomes a DECISION. This is the named BIAS gene; the per-unit hidden→output
+  // weights live in the W2 block at output column 3. Seeded gate-OPEN (bite by default); the gate LEARNS.
+  BITE_GATE_BIAS: 53,
 } as const;
 /** Senses-core brain weights (food + sight) — the count present before walls/flow/hunger, and the RNG-draw
  *  count when all gated blocks are off. Each gated block extends the array but draws RNG only when on. */
 export const BRAIN_CORE_GENES = 10;
-
-/** Number of named (non-hidden) brain weights — the linear sensor→motor map above (slots 0..32). The hidden
+/** Number of named (non-hidden) brain weights — the linear sensor→motor map above (slots 0..44). The hidden
  *  layer's weight blocks start here. */
-export const NAMED_BRAIN_GENES = 33;
+export const NAMED_BRAIN_GENES = 54;
 
-/** Order of the 14 scalars fed into the hidden layer (slice E) — the same heading-frame inputs turn/thrust
- *  read, plus a constant bias. Index into the W1 input→hidden block. */
+/** Order of the HIDDEN_INPUTS scalars fed into the hidden layer (slice E) — the same heading-frame inputs
+ *  turn/thrust read, plus own-SIZE/own-DIET (A1a) and a constant bias. The single pre-merge PHERO pair is
+ *  replaced by the 4 identity-bearing scent
+ *  channels (8 inputs: C0..C3 × {fwd,lat}) so scent feeds the NONLINEAR layer, not just the linear synapses.
+ *  Index into the W1 input→hidden block. */
 export const HiddenInput = {
   FOOD_FWD: 0,
   FOOD_LAT: 1,
@@ -347,12 +491,22 @@ export const HiddenInput = {
   WALL_LAT: 5,
   FLOW_FWD: 6,
   FLOW_LAT: 7,
-  PHERO_FWD: 8,
-  PHERO_LAT: 9,
-  HUNGER: 10,
-  AGE: 11,
-  READINESS: 12,
-  BIAS: 13,
+  SCENT_C0_FWD: 8,
+  SCENT_C0_LAT: 9,
+  SCENT_C1_FWD: 10,
+  SCENT_C1_LAT: 11,
+  SCENT_C2_FWD: 12,
+  SCENT_C2_LAT: 13,
+  SCENT_C3_FWD: 14,
+  SCENT_C3_LAT: 15,
+  HUNGER: 16,
+  AGE: 17,
+  READINESS: 18,
+  SIZE: 19, // A1a: own normalized SIZE feeds the hidden layer (conditional logic on body size)
+  DIET: 20, // A1a: own DIET feeds the hidden layer (conditional logic on trophic role)
+  CROWD: 21, // A1b: local crowding feeds the hidden layer (conditional logic on density)
+  FERT: 22, // A1c: fertility-under-foot feeds the hidden layer (conditional logic on local food)
+  BIAS: 23,
 } as const;
 
 /** Hidden layer (slice E): a fixed H-unit tanh layer adding a NONLINEAR correction ON TOP of the linear
@@ -366,19 +520,19 @@ export const HiddenInput = {
  *  symmetry). Plasticity is asymmetric: input→hidden is EVOLVED-only (frozen within life — the Hebbian rule
  *  can't credit-assign through a hidden unit), hidden→output LEARNS. Gated by cfg.hiddenLayer (the forward
  *  pass is skipped when off); the weights are always drawn (on-by-default policy). */
-export const HIDDEN_UNITS = 4;
-export const HIDDEN_INPUTS = 14;
-export const HIDDEN_OUTPUTS = 3; // turn=0, thrust=1, eatGate=2
-export const HIDDEN_W1 = NAMED_BRAIN_GENES; // input→hidden block start (slot 33)
-export const HIDDEN_W2 = HIDDEN_W1 + HIDDEN_INPUTS * HIDDEN_UNITS; // hidden→output block start (slot 89)
+export const HIDDEN_UNITS = 4; // escape hatch: bump to 6 only if 4 bottlenecks — not speculatively
+export const HIDDEN_INPUTS = 24; // +SIZE +DIET (A1a) +CROWD (A1b) +FERT (A1c)
+export const HIDDEN_OUTPUTS = 4; // turn=0, thrust=1, eatGate=2, biteGate=3 (A2a)
+export const HIDDEN_W1 = NAMED_BRAIN_GENES; // input→hidden block start (derived; see genome.test layout lock)
+export const HIDDEN_W2 = HIDDEN_W1 + HIDDEN_INPUTS * HIDDEN_UNITS; // hidden→output block start (derived)
 
 /** Mood-glow output (slice F): bioluminescence = sigmoid(GLOW_BIAS + Σ_j hidden_j·GLOW_HID_j), reading the
  *  hidden "mood" layer + a bias. DISPLAY-ONLY (no motor/energy effect) and EVOLVE-ONLY (no within-life
  *  learning). The hidden→glow weights seed at 0 + founder noise, so each LINEAGE drifts to its OWN glow
  *  trigger — different species evolve different glow mechanisms. Hue stays for lineage; glow is a separate
  *  channel. Always drawn (on-by-default policy); the forward pass is gated on cfg.moodGlow. */
-export const GLOW_BIAS = HIDDEN_W2 + HIDDEN_UNITS * HIDDEN_OUTPUTS; // 101 (after the hidden W2 block)
-export const GLOW_HID = GLOW_BIAS + 1; // 102; hidden→glow weights (HIDDEN_UNITS of them)
+export const GLOW_BIAS = HIDDEN_W2 + HIDDEN_UNITS * HIDDEN_OUTPUTS; // after the hidden W2 block (derived)
+export const GLOW_HID = GLOW_BIAS + 1; // hidden→glow weights (HIDDEN_UNITS of them)
 
 /** GLOW-SENSE weights (slice F3): the glow-field gradient ∇G (lateral, forward) in the heading frame →
  *  turn + thrust — the receiver side of the glow communication channel (the deposit side reads store.glow).
@@ -386,11 +540,11 @@ export const GLOW_HID = GLOW_BIAS + 1; // 102; hidden→glow weights (HIDDEN_UNI
  *  unlike the display-only mood-glow weights they both EVOLVE and LEARN (eligibility traces in steer). Seed
  *  at 0 so evolution picks the SIGN — approach the glowing crowd or flee it. Always drawn (on-by-default,
  *  like the eat-gate/age/readiness/glow blocks), so the draw stream is consistent whether glowSense is on. */
-export const GLOW_SENSE_LAT_TURN = GLOW_HID + HIDDEN_UNITS; // 106
-export const GLOW_SENSE_FWD_TURN = GLOW_SENSE_LAT_TURN + 1; // 107
-export const GLOW_SENSE_LAT_THRUST = GLOW_SENSE_LAT_TURN + 2; // 108
-export const GLOW_SENSE_FWD_THRUST = GLOW_SENSE_LAT_TURN + 3; // 109
-export const BRAIN_GENES = GLOW_SENSE_LAT_TURN + 4; // 110
+export const GLOW_SENSE_LAT_TURN = GLOW_HID + HIDDEN_UNITS;
+export const GLOW_SENSE_FWD_TURN = GLOW_SENSE_LAT_TURN + 1;
+export const GLOW_SENSE_LAT_THRUST = GLOW_SENSE_LAT_TURN + 2;
+export const GLOW_SENSE_FWD_THRUST = GLOW_SENSE_LAT_TURN + 3;
+export const BRAIN_GENES = GLOW_SENSE_LAT_TURN + 4; // derived; the genome.test layout-lock pins the value
 
 /** Founder brain ≈ the hand-tuned chemotaxis controller (turn toward lateral food, thrust up-gradient,
  *  gentle cruise) + ACTIVE sight: turn toward & thrust along the appeal-signed sight vector. Because that
@@ -403,47 +557,32 @@ export const BRAIN_GENES = GLOW_SENSE_LAT_TURN + 4; // 110
  *   SIGHT_LAT_TURN, SIGHT_FWD_TURN, SIGHT_LAT_THRUST, SIGHT_FWD_THRUST,
  *   WALL_LAT_TURN, WALL_FWD_TURN, WALL_LAT_THRUST, WALL_FWD_THRUST,
  *   FLOW_LAT_TURN, FLOW_FWD_TURN, FLOW_LAT_THRUST, FLOW_FWD_THRUST, HUNGER_TURN, HUNGER_THRUST,
- *   PHERO_LAT_TURN, PHERO_FWD_TURN, PHERO_LAT_THRUST, PHERO_FWD_THRUST,
+ *   PHERO_C0_LAT_TURN … PHERO_C3_FWD_THRUST (16),
  *   EAT_GATE_BIAS, EAT_GATE_FWD, EAT_GATE_LAT, EAT_GATE_SIGHT_FWD, EAT_GATE_SIGHT_LAT,
- *   AGE_TURN, AGE_THRUST, READINESS_TURN, READINESS_THRUST]. The 4 phero weights seed at 0; the eat-gate
+ *   AGE_TURN, AGE_THRUST, READINESS_TURN, READINESS_THRUST]. The 16 scent weights seed at 0; the eat-gate
  *   seeds BIAS 4 (sigmoid≈0.98 → eat ~fully by default) + SIGHT_FWD 2 (a threat ahead pulls the gate down →
  *   lift head + regain mobility); the age input seeds AGE_THRUST 0.3 (older → a touch more thrust), AGE_TURN
  *   0; the repro-readiness pair seeds 0 (the repro-timing response evolves); every other weight 0. */
 const FOUNDER_BRAIN: readonly number[] = [
-  1.2,
-  0,
-  0,
-  1.5,
-  0,
-  0.3,
-  1.0,
-  0,
-  0,
-  1.2,
-  0,
-  0,
-  0,
-  0,
-  0,
-  0,
-  0,
-  0,
-  0,
-  0,
-  0,
-  0,
-  0,
-  0,
+  // core (0-9): chemotaxis + sight
+  1.2, 0, 0, 1.5, 0, 0.3, 1.0, 0, 0, 1.2,
+  // wall (10-13), flow (14-17), hunger (18-19) — neutral
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  // scent C0..C3 (20-35) — 16 weights seed 0 (evolution picks each channel's sign)
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  // eat-gate (36-40): BIAS 4, FWD 0, LAT 0, SIGHT_FWD 2, SIGHT_LAT 0
+  4, 0, 0, 2, 0,
+  // age (41-42): AGE_TURN 0, AGE_THRUST 0.3 ; readiness (43-44): 0, 0
+  0, 0.3, 0, 0,
+  // A1a own-SIZE/own-DIET (45-48): SIZE_TURN, SIZE_THRUST, DIET_TURN, DIET_THRUST — seed 0 (response evolves).
+  0, 0, 0, 0,
+  // A1b local-CROWDING (49-50): CROWD_TURN, CROWD_THRUST — seed 0 (the density response evolves + learns).
+  0, 0,
+  // A1c fertility-under-foot (51-52): FERT_TURN, FERT_THRUST — seed 0 (the settle/leave response evolves + learns).
+  0, 0,
+  // A2a BITE_GATE_BIAS (53): seeded gate-OPEN (sigmoid(4)≈0.98 → bite by default; evolution/learning refine).
   4,
-  0,
-  0,
-  2,
-  0,
-  0,
-  0.3,
-  0,
-  0,
-  // Hidden layer (slice E): HIDDEN_INPUTS·HIDDEN_UNITS (56) input→hidden + HIDDEN_UNITS·HIDDEN_OUTPUTS (12)
+  // Hidden layer (slice E): HIDDEN_INPUTS·HIDDEN_UNITS (80) input→hidden + HIDDEN_UNITS·HIDDEN_OUTPUTS (12)
   // hidden→output weights, all seeded 0 — the founder Gaussian noise at seed breaks the unit symmetry.
   ...new Array<number>(HIDDEN_INPUTS * HIDDEN_UNITS + HIDDEN_UNITS * HIDDEN_OUTPUTS).fill(0),
   // Mood-glow (slice F): GLOW_BIAS dim baseline (sigmoid(−1.5)≈0.18 — glow is the exception, not the norm);
@@ -476,7 +615,7 @@ export function seedGenome(
     const isWall = g >= Brain.WALL_LAT_TURN && g <= Brain.WALL_FWD_THRUST;
     const isFlow = g >= Brain.FLOW_LAT_TURN && g <= Brain.FLOW_FWD_THRUST;
     const isHunger = g >= Brain.HUNGER_TURN && g <= Brain.HUNGER_THRUST;
-    const isPhero = g >= Brain.PHERO_LAT_TURN && g <= Brain.PHERO_FWD_THRUST;
+    const isPhero = g >= Brain.PHERO_C0_LAT_TURN && g <= Brain.PHERO_C3_FWD_THRUST;
     if (
       (isWall && !wallSenseGenes) ||
       (isFlow && !flowSenseGenes) ||
@@ -514,7 +653,7 @@ export function mutateGenome(
     const isWall = g >= Brain.WALL_LAT_TURN && g <= Brain.WALL_FWD_THRUST;
     const isFlow = g >= Brain.FLOW_LAT_TURN && g <= Brain.FLOW_FWD_THRUST;
     const isHunger = g >= Brain.HUNGER_TURN && g <= Brain.HUNGER_THRUST;
-    const isPhero = g >= Brain.PHERO_LAT_TURN && g <= Brain.PHERO_FWD_THRUST;
+    const isPhero = g >= Brain.PHERO_C0_LAT_TURN && g <= Brain.PHERO_C3_FWD_THRUST;
     if (
       (isWall && !wallSenseGenes) ||
       (isFlow && !flowSenseGenes) ||

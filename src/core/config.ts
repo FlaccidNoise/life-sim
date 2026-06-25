@@ -96,6 +96,12 @@ export interface Config {
    *  channel). 0 = ablation (no specialization incentive; income ceiling = single-channel, so the only
    *  difference left is the split resource pool itself). Only read when foodChannels===2. */
   forageSpecBonus: number;
+  /** Generalist energy FLOOR — the conversion multiplier a fully-indifferent forager (FORAGE_PREF=0.5)
+   *  earns, vs 1+forageSpecBonus for a full specialist. <1 PENALISES generalism: spec ramps linearly
+   *  from this floor (indifferent) up to 1+forageSpecBonus (committed), so a generalist earns less energy
+   *  per grazed unit than a specialist eating its own channel. This is what pulls FORAGE_PREF off 0.5 and
+   *  into two niches (the owner's "everyone is gray" fix). 1 = no penalty (legacy). Read at foodChannels≥2. */
+  forageGeneralistFloor: number;
   /** Max biomass an organism ingests per tick from its current cell (→ energy 1:1). */
   eatRate: number;
   /** Basal metabolic cost per tick (the starvation clock — high enough that not-eating kills). */
@@ -105,6 +111,8 @@ export interface Config {
   /** FOUNDER CENTER for the per-creature reproThreshold gene: the survival↔reproductive boundary (the
    *  learn-gate floor; where a parent lands after breeding). Each creature evolves its own. */
   reproThreshold: number;
+  /** DIET up-weight in the mate genetic-distance metric (predator/prey isolation). */
+  mateDietWeight: number;
   /** FOUNDER CENTER for the per-creature satiatedThreshold gene: the "full" bar — stop eating (leave
    *  biomass), peak learning, and BREED ("breed at the top"). Each creature evolves its own (r/K). */
   satiatedThreshold: number;
@@ -117,6 +125,24 @@ export interface Config {
   birthEnergy: number;
   /** Offspring placement offset from the parent, in world units. */
   offspringOffset: number;
+  /** Breeding refractory period (ticks): after a creature reproduces it cannot breed again for this many
+   *  ticks, even while energetically able. This opens a "well-fed but not breeding" dwell — the regime the
+   *  hunger-gate needs to express satiation behavior (forage → breed → cooldown: wander while full → breed)
+   *  — and spaces reproduction into a real life-cycle. The FIRST breed is never gated (newborns start ready),
+   *  so getting established is unaffected. 0 = OFF: no gating, byte-identical to pre-cooldown (the contract). */
+  breedCooldown: number;
+  /** Master toggle: sexual reproduction (crossover of two compatible parents). Default ON; false → the
+   *  legacy asexual clone+mutate path (ablation). The ONLY behavioural gate for this feature. */
+  sexualReproduction: boolean;
+  /** Ticks a satiated creature stays in the mate-SEEKING state before giving up this cycle. */
+  mateSeekWindow: number;
+  /** World-unit radius for a mating contact (≈ one spatial-hash cell; covered by the 3×3 scan). */
+  mateContactRange: number;
+  /** Max geneticDistance for two creatures to be a compatible (interbreeding) pair — the species gate.
+   *  Smaller = stricter isolation / easier speciation; too small risks crashing births. */
+  mateCompatThreshold: number;
+  /** Strength of the sight pull toward similar-looking creatures while seeking (bounded like cohesion). */
+  mateSenseAttraction: number;
 
   // ── Steering + evolution (per-creature heritable brain) ─────────────────────────────────────────
   /** Gradient sample half-step in world units (central difference of the food field). */
@@ -290,6 +316,8 @@ export interface Config {
    *  large value pushes the moved fraction past the CFL=0.25 ceiling and the upwind scheme can go negative. */
   foodChannelBDriftMult: number;
 
+  // ── F2 identity-bearing scent (a 4-channel deposit-and-sense field; pheromoneEnabled master switch) ──
+  /** Master switch for the ScentField + the 16 PHERO brain genes + PHERO_DEPOSIT scalar gene. false =
   // ── Migrating food pockets (the pocket CENTRES drift over time so food moves; OFF default = byte-identical) ──
   /** Master multiplier on pocket drift. 0 (default) = pockets are STATIC: driftPockets is a no-op, no
    *  forked velocity RNG is drawn, no recarve runs → byte-identical to a fixed archipelago (the OFF state).
@@ -313,23 +341,22 @@ export interface Config {
   /** Master switch for the pheromone field + the 4 PHERO brain genes + PHERO_DEPOSIT scalar gene. false =
    *  the field is never allocated, the genes never draw RNG, and the sim is byte-identical to pre-feature. */
   pheromoneEnabled: boolean;
-  /** PHERO_DEPOSIT gene center: baseline deposit strength a creature broadcasts. Only drawn when enabled. */
+  /** PHERO_DEPOSIT gene center: baseline deposit loudness a creature broadcasts. Only drawn when enabled. */
   pheroDeposit: number;
   /** Per-unit-above-center upkeep for PHERO_DEPOSIT (no free chemical broadcast). */
   pheroDepositCost: number;
-  /** Inter-cell diffusion of the pheromone field per tick [0,0.25] — sets how FAR the signal carries (the
-   *  density-wall crossing) and, with decay, the DELAY that makes it candidate breathing feedback. */
+  /** Inter-cell diffusion of each scent channel per tick [0,0.25] — how FAR the signal carries (shared
+   *  across channels for V1) and, with decay, the DELAY that makes it candidate breathing feedback. */
   pheroDiffuse: number;
-  /** Pheromone decay per tick (0,1] — the field forgets at this rate. Low + diffuse = long-memory delayed feedback. */
+  /** Scent decay per tick (0,1] — each channel forgets at this rate. Low + diffuse = long-memory feedback. */
   pheroDecay: number;
-  /** Default deposit source = on-graze (ubiquitous, so the field actually populates at 8192² where bites are
-   *  rare). true = a grazing creature deposits PHERO_DEPOSIT·pheroGrazeStrength into its cell. */
-  pheroDepositOnGraze: boolean;
-  /** Scale on the on-graze deposit. */
-  pheroGrazeStrength: number;
-  /** Secondary alarm-on-bite deposit (a bitten prey emits). Default 0 — bites are too rare at scale to be the
-   *  primary source, but kept as an evolvable flavor channel. */
-  pheroAlarmStrength: number;
+  /** Per-tick passive deposit scale: every live creature broadcasts PHERO_DEPOSIT_gene·pheroDepositStrength
+   *  of its signature each tick. The continuous trail (vs on-graze) so predators — who hunt, not graze —
+   *  also lay scent. Lower it / raise pheroDecay if the field saturates. */
+  pheroDepositStrength: number;
+  /** Identity ablation: true → deposit splits by diet (role) + hue (signature); false → equal into all
+   *  channels (field alive but information-free). The toggle that isolates the feature's effect. */
+  scentIdentity: boolean;
 
   // ── F3 glow-sense (a diffusing glow field whose deposit source is store.glow; SELECTS the glow signal) ──
   /** Master switch for the glow field + the 4 GLOW_SENSE brain genes. When on, every creature deposits its
@@ -401,6 +428,10 @@ export interface Config {
    *  — graze (fed but slow + catchable) vs lift the head to flee at full speed. Off = legacy unconditional
    *  eating with no mobility cost (its ablation switch). */
   brainGatedEating: boolean;
+  /** A2a brain-gated predation: when on, hunt()'s bite drain is scaled by the creature's biteGate (0..1)
+   *  sigmoid output, so biting is a DECISION (graze-only vs strike). Seeded gate-open → founding predation is
+   *  unchanged; the gate learns + evolves. Off → unconditional auto-bite (the legacy reflex), ×1 byte-identical. */
+  brainGatedBiting: boolean;
   /** How hard active eating cuts thrust (the mobility cost that makes the eat-gate matter). 0 = eating is
    *  free (gate only throttles intake); 0.4 = a full-gate grazer moves at ~60% thrust. */
   eatMovePenalty: number;
@@ -416,6 +447,16 @@ export interface Config {
    *  Distinct from hunger (whose denominator is the full bar): this one is clamped to the breeding BAND.
    *  Off = the brain can't sense breeding readiness. */
   readinessSense: boolean;
+  /** A1a interoceptive body sense: feed own-SIZE (= SIZE/(2·cellRadius)) and own-DIET (0..1) as brain inputs
+   *  (both the linear map and the hidden layer), so behaviour can be conditional on the body. Gates only the
+   *  steer() forward pass; the synapses are always drawn (on-by-default policy). */
+  bodySense: boolean;
+  /** A1b local-crowding sense radius (world units): senseCrowding counts live neighbors within this distance
+   *  into store.crowding. Wider than the 2·cellRadius repulsion cutoff (which holds creatures ~12u apart, so a
+   *  12u radius reads ~0 — the dead lever-D scan's failure). Only read when bodySense (the A1 umbrella flag). */
+  crowdSenseRange: number;
+  /** Normalization divisor for the crowding count: crowdN = min(crowding/this, 1). ~8 neighbors → saturated. */
+  crowdSenseNorm: number;
   /** Hidden layer (slice E): when on, a fixed H-unit tanh layer adds a NONLINEAR correction on top of the
    *  linear sensor→motor map (skip-connection), giving the brain conditional logic ("flee only if a predator
    *  is close AND I'm cornered"). Off = the pure linear brain (the hidden forward pass is skipped). The
@@ -504,6 +545,45 @@ export interface Config {
    *  pre-E2 (safeguard #1). true = the weights seed near 0 and EVOLVE; behavior couples to internal state. */
   hungerSense: boolean;
 
+  /** Hunger-gated food drive (satiation → stop seeking): when true, the FOOD gradient feeding the brain
+   *  is multiplied by hunger = clamp(1 − energy/satiatedBar, 0, 1), so a FULL creature's food-seeking
+   *  fades to zero and it steers on its OTHER drives (sight/flow/pheromone/bias) — i.e. it wanders/explores
+   *  instead of grinding the gradient — while a starving one still seeks at full strength. Only the food
+   *  gradient is scaled (not sight/wall/flow/pheromone). false = OFF: the gradient is never scaled, so the
+   *  sim is byte-identical to pre-gate (the OFF golden contract). Reuses the satiatedBar hunger signal. */
+  hungerGatesFood: boolean;
+
+  /** Food-gate shape (only meaningful when hungerGatesFood is on): the food drive = clamp(hunger /
+   *  foodGateThreshold, 0, 1), so a creature forages at FULL strength until its hunger drops below this
+   *  threshold, then eases off — i.e. only a NEARLY-FULL creature reduces its food-seeking (the gate
+   *  doesn't handicap the still-hungry majority). 0.4 ≈ "ease off only in the top 40% of the energy range".
+   *  Set ≤0 for the raw-linear gate (drive = hunger). Unused when hungerGatesFood is off. */
+  foodGateThreshold: number;
+
+  // ── Age / life stages (juvenile/adult/elder; OFF by default = byte-identical) ─────────────────────
+  /** Master switch for age-dependent metabolism + life stages. false = the two age genes (MATURITY_AGE,
+   *  SENESCENCE_AGE) draw NO RNG and neither the senescence tax nor the maturity gate is consulted, so the
+   *  sim is byte-identical to pre-feature (the OFF golden contract). true = the genes seed/mutate and `age`
+   *  becomes a real life axis: a juvenile breeding lock + an elder metabolic decline + a costed longevity gene. */
+  ageStages: boolean;
+  /** Senescence tax slope (per tick past SENESCENCE_AGE): an elder's basal cost is scaled by
+   *  (1 + senescenceRate·(age − SENESCENCE_AGE)), so upkeep climbs with age until the creature can no longer
+   *  break even and starves — death of old age, reaped by the EXISTING cull (no new death path). Only read
+   *  when ageStages; 0 → no tax (the senescence-only ablation within an ageStages-on world). */
+  senescenceRate: number;
+  /** MATURITY_AGE gene founder CENTER (ticks): below this age a creature cannot breed (juvenile). */
+  maturityAge: number;
+  /** SENESCENCE_AGE gene founder CENTER (ticks): at/above this age the senescence tax begins (elder). */
+  senescenceAge: number;
+  /** Basal upkeep per unit of SENESCENCE_AGE gene above its center: a durable (long-lived) body costs more
+   *  to run every tick (disposable-soma / antagonistic-pleiotropy), so longevity is a genuine tradeoff —
+   *  a balanced polymorphism rather than free upward drift toward immortality. */
+  senescenceAgeCost: number;
+  /** DISPLAY gene founder CENTER (sexual-selection ornament, 0..1). */
+  display: number;
+  /** PREFERENCE gene founder CENTER (preferred DISPLAY value, 0..1). */
+  preference: number;
+
   // ── Observation hooks (optional; OFF by default — pure instrumentation, never affects the sim) ────
   /** Fired once per successful birth inside reproduce(), in ascending parent-slot order, BEFORE the
    *  tick counter advances. Read-only by contract: it must not touch the store, RNG, or iteration —
@@ -522,8 +602,9 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     dt: 1,
     maxOrganisms: 32768,
     // Seeded into the pockets (rejection-sampled onto fertile spots), spread across the islands.
-    // Modest count so the small pockets aren't overgrazed at t0.
-    initialPopulation: 90,
+    // Higher count seeds a denser founder pool — more well-fed seekers can find compatible mates at
+    // the 8192² demo scale (sexual reproduction's encounter rate scales with density).
+    initialPopulation: 1000,
     driftSpeed: 1.5,
     // Physics defaults: light drag so seeded motion is visibly sustained (organisms glide + wrap),
     // soft repulsion that spreads crowding, a speed ceiling that bounds any repulsion spike.
@@ -560,6 +641,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     foodChannels: 1, // single resource (byte-identical OFF state); 2 = niche-partitioning second channel
     foodChannelRatio: 0.5, // symmetric A/B split when channels===2 (total per-cell cap unchanged)
     forageSpecBonus: 0.5, // specialists convert up to 1.5× energy (the disruptive niche-split pressure)
+    forageGeneralistFloor: 0.85, // gentle generalist penalty: pulls FORAGE_PREF off 0.5 without a t=0 founder crash
     eatRate: 2,
     basalCost: 0.12, // low starvation clock → longer lives + a SOFTER early crash, so predator founders
     // survive the sparse phase long enough to reach the prey boom (predator-viability fix; was 0.2)
@@ -567,10 +649,17 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     // Slow breeding (long generation vs the starvation clock) damps the boom-bust toward a sustained,
     // turning-over population instead of an overshoot-to-extinction. Tuned headlessly.
     reproThreshold: 60, // gene center: survival↔reproductive boundary
+    mateDietWeight: 5,
     satiatedThreshold: 100, // gene center: breed-at-the-top trigger + eat-stop + peak learning
     reproOverhead: 15, // energy lost per birth beyond provisioning (parent pays birthEnergy + this)
     birthEnergy: 25, // gene center: offspring provisioning
     offspringOffset: 8,
+    breedCooldown: 0, // OFF: no breeding refractory → byte-identical; >0 spaces reproduction (the dwell lever)
+    sexualReproduction: true,
+    mateSeekWindow: 120,
+    mateContactRange: 12,
+    mateCompatThreshold: 0.6,
+    mateSenseAttraction: 1.0,
 
     // Steering + evolution. Founders seeded near a chemotaxis brain (genome.ts FOUNDER_BRAIN) with a
     // spread; offspring mutate. senseStep ≈ one food cell (64u) so the gradient reads across cells.
@@ -648,6 +737,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     foodPocketChannelMode: 0, // 0 = all pockets channel A (no spatial split); 1 = round-robin distinct islands
     foodChannelAWallTied: false, // ch2-diff OFF: legacy round-robin channel assignment → byte-identical
     foodChannelBDriftMult: 1, // ch2-diff OFF: uniform advection across channels → byte-identical
+    // F2 identity-bearing scent (master OFF here; the demo turns pheromoneEnabled on — on-by-default policy).
     // Migrating food pockets (OFF default: fertilityDriftRate=0 → driftPockets no-ops, no forked velocity RNG,
     // no recarve → byte-identical to the static archipelago). Flip on to make the pockets MOVE: channel-A
     // pockets creep along dirA (slow), channel-B pockets sweep along dirB (normal) — two crossing currents.
@@ -658,13 +748,12 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     pocketDriftSpeed: 0.6, // base world-units/tick the per-channel rate scales
     // F2 pheromones (OFF default: pheromoneEnabled=false → field never allocated, genes never draw → no-op).
     pheromoneEnabled: false,
-    pheroDeposit: 1.0, // PHERO_DEPOSIT gene center
+    pheroDeposit: 1.0, // PHERO_DEPOSIT gene center (deposit loudness)
     pheroDepositCost: 0.01, // upkeep per unit above center
     pheroDiffuse: 0.2, // carries the signal ~64-91u in 10-20 ticks (crosses the ~40u pocket NND)
     pheroDecay: 0.02, // slow forget → long-memory delayed feedback (the breathing candidate)
-    pheroDepositOnGraze: true, // ubiquitous deposit source so the field populates at scale
-    pheroGrazeStrength: 1,
-    pheroAlarmStrength: 0, // alarm-on-bite secondary (bites too rare at scale to lead with)
+    pheroDepositStrength: 0.1, // per-tick passive deposit; ×4 channels ×live creatures, so kept small
+    scentIdentity: true, // identity-bearing by default (on-by-default policy)
     // F3 glow-sense (ON by default — glow is now a SELECTED comms signal). Knobs mirror the pheromone field.
     glowSense: true,
     glowDiffuse: 0.2, // mirrors pheroDiffuse: carries the glow signal across the pocket NND
@@ -697,10 +786,14 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     evolvableDamping: true,
     reverseThrustFraction: 0.5, // ON by default: creatures can back away at half forward power
     brainGatedEating: true, // ON by default: eating is a decision — graze slow vs lift the head to flee fast
-    eatMovePenalty: 0.4,
+    brainGatedBiting: true, // ON by default: predation is a brain decision (seeded bite-open; learns)
+    eatMovePenalty: 0.25, // eased from 0.4: eating still costs mobility (gate ON) but ~3× healthier population
     ageSense: true, // ON by default: the brain can sense its own maturity (life-stage behaviour)
     ageNorm: 1000, // ~average lifespan at the shipped economy → maturity reaches ~1 near mid-late life
     readinessSense: true, // ON by default: the brain can sense how close it is to breeding (the repro band)
+    bodySense: true, // ON by default: the brain senses its own size + diet (A1a interoceptive inputs)
+    crowdSenseRange: 36, // = 6·cellRadius; wider than the 12u repulsion cutoff so neighbors can register
+    crowdSenseNorm: 8, // crowding count → [0,1]: 8 neighbors-in-radius reads as fully crowded
     hiddenLayer: true, // ON by default: the nonlinear hidden layer (conditional logic — the emergent-behavior substrate)
     moodGlow: true, // ON by default: bioluminescence read from the hidden mood layer (display + comms signal)
 
@@ -744,6 +837,20 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     // Interoceptive hunger brain input (lever E2): OFF = byte-identical (hunger synapses unseeded/unread).
     // Flip on to give the brain its own energy-deficit sense, evolving from a neutral 0.
     hungerSense: false,
+    // Hunger-gated food drive (satiation → wander): OFF = byte-identical (food gradient never scaled).
+    // Flip on so a full creature stops climbing the food gradient and drifts on its other drives.
+    hungerGatesFood: false,
+    foodGateThreshold: 0.4, // ease off food-seeking only in the top ~40% of the energy range (unused when gate off)
+    // Age / life stages (OFF default: ageStages false → the 2 age genes never draw, neither the senescence
+    // tax nor the maturity gate fires → byte-identical). Flip on to make `age` a real axis: juvenile breeding
+    // lock + elder senescence decline + a costed longevity gene. Rate/cost/centers tuned via life-history probe.
+    ageStages: false,
+    senescenceRate: 0.01, // elder basal-tax slope per tick past SENESCENCE_AGE (only read when ageStages)
+    maturityAge: 100, // MATURITY_AGE gene center (ticks): ≈ under the first-breed median → the gate bites
+    senescenceAge: 400, // SENESCENCE_AGE gene center (ticks): ≈ mean lifespan → only the long tail gets capped
+    senescenceAgeCost: 0.0005, // basal upkeep per unit SENESCENCE_AGE above center (the longevity tradeoff)
+    display: 0.5,
+    preference: 0.5,
     ...overrides,
   };
 }

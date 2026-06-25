@@ -9,3 +9,7 @@ tmp-frames/
 m1-100k-*.png
 *.gif
 .worktrees/
+
+# headless probe outputs (generated)
+life-histories-*.md
+life-histories-*.csv

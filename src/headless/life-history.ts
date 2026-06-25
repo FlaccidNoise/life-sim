@@ -12,8 +12,10 @@
  * heuristic. We buffer the events and drain them at the next observe(), so each birth is attributed to
  * the exact tick and parent. The per-seed total is cross-checked against world.totalBirths (expect Δ 0).
  *
- * Run: npx tsx src/headless/life-history.ts [ticks] [seeds] [sampleStride]
+ * Run: npx tsx src/headless/life-history.ts [ticks] [seeds] [sampleStride] [--demo]
  *   seeds: "3" (one) · "1-5" (inclusive range) · "1,3,7" (explicit list).  Default "1-5".
+ *   --demo: apply the LIVE-DEMO overrides (walls/flow/motorSquash/3-channel food/pheromones, per main.ts)
+ *           instead of the byte-clean defaultConfig — measures the world the user actually watches.
  * Writes life-histories-seed{S}.md/.csv per seed, plus life-histories-multiseed.md (cross-seed aggregate).
  */
 import { World } from '../core/world';
@@ -22,6 +24,7 @@ import { ScalarGene, SCALAR_GENE_COUNT } from '../core/genome';
 import { satiatedBar } from '../core/economy';
 import { computeBrainState } from '../app/observability/brain-view';
 import { writeFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 type Mode = 'survival' | 'reproductive' | 'satiated';
 
@@ -137,9 +140,42 @@ interface SeedResult {
   reportMd: string;
 }
 
+// Live-demo overrides — mirrors src/app/main.ts (the world the user actually watches). Kept here so the
+// probe can measure the demo regime, not just the byte-clean default. Update if main.ts's config changes.
+export const DEMO_OVERRIDES: Partial<Config> = {
+  // Spatial structure + legibility.
+  wallRegionCount: 5,
+  flowStrength: 0.35,
+  flowPushStrength: 0.25,
+  motorSquash: true,
+  // Density + two differentiated resources (channel A wall-tied, B drifting) + parcels (vision-revival).
+  foodPatchCount: 40,
+  foodPatchRadius: 8,
+  foodChannels: 2,
+  foodPocketChannelMode: 1,
+  foodChannelAWallTied: true,
+  foodChannelBDriftMult: 3,
+  pheromoneEnabled: true,
+  hungerSense: true, // DEMO: the brain senses its own energy deficit (dead in default config — audit)
+  scentIdentity: true,
+  parcelsEnabled: true,
+  parcelEnergy: 80,
+  parcelSpawnInterval: 6,
+  parcelCapacity: 120,
+  visionFovCost: 0.02,
+  visionAcuityCost: 0.02,
+  // Lifespan + behavior depth (mirrors main.ts): softer starvation clock + satiation-driven wander +
+  // breeding cooldown so creatures dwell well-fed. Override on the CLI to A/B against the old demo.
+  basalCost: 0.08,
+  hungerGatesFood: true,
+  breedCooldown: 150,
+  // Age / life stages (life-sim-bd8a): juvenile breed-lock + elder senescence tax + costed longevity gene.
+  ageStages: true,
+};
+
 // ── One seed: run the sim, observe every tick, build the per-seed report, return structured stats ──────
-function runSeed(seed: number, ticks: number, stride: number): SeedResult {
-  const config: Config = defaultConfig({ seed });
+function runSeed(seed: number, ticks: number, stride: number, overrides: Partial<Config>): SeedResult {
+  const config: Config = defaultConfig({ seed, ...overrides });
   const world = new World(config);
 
   const tracked = new Map<string, Life>(); // currently-alive individuals
@@ -592,7 +628,7 @@ function runSeed(seed: number, ticks: number, stride: number): SeedResult {
 }
 
 // ── Seeds-spec parser: "3" | "1-5" | "1,3,7" ──────────────────────────────────────────────────────────
-function parseSeeds(spec: string): number[] {
+export function parseSeeds(spec: string): number[] {
   const out: number[] = [];
   for (const part of spec.split(',')) {
     const t = part.trim();
@@ -609,14 +645,34 @@ function parseSeeds(spec: string): number[] {
 }
 
 // ── Driver ────────────────────────────────────────────────────────────────────────────────────────────
-const TICKS = Number(process.argv[2] ?? 6000);
-const SEEDS = parseSeeds(process.argv[3] ?? '1-5');
-const STRIDE = Number(process.argv[4] ?? 5); // store a full sample every STRIDE ticks (detection is per-tick)
+// Only run the CLI when executed directly — importing this module (e.g. for DEMO_OVERRIDES) must be
+// side-effect-free, or the importer would trigger a full life-history run on its own argv.
+const isMain = process.argv[1] !== undefined && fileURLToPath(import.meta.url) === process.argv[1];
+if (isMain) {
+const FLAGS = process.argv.slice(2).filter((a) => a.startsWith('--'));
+const POS = process.argv.slice(2).filter((a) => !a.startsWith('--'));
+const DEMO = FLAGS.includes('--demo');
+// Any `--key=value` flag (other than the valueless --demo) is a config override, applied ON TOP of the
+// demo overrides: e.g. `--demo --hungerGatesFood=true --basalCost=0.08`. Coerces true/false/number.
+const setOverrides: Record<string, unknown> = {};
+for (const f of FLAGS) {
+  const eq = f.indexOf('=');
+  if (eq < 0) continue; // valueless flag (--demo)
+  const key = f.slice(2, eq);
+  const raw = f.slice(eq + 1);
+  setOverrides[key] =
+    raw === 'true' ? true : raw === 'false' ? false : /^-?\d*\.?\d+$/.test(raw) ? Number(raw) : raw;
+}
+const OVERRIDES: Partial<Config> = { ...(DEMO ? DEMO_OVERRIDES : {}), ...(setOverrides as Partial<Config>) };
+const TICKS = Number(POS[0] ?? 6000);
+const SEEDS = parseSeeds(POS[1] ?? '1-5');
+const STRIDE = Number(POS[2] ?? 5); // store a full sample every STRIDE ticks (detection is per-tick)
 
 const results: SeedResult[] = [];
 for (const seed of SEEDS) {
-  process.stderr.write(`[seed ${seed}] running ${TICKS} ticks…\n`);
-  const r = runSeed(seed, TICKS, STRIDE);
+  const ovStr = Object.keys(setOverrides).length ? ` ${JSON.stringify(setOverrides)}` : '';
+  process.stderr.write(`[seed ${seed}] running ${TICKS} ticks${DEMO ? ' (DEMO config)' : ''}${ovStr}…\n`);
+  const r = runSeed(seed, TICKS, STRIDE, OVERRIDES);
   results.push(r);
   process.stderr.write(
     `[seed ${seed}] ${r.alive ? 'ALIVE' : 'EXTINCT'} pop ${r.finalPop} · births ${r.totalBirths} · ` +
@@ -773,3 +829,4 @@ if (results.length === 1) {
     `\n[wrote ${aggPath} + ${n} per-seed life-histories-seed{${SEEDS.join(',')}}.md/.csv]`,
   );
 }
+} // end if (isMain)

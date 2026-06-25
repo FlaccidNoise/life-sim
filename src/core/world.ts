@@ -6,9 +6,10 @@ import { applyFlowForce, computeRepulsion, integrate } from './physics';
 import { FoodField } from './food-field';
 import { Walls } from './walls';
 import { FlowField } from './flow-field';
+import { ScentField } from './scent-field';
 import { PheroField } from './phero-field';
 import { Parcels } from './parcels';
-import { senseFood, senseCreatures, senseEnv } from './sense';
+import { senseFood, senseCreatures, senseEnv, senseCrowding, senseFertility } from './sense';
 import { steer, learn } from './brain';
 import {
   seedGenome,
@@ -17,7 +18,7 @@ import {
   SCALAR_GENE_COUNT,
   SCALAR_GENE_SPECS,
 } from './genome';
-import { metabolize, hunt, eatParcels, cullDead, reproduce } from './economy';
+import { metabolize, hunt, eatParcels, cullDead, reproduce, depositScent } from './economy';
 import { Hasher } from './hash';
 
 /**
@@ -37,10 +38,10 @@ export class World {
   readonly food: FoodField;
   readonly walls: Walls;
   readonly flow: FlowField;
-  /** The pheromone field — a diffusing deposit-and-sense scalar grid. Allocated ONLY when
-   *  cfg.pheromoneEnabled; null otherwise, so the OFF path never deposits/senses/steps/hashes and stays
-   *  byte-identical. */
-  readonly phero: PheroField | null;
+  /** The identity-bearing scent field — a 4-channel diffusing deposit-and-sense grid (role + hue
+   *  signature). Allocated ONLY when cfg.pheromoneEnabled; null otherwise, so the OFF path never
+   *  deposits/senses/steps/hashes and stays byte-identical. */
+  readonly scent: ScentField | null;
   /** The glow field (slice F3) — a diffusing deposit-and-sense scalar grid whose deposit SOURCE is each
    *  creature's store.glow (every tick), so glow becomes a SELECTED communication signal others steer on.
    *  Reuses PheroField (a generic diffusing scalar grid). Allocated ONLY when cfg.glowSense; null otherwise,
@@ -75,6 +76,13 @@ export class World {
       2 * config.cellRadius,
       config.maxOrganisms,
     );
+    if (config.sexualReproduction && config.mateContactRange > 2 * config.cellRadius) {
+      console.warn(
+        `[life-sim] mateContactRange (${config.mateContactRange}) exceeds the mate-scan reach ` +
+          `2*cellRadius (${2 * config.cellRadius}); findMate's 3×3 hash scan can't see past one cell, ` +
+          `so the extra range is ignored. Lower mateContactRange or widen the scan (see findMate).`,
+      );
+    }
     this.food = new FoodField(
       config.worldWidth,
       config.worldHeight,
@@ -102,9 +110,9 @@ export class World {
       config.foodRows,
       config,
     );
-    // Pheromone field sized to the food grid. Built ONLY when enabled → null is the byte-identical OFF path.
-    this.phero = config.pheromoneEnabled
-      ? new PheroField(config.worldWidth, config.worldHeight, config.foodCols, config.foodRows)
+    // Scent field sized to the food grid. Built ONLY when enabled → null is the byte-identical OFF path.
+    this.scent = config.pheromoneEnabled
+      ? new ScentField(config.worldWidth, config.worldHeight, config.foodCols, config.foodRows)
       : null;
     // Glow field (slice F3) sized to the food grid like phero. Built ONLY when enabled → null is OFF.
     this.glowField = config.glowSense
@@ -284,15 +292,17 @@ export class World {
       this.parcels.step(cfg.flowStrength > 0 ? this.flow : null, cfg.dt);
     }
     senseFood(s, this.food, cfg);
+    senseFertility(s, this.food, cfg);
     senseEnv(
       s,
       this.walls,
       cfg.flowStrength > 0 ? this.flow : null,
-      this.phero,
+      this.scent,
       this.glowField,
       cfg,
     );
     senseCreatures(s, this.hash, cfg, this.walls, this.parcels);
+    senseCrowding(s, this.hash, cfg);
     steer(s, cfg.learningEnabled, cfg.eligLambda, cfg.motorSquash, cfg);
     // GLOW DEPOSIT (slice F3): every live creature broadcasts this tick's store.glow (set by steer) into the
     // glow field, so the gradient others sense reflects who is lit up. RNG-free; ascending order. Gated (null
@@ -323,13 +333,13 @@ export class World {
     // HUNT: predators (diet>0) bite nearby creatures. Rebuild the hash at post-MOVE positions first so
     // bites use where creatures actually are this tick.
     this.hash.build(s);
-    hunt(s, this.hash, cfg, this.phero);
+    hunt(s, this.hash, cfg);
     // EAT PARCELS: a creature that its sight steered onto a parcel now cashes the intercept (post-MOVE
     // positions, ascending live-slot order, RNG-free). Gated (null = OFF, byte-identical).
     if (this.parcels !== null) eatParcels(s, this.parcels, cfg);
     // METABOLIZE → LEARN → REPRO/DIE. Energy (the band the creature is in) is known after metabolize,
     // so the energy-gated within-life consolidation runs here (eligibility traces were laid in steer).
-    metabolize(s, this.food, this.hash, cfg, this.phero);
+    metabolize(s, this.food, this.hash, cfg);
     if (cfg.learningEnabled)
       learn(s, cfg.learningRate, cfg.weightDecay, cfg.maxLearnDeviation, cfg.learnRewardClamp);
     this.lastDeaths = cullDead(s);
@@ -340,6 +350,7 @@ export class World {
       this.wallSenseGenes,
       this.flowSenseGenes,
       this.walls,
+      this.hash,
     );
     this.totalBirths += this.lastBirths;
     this.totalDeaths += this.lastDeaths;
@@ -351,15 +362,17 @@ export class World {
       cfg.flowStrength > 0 ? this.flow : null,
       this.walls.active ? this.walls.foodBlockedMask() : null,
     );
-    // Pheromone diffuse + decay, IMMEDIATELY after the food field (this tick's deposits, laid in
-    // metabolize/hunt, now spread + forget). Null when disabled → skipped entirely (byte-identical OFF).
-    if (this.phero !== null)
-      this.phero.step(
+    // SCENT: every live creature lays its signature at its post-move position (ascending live-slot,
+    // RNG-free), then each channel diffuses + forgets. Null when disabled → skipped (byte-identical OFF).
+    if (this.scent !== null) {
+      depositScent(s, this.scent, cfg);
+      this.scent.stepAll(
         cfg.pheroDiffuse,
         cfg.pheroDecay,
         this.walls.active ? this.walls.foodBlockedMask() : null,
       );
-    // Glow field diffuse + decay (slice F3), after phero (this tick's glow deposits now spread + forget).
+    }
+    // Glow field diffuse + decay (slice F3), after scent (this tick's glow deposits now spread + forget).
     // Null when disabled → skipped entirely.
     if (this.glowField !== null)
       this.glowField.step(
@@ -376,7 +389,7 @@ export class World {
     this.store.clear();
     this.tick = 0;
     this.lastBirths = this.lastDeaths = this.totalBirths = this.totalDeaths = 0;
-    if (this.phero !== null) this.phero.reset();
+    if (this.scent !== null) this.scent.reset();
     if (this.glowField !== null) this.glowField.reset();
     if (this.parcels !== null) this.parcels.reset();
     this.setup();
@@ -393,7 +406,7 @@ export class World {
     h.u32(this.tick);
     h.u32(this.rng.state);
     h.u32(s.liveCount);
-    const { liveIndices, liveCount, x, y, vx, vy, heading, energy, age, genId } = s;
+    const { liveIndices, liveCount, x, y, vx, vy, heading, energy, age, genId, seeking, seekTicksLeft } = s;
     for (let k = 0; k < liveCount; k++) {
       const i = liveIndices[k]!;
       h.f(x[i]!);
@@ -404,11 +417,13 @@ export class World {
       h.f(energy[i]!);
       h.u32(age[i]!);
       h.u32(genId[i]!);
+      h.u32(seeking[i]!);
+      h.u32(seekTicksLeft[i]!);
     }
     this.food.hashInto(h); // food is part of the sim state
-    // The pheromone field is part of sim state ONLY when active (after food, gated) → byte-identical when off.
-    if (this.phero !== null) this.phero.hashInto(h);
-    // The glow field is part of sim state ONLY when active (after phero, gated) → byte-identical when off.
+    // The scent field is part of sim state ONLY when active (after food, gated) → byte-identical when off.
+    if (this.scent !== null) this.scent.hashInto(h);
+    // The glow field is part of sim state ONLY when active (after scent, gated) → byte-identical when off.
     if (this.glowField !== null) this.glowField.hashInto(h);
     // Parcels are part of sim state ONLY when active (after the field hashes, gated) → byte-identical OFF.
     if (this.parcels !== null) this.parcels.hashInto(h);
