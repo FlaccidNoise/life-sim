@@ -70,6 +70,8 @@ export const SPECS: readonly KnobSpec[] = [
   // ── World & food ──────────────────────────────────────────────────────────────────────────────────
   { key: 'initialPopulation', label: 'initial pop', min: 1, max: 2000, step: 1, live: false, group: 'world' }, // prettier-ignore
   { key: 'driftSpeed', label: 'drift speed', min: 0, max: 3, step: 0.1, live: false, group: 'world' },
+  { key: 'flowStrength', label: 'flow strength', min: 0, max: 16, step: 0.5, live: false, group: 'world' }, // prettier-ignore
+  { key: 'flowPushStrength', label: 'flow push (drift bodies)', min: 0, max: 1.5, step: 0.05, live: true, group: 'world' }, // prettier-ignore
   { key: 'foodRegen', label: 'food regen', min: 0, max: 0.2, step: 0.005, live: true, group: 'world' },
   { key: 'foodPatchRichness', label: 'pocket richness', min: 1, max: 4, step: 0.5, live: false, group: 'world' }, // prettier-ignore
   { key: 'foodPatchRichnessVar', label: 'pocket variation', min: 0, max: 1, step: 0.1, live: false, group: 'world' }, // prettier-ignore
