@@ -30,7 +30,7 @@ for (const brainGatedBiting of [false, true]) {
   const pop = s.liveCount;
   process.stdout.write(
     `brainGatedBiting ${brainGatedBiting ? 'ON ' : 'OFF'} — pop ${pop} predFrac ${((100 * pred) / Math.max(1, pop)).toFixed(1)}% meanDiet ${(dietSum / Math.max(1, pop)).toFixed(3)}` +
-    (brainGatedBiting ? ` | predators' biteGate mean ${pred ? (gSum / pred).toFixed(3) : 'n/a'} [${gMin.toFixed(2)}..${gMax.toFixed(2)}] over ${pred} predators` : '') + '\n',
+    (brainGatedBiting ? ` | predators' biteGate mean ${pred ? `${(gSum / pred).toFixed(3)} [${gMin.toFixed(2)}..${gMax.toFixed(2)}]` : 'n/a'} over ${pred} predators` : '') + '\n',
   );
 }
 process.stdout.write('INTERPRET: predFrac ON vs OFF (suppression?) + the predators biteGate mean (evolving shut → suppression; ~open → not). NB engine ceiling: predation is fragile regardless.\n');
