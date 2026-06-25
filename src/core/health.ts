@@ -55,7 +55,19 @@ const GENE_NAMES = [
   'visionRange',
   'visionFov',
   'visionAcuity',
+  'shelterDrive',
+  'cohesionDrive',
+  'foragePref',
+  'foragePrefC',
+  'senseRangeB',
+  'senseRangeC',
+  'pheroDeposit',
+  'damping',
 ] as const;
+
+// Float32 storage can nudge a hard-clamped gene a hair past its (double) bound — e.g. 0.98 stores
+// as 0.98000001907. Tolerate that tiny epsilon so the clamp's own rounding isn't a false violation.
+const GENE_BOUNDS_EPS = 1e-4;
 
 /**
  * Sweep the live population for invariant violations. `maxViolations` caps the returned list (the full
@@ -117,7 +129,7 @@ export function scanHealth(world: World, maxViolations = 50): HealthReport {
         continue;
       }
       const spec = SCALAR_GENE_SPECS[g]!;
-      if (v < spec.min || v > spec.max) add('gene', i, name, v);
+      if (v < spec.min - GENE_BOUNDS_EPS || v > spec.max + GENE_BOUNDS_EPS) add('gene', i, name, v);
     }
 
     // ── nonfinite: brain weights (unclamped, but must stay finite) ──
