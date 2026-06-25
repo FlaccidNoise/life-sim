@@ -85,12 +85,12 @@ export const SPECS: readonly KnobSpec[] = [
   { key: 'cellRadius', label: 'gene· size', min: 2, max: 32, step: 0.5, live: false, group: 'genes' },
   { key: 'maxTurn', label: 'gene· max turn', min: 0.05, max: 1.2, step: 0.05, live: false, group: 'genes' }, // prettier-ignore
   { key: 'maxThrust', label: 'gene· max thrust', min: 0.1, max: 4, step: 0.1, live: false, group: 'genes' }, // prettier-ignore
-  { key: 'metabolicEfficiency', label: 'gene· metab eff', min: 0.5, max: 1.5, step: 0.05, live: false, group: 'genes' }, // prettier-ignore
-  { key: 'reproThreshold', label: 'gene· repro bar', min: 20, max: 120, step: 5, live: false, group: 'genes' }, // prettier-ignore
+  { key: 'metabolicEfficiency', label: 'gene· metab eff', min: 0.5, max: 2.0, step: 0.05, live: false, group: 'genes' }, // prettier-ignore
+  { key: 'reproThreshold', label: 'gene· repro bar', min: 10, max: 120, step: 5, live: false, group: 'genes' }, // prettier-ignore
   { key: 'satiatedThreshold', label: 'gene· satiated', min: 40, max: 220, step: 5, live: false, group: 'genes' }, // prettier-ignore
   { key: 'birthEnergy', label: 'gene· birth energy', min: 8, max: 90, step: 1, live: false, group: 'genes' }, // prettier-ignore
   { key: 'damage', label: 'gene· damage', min: 0, max: 20, step: 0.5, live: false, group: 'genes' },
-  { key: 'visionRange', label: 'gene· vis range', min: 0, max: 256, step: 2, live: false, group: 'genes' }, // prettier-ignore
+  { key: 'visionRange', label: 'gene· vis range', min: 0, max: 384, step: 2, live: false, group: 'genes' }, // prettier-ignore
   { key: 'visionFov', label: 'gene· vis FOV', min: 0.1, max: 3.14, step: 0.05, live: false, group: 'genes' }, // prettier-ignore
   { key: 'visionAcuity', label: 'gene· vis acuity', min: 0, max: 3, step: 0.1, live: false, group: 'genes' }, // prettier-ignore
 
@@ -107,6 +107,9 @@ export const SPECS: readonly KnobSpec[] = [
 
   // ── Economy & evolution (live) ──────────────────────────────────────────────────────────────────────
   { key: 'basalCost', label: 'basal cost', min: 0, max: 2, step: 0.05, live: true, group: 'economy' },
+  // Satiation food-drive floor (only bites when the hunger gate is on): 0 = a fed creature parks (births
+  // crater); 1 = gate off (always forages). 0.7 keeps it relocating + topping up so it can breed.
+  { key: 'foodDriveFloor', label: 'food-drive floor', min: 0, max: 1, step: 0.05, live: true, group: 'economy' }, // prettier-ignore
   { key: 'reproOverhead', label: 'repro overhead', min: 0, max: 40, step: 1, live: true, group: 'economy' }, // prettier-ignore
   { key: 'mutationSigma', label: 'mutation σ', min: 0, max: 0.3, step: 0.005, live: true, group: 'economy' }, // prettier-ignore
 

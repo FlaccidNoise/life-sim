@@ -66,6 +66,28 @@ describe('World — Phase 0 determinism contract', () => {
     expect(on.stateHash()).not.toBe(baseline.stateHash());
   });
 
+  it('foodDriveFloor is inert when the hunger gate is off; floor 0 == the pre-floor gate; floor>0 perturbs', () => {
+    const seed = 1;
+    const baseline = new World(defaultConfig({ seed })); // default: hungerGatesFood off
+    const floorButGateOff = new World(defaultConfig({ seed, foodDriveFloor: 0.7 }));
+    const gateOnly = new World(defaultConfig({ seed, hungerGatesFood: true }));
+    const gateFloor0 = new World(defaultConfig({ seed, hungerGatesFood: true, foodDriveFloor: 0 }));
+    const gateFloor07 = new World(defaultConfig({ seed, hungerGatesFood: true, foodDriveFloor: 0.7 }));
+    for (let t = 0; t < 1000; t++) {
+      baseline.step();
+      floorButGateOff.step();
+      gateOnly.step();
+      gateFloor0.step();
+      gateFloor07.step();
+    }
+    // gate off → the floor branch is never reached, so any floor value == default (no behavioral path, no RNG)
+    expect(floorButGateOff.stateHash()).toBe(baseline.stateHash());
+    // gate on + floor 0 == the pre-floor gate (the floor branch is unreachable since drive ≥ 0)
+    expect(gateFloor0.stateHash()).toBe(gateOnly.stateHash());
+    // gate on + floor 0.7 → a fed creature keeps foraging instead of parking → the world diverges (lever live)
+    expect(gateFloor07.stateHash()).not.toBe(gateOnly.stateHash());
+  });
+
   it('pheromoneEnabled OFF is byte-identical to default; ON perturbs the world (F2 gene-gate)', () => {
     const baseline = new World(defaultConfig({ seed: 1 }));
     const off = new World(defaultConfig({ seed: 1, pheromoneEnabled: false }));
