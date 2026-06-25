@@ -73,6 +73,8 @@ export class TimeSeriesGraph {
     ctx.font = `${Math.round(11 * dpr)}px ui-monospace, monospace`;
     ctx.textBaseline = 'top';
     let ly = 4 * dpr;
+    // Small rates (<10) keep a decimal; large counts (pop/food) round.
+    const fmt = (v: number): string => (v < 10 ? v.toFixed(1) : `${Math.round(v)}`);
     for (let si = 0; si < this.series.length; si++) {
       const hser = this.history[si]!;
       let smax = 0;
@@ -80,7 +82,7 @@ export class TimeSeriesGraph {
       const cur = hser.length ? hser[hser.length - 1]! : 0;
       ctx.fillStyle = this.series[si]!.color;
       ctx.fillText(
-        `${this.series[si]!.label} ${Math.round(cur)} (max ${Math.round(smax)})`,
+        `${this.series[si]!.label} ${fmt(cur)} (max ${fmt(smax)})`,
         6 * dpr,
         ly,
       );

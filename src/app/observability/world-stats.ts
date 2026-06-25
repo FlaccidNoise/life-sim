@@ -13,8 +13,8 @@ export class WorldStats {
     this.render(null, 0, 0);
   }
 
-  /** `lastBirths`/`lastDeaths` are the most recent tick's vital counts (world.lastBirths/lastDeaths). */
-  render(store: OrganismStore | null, lastBirths: number, lastDeaths: number): void {
+  /** `avgBirths`/`avgDeaths` are trailing per-tick vital rates averaged over the last 100 ticks. */
+  render(store: OrganismStore | null, avgBirths: number, avgDeaths: number): void {
     if (!store || store.liveCount === 0) {
       this.root.innerHTML = `<div class="ws" style="grid-column:1/-1">
         <span class="ws-k">population</span><span class="ws-v">${store ? 'extinct' : '—'}</span></div>`;
@@ -38,8 +38,8 @@ export class WorldStats {
     const rows: [string, string][] = [
       ['pop', `${n}`],
       ['diet ○◇△', `${herb}/${omni}/${pred}`],
-      ['births/t', `${lastBirths}`],
-      ['deaths/t', `${lastDeaths}`],
+      ['births/t', avgBirths.toFixed(1)],
+      ['deaths/t', avgDeaths.toFixed(1)],
       ['mean age', `${Math.round(ageSum / n)}`],
       ['mean energy', (eSum / n).toFixed(1)],
     ];
