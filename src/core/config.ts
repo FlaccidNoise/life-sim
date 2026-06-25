@@ -439,6 +439,12 @@ export interface Config {
    *  (0..1) sigmoid output, so signalling is a DECISION (broadcast vs go silent). Evolve-only. Seeded gate-open
    *  → founding deposit unchanged. Off → unconditional passive deposit (the reflex), ×1 byte-identical. */
   brainGatedScent: boolean;
+  /** A2c brain-gated breeding: when on, a breeding-eligible creature only breeds if its breedGate (0..1)
+   *  sigmoid output is ≥ breedGateThreshold — the brain chooses WHEN to breed. Evolve-only. Seeded gate-open →
+   *  founding breeding unchanged. Off → the pure energy-threshold reflex (byte-identical). */
+  brainGatedBreeding: boolean;
+  /** Threshold the breedGate must reach to permit breeding (A2c). Default 0.5; seeded gate ≈0.98 clears it. */
+  breedGateThreshold: number;
   /** How hard active eating cuts thrust (the mobility cost that makes the eat-gate matter). 0 = eating is
    *  free (gate only throttles intake); 0.4 = a full-gate grazer moves at ~60% thrust. */
   eatMovePenalty: number;
@@ -804,6 +810,8 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     brainGatedEating: true, // ON by default: eating is a decision — graze slow vs lift the head to flee fast
     brainGatedBiting: true, // ON by default: predation is a brain decision (seeded bite-open; learns)
     brainGatedScent: true, // ON by default: scent deposit is a brain decision (seeded broadcast-open; evolve-only)
+    brainGatedBreeding: true, // ON by default: breeding timing is a brain decision (seeded breed-open; evolve-only)
+    breedGateThreshold: 0.5, // breedGate must reach this to breed; seeded ≈0.98 clears it (breeds by default)
     eatMovePenalty: 0.25, // eased from 0.4: eating still costs mobility (gate ON) but ~3× healthier population
     ageSense: true, // ON by default: the brain can sense its own maturity (life-stage behaviour)
     ageNorm: 1000, // ~average lifespan at the shipped economy → maturity reaches ~1 near mid-late life
