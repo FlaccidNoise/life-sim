@@ -11,6 +11,11 @@ import {
   GLOW_SENSE_FWD_TURN,
   GLOW_SENSE_LAT_THRUST,
   GLOW_SENSE_FWD_THRUST,
+  HIDDEN_W1,
+  HIDDEN_W2,
+  HIDDEN_OUTPUTS,
+  HIDDEN_UNITS,
+  HiddenInput,
 } from '../../core/genome';
 import { SCENT_CHANNELS } from '../../core/scent-field';
 import { steer } from '../../core/brain';
@@ -289,6 +294,31 @@ describe('computeBrainState', () => {
     steer(s, false, hc.eligLambda, hc.motorSquash, hc);
     expect(st.turn).toBeCloseTo(s.heading[i]! - h0, 10);
     expect(st.thrust).toBeCloseTo(Math.hypot(s.forceX[i]!, s.forceY[i]!), 10);
+  });
+
+  it('computes a biteGate output that matches a real steer() run, exercising the hidden→bite column (A2a)', () => {
+    const c = defaultConfig({ brainGatedBiting: true, hiddenLayer: true });
+    const s = new OrganismStore(8);
+    const i = s.alloc();
+    s.heading[i] = 0;
+    const base = i * SCALAR_GENE_COUNT;
+    for (let g = 0; g < SCALAR_GENE_COUNT; g++)
+      s.scalarGenes[base + g] = c[SCALAR_GENE_SPECS[g]!.centerKey];
+    const b = i * BRAIN_GENES;
+    // Drive hidden unit 0 off food-fwd, then feed it to the biteGate column (3). Small weights → non-saturated
+    // sigmoid, so a wrong W2 column (e.g. reading eatGate col 2 = 0) would change biteGateRaw and fail parity.
+    s.brain[b + Brain.BITE_GATE_BIAS] = 0.3;
+    s.brain[b + HIDDEN_W1 + HiddenInput.FOOD_FWD * HIDDEN_UNITS + 0] = 0.8; // food-fwd → hidden unit 0
+    s.brain[b + HIDDEN_W2 + 0 * HIDDEN_OUTPUTS + 3] = 0.6; // hidden unit 0 → biteGate column (3)
+    s.senseX[i] = 0.5; // heading 0 → fwd = 0.5 → hAct[0] = tanh(0.5·0.8) ≈ 0.38 (nonzero)
+    s.resetLearned(i);
+    s.rebuildLive();
+    const st = computeBrainState(s, c, i);
+    steer(s, false, c.eligLambda, c.motorSquash, c);
+    expect(st.biteGate).toBeCloseTo(s.biteGate[i]!, 10); // inspector == sim
+    // The hidden→bite term is genuinely contributing (not just the bias): biteGate ≈ sigmoid(0.3 + 0.38·0.6).
+    expect(st.biteGate).toBeGreaterThan(0.5);
+    expect(st.biteGate).toBeLessThan(0.7); // non-saturated (would be ~1 if it read a saturating path)
   });
 
   it('reports learning drift = Σ|learned − instinct|', () => {
