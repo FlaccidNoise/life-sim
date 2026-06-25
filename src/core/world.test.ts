@@ -103,6 +103,28 @@ describe('World — Phase 0 determinism contract', () => {
     expect(on.stateHash()).not.toBe(baseline.stateHash());
   });
 
+  it('perPocketDrift OFF vs ON diverge; both deterministic (B-food-1, forked-rng safe)', () => {
+    const off = new World(defaultConfig({ seed: 2, fertilityDriftRate: 1, perPocketDrift: false }));
+    const on = new World(defaultConfig({ seed: 2, fertilityDriftRate: 1, perPocketDrift: true }));
+    const off2 = new World(defaultConfig({ seed: 2, fertilityDriftRate: 1, perPocketDrift: false }));
+    for (let t = 0; t < 400; t++) {
+      off.step();
+      on.step();
+      off2.step();
+    }
+    expect(on.stateHash()).not.toBe(off.stateHash()); // the flag changes the drift pattern → the world
+    expect(off.stateHash()).toBe(off2.stateHash()); // determinism (run-twice-same-hash)
+  });
+
+  it('perPocketDrift world is reset-deterministic (B-food-1)', () => {
+    const w = new World(defaultConfig({ seed: 8, fertilityDriftRate: 1, perPocketDrift: true }));
+    for (let t = 0; t < 200; t++) w.step();
+    const h1 = w.stateHash();
+    w.reset();
+    for (let t = 0; t < 200; t++) w.step();
+    expect(w.stateHash()).toBe(h1);
+  });
+
   it('ageStages OFF is byte-identical to default; ON perturbs the world (age-stages gene-gate)', () => {
     const baseline = new World(defaultConfig({ seed: 1 }));
     const off = new World(defaultConfig({ seed: 1, ageStages: false }));

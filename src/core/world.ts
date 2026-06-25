@@ -162,6 +162,9 @@ export class World {
         cfg.foodPocketDriftRateB,
         cfg.pocketDriftSpeed,
         this.rng.fork(0x5eed),
+        // B-food-1: per-pocket drift directions (drawn from the SAME forked velocity rng above). On → each
+        // pocket wanders independently; off → the legacy two per-channel global dirs (byte-identical).
+        cfg.perPocketDrift,
       );
     } else {
       this.food.reset();

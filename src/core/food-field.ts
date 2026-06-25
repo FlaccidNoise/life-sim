@@ -97,6 +97,12 @@ export class FoodField {
   private dirAy = 0;
   private dirBx = 0;
   private dirBy = 0;
+  // B-food-1 per-pocket drift: each pocket's own unit drift direction (drawn from the forked velocity rng at
+  // seedPatches when perPocketDrift). driftPockets reads these (RNG-free). Persist across recarves like the
+  // channel dirs; size = pocketCount. When perPocketDrift is off these stay length 0 and the channel dirs drive.
+  private pocketDirX: Float64Array = new Float64Array(0);
+  private pocketDirY: Float64Array = new Float64Array(0);
+  private perPocketDrift = false;
   // Saved start-of-run pocket centres (grid cells) so reset() restores the archipelago to its seeded t0.
   private seedPc: Float64Array = new Float64Array(0);
   private seedPr: Float64Array = new Float64Array(0);
@@ -227,6 +233,10 @@ export class FoodField {
     driftRateB = 1,
     driftBaseSpeed = 0.6,
     velocityRng?: { float(): number },
+    // B-food-1: when true, drawDriftDirections draws one direction PER POCKET (from velocityRng) and
+    // driftPockets steps each pocket along its own; false keeps the legacy two per-channel global dirs
+    // (byte-identical). Stored before the drawDriftDirections call so it sees the flag.
+    perPocketDrift = false,
   ): void {
     const { cols, rows } = this;
     this.patchCenters.length = 0;
@@ -303,6 +313,7 @@ export class FoodField {
     this.driftRateA = driftRateA;
     this.driftRateB = driftRateB;
     this.driftBaseSpeed = driftBaseSpeed;
+    this.perPocketDrift = perPocketDrift;
     if (driftRate > 0 && velocityRng) this.drawDriftDirections(velocityRng);
     else {
       this.dirAx = this.dirAy = this.dirBx = this.dirBy = 0;
@@ -380,6 +391,18 @@ export class FoodField {
    * never reach this — only seedPatches, once, when drift is ON.
    */
   private drawDriftDirections(velocityRng: { float(): number }): void {
+    if (this.perPocketDrift) {
+      // Per-pocket: one independent direction per pocket from the forked velocity rng. Uniform angles over the
+      // pockets naturally spread (no forced separation needed). pocketChan/pocketCount are already set.
+      this.pocketDirX = new Float64Array(this.pocketCount);
+      this.pocketDirY = new Float64Array(this.pocketCount);
+      for (let p = 0; p < this.pocketCount; p++) {
+        const ang = velocityRng.float() * 2 * Math.PI;
+        this.pocketDirX[p] = Math.cos(ang);
+        this.pocketDirY[p] = Math.sin(ang);
+      }
+      return;
+    }
     const aAng = velocityRng.float() * 2 * Math.PI;
     let bAng = velocityRng.float() * 2 * Math.PI;
     // Force a clear angular separation: if A and B are closer than ~0.6 rad (either direction), offset B by
@@ -414,8 +437,10 @@ export class FoodField {
       // angular jitter is intentionally omitted: the per-channel direction must DOMINATE (the brief), and a
       // forked draw here would re-touch the velocity rng during a recarve (which must stay RNG-free).
       const rate = ch === 0 ? this.driftRateA : this.driftRateB;
-      const dx = ch === 0 ? this.dirAx : this.dirBx;
-      const dy = ch === 0 ? this.dirAy : this.dirBy;
+      // B-food-1: per-pocket direction when on (each pocket wanders on its own); else the legacy per-channel
+      // global dir. The per-channel SPEED (rate) is kept either way — only the DIRECTION becomes per-pocket.
+      const dx = this.perPocketDrift ? this.pocketDirX[p]! : ch === 0 ? this.dirAx : this.dirBx;
+      const dy = this.perPocketDrift ? this.pocketDirY[p]! : ch === 0 ? this.dirAy : this.dirBy;
       const stepWorld = baseStep * rate;
       // Convert the world-unit step to grid cells (cellW/cellH may differ on a non-square food grid).
       let pc = this.pocketPc[p]! + (stepWorld * dx) / this.cellW;

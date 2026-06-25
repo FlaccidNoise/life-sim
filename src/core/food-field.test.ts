@@ -819,4 +819,50 @@ describe('FoodField — migrating pockets (drifting centres)', () => {
     const fertR = Array.from(f.fertilityMap());
     for (let i = 0; i < fertR.length; i++) expect(fertR[i]).toBe(fert0[i]);
   });
+
+  it('per-pocket drift makes pockets wander in DISTINCT directions (B-food-1)', () => {
+    const W = 1024;
+    const H = 1024;
+    const COUNT = 16;
+    const DRIFT_INTERVAL = 20;
+    // 16 spread-out pocket centres (32 floats: pc, pr per pocket). Single channel so every pocket can drift
+    // freely; per-pocket dirs are drawn from the forked velocity rng (one float per pocket → 16 distinct angles).
+    const centres: number[] = [];
+    for (let p = 0; p < COUNT; p++) centres.push((p * 0.06 + 0.05) % 1, (p * 0.11 + 0.03) % 1);
+    const perPocketVels: number[] = [];
+    for (let p = 0; p < COUNT; p++) perPocketVels.push((p / COUNT + 0.01) % 1); // distinct angles per pocket
+    // distinct displacement directions after one recarve.
+    const mk = (perPocketDrift: boolean): number => {
+      const f = new FoodField(W, H, 128, 128, K, 1);
+      f.seedPatches(
+        COUNT,
+        4,
+        0,
+        new QueueRng(centres),
+        1,
+        0,
+        1,
+        0,
+        undefined,
+        undefined,
+        1, // driftRate > 0 → drift engages
+        DRIFT_INTERVAL,
+        1, // rateA = 1 (single channel; all pockets are channel A, so use a non-trivial rate)
+        1,
+        0.6,
+        velRng(...perPocketVels),
+        perPocketDrift,
+      );
+      const before = f.patchCenters.map((c) => ({ x: c.x, y: c.y }));
+      for (let t = 0; t <= DRIFT_INTERVAL; t++) f.driftPockets(t); // advance one recarve
+      const angles = new Set<number>();
+      f.patchCenters.forEach((c, i) => {
+        const d = toroDisp(before[i]!.x, before[i]!.y, c.x, c.y, W, H);
+        if (d.mag > 1e-9) angles.add(Math.round(Math.atan2(d.dy, d.dx) * 100)); // quantized angle
+      });
+      return angles.size;
+    };
+    expect(mk(false)).toBeLessThanOrEqual(2); // per-channel: ≤ 2 global directions (here all channel A → 1)
+    expect(mk(true)).toBeGreaterThan(2); // per-pocket: many distinct directions
+  });
 });
