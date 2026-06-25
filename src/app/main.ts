@@ -55,8 +55,13 @@ let config: Config = defaultConfig({
   flowPushStrength: 0.25,
   motorSquash: true,
   // Density (the proven lever): more + bigger pockets → dense → predators + niche partitioning return.
-  foodPatchCount: 40,
-  foodPatchRadius: 8,
+  // B-food-2: separate A/B patches (mode 1), blobbier (radius 8→14), drifting per-pocket → two-niche diversity.
+  // count: the plan called for 40→20 but 20 STARVES the demo at the realistic 8000-tick horizon (2/3 seeds
+  // extinct — the area argument ignores that fewer drifting pockets strand the population in gaps). 24 is the
+  // measured floor that holds liveness at 8000t across 5 seeds (938/27/325/4319/549, no extinction) while still
+  // sparser+blobbier than the 40/8 original. See bfood2-report.md.
+  foodPatchCount: 24,
+  foodPatchRadius: 14,
   // Two differentiated resources: channel A wall-tied (structural), channel B drifting in the current.
   foodChannels: 2,
   foodPocketChannelMode: 1,
