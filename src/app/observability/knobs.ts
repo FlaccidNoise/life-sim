@@ -29,6 +29,9 @@ const SPECS: KnobSpec[] = [
   { key: 'driftSpeed', label: 'drift speed', min: 0, max: 3, step: 0.1, live: false },
   { key: 'foodRegen', label: 'food regen', min: 0, max: 0.2, step: 0.005, live: true },
   { key: 'basalCost', label: 'basal cost', min: 0, max: 2, step: 0.05, live: true },
+  // Satiation food-drive floor (only bites when the hunger gate is on): 0 = a fed creature parks (births
+  // crater); 1 = gate off (always forages). 0.7 keeps it relocating + topping up so it can breed.
+  { key: 'foodDriveFloor', label: 'food-drive floor', min: 0, max: 1, step: 0.05, live: true },
   { key: 'reproOverhead', label: 'repro overhead', min: 0, max: 40, step: 1, live: true },
   { key: 'mutationSigma', label: 'mutation σ', min: 0, max: 0.3, step: 0.005, live: true },
   // Gene CENTERS (seed-time): the founder value for each evolvable scalar gene.

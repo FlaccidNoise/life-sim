@@ -81,6 +81,9 @@ export function steer(
   const hungerSense = cfg.hungerSense;
   const hungerGatesFood = cfg.hungerGatesFood;
   const foodGateThreshold = cfg.foodGateThreshold;
+  // Clamp to [0,1] at the boundary: a floor >1 would invert the gate (a fed creature forages HARDER than a
+  // starving one); <0 is a no-op. At the default 0 the floor branch is unreachable → byte-identical.
+  const foodDriveFloor = Math.min(1, Math.max(0, cfg.foodDriveFloor));
   const reverseFrac = cfg.reverseThrustFraction; // 0 = forward-only (legacy); 0.5 = back away at half power
   const brainGatedEating = cfg.brainGatedEating; // eatGate output throttles intake + costs mobility
   const brainGatedBiting = cfg.brainGatedBiting; // A2a: biteGate output (col 3) is the predation decision
@@ -128,7 +131,11 @@ export function steer(
     // Gated so the OFF path leaves fwd/lat untouched (byte-identical). Scaling at the source feeds the elig.
     if (hungerGatesFood) {
       let drive = foodGateThreshold > 0 ? hunger / foodGateThreshold : hunger;
-      if (drive > 1) drive = 1; // lower bound is implicit: hunger ≥ 0 → drive ≥ 0
+      if (drive > 1) drive = 1;
+      // Floor: a satiated creature keeps at least `foodDriveFloor` of its food drive so it goes on chasing
+      // the depleting gradient into fresh pockets (= relocates + keeps topping up its energy so it can breed)
+      // instead of zeroing its drive and parking. floor 0 is the implicit lower bound → byte-identical.
+      else if (drive < foodDriveFloor) drive = foodDriveFloor;
       fwd *= drive;
       lat *= drive;
     }

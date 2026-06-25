@@ -555,6 +555,15 @@ export interface Config {
    *  Set ≤0 for the raw-linear gate (drive = hunger). Unused when hungerGatesFood is off. */
   foodGateThreshold: number;
 
+  /** Lower bound on the satiation food-drive (only meaningful when hungerGatesFood is on). The gate's
+   *  drive is floored at this value, so drive ∈ [foodDriveFloor, 1]. 0 = the full gate (a fed creature's
+   *  food gradient is zeroed → it stops relocating and parks in place — the satiation-parking failure mode
+   *  that craters births: a parked creature never tops up its energy and so can't reproduce through the
+   *  breed cooldown). 1 = the gate is effectively off (always forages at full strength → keeps chasing the
+   *  depleting gradient into fresh pockets = roams). Intermediate values let a fed creature keep relocating
+   *  toward fresh food while still easing off near satiation. Default 0 = byte-identical to the pre-floor gate. */
+  foodDriveFloor: number;
+
   // ── Age / life stages (juvenile/adult/elder; OFF by default = byte-identical) ─────────────────────
   /** Master switch for age-dependent metabolism + life stages. false = the two age genes (MATURITY_AGE,
    *  SENESCENCE_AGE) draw NO RNG and neither the senescence tax nor the maturity gate is consulted, so the
@@ -835,6 +844,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     // Flip on so a full creature stops climbing the food gradient and drifts on its other drives.
     hungerGatesFood: false,
     foodGateThreshold: 0.4, // ease off food-seeking only in the top ~40% of the energy range (unused when gate off)
+    foodDriveFloor: 0, // full gate (byte-identical): a fed creature's food drive falls to 0. >0 keeps it relocating.
     // Age / life stages (OFF default: ageStages false → the 2 age genes never draw, neither the senescence
     // tax nor the maturity gate fires → byte-identical). Flip on to make `age` a real axis: juvenile breeding
     // lock + elder senescence decline + a costed longevity gene. Rate/cost/centers tuned via life-history probe.
