@@ -49,10 +49,8 @@ const fatal = el('fatal'); // boot-fatal banner (renderer init failure)
 let config: Config = defaultConfig({
   // Spatial structure + legibility.
   wallRegionCount: 5,
-  flowStrength: 4, // strong current: food gradients drift visibly downstream (~11× the old 0.35). Swept the
-  // demo config across seeds — fs=4 is the strongest current that keeps the population robustly alive AND
-  // breeding (births fall ~32% from baseline as the push sweeps bodies off food; fs≥8 craters them). The
-  // arrow OVERLAY ('v') is off by default now — the current reads in the drifting food itself.
+  flowStrength: 4, // strong current — measured strongest value that keeps the population robustly alive AND
+  // breeding (births fall ~32% from baseline as the push sweeps bodies off food; fs≥8 craters them).
   flowPushStrength: 0.25,
   motorSquash: true,
   // Density (the proven lever): more + bigger pockets → dense → predators + niche partitioning return.
