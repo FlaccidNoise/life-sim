@@ -155,9 +155,15 @@ export const SCALAR_GENE_SPECS: readonly ScalarGeneSpec[] = [
   { centerKey: 'cellRadius', costKey: 'sizeCost', min: 2, max: 32 }, // SIZE: physical (refuge + bite + speed/move/store couplings), so costed; max 2× for big-body strategies
   { centerKey: 'maxTurn', costKey: 'maxTurnCost', min: 0.05, max: 1.2 },
   { centerKey: 'maxThrust', costKey: 'maxThrustCost', min: 0.1, max: 4 },
-  { centerKey: 'metabolicEfficiency', costKey: null, min: 0.5, max: 1.5 },
+  // METAB_EFF max raised 1.5→2.0: the live population RAILS at 1.5 (gene census), so selection wants more
+  // throughput than the cap allows. Cost is the multiplicative basal×eff (no costKey), and graze income also
+  // scales with eff, so a high-throughput body is a real tradeoff (eats more, burns more), not a free win.
+  { centerKey: 'metabolicEfficiency', costKey: null, min: 0.5, max: 2.0 },
   // Life-history genes — costKey null (no upkeep; their "cost" is the strategy tradeoff itself).
-  { centerKey: 'reproThreshold', costKey: null, min: 20, max: 120 },
+  // reproThreshold min lowered 20→10: adds a fast-breeding r-strategist niche (breed at low energy reserve —
+  // cheap, risky offspring) for variety + resilience. Max kept at 120: the pop rails HIGH (census 117/120),
+  // but raising it further would only deepen the birth-suppressing K-strategy, so the cap stays put.
+  { centerKey: 'reproThreshold', costKey: null, min: 10, max: 120 },
   { centerKey: 'satiatedThreshold', costKey: null, min: 40, max: 220 },
   { centerKey: 'birthEnergy', costKey: null, min: 8, max: 90 },
   // Trophic genes. DIET costKey null (its cost is the graze↔hunt income tradeoff); its center (0.5) is
@@ -168,7 +174,9 @@ export const SCALAR_GENE_SPECS: readonly ScalarGeneSpec[] = [
   // Vision genes — ALL costed (no free eyes). Range cap raised to 256u (~21 hash cells) for the
   // long-sight experiment: the sight scan radius now DERIVES from each creature's range (sense.ts), so
   // big eyes see far (and cost more cells to scan). FOV is a half-angle [~6°, 180°]; acuity scales signal.
-  { centerKey: 'visionRange', costKey: 'visionRangeCost', min: 0, max: 256 },
+  // Max raised 256→384: the pop RAILS at 256 (census 244/256) chasing the sight-only parcels, so selection
+  // wants longer sight. visionRangeCost scales the upkeep linearly with range, so the wider cap is self-costing.
+  { centerKey: 'visionRange', costKey: 'visionRangeCost', min: 0, max: 384 },
   { centerKey: 'visionFov', costKey: 'visionFovCost', min: 0.1, max: 3.14159 },
   { centerKey: 'visionAcuity', costKey: 'visionAcuityCost', min: 0, max: 3 },
   // SHELTER_DRIVE — costed social attraction toward bigger same-guild creatures (no free herding).

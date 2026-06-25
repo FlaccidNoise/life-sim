@@ -371,7 +371,10 @@ export interface Config {
   /** Scale on the per-tick glow deposit: each creature adds store.glow·glowDepositStrength into its cell. */
   glowDepositStrength: number;
 
-  /** Gaussian σ spread of founder brain weights around the seed brain (initial behavioral variation). */
+  /** Gaussian σ spread of founder brain weights AND scalar genes around the seed center (initial variation).
+   *  NB the population is fragile to this: raising it past ~0.3 floods the founding pool with unfit extremes
+   *  (ruinous costed-gene upkeep + unreachable repro thresholds) that starve before breeding — measured
+   *  births collapse to ~0 at 0.5–0.7. Widen the trait SPACE via the gene RANGES, not this founder spread. */
   founderSigma: number;
   /** Founder SIZE-variety spread: founders' SIZE gene is seeded UNIFORMLY in cellRadius·[1−s, 1+s]
    *  (clamped to the gene range), so distinct body-size niches exist from t0 instead of all clustering
