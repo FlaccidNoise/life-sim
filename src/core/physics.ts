@@ -104,12 +104,17 @@ export function integrate(
   refSize: number,
   sizeSpeedExp: number,
   walls: Walls | null,
+  evolvableDamping = false,
 ): void {
   const { liveIndices, liveCount, x, y, vx, vy, forceX, forceY, scalarGenes } = store;
   for (let k = 0; k < liveCount; k++) {
     const i = liveIndices[k]!;
-    let nvx = (vx[i]! + forceX[i]! * dt) * damping;
-    let nvy = (vy[i]! + forceY[i]! * dt) * damping;
+    // Per-creature velocity retention when evolvableDamping is on (the DAMPING gene); else the global rate.
+    const d = evolvableDamping
+      ? scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.DAMPING]!
+      : damping;
+    let nvx = (vx[i]! + forceX[i]! * dt) * d;
+    let nvy = (vy[i]! + forceY[i]! * dt) * d;
     if (stabilityClamp) {
       const sg = i * SCALAR_GENE_COUNT;
       // Bigger bodies are slower: tax the evolved speed ceiling by (refSize/size)^sizeSpeedExp. Penalty
