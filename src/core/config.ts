@@ -336,6 +336,10 @@ export interface Config {
   /** Base pocket drift speed in world units/tick the per-channel rate scales. The displacement applied at a
    *  recarve is pocketDriftSpeed · fertilityDriftRate · rate(channel) · fertilityDriftInterval along dir. */
   pocketDriftSpeed: number;
+  /** B-food-1: when on, each migrating food pocket drifts along its OWN direction (drawn per-pocket from the
+   *  forked velocity rng) so patches wander independently + cross/overlap/merge. Off → the legacy two per-channel
+   *  global drift directions (byte-identical). Only matters when fertilityDriftRate > 0. */
+  perPocketDrift: boolean;
 
   // ── F2 pheromones (a diffusing deposit-and-sense field; OFF default pheromoneEnabled=false = byte-identical) ──
   /** Master switch for the pheromone field + the 4 PHERO brain genes + PHERO_DEPOSIT scalar gene. false =
@@ -768,6 +772,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     foodPocketDriftRateA: 0.2, // channel A creeps (the slow seasonal current)
     foodPocketDriftRateB: 1.0, // channel B sweeps at the normal rate
     pocketDriftSpeed: 0.6, // base world-units/tick the per-channel rate scales
+    perPocketDrift: true, // ON by default: pockets drift independently (B-food-1)
     // F2 pheromones (OFF default: pheromoneEnabled=false → field never allocated, genes never draw → no-op).
     pheromoneEnabled: false,
     pheroDeposit: 1.0, // PHERO_DEPOSIT gene center (deposit loudness)
