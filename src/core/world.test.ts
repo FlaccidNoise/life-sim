@@ -139,6 +139,16 @@ describe('World — Phase 0 determinism contract', () => {
     expect(a.stateHash()).toBe(b.stateHash());
   });
 
+  it('brainGatedScent ON is deterministic (A2b — same config+seed → identical hash run-to-run)', () => {
+    const a = new World(defaultConfig({ seed: 4, brainGatedScent: true }));
+    const b = new World(defaultConfig({ seed: 4, brainGatedScent: true }));
+    for (let t = 0; t < 300; t++) {
+      a.step();
+      b.step();
+    }
+    expect(a.stateHash()).toBe(b.stateHash());
+  });
+
   it('ageStages OFF: MATURITY_AGE/SENESCENCE_AGE stay exactly at their centers after a long run (ablation)', () => {
     // The tail-gated-draw contract: with ageStages off, seed/mutateScalarGenes pin both genes to their
     // config centers WITHOUT drawing RNG — so after a long run every live creature (founders + all

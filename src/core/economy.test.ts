@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { OrganismStore } from './store';
 import { FoodField } from './food-field';
+import { ScentField, Scent } from './scent-field';
 import { SpatialHash } from './spatial-hash';
 import { Rng } from './rng';
 import { defaultConfig, type Config } from './config';
-import { metabolize, hunt, cullDead, reproduce, satiatedBar } from './economy';
+import { metabolize, hunt, cullDead, reproduce, satiatedBar, depositScent } from './economy';
 import { ScalarGene, SCALAR_GENE_COUNT, SCALAR_GENE_SPECS, MIN_BAND } from './genome';
 
 const W = 128;
@@ -735,6 +736,49 @@ describe('hunt (predation)', () => {
     };
     expect(preyEnergyAfter(0)).toBe(50); // gate shut → no bite, prey untouched
     expect(preyEnergyAfter(1)).toBeLessThan(50); // gate open → bite lands
+  });
+});
+
+describe('depositScent brain-gated broadcast (A2b)', () => {
+  // A grazer (diet 0, hue 0) with a positive PHERO_DEPOSIT gene broadcasts into the PREY channel. With
+  // brainGatedScent ON the deposited amount is scaled by the creature's scentGate: a shut gate (0) lays
+  // NOTHING, an open gate (1) lays the full passive amount. pheroDepositStrength 1 so amount == the gene.
+  const cfg = defaultConfig({ brainGatedScent: true, pheroDepositStrength: 1, scentIdentity: true });
+  const scentAt = (gate: number): number => {
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.x[i] = 500;
+    s.y[i] = 500;
+    s.hue[i] = 0;
+    genes(s, i, cfg, { [ScalarGene.PHERO_DEPOSIT]: 2 }); // diet 0 (grazer) → deposits into PREY
+    s.scentGate[i] = gate;
+    s.rebuildLive();
+    const scent = new ScentField(1000, 1000, 50, 50);
+    depositScent(s, scent, cfg);
+    return scent.channel(Scent.PREY).sampleAt(500, 500);
+  };
+
+  it('scentGate 0 → no deposit (the field stays empty at the body)', () => {
+    expect(scentAt(0)).toBe(0);
+  });
+
+  it('scentGate 1 → the full passive deposit lands (amount = gene × strength)', () => {
+    expect(scentAt(1)).toBeCloseTo(2); // 2 (gene) · 1 (strength) · (1 − diet 0) into PREY
+  });
+
+  it('brainGatedScent OFF ignores the gate (unconditional passive deposit)', () => {
+    const off = defaultConfig({ brainGatedScent: false, pheroDepositStrength: 1, scentIdentity: true });
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.x[i] = 500;
+    s.y[i] = 500;
+    s.hue[i] = 0;
+    genes(s, i, off, { [ScalarGene.PHERO_DEPOSIT]: 2 });
+    s.scentGate[i] = 0; // would zero the deposit IF gating were on
+    s.rebuildLive();
+    const scent = new ScentField(1000, 1000, 50, 50);
+    depositScent(s, scent, off);
+    expect(scent.channel(Scent.PREY).sampleAt(500, 500)).toBeCloseTo(2); // full deposit despite gate 0
   });
 });
 
