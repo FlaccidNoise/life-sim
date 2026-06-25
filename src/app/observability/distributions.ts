@@ -3,13 +3,13 @@
  * bimodal population: diet is split into grazers (~0) and hunters (~0.9), so its mean (~0.18) describes
  * nobody. This panel draws the actual SHAPE of every trait, updating each frame.
  *
- * Every one of the 18 scalar genes plus energy + age is available as a field (built from
- * SCALAR_GENE_SPECS so the ranges stay honest); a checkbox picker chooses which to show. Each field
- * draws in its own stable palette hue (diet keeps the green→red trophic ramp) so adjacent histograms
- * read as distinct, not one flat blue.
+ * Every scalar gene plus energy + age is available as a field (built from SCALAR_GENE_SPECS so the
+ * ranges stay honest); a checkbox picker chooses which to show, and the stacked rows can be dragged to
+ * reorder. Each field draws in its own stable palette hue (diet keeps the green→red trophic ramp) so
+ * adjacent histograms read as distinct, not one flat blue.
  *
  * histogram() is a pure bucketing pass over the live set; the Distributions class is a dumb 2D-canvas
- * drawer over it. Read-only — never touches the sim.
+ * drawer over it (plus a thin pointer-drag layer for row reordering). Read-only — never touches the sim.
  */
 import { type OrganismStore } from '../../core/store';
 import { ScalarGene, SCALAR_GENE_COUNT, SCALAR_GENE_SPECS } from '../../core/genome';
@@ -126,17 +126,71 @@ function buildRegistry(): FieldSpec[] {
 
 const DEFAULT_KEYS = ['diet', 'energy', 'age', 'visionRange', 'maxSpeed'];
 
+const HEADER_CSS = 18; // header strip height in CSS px (the pop/○◇△ line); rows start below it
+
 export class Distributions {
   private readonly ctx: CanvasRenderingContext2D;
-  // Selected fields, in registry order. Default = the original five.
+  // Selected fields, in display order. Starts in registry order (the original five) but the user can
+  // drag rows to reorder — so this is NO LONGER pinned to registry order once a drag happens.
   private fields: FieldSpec[] = FIELD_REGISTRY.filter((f) => DEFAULT_KEYS.includes(f.key));
+  // Live drag state: which row is grabbed and where it would drop (-1 = not dragging). Read by render()
+  // to draw the grab highlight + insertion line; the actual splice happens on pointer-up.
+  private dragFrom = -1;
+  private dragTo = -1;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('2D canvas context unavailable for distributions');
     this.ctx = ctx;
     this.applyHeight();
+    canvas.style.cursor = 'grab';
+    canvas.style.touchAction = 'none'; // we own the gesture; stop the panel from scroll-stealing the drag
+    canvas.addEventListener('pointerdown', this.onPointerDown);
+    canvas.addEventListener('pointermove', this.onPointerMove);
+    canvas.addEventListener('pointerup', this.onPointerUp);
+    canvas.addEventListener('pointercancel', this.onPointerUp);
   }
+
+  /** Map a CSS-pixel y (within the canvas) to the row index it falls in, clamped to a valid row. */
+  private rowAtCssY(cssY: number): number {
+    const n = this.fields.length;
+    if (n === 0) return -1;
+    const rowH = (this.canvas.clientHeight - HEADER_CSS) / n;
+    const idx = Math.floor((cssY - HEADER_CSS) / rowH);
+    return idx < 0 ? 0 : idx >= n ? n - 1 : idx;
+  }
+
+  private readonly onPointerDown = (e: PointerEvent): void => {
+    if (this.fields.length < 2) return; // nothing to reorder
+    const rect = this.canvas.getBoundingClientRect();
+    const idx = this.rowAtCssY(e.clientY - rect.top);
+    if (idx < 0) return;
+    this.dragFrom = idx;
+    this.dragTo = idx;
+    this.canvas.setPointerCapture(e.pointerId);
+    this.canvas.style.cursor = 'grabbing';
+    e.preventDefault();
+  };
+
+  private readonly onPointerMove = (e: PointerEvent): void => {
+    if (this.dragFrom < 0) return;
+    const rect = this.canvas.getBoundingClientRect();
+    this.dragTo = this.rowAtCssY(e.clientY - rect.top);
+  };
+
+  private readonly onPointerUp = (e: PointerEvent): void => {
+    if (this.dragFrom < 0) return;
+    const from = this.dragFrom;
+    const to = this.dragTo;
+    this.dragFrom = -1;
+    this.dragTo = -1;
+    this.canvas.style.cursor = 'grab';
+    if (this.canvas.hasPointerCapture(e.pointerId)) this.canvas.releasePointerCapture(e.pointerId);
+    if (to >= 0 && to !== from) {
+      const [moved] = this.fields.splice(from, 1);
+      this.fields.splice(to, 0, moved!);
+    }
+  };
 
   /** A field's bar color: the trophic ramp for diet, else its stable palette hue. */
   private static fieldCss(spec: FieldSpec): string {
@@ -163,7 +217,12 @@ export class Distributions {
       cb.addEventListener('change', () => {
         if (cb.checked) selected.add(spec.key);
         else selected.delete(spec.key);
-        this.fields = FIELD_REGISTRY.filter((f) => selected.has(f.key));
+        // Preserve the user's drag order: keep still-selected fields where they are, drop the rest, and
+        // append any newly-checked field at the end (registry order among the new ones).
+        const kept = this.fields.filter((f) => selected.has(f.key));
+        const keptKeys = new Set(kept.map((f) => f.key));
+        const added = FIELD_REGISTRY.filter((f) => selected.has(f.key) && !keptKeys.has(f.key));
+        this.fields = [...kept, ...added];
         this.applyHeight();
       });
       const sw = document.createElement('span');
@@ -221,7 +280,7 @@ export class Distributions {
       return;
     }
 
-    const headerH = 18 * dpr;
+    const headerH = HEADER_CSS * dpr;
     const rowH = (h - headerH) / this.fields.length;
     const padL = 6 * dpr;
     const padR = 6 * dpr;
@@ -261,6 +320,22 @@ export class Distributions {
           ctx.fillStyle = solid;
         }
         ctx.fillRect(bx0 + b * bw, barAreaTop + (barAreaH - bh), Math.max(1, bw - dpr), bh);
+      }
+    }
+
+    // Drag feedback (overlaid on top): highlight the grabbed row + show where it will drop. The fields
+    // array isn't reordered until pointer-up, so rows stay put and we just paint the intent.
+    if (this.dragFrom >= 0 && this.fields.length > 1) {
+      const gy = headerH + this.dragFrom * rowH;
+      ctx.fillStyle = 'rgba(120,170,210,0.12)';
+      ctx.fillRect(0, gy, w, rowH);
+      ctx.strokeStyle = 'rgba(150,195,235,0.55)';
+      ctx.lineWidth = dpr;
+      ctx.strokeRect(0.5 * dpr, gy + 0.5 * dpr, w - dpr, rowH - dpr);
+      if (this.dragTo >= 0 && this.dragTo !== this.dragFrom) {
+        const insY = headerH + this.dragTo * rowH;
+        ctx.fillStyle = 'rgba(120,205,255,0.95)';
+        ctx.fillRect(0, insY - dpr, w, 2 * dpr);
       }
     }
   }

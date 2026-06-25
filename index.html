@@ -7,16 +7,29 @@
     <title>ecosim — archipelago</title>
     <style>
       /* One frosted-glass panel system over a dark canvas. Monospace + one cyan accent — this is a
-         data-dense sim/debug tool, so numeric alignment and a terminal identity matter. */
+         data-dense sim/debug tool, so numeric alignment and a terminal identity matter.
+
+         LAYOUT MODEL (desktop): the canvas is the full-screen hero. Floating over it —
+           • top-centre   : the TRANSPORT bar (time controls + live status)
+           • left         : the SELECTED-CREATURE dossier (brain keystone → morphotype → genes)
+           • right        : the WORLD panel (population graph + distributions + world stats)
+           • bottom-left  : menu buttons (⚙ settings · ❔ guide) that summon modal sheets
+           • bottom-centre: the VIEW chips (food layer / color mode / flow / walls / overlay / glow)
+           • bottom-right : the dot legend (closeable)                                                  */
       :root {
         --bg: #0a0e14;
         --panel: rgba(12, 17, 24, 0.66);
+        --panel-solid: rgba(11, 15, 21, 0.94);
         --border: rgba(120, 170, 210, 0.16);
+        --border-hi: rgba(138, 217, 242, 0.5);
         --text: #c9d6e2;
         --muted: #6b7a8d;
         --accent: #8ad9f2;
+        --accent-dim: rgba(138, 217, 242, 0.14);
+        --danger: #e08a8a;
         --radius: 7px;
         --shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+        --shadow-lg: 0 18px 60px rgba(0, 0, 0, 0.6);
         --blur: blur(9px);
       }
       * {
@@ -51,27 +64,20 @@
         backdrop-filter: var(--blur);
         -webkit-backdrop-filter: var(--blur);
         padding: 12px;
-        max-height: calc(100vh - 28px);
+        max-height: calc(100vh - 86px); /* clear the top bar + bottom chrome */
         overflow-y: auto;
       }
       #left {
-        top: 14px;
+        top: 60px; /* sits UNDER the top transport bar */
         left: 14px;
-        width: 280px;
-        z-index: 10; /* above the floating legend (z-index 5) so panel clicks always win */
-      }
-      #right {
-        top: 14px;
-        right: 14px;
         width: 280px;
         z-index: 10;
       }
-      h1 {
-        font-size: 12px;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
-        color: var(--accent);
-        margin: 0 0 10px;
+      #right {
+        top: 60px;
+        right: 14px;
+        width: 292px;
+        z-index: 10;
       }
       h2 {
         font-size: 11px;
@@ -79,6 +85,22 @@
         text-transform: uppercase;
         color: var(--muted);
         margin: 14px 0 6px;
+      }
+      h2:first-child {
+        margin-top: 0;
+      }
+      h3 {
+        font-size: 10px;
+        letter-spacing: 0.09em;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin: 12px 0 5px;
+      }
+      .h3-hint {
+        text-transform: none;
+        letter-spacing: 0;
+        opacity: 0.65;
+        font-weight: 400;
       }
       .muted {
         color: var(--muted);
@@ -99,9 +121,16 @@
         cursor: pointer;
         font: inherit;
       }
-      .btn:hover {
+      .btn:hover,
+      .btn:focus-visible {
         border-color: var(--accent);
         color: var(--accent);
+        outline: none;
+      }
+      .btn.active {
+        border-color: var(--border-hi);
+        color: var(--accent);
+        background: var(--accent-dim);
       }
       .lbl {
         color: var(--muted);
@@ -115,11 +144,65 @@
         width: 64px;
         font: inherit;
       }
+      .num:focus-visible {
+        outline: none;
+        border-color: var(--accent);
+      }
       .status {
-        margin-top: 6px;
         font-size: 11px;
         word-break: break-all;
       }
+
+      /* ── Top transport bar ─────────────────────────────────────────────────────────────────────── */
+      #topbar {
+        position: fixed;
+        top: 14px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 15;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        backdrop-filter: var(--blur);
+        -webkit-backdrop-filter: var(--blur);
+        padding: 7px 12px;
+        max-width: calc(100vw - 28px);
+      }
+      #topbar .tb-row {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+      }
+      #topbar .btn {
+        padding: 5px 11px;
+      }
+      #topbar .num,
+      #topbar select.num {
+        width: auto;
+        padding: 4px 8px;
+      }
+      .tb-sep {
+        width: 1px;
+        align-self: stretch;
+        background: var(--border);
+      }
+      .tb-stat {
+        display: flex;
+        flex-direction: column;
+        line-height: 1.35;
+        font-size: 11px;
+        white-space: nowrap;
+      }
+      .tb-stat .tb-perf {
+        color: var(--muted);
+        font-size: 10px;
+      }
+
+      /* ── Knobs (slider list — rendered into the settings modal) ──────────────────────────────────── */
       .knob {
         margin-bottom: 10px;
       }
@@ -135,17 +218,37 @@
         width: 100%;
         accent-color: var(--accent);
       }
-      #graph {
-        width: 100%;
-        height: 120px;
-        display: block;
-        border-radius: 5px;
+      .knob.toggle {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        cursor: pointer;
+        margin-bottom: 10px;
+      }
+      .knob.toggle .check {
+        accent-color: var(--accent);
+        margin: 0;
+      }
+
+      /* ── Selected-creature dossier (left) ────────────────────────────────────────────────────────── */
+      .panel-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 8px;
+      }
+      .empty {
+        text-align: center;
+        padding: 30px 8px;
+        font-size: 11px;
+        opacity: 0.8;
       }
       #brain {
         width: 100%;
-        height: 250px;
+        height: 210px;
         display: block;
         border-radius: 5px;
+        background: rgba(0, 0, 0, 0.22);
       }
       #radar {
         width: 100%;
@@ -163,21 +266,218 @@
         padding: 4px 6px;
         font: inherit;
       }
+      #inspector .row {
+        display: flex;
+        justify-content: space-between;
+        border-bottom: 1px solid rgba(120, 170, 210, 0.06);
+        padding: 1px 0;
+      }
+      #inspector .k {
+        color: var(--muted);
+      }
+      #inspector .v {
+        color: var(--text);
+      }
+      #follow-status {
+        font-size: 10px;
+        text-align: right;
+        max-width: 150px;
+      }
+
+      /* ── World panel (right) ─────────────────────────────────────────────────────────────────────── */
+      #graph {
+        width: 100%;
+        height: 120px;
+        display: block;
+        border-radius: 5px;
+      }
       #dist {
         width: 100%;
         height: 220px;
         display: block;
         border-radius: 5px;
       }
-      /* Floating dot legend — bottom-centre over the canvas (clear of both side panels), closeable
-         (✕ → reopen pill). */
-      #legend-panel {
+      #world-stats {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 2px 14px;
+        margin-bottom: 4px;
+      }
+      #world-stats .ws {
+        display: flex;
+        justify-content: space-between;
+        gap: 6px;
+        font-size: 11px;
+        border-bottom: 1px solid rgba(120, 170, 210, 0.06);
+        padding: 1px 0;
+      }
+      #world-stats .ws-k {
+        color: var(--muted);
+      }
+      #world-stats .ws-v {
+        color: var(--text);
+      }
+      /* Interactive population-graph legend: click a series to toggle it on the chart. */
+      #graph-legend {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin-top: 6px;
+        font-size: 10px;
+      }
+      .gl-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        cursor: pointer;
+        user-select: none;
+        opacity: 0.95;
+      }
+      .gl-item.off {
+        opacity: 0.4;
+        text-decoration: line-through;
+      }
+      .gl-dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 2px;
+        flex: 0 0 auto;
+      }
+      .dist-pick {
+        margin-bottom: 6px;
+        font-size: 11px;
+      }
+      .dist-pick > summary {
+        color: var(--muted);
+        cursor: pointer;
+        list-style: none;
+        user-select: none;
+      }
+      .dist-pick > summary:hover {
+        color: var(--accent);
+      }
+      .dist-pick[open] > summary {
+        color: var(--accent);
+      }
+      .dist-fields {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1px 10px;
+        margin-top: 6px;
+        max-height: 210px;
+        overflow-y: auto;
+      }
+      .dist-fields label {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .dist-fields input {
+        accent-color: var(--accent);
+        margin: 0;
+      }
+      .dist-sw {
+        width: 8px;
+        height: 8px;
+        border-radius: 2px;
+        flex: 0 0 auto;
+      }
+
+      /* ── Bottom-left menu buttons ────────────────────────────────────────────────────────────────── */
+      #menu-buttons {
+        position: fixed;
+        left: 14px;
+        bottom: 14px;
+        z-index: 12;
+        display: flex;
+        gap: 8px;
+      }
+      .menu-btn {
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        backdrop-filter: var(--blur);
+        -webkit-backdrop-filter: var(--blur);
+        color: var(--text);
+        padding: 9px 14px;
+        cursor: pointer;
+        font: inherit;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        transition:
+          border-color 0.18s ease,
+          color 0.18s ease;
+      }
+      .menu-btn:hover,
+      .menu-btn:focus-visible {
+        color: var(--accent);
+        border-color: var(--border-hi);
+        outline: none;
+      }
+
+      /* ── Bottom-centre view chips ────────────────────────────────────────────────────────────────── */
+      #view-chips {
         position: fixed;
         left: 50%;
         transform: translateX(-50%);
         bottom: 14px;
-        width: 268px;
-        z-index: 5;
+        z-index: 11;
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        justify-content: center;
+        max-width: calc(100vw - 380px); /* stay clear of the corner clusters */
+      }
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        box-shadow: var(--shadow);
+        backdrop-filter: var(--blur);
+        -webkit-backdrop-filter: var(--blur);
+        color: var(--muted);
+        padding: 5px 11px;
+        cursor: pointer;
+        font: inherit;
+        font-size: 11px;
+        white-space: nowrap;
+        transition:
+          border-color 0.16s ease,
+          color 0.16s ease,
+          background 0.16s ease;
+      }
+      .chip:hover,
+      .chip:focus-visible {
+        color: var(--accent);
+        border-color: var(--border-hi);
+        outline: none;
+      }
+      .chip.active {
+        color: var(--accent);
+        border-color: var(--border-hi);
+        background: var(--accent-dim);
+      }
+      .chip .chip-v {
+        color: var(--text);
+      }
+      .chip.active .chip-v {
+        color: var(--accent);
+      }
+
+      /* ── Dot legend (bottom-right) ───────────────────────────────────────────────────────────────── */
+      #legend-panel {
+        position: fixed;
+        left: 50%;
+        transform: translateX(-50%);
+        bottom: 54px; /* rise above the view chips, over the open canvas — clear of both side panels */
+        width: 280px;
+        z-index: 13;
         font-size: 11px;
         line-height: 1.5;
       }
@@ -185,8 +485,8 @@
         position: fixed;
         left: 50%;
         transform: translateX(-50%);
-        bottom: 14px;
-        z-index: 5;
+        bottom: 54px;
+        z-index: 13;
         display: none;
         background: var(--panel);
         border: 1px solid var(--border);
@@ -201,9 +501,11 @@
         letter-spacing: 0.08em;
         text-transform: uppercase;
       }
-      #legend-pill:hover {
+      #legend-pill:hover,
+      #legend-pill:focus-visible {
         color: var(--accent);
         border-color: var(--accent);
+        outline: none;
       }
       .lg-head {
         display: flex;
@@ -242,8 +544,6 @@
       .lg-cl {
         color: var(--accent);
       }
-      /* A channel row that doesn't apply in the current color mode (e.g. saturation/brightness in
-         energy mode, where the shader fixes them) — struck out so the legend never over-claims. */
       .lg-na {
         opacity: 0.4;
         text-decoration: line-through;
@@ -259,7 +559,8 @@
       .lg-valbar {
         background: linear-gradient(90deg, #14202c, #cfe8f5);
       }
-      /* Family-tree modal — centered floating overlay, opened from the inspector 🌳 button or 't'. */
+
+      /* ── Family-tree (lineage) modal — opened from the creature dossier 🌳 button or 't' ──────────── */
       #lineage-panel {
         position: fixed;
         top: 50%;
@@ -268,7 +569,7 @@
         width: 300px;
         max-height: 72vh;
         overflow-y: auto;
-        z-index: 20; /* above the side panels (z 10) and legend (z 5) */
+        z-index: 22; /* above side panels (z 10) + chips (z 11) + topbar (z 15), below the overlays (z 40) */
         display: none;
         font-size: 11px;
         line-height: 1.5;
@@ -350,7 +651,7 @@
         color: var(--muted);
       }
       .ln-dead {
-        color: var(--danger, #e08a8a);
+        color: var(--danger);
       }
       .ln-conn {
         color: var(--muted);
@@ -363,96 +664,196 @@
         font-size: 10px;
         word-break: break-all;
       }
-      /* Below ~880px the two 280px side panels leave too little centre gap — the legend would overlap
-         them, so hide it (and its pill) rather than collide. */
-      @media (max-width: 880px) {
+
+      /* Narrow screens: the centre chips + legend collide with the side panels — hide the floating
+         extras rather than overlap. */
+      @media (max-width: 980px) {
         #legend-panel,
         #legend-pill {
           display: none !important;
         }
+        #view-chips {
+          max-width: calc(100vw - 28px);
+        }
       }
-      /* Distributions field picker — a compact disclosure of checkboxes above the histogram canvas. */
-      .dist-pick {
-        margin-bottom: 6px;
-        font-size: 11px;
-      }
-      .dist-pick > summary {
-        color: var(--muted);
-        cursor: pointer;
-        list-style: none;
-        user-select: none;
-      }
-      .dist-pick > summary:hover {
-        color: var(--accent);
-      }
-      .dist-pick[open] > summary {
-        color: var(--accent);
-      }
-      .dist-fields {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 1px 10px;
-        margin-top: 6px;
-        max-height: 210px;
-        overflow-y: auto;
-      }
-      .dist-fields label {
+
+      /* ── Modal sheets (settings · guide) ─────────────────────────────────────────────────────────── */
+      .overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 40;
         display: flex;
         align-items: center;
-        gap: 5px;
-        cursor: pointer;
-        white-space: nowrap;
+        justify-content: center;
+        background: rgba(5, 8, 12, 0.55);
+        backdrop-filter: blur(3px);
+        -webkit-backdrop-filter: blur(3px);
+        padding: 24px;
+        animation: overlay-in 0.18s ease;
       }
-      .dist-fields input {
-        accent-color: var(--accent);
-        margin: 0;
+      .overlay[hidden] {
+        display: none;
       }
-      .dist-sw {
-        width: 8px;
-        height: 8px;
-        border-radius: 2px;
-        flex: 0 0 auto;
+      @keyframes overlay-in {
+        from {
+          opacity: 0;
+        }
       }
-      #inspector .row {
+      .modal {
+        background: var(--panel-solid);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        box-shadow: var(--shadow-lg);
+        backdrop-filter: var(--blur);
+        -webkit-backdrop-filter: var(--blur);
+        width: 100%;
+        max-width: 560px;
+        max-height: calc(100vh - 48px);
         display: flex;
-        justify-content: space-between;
-        border-bottom: 1px solid rgba(120, 170, 210, 0.06);
-        padding: 1px 0;
+        flex-direction: column;
+        overflow: hidden;
+        animation: modal-in 0.2s cubic-bezier(0.4, 0, 0.2, 1);
       }
-      #inspector .k {
+      @keyframes modal-in {
+        from {
+          transform: translateY(8px);
+          opacity: 0;
+        }
+      }
+      .modal-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--border);
+      }
+      .modal-head h2 {
+        margin: 0;
+        font-size: 12px;
+        color: var(--accent);
+        letter-spacing: 0.12em;
+      }
+      .modal-x {
+        background: none;
+        border: 1px solid transparent;
+        color: var(--muted);
+        cursor: pointer;
+        font: inherit;
+        font-size: 14px;
+        line-height: 1;
+        padding: 4px 8px;
+        border-radius: 5px;
+      }
+      .modal-x:hover,
+      .modal-x:focus-visible {
+        color: var(--accent);
+        border-color: var(--border-hi);
+        outline: none;
+      }
+      .modal-tabs {
+        display: flex;
+        gap: 4px;
+        flex-wrap: wrap;
+        padding: 10px 16px 0;
+      }
+      .tab {
+        background: rgba(120, 170, 210, 0.07);
+        border: 1px solid var(--border);
+        border-radius: 6px 6px 0 0;
+        border-bottom: none;
+        color: var(--muted);
+        cursor: pointer;
+        font: inherit;
+        font-size: 11px;
+        padding: 6px 11px;
+        letter-spacing: 0.04em;
+      }
+      .tab:hover,
+      .tab:focus-visible {
+        color: var(--accent);
+        outline: none;
+      }
+      .tab.active {
+        color: var(--accent);
+        border-color: var(--border-hi);
+        background: var(--accent-dim);
+      }
+      .modal-body {
+        padding: 14px 16px;
+        overflow-y: auto;
+        flex: 1;
+      }
+      .modal-foot {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 16px;
+        border-top: 1px solid var(--border);
+        flex-wrap: wrap;
+      }
+      .modal-foot label {
+        display: flex;
+        align-items: center;
+        gap: 6px;
         color: var(--muted);
       }
-      #inspector .v {
+      .group-hint {
+        color: var(--muted);
+        font-size: 10px;
+        margin-bottom: 12px;
+        line-height: 1.5;
+      }
+      /* Guide modal content. */
+      .guide-sec {
+        margin-bottom: 18px;
+      }
+      .guide-sec:last-child {
+        margin-bottom: 0;
+      }
+      .guide-sec h3 {
+        color: var(--accent);
+        margin-top: 0;
+      }
+      .guide-lead {
         color: var(--text);
+        margin-bottom: 14px;
+        line-height: 1.6;
+      }
+      .key-grid {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 6px 12px;
+        align-items: baseline;
+      }
+      kbd {
+        display: inline-block;
+        min-width: 16px;
+        text-align: center;
+        background: rgba(120, 170, 210, 0.12);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        padding: 1px 6px;
+        color: var(--accent);
+        font: inherit;
+        font-size: 11px;
+        white-space: nowrap;
       }
 
       /* ──────────────────────────────────────────────────────────────────────────────────────────
          MANUAL mobile / desktop modes. No auto-detection — the user flips #mode-toggle and the choice
-         is remembered (localStorage). Desktop = the floating side panels (default). Mobile = the canvas
-         stays the full-screen hero, the panels become bottom sheets summoned from a fixed action bar,
-         and touch targets grow. Same frosted-glass brand; sheets slide via transform (no layout shift).
+         is remembered (localStorage). Desktop = floating panels + bars. Mobile = the canvas stays the
+         full-screen hero, panels become bottom sheets summoned from a fixed action bar, touch targets grow.
          ────────────────────────────────────────────────────────────────────────────────────────── */
       #mode-toggle {
-        position: fixed;
-        top: 14px;
-        left: 50%;
-        transform: translateX(-50%);
-        z-index: 30;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        background: var(--panel);
+        background: rgba(120, 170, 210, 0.1);
         border: 1px solid var(--border);
-        border-radius: var(--radius);
-        box-shadow: var(--shadow);
-        backdrop-filter: var(--blur);
-        -webkit-backdrop-filter: var(--blur);
+        border-radius: 5px;
         color: var(--muted);
-        padding: 6px 11px;
+        padding: 5px 9px;
         cursor: pointer;
         font: inherit;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
+        font-size: 11px;
+        white-space: nowrap;
       }
       #mode-toggle:hover,
       #mode-toggle:focus-visible {
@@ -460,7 +861,6 @@
         border-color: var(--accent);
         outline: none;
       }
-      /* Fixed bottom action bar — only in mobile mode. Always-on play + the two panel summons. */
       #mbar {
         display: none;
         position: fixed;
@@ -487,8 +887,8 @@
         border: 1px solid var(--border);
         border-radius: var(--radius);
         font: inherit;
-        font-size: 13px;
-        letter-spacing: 0.06em;
+        font-size: 12px;
+        letter-spacing: 0.04em;
         text-transform: uppercase;
         cursor: pointer;
       }
@@ -500,16 +900,22 @@
       #mbar .mbtn.active {
         border-color: var(--accent);
         color: var(--accent);
-        background: rgba(138, 217, 242, 0.14);
+        background: var(--accent-dim);
       }
       #mbar #mbar-play {
-        flex: 0 0 34%;
+        flex: 0 0 24%;
       }
 
       body.mode-mobile #mbar {
         display: flex;
       }
-      /* Mobile: both side panels become full-width bottom sheets, hidden (slid down) until summoned. */
+      /* Mobile hides the desktop-only floating chrome; play lives on the action bar, settings/guide are
+         reachable from it, view toggles move into the world sheet. */
+      body.mode-mobile #topbar,
+      body.mode-mobile #menu-buttons,
+      body.mode-mobile #view-chips {
+        display: none !important;
+      }
       body.mode-mobile #left,
       body.mode-mobile #right {
         top: auto;
@@ -521,7 +927,7 @@
         margin: 0 auto;
         max-height: 74vh;
         border-radius: var(--radius) var(--radius) 0 0;
-        padding-bottom: 78px; /* clear the action bar so the last rows aren't hidden behind it */
+        padding-bottom: 78px;
         transform: translateY(105%);
         transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
         z-index: 14;
@@ -530,7 +936,6 @@
       body.mode-mobile #right.sheet-open {
         transform: translateY(0);
       }
-      /* Roomier touch targets inside the mobile sheets. */
       body.mode-mobile .btn {
         min-height: 40px;
         padding: 9px 12px;
@@ -541,7 +946,6 @@
       body.mode-mobile .num {
         min-height: 36px;
       }
-      /* The desktop floating legend never belongs in mobile. */
       body.mode-mobile #legend-panel,
       body.mode-mobile #legend-pill {
         display: none !important;
@@ -551,61 +955,125 @@
         body.mode-mobile #right {
           transition: none;
         }
+        .overlay,
+        .modal {
+          animation: none;
+        }
       }
     </style>
   </head>
   <body>
     <canvas id="view"></canvas>
 
-    <div id="left" class="panel">
-      <h1>ecosim · archipelago</h1>
-      <div id="hud-body" class="muted">
-        evolving swimmers in fertility pockets across a huge ocean. scroll = zoom · drag = pan ·
-        click = inspect · <b>f</b> = food layer (<b>shift+f</b> = back) · <b>o</b> = creature overlay · <b>v</b> = flow ·
-        <b>c</b> = color mode · <b>l</b> = follow + record · <b>t</b> = family tree.
-        <div class="muted">
-          food layer: <b id="food-layer-label">total</b> · color mode:
-          <b id="color-mode-label">lineage</b>
+    <!-- Boot-fatal banner (renderer init failure) — replaces the old in-panel error slot. -->
+    <div
+      id="fatal"
+      class="panel"
+      hidden
+      style="top: 14px; left: 14px; max-width: 480px; z-index: 50"
+    ></div>
+
+    <!-- TOP: transport / time controls (Controls renders into #controls) -->
+    <header id="topbar" aria-label="Time controls">
+      <div id="controls" class="tb-row"></div>
+      <div class="tb-sep"></div>
+      <button id="mode-toggle" aria-label="Toggle mobile / desktop layout">📱 mobile</button>
+    </header>
+
+    <!-- LEFT: selected-creature dossier (brain keystone → morphotype → genes) -->
+    <aside id="left" class="panel" aria-label="Selected creature">
+      <div class="panel-head">
+        <h2>selected creature</h2>
+        <span id="follow-status" class="muted"></span>
+      </div>
+      <div id="creature-empty" class="muted empty">click any dot in the world to inspect it</div>
+      <div id="creature-body" hidden>
+        <h3>brain</h3>
+        <canvas id="brain"></canvas>
+        <h3>morphotype <span class="muted h3-hint">— flip the lens to walk the whole genome</span></h3>
+        <select id="radar-lens"></select>
+        <canvas id="radar"></canvas>
+        <h3>state &amp; genes</h3>
+        <div id="inspector"></div>
+        <div class="ctl-row" style="margin-top: 10px">
+          <button id="follow-btn" class="btn" title="follow + record this creature (l)">
+            🔒 follow
+          </button>
+          <button id="lineage-open" class="btn" title="family tree (t)">🌳 tree</button>
+          <button id="csv-btn" class="btn" title="download the followed creature's per-tick CSV">
+            ⤓ csv
+          </button>
         </div>
       </div>
-      <h2>controls</h2>
-      <div id="controls"></div>
-      <h2>knobs</h2>
-      <div id="knobs"></div>
-    </div>
+    </aside>
 
-    <div id="right" class="panel">
+    <!-- RIGHT: world panel (global stats + population + distributions) -->
+    <aside id="right" class="panel" aria-label="World statistics">
+      <h2>world</h2>
+      <div id="world-stats"></div>
       <h2>population</h2>
       <canvas id="graph"></canvas>
-      <h2>distributions</h2>
+      <div id="graph-legend"></div>
+      <h2>distributions <span class="muted h3-hint">— drag a chart to reorder</span></h2>
       <details id="dist-pick" class="dist-pick">
         <summary>fields ▾</summary>
         <div id="dist-fields" class="dist-fields"></div>
       </details>
       <canvas id="dist"></canvas>
-      <h2>brain</h2>
-      <canvas id="brain"></canvas>
-      <h2>morphotype</h2>
-      <select id="radar-lens"></select>
-      <canvas id="radar"></canvas>
-      <h2 class="insp-head">inspector
-        <button id="lineage-open" class="btn ln-btn" title="family tree (t)">🌳 tree</button>
-      </h2>
-      <div id="inspector"></div>
+    </aside>
+
+    <!-- BOTTOM-LEFT: menu buttons -->
+    <div id="menu-buttons">
+      <button id="open-settings" class="menu-btn">⚙ settings</button>
+      <button id="open-guide" class="menu-btn">❔ guide</button>
     </div>
 
+    <!-- BOTTOM-CENTRE: view chips (render/overlay toggles) -->
+    <div id="view-chips" aria-label="View toggles"></div>
+
+    <!-- BOTTOM-RIGHT: dot legend -->
     <div id="legend-panel" class="panel"></div>
     <button id="legend-pill">legend</button>
+
+    <!-- Family-tree modal (centered overlay) -->
     <div id="lineage-panel" class="panel"></div>
 
-    <!-- Manual mode flip (no auto-detect); label shows the mode you'll switch TO. -->
-    <button id="mode-toggle" aria-label="Toggle mobile / desktop layout">📱 mobile</button>
+    <!-- Settings modal -->
+    <div id="settings-overlay" class="overlay" hidden>
+      <div class="modal" role="dialog" aria-modal="true" aria-label="Settings">
+        <div class="modal-head">
+          <h2>settings</h2>
+          <button class="modal-x" data-close="settings" aria-label="Close settings">✕</button>
+        </div>
+        <div id="settings-tabs" class="modal-tabs"></div>
+        <div id="settings-body" class="modal-body"></div>
+        <div class="modal-foot">
+          <label>seed <input id="modal-seed" class="num" type="number" /></label>
+          <button id="launch-world" class="btn">↺ launch new world</button>
+          <span class="muted" style="flex: 1; text-align: right; font-size: 10px">
+            <b class="lbl">*</b> = applied on new world · others live
+          </span>
+        </div>
+      </div>
+    </div>
 
-    <!-- Mobile-only action bar: always-on play + summon the two bottom-sheet panels. -->
+    <!-- Guide modal -->
+    <div id="guide-overlay" class="overlay" hidden>
+      <div class="modal" role="dialog" aria-modal="true" aria-label="Guide">
+        <div class="modal-head">
+          <h2>guide &amp; controls</h2>
+          <button class="modal-x" data-close="guide" aria-label="Close guide">✕</button>
+        </div>
+        <div id="guide-body" class="modal-body"></div>
+      </div>
+    </div>
+
+    <!-- Mobile-only action bar: always-on play + summon sheets + settings. -->
     <nav id="mbar" aria-label="Mobile controls">
-      <button id="mbar-play" class="mbtn" aria-label="Play or pause">▶ play</button>
-      <button id="mbar-controls" class="mbtn" aria-pressed="false">⚙ controls</button>
-      <button id="mbar-stats" class="mbtn" aria-pressed="false">📊 stats</button>
+      <button id="mbar-play" class="mbtn" aria-label="Play or pause">▶</button>
+      <button id="mbar-controls" class="mbtn" aria-pressed="false">🔬 creature</button>
+      <button id="mbar-stats" class="mbtn" aria-pressed="false">📊 world</button>
+      <button id="mbar-settings" class="mbtn">⚙</button>
     </nav>
 
     <script type="module" src="/src/app/main.ts"></script>
