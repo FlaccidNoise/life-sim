@@ -144,13 +144,15 @@ export function hunt(store: OrganismStore, hash: SpatialHash, cfg: Config): void
  * When cfg.scentIdentity is false the deposit is identity-blind (equal into all channels) — the ablation.
  */
 export function depositScent(store: OrganismStore, scent: ScentField, cfg: Config): void {
-  const { liveIndices, liveCount, x, y, hue, scalarGenes } = store;
+  const { liveIndices, liveCount, x, y, hue, scalarGenes, scentGate } = store;
   const strength = cfg.pheroDepositStrength;
   const identity = cfg.scentIdentity;
+  const brainGatedScent = cfg.brainGatedScent;
   for (let k = 0; k < liveCount; k++) {
     const i = liveIndices[k]!;
     const sg = i * SCALAR_GENE_COUNT;
-    const amount = scalarGenes[sg + ScalarGene.PHERO_DEPOSIT]! * strength;
+    let amount = scalarGenes[sg + ScalarGene.PHERO_DEPOSIT]! * strength;
+    if (brainGatedScent) amount *= scentGate[i]!; // brain decides whether to broadcast (×1 when off)
     if (amount <= 0) continue;
     const diet = scalarGenes[sg + ScalarGene.DIET]!;
     scent.deposit(x[i]!, y[i]!, diet, hue[i]!, amount, identity);

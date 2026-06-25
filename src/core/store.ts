@@ -37,6 +37,11 @@ export class OrganismStore {
   // alloc for the edge-case pre-steer read.
   readonly biteGate: Float64Array;
 
+  // Transient per-tick SCENT-GATE actuator (0..1): the brain's broadcast decision (A2b). Recomputed each tick
+  // in steer(); read by depositScent() to scale the deposit amount. Not hashed (derived). Defaults to 1
+  // (broadcast-open) on alloc for the edge-case pre-steer read.
+  readonly scentGate: Float64Array;
+
   // Transient per-tick MOOD-GLOW actuator (0..1): the brain's bioluminescence output (slice F). Recomputed
   // each tick in steer() from the hidden "mood" layer; read by the renderer (biolum brightness) and, when
   // the glow-sense channel is on, deposited into the glow field. Not hashed (derived).
@@ -126,6 +131,7 @@ export class OrganismStore {
     this.forceY = new Float64Array(capacity);
     this.eatGate = new Float64Array(capacity);
     this.biteGate = new Float64Array(capacity);
+    this.scentGate = new Float64Array(capacity);
     this.glow = new Float64Array(capacity);
     this.senseX = new Float64Array(capacity);
     this.senseY = new Float64Array(capacity);
@@ -187,6 +193,7 @@ export class OrganismStore {
     this.seekTicksLeft[slot] = 0;
     this.eatGate[slot] = 1; // default full eating until steer() recomputes (avoids a stale pre-steer read)
     this.biteGate[slot] = 1; // default bite-open until steer() recomputes (A2a; avoids a stale pre-steer read)
+    this.scentGate[slot] = 1; // default broadcast-open until steer() recomputes (A2b; avoids a stale pre-steer read)
     return slot;
   }
 

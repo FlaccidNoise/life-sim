@@ -469,13 +469,17 @@ export const Brain = {
   // bite drain — predation becomes a DECISION. This is the named BIAS gene; the per-unit hidden→output
   // weights live in the W2 block at output column 3. Seeded gate-OPEN (bite by default); the gate LEARNS.
   BITE_GATE_BIAS: 53,
+  // A2b brain-gated scent deposit: a sigmoid scentGate output (hidden-layer column 4) read by depositScent()
+  // to scale the deposit amount — broadcast vs go silent. This is the named BIAS gene; the per-unit weights
+  // live in the W2 block at output column 4. Seeded gate-OPEN; EVOLVE-ONLY (no within-life reward → no elig).
+  SCENT_GATE_BIAS: 54,
 } as const;
 /** Senses-core brain weights (food + sight) — the count present before walls/flow/hunger, and the RNG-draw
  *  count when all gated blocks are off. Each gated block extends the array but draws RNG only when on. */
 export const BRAIN_CORE_GENES = 10;
 /** Number of named (non-hidden) brain weights — the linear sensor→motor map above (slots 0..44). The hidden
  *  layer's weight blocks start here. */
-export const NAMED_BRAIN_GENES = 54;
+export const NAMED_BRAIN_GENES = 55;
 
 /** Order of the HIDDEN_INPUTS scalars fed into the hidden layer (slice E) — the same heading-frame inputs
  *  turn/thrust read, plus own-SIZE/own-DIET (A1a) and a constant bias. The single pre-merge PHERO pair is
@@ -522,7 +526,7 @@ export const HiddenInput = {
  *  pass is skipped when off); the weights are always drawn (on-by-default policy). */
 export const HIDDEN_UNITS = 4; // escape hatch: bump to 6 only if 4 bottlenecks — not speculatively
 export const HIDDEN_INPUTS = 24; // +SIZE +DIET (A1a) +CROWD (A1b) +FERT (A1c)
-export const HIDDEN_OUTPUTS = 4; // turn=0, thrust=1, eatGate=2, biteGate=3 (A2a)
+export const HIDDEN_OUTPUTS = 5; // turn=0, thrust=1, eatGate=2, biteGate=3 (A2a), scentGate=4 (A2b)
 export const HIDDEN_W1 = NAMED_BRAIN_GENES; // input→hidden block start (derived; see genome.test layout lock)
 export const HIDDEN_W2 = HIDDEN_W1 + HIDDEN_INPUTS * HIDDEN_UNITS; // hidden→output block start (derived)
 
@@ -582,6 +586,8 @@ const FOUNDER_BRAIN: readonly number[] = [
   0, 0,
   // A2a BITE_GATE_BIAS (53): seeded gate-OPEN (sigmoid(4)≈0.98 → bite by default; evolution/learning refine).
   4,
+  // A2b SCENT_GATE_BIAS (54): seeded gate-OPEN (sigmoid(4)≈0.98 → broadcast by default; evolution refines).
+  4,
   // Hidden layer (slice E): HIDDEN_INPUTS·HIDDEN_UNITS (80) input→hidden + HIDDEN_UNITS·HIDDEN_OUTPUTS (12)
   // hidden→output weights, all seeded 0 — the founder Gaussian noise at seed breaks the unit symmetry.
   ...new Array<number>(HIDDEN_INPUTS * HIDDEN_UNITS + HIDDEN_UNITS * HIDDEN_OUTPUTS).fill(0),
@@ -593,6 +599,15 @@ const FOUNDER_BRAIN: readonly number[] = [
   // glowing crowd or flee it). Always drawn (consistent stream); they learn (real input → eligibility).
   ...new Array<number>(4).fill(0),
 ];
+
+// Layout guard: FOUNDER_BRAIN is hand-maintained but indexed by `g` up to BRAIN_GENES in seedGenome (which
+// reads FOUNDER_BRAIN[g]! with a non-null assertion). An off-by-one from a layout edit would otherwise read
+// `undefined`, producing NaN founder weights that silently poison the run. Fail loudly at module load instead.
+if (FOUNDER_BRAIN.length !== BRAIN_GENES) {
+  throw new Error(
+    `FOUNDER_BRAIN length ${FOUNDER_BRAIN.length} !== BRAIN_GENES ${BRAIN_GENES} — a layout edit is out of sync`,
+  );
+}
 
 /** Seed a founder's genome: founder brain + Gaussian spread, random hue (lineage colors diverge).
  *  The 8 env-sense weights (wall/flow) and the 2 hunger weights are GATED: a WALL weight is drawn only
