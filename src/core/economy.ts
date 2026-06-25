@@ -457,6 +457,11 @@ export function reproduce(
     ) {
       continue;
     }
+    // A2c brain-gated breeding: the brain chooses WHEN to breed. Skip (consuming NO rng — before spawnChildSlot's
+    // angle draw, mirroring the cooldown skip) when the gate is below threshold → the determinism stream is
+    // preserved. Gated on brainGatedBreeding; seeded gate-open so this rarely bites at founding. Covers both the
+    // asexual and sexual paths (the gate is common to both, before any spawn/rng).
+    if (cfg.brainGatedBreeding && store.breedGate[p]! < cfg.breedGateThreshold) continue;
 
     if (!cfg.sexualReproduction) {
       if (energy[p]! < satiatedBar(scalarGenes, p, cfg)) continue; // not full yet
