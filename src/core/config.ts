@@ -387,6 +387,11 @@ export interface Config {
    *  the applied motor output — the eligibility trace still uses the pre-shaping raw signal, so within-life
    *  learning is unchanged. OFF by default so the determinism hash is byte-identical until you opt in. */
   motorSquash: boolean;
+  /** Evolvable per-creature damping (drift ↔ dart): when on, integrate() reads each creature's DAMPING
+   *  gene instead of the global `damping` constant. The gene is drawn from RNG regardless of this flag,
+   *  so toggling it is a pure read-path switch — the determinism hash for a given seed is unaffected by
+   *  the flag. ON by default (movement-style variance). */
+  evolvableDamping: boolean;
   /** Fraction of MAX_THRUST a creature may apply in REVERSE (backward force). 0 = forward-only (legacy
    *  motor); 0.5 = can back away from a threat at half forward power while still facing it. This is its
    *  OWN ablation knob — set to 0 and the motor is byte-identical to the pre-reverse engine. */
@@ -689,6 +694,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     // Steering output shaping: OFF = hard clamp (current behavior, byte-identical hash). Flip on to
     // smoothly tanh-squash turn/thrust → graded, legible steering (kills the motor-saturation spin).
     motorSquash: false,
+    evolvableDamping: true,
     reverseThrustFraction: 0.5, // ON by default: creatures can back away at half forward power
     brainGatedEating: true, // ON by default: eating is a decision — graze slow vs lift the head to flee fast
     eatMovePenalty: 0.4,

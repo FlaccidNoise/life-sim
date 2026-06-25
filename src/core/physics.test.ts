@@ -15,6 +15,35 @@ function setMaxSpeed(s: OrganismStore, slot: number, v: number): void {
   s.scalarGenes[slot * SCALAR_GENE_COUNT + ScalarGene.MAX_SPEED] = v;
 }
 
+describe('evolvable per-creature damping', () => {
+  // Give a creature one tick of zero force after an initial velocity, integrating only the damping decay.
+  const coastVx = (dampingGene: number, evolvable: boolean): number => {
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.vx[i] = 10;
+    s.vy[i] = 0;
+    setMaxSpeed(s, i, 1e9); // don't let the clamp interfere
+    s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.DAMPING] = dampingGene;
+    s.rebuildLive();
+    // global damping arg = 0.9; evolvable flag decides whether the gene overrides it.
+    integrate(s, 1, 0.9, true, W, H, 6, 0, null, evolvable);
+    return s.vx[i]!;
+  };
+
+  it('a high-damping creature coasts faster than a low-damping one (gene drives retention)', () => {
+    const drifter = coastVx(0.98, true);
+    const darter = coastVx(0.6, true);
+    expect(drifter).toBeCloseTo(9.8); // 10 * 0.98
+    expect(darter).toBeCloseTo(6.0); // 10 * 0.6
+    expect(drifter).toBeGreaterThan(darter);
+  });
+
+  it('evolvableDamping off → the gene is ignored and the global damping (0.9) applies', () => {
+    expect(coastVx(0.6, false)).toBeCloseTo(9.0); // 10 * 0.9, gene 0.6 ignored
+    expect(coastVx(0.98, false)).toBeCloseTo(9.0); // same — global wins
+  });
+});
+
 describe('integrate', () => {
   it('symplectic-Euler with no force or damping just advances by velocity', () => {
     const s = new OrganismStore(4);

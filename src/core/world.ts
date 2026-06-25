@@ -318,6 +318,7 @@ export class World {
       cfg.cellRadius,
       cfg.sizeSpeedExp,
       this.walls,
+      cfg.evolvableDamping,
     );
     // HUNT: predators (diet>0) bite nearby creatures. Rebuild the hash at post-MOVE positions first so
     // bites use where creatures actually are this tick.
