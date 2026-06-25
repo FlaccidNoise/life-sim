@@ -13,7 +13,10 @@ import { scanHealth } from '../core/health';
 import { Renderer, ColorMode, FoodLayer } from '../render/renderer';
 import { buildOverlaySegments } from '../render/overlay';
 import { Controls } from './observability/controls';
-import { Knobs } from './observability/knobs';
+import { SettingsModal } from './observability/settings-modal';
+import { GuideModal } from './observability/guide-modal';
+import { ViewChips } from './observability/view-chips';
+import { WorldStats } from './observability/world-stats';
 import { Inspector } from './observability/inspector';
 import { BrainView } from './observability/brain-view';
 import { RadarView, LENSES, DEFAULT_LENS } from './observability/radar-view';
@@ -31,7 +34,7 @@ function el<T extends HTMLElement>(id: string): T {
 }
 
 const canvas = el<HTMLCanvasElement>('view');
-const hudBody = el('hud-body');
+const fatal = el('fatal'); // boot-fatal banner (renderer init failure)
 
 // Live demo = the FULL LIVING-WORLD PACKAGE. defaultConfig keeps every feature OFF so headless/tests stay
 // byte-identical to the pre-feature engine; the demo opts in here. Every knob is live-tunable in the panel:
@@ -46,7 +49,8 @@ const hudBody = el('hud-body');
 let config: Config = defaultConfig({
   // Spatial structure + legibility.
   wallRegionCount: 5,
-  flowStrength: 0.35, // stronger current so channel B actually drifts (and mixes pockets for encounters)
+  flowStrength: 4, // strong current — measured strongest value that keeps the population robustly alive AND
+  // breeding (births fall ~32% from baseline as the push sweeps bodies off food; fs≥8 craters them).
   flowPushStrength: 0.25,
   motorSquash: true,
   // Density (the proven lever): more + bigger pockets → dense → predators + niche partitioning return.
@@ -107,7 +111,8 @@ let renderer: Renderer;
 try {
   renderer = new Renderer(canvas, config.worldWidth, config.worldHeight, config.maxOrganisms);
 } catch (err) {
-  hudBody.textContent = `Renderer init failed: ${err instanceof Error ? err.message : String(err)}`;
+  fatal.hidden = false;
+  fatal.textContent = `Renderer init failed: ${err instanceof Error ? err.message : String(err)}`;
   throw err;
 }
 // F4 bioluminescence ON by default — the deep-sea aesthetic (creatures glow by activity/role). Pure render,
@@ -123,8 +128,8 @@ const graph = new TimeSeriesGraph(el<HTMLCanvasElement>('graph'), [
 const inspector = new Inspector(el('inspector'));
 const brainView = new BrainView(el<HTMLCanvasElement>('brain'));
 const radar = new RadarView(el<HTMLCanvasElement>('radar'));
-// Lens selector: switches which heritable-trait axis-set the radar draws (Capability / Senses & Social
-// / Life-history). Options come from the LENSES registry so the list lives in one place.
+// Lens selector: switches which heritable-trait axis-set the radar draws (Capability overview + the
+// per-subsystem genome walk). Options come from the LENSES registry so the list lives in one place.
 const lensSelect = el<HTMLSelectElement>('radar-lens');
 for (const lens of LENSES) {
   const opt = document.createElement('option');
@@ -150,7 +155,7 @@ let speed = 1; // sim ticks per animation frame; <1 = slow-mo (interpolated for 
 let foodLayer: FoodLayer = FoodLayer.TOTAL;
 let showWalls = true; // wall slate layer (toggle with 'w')
 let showOverlay = true; // per-creature debug overlay on the selection (toggle with 'o')
-let showFlow = false; // flow-field current arrows (toggle with 'v')
+let showFlow = false; // flow-field current arrows (toggle with 'v') — OFF by default; the current's effect reads in the drifting food, the arrow overlay is opt-in
 let colorMode: ColorMode = ColorMode.LINEAGE; // dot hue source (cycle with 'c'): lineage → diet → energy → forage
 let selected: { slot: number; gen: number } | null = null;
 
@@ -168,8 +173,6 @@ const FOOD_LAYER_NAMES: Record<number, string> = {
   [FoodLayer.SCENT_KIN_SIN]: 'scent: kin (sin)',
 };
 const COLOR_MODE_NAMES = ['lineage', 'diet', 'energy', 'forage'];
-const foodLayerLabel = el('food-layer-label');
-const colorModeLabel = el('color-mode-label');
 
 /** The ring of layers that actually have data for the current world, in cycle order. Off is always in
  *  the ring; channels B/C only when foodChannels covers them; the 4 scent channels only when the field exists. */
@@ -196,9 +199,7 @@ function cycleFoodLayer(dir = 1): void {
   // If the current layer vanished (e.g. a reset dropped a channel), restart the ring at off.
   const next = cur < 0 ? 0 : (cur + dir + ring.length) % ring.length;
   foodLayer = ring[next]!;
-  foodLayerLabel.textContent = FOOD_LAYER_NAMES[foodLayer] ?? 'off';
 }
-foodLayerLabel.textContent = FOOD_LAYER_NAMES[foodLayer] ?? 'off';
 
 // Scratch for the selected creature's overlay line vertices ([x,y,r,g,b] per vertex; gl.LINES).
 const overlayScratch = new Float32Array(2048);
@@ -248,20 +249,15 @@ function setPlaying(v: boolean): void {
   syncMobileBar();
 }
 
-const controls = new Controls(el('controls'), config.seed, {
+const controls = new Controls(el('controls'), {
   onPlayToggle: () => setPlaying(!running),
   onStep: () => {
     world.step();
     followTick();
   },
-  onReset: (seed: number) => {
-    config = { ...config, seed };
-    rebuild();
-  },
   onSpeed: (n: number) => {
     speed = n;
   },
-  onDumpCsv: () => downloadFollowCsv(),
 });
 
 // Save the followed creature's per-tick recording as a CSV file (user-initiated via the ⤓ csv button).
@@ -276,23 +272,122 @@ function downloadFollowCsv(): void {
   URL.revokeObjectURL(url);
 }
 
-new Knobs(el('knobs'), config, {
-  // Live knob: mutate the config the world already holds → effect next tick, no reset.
-  onLive: (key, value) => {
-    (config[key] as number) = value;
+// Settings modal — the organized tuning surface (categorized knobs + seed + launch-new-world). Same
+// config-mutation routing the old flat #knobs panel used, so determinism is untouched.
+const settings = new SettingsModal(
+  el('settings-overlay'),
+  el('settings-tabs'),
+  el('settings-body'),
+  el<HTMLInputElement>('modal-seed'),
+  el<HTMLButtonElement>('launch-world'),
+  config,
+  {
+    // Live knob: mutate the config the world already holds → effect next tick, no reset.
+    onLive: (key, value) => {
+      (config[key] as number) = value;
+    },
+    // Seed-time knob: apply and rebuild the world from the seed.
+    onReset: (key, value) => {
+      config = { ...config, [key]: value };
+      rebuild();
+    },
+    // Live boolean toggle (e.g. learning on/off): mutate config in place → effect next tick, no reset.
+    onToggle: (key, value) => {
+      (config[key] as boolean) = value;
+    },
+    // Launch a fresh world from the edited seed + current (tuned) config.
+    onLaunch: (seed) => {
+      config = { ...config, seed };
+      rebuild();
+    },
+    getSeed: () => config.seed,
   },
-  // Seed-time knob: apply and rebuild the world from the seed.
-  onReset: (key, value) => {
-    config = { ...config, [key]: value };
-    rebuild();
-  },
-  // Live boolean toggle (e.g. learning on/off): mutate config in place → effect next tick, no reset.
-  onToggle: (key, value) => {
-    (config[key] as boolean) = value;
-  },
-});
+);
+const guide = new GuideModal(el('guide-overlay'), el('guide-body'));
+const worldStats = new WorldStats(el('world-stats'));
+el<HTMLButtonElement>('open-settings').addEventListener('click', () => settings.setOpen(true));
+el<HTMLButtonElement>('open-guide').addEventListener('click', () => guide.setOpen(true));
+el<HTMLButtonElement>('mbar-settings').addEventListener('click', () => settings.setOpen(true));
 
-controls.setFollow(-1, 0, false); // show the 'l = follow' hint before the first play
+// ── Selected-creature dossier: empty/body toggle + follow/csv controls ────────────────────────────────
+const creatureEmpty = el('creature-empty');
+const creatureBody = el('creature-body');
+const followStatusEl = el('follow-status');
+const followBtn = el<HTMLButtonElement>('follow-btn');
+function setCreatureVisible(v: boolean): void {
+  creatureEmpty.hidden = v;
+  creatureBody.hidden = !v;
+}
+function syncFollowUi(): void {
+  followBtn.classList.toggle('active', recorder.following);
+  followBtn.textContent = recorder.following ? '🔓 unfollow' : '🔒 follow';
+}
+function setFollowStatus(slot: number, ticks: number, alive: boolean): void {
+  followStatusEl.textContent =
+    slot < 0 ? '' : alive ? `🔒 #${slot} · ${ticks}t` : `† #${slot} · ${ticks}t`;
+}
+// Follow + record the selection — shared by the 'l' key and the dossier button.
+function toggleFollow(): void {
+  if (recorder.following) {
+    recorder.clear();
+    clearTrail();
+  } else if (selected) {
+    recorder.follow(selected.slot, selected.gen);
+    clearTrail();
+  }
+  syncFollowUi();
+}
+followBtn.addEventListener('click', toggleFollow);
+el<HTMLButtonElement>('csv-btn').addEventListener('click', downloadFollowCsv);
+syncFollowUi();
+
+// ── View chips (bottom-centre) — clickable mirror of the keyboard view toggles ────────────────────────
+function actFood(dir = 1): void {
+  cycleFoodLayer(dir);
+  syncView();
+}
+function actColor(): void {
+  colorMode = ((colorMode + 1) % 4) as ColorMode;
+  legend.setColorMode(colorMode);
+  syncView();
+}
+function actFlow(): void {
+  showFlow = !showFlow;
+  syncView();
+}
+function actWalls(): void {
+  showWalls = !showWalls;
+  syncView();
+}
+function actOverlay(): void {
+  showOverlay = !showOverlay;
+  syncView();
+}
+function actGlow(): void {
+  renderer.setGlow(!renderer.glow.enabled, 1); // renderer.glow is {enabled,intensity} — toggle the flag
+  syncView();
+}
+const viewChips = new ViewChips(el('view-chips'), {
+  onFood: () => actFood(1),
+  onColor: actColor,
+  onFlow: actFlow,
+  onWalls: actWalls,
+  onOverlay: actOverlay,
+  onGlow: actGlow,
+});
+// Push the current view state to the chips (called after any toggle, from chip OR keyboard).
+function syncView(): void {
+  viewChips.update({
+    food: FOOD_LAYER_NAMES[foodLayer] ?? 'off',
+    foodOn: foodLayer !== FoodLayer.OFF,
+    color: COLOR_MODE_NAMES[colorMode] ?? 'lineage',
+    flow: showFlow,
+    walls: showWalls,
+    overlay: showOverlay,
+    glow: renderer.glow.enabled,
+  });
+}
+syncView();
 
 // ── Manual mobile / desktop UI mode (no auto-detect) + the mobile action bar ─────────────────────────
 // The user explicitly flips modes; the choice is remembered. Desktop keeps the floating side panels;
@@ -355,7 +450,9 @@ function rebuild(): void {
   radar.clear();
   recorder.clear();
   clearTrail();
-  controls.setFollow(-1, 0, false);
+  setCreatureVisible(false); // back to the empty state on a fresh world
+  setFollowStatus(-1, 0, false);
+  syncFollowUi();
   prevBirths = 0;
   prevDeaths = 0;
 }
@@ -387,6 +484,7 @@ function selectCreature(slot: number, gen: number): void {
   brainView.select(slot, gen);
   radar.select(slot, gen);
   lineageModal.select(slot, gen);
+  setCreatureVisible(true); // reveal the dossier on first selection
 }
 
 // Scroll to zoom, around the cursor (the world point under the cursor stays put).
@@ -434,26 +532,17 @@ globalThis.addEventListener('resize', () => renderer.resize());
 
 // 'f' cycle food/field layer · 'w' wall layer · 'o' creature overlay · 'v' flow arrows · 'c' cycle dot color-mode · 'l' lock follow-cam + record.
 globalThis.addEventListener('keydown', (e) => {
-  if (e.key === 'f' || e.key === 'F') cycleFoodLayer(e.shiftKey ? -1 : 1); // Shift+F steps backward
-  if (e.key === 'w' || e.key === 'W') showWalls = !showWalls;
-  if (e.key === 'o' || e.key === 'O') showOverlay = !showOverlay;
-  if (e.key === 'v' || e.key === 'V') showFlow = !showFlow;
-  if (e.key === 'g' || e.key === 'G') renderer.setGlow(!renderer.glow, 1); // bioluminescence
-  if (e.key === 'c' || e.key === 'C') {
-    colorMode = ((colorMode + 1) % 4) as ColorMode;
-    legend.setColorMode(colorMode);
-    colorModeLabel.textContent = COLOR_MODE_NAMES[colorMode] ?? 'lineage';
-  }
-  if (e.key === 'l' || e.key === 'L') {
-    if (recorder.following) {
-      recorder.clear();
-      clearTrail();
-      controls.setFollow(-1, 0, false);
-    } else if (selected) {
-      recorder.follow(selected.slot, selected.gen);
-      clearTrail();
-    }
-  }
+  // Ignore shortcuts while typing in a field (the settings seed input, speed select, etc.).
+  const tgt = e.target as HTMLElement | null;
+  if (tgt && (tgt.tagName === 'INPUT' || tgt.tagName === 'SELECT' || tgt.tagName === 'TEXTAREA'))
+    return;
+  if (e.key === 'f' || e.key === 'F') actFood(e.shiftKey ? -1 : 1); // Shift+F steps backward
+  if (e.key === 'w' || e.key === 'W') actWalls();
+  if (e.key === 'o' || e.key === 'O') actOverlay();
+  if (e.key === 'v' || e.key === 'V') actFlow();
+  if (e.key === 'g' || e.key === 'G') actGlow(); // bioluminescence
+  if (e.key === 'c' || e.key === 'C') actColor();
+  if (e.key === 'l' || e.key === 'L') toggleFollow();
   if (e.key === 't' || e.key === 'T') lineageModal.toggle(); // family tree of the selection
 });
 
@@ -596,13 +685,25 @@ function frame(): void {
     renderer.drawLines(trailScratch, v);
   }
   // Flow-field current arrows ('v'): coarse sub-grid sample of world.flow drawn as cell-centre→centre+v·scale
-  // line pairs (dim cyan). scale=8·dt maps the CFL-max velocity (0.25·cellW/dt) to a ~2-cell arrow, so the
-  // arrows stay visibly sized whatever the flow strength. Pure render — no sim/determinism impact.
+  // line pairs, each a dim-tail→bright-head comet so the current's direction reads. Opt-in (off by default).
   if (showFlow && world.flow) {
     const flow = world.flow;
     const cellW = config.worldWidth / flow.cols;
     const cellH = config.worldHeight / flow.rows;
-    const scale = 8 * config.dt;
+    // Auto-scale the arrows to the field's ACTUAL peak magnitude, not the CFL ceiling: the tuned current
+    // sits ~1000× below CFL-max, so a fixed scale renders every arrow sub-pixel (invisible). One cheap
+    // pass over the sampled sub-grid finds the peak; the longest arrow is then drawn at ~1.6 cells so the
+    // current's pattern reads at any flowStrength. Pure render — no sim/determinism impact.
+    let peak = 1e-9;
+    for (let r = 0; r < flow.rows; r += FLOW_STRIDE) {
+      const cy = (r + 0.5) * cellH;
+      for (let c = 0; c < flow.cols; c += FLOW_STRIDE) {
+        const cx = (c + 0.5) * cellW;
+        const m = Math.hypot(flow.sampleX(cx, cy), flow.sampleY(cx, cy));
+        if (m > peak) peak = m;
+      }
+    }
+    const scale = (1.6 * cellW) / peak;
     let v = 0;
     for (let r = 0; r < flow.rows; r += FLOW_STRIDE) {
       const cy = (r + 0.5) * cellH;
@@ -610,17 +711,18 @@ function frame(): void {
         const cx = (c + 0.5) * cellW;
         const vx = flow.sampleX(cx, cy);
         const vy = flow.sampleY(cx, cy);
+        // Tail dim, head bright → a comet gradient that shows flow DIRECTION (a bare line wouldn't).
         flowScratch[v * 5] = cx;
         flowScratch[v * 5 + 1] = cy;
-        flowScratch[v * 5 + 2] = 0.2;
-        flowScratch[v * 5 + 3] = 0.7;
-        flowScratch[v * 5 + 4] = 0.8;
+        flowScratch[v * 5 + 2] = 0.1;
+        flowScratch[v * 5 + 3] = 0.34;
+        flowScratch[v * 5 + 4] = 0.4;
         v++;
         flowScratch[v * 5] = cx + vx * scale;
         flowScratch[v * 5 + 1] = cy + vy * scale;
-        flowScratch[v * 5 + 2] = 0.2;
-        flowScratch[v * 5 + 3] = 0.7;
-        flowScratch[v * 5 + 4] = 0.8;
+        flowScratch[v * 5 + 2] = 0.42;
+        flowScratch[v * 5 + 3] = 0.92;
+        flowScratch[v * 5 + 4] = 1.0;
         v++;
       }
     }
@@ -644,7 +746,7 @@ function frame(): void {
     lastTick = world.tick;
     // Perf line updated on the same cadence (hash.stats() scans every bucket — too costly per frame).
     controls.setPerf(stepMsEma, lastStepsPerFrame, world.hash.stats());
-    controls.setFollow(
+    setFollowStatus(
       recorder.following ? recorder.followedSlot : -1,
       recorder.count,
       recorder.isFollowedAlive(world.store),
@@ -657,12 +759,19 @@ function frame(): void {
   graph.push(world.tick, [world.population, world.food.total(), dB, dD]);
   graph.render();
   distributions.render(world.store);
+  worldStats.render(world.store, world.lastBirths, world.lastDeaths);
   controls.setStatus(world.tick, tps, world.population, world.stateHash());
   // keep the selection panel honest if the dot was recycled
   if (selected && !world.store.isAlive(selected.slot, selected.gen)) {
     inspector.clear();
     brainView.clear();
     radar.clear();
+    // Not following it (so nothing to export) → drop back to the clean "click a dot" prompt rather
+    // than leaving the dossier open on placeholders. Following keeps it up so ⤓ csv stays reachable.
+    if (!recorder.following) {
+      selected = null;
+      setCreatureVisible(false);
+    }
   }
 
   requestAnimationFrame(frame);
