@@ -51,6 +51,7 @@ export const BODY_AXES: readonly RadarAxisDef[] = [
   { gene: ScalarGene.MAX_TURN, label: 'agility', color: '#e0b15f' },
   { gene: ScalarGene.SIZE, label: 'size', color: '#9aa7b4' },
   { gene: ScalarGene.DAMAGE, label: 'bite', color: '#e0566a' },
+  { gene: ScalarGene.DAMPING, label: 'coast', color: '#88c0a8' }, // velocity retention — high = drifts on momentum
 ];
 
 /** SENSES — the full perception suite: three chemoreception channels + the three vision genes. */

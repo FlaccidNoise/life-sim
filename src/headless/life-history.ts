@@ -145,7 +145,7 @@ interface SeedResult {
 export const DEMO_OVERRIDES: Partial<Config> = {
   // Spatial structure + legibility.
   wallRegionCount: 5,
-  flowStrength: 4, // strong current: food drifts visibly (~11× the old 0.35 — measured strongest robust value)
+  flowStrength: 1, // visible current (3× old 0.35) reconciled with resilience: only zero-extinction setting
   flowPushStrength: 0.25,
   motorSquash: true,
   // Density + two differentiated resources (channel A wall-tied, B drifting) + parcels (vision-revival).
