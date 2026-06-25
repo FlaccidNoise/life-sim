@@ -213,6 +213,18 @@ describe('scalar genes (evolvable per-creature traits)', () => {
     expect(mean).toBeLessThan(cfg.maxSpeed + 2); // mean sits near the center
   });
 
+  it('keeps the widened gene ranges (resilience slice 3 — guards against silent revert)', () => {
+    const byKey = (k: string): { min: number; max: number } => {
+      const spec = SCALAR_GENE_SPECS.find((s) => s.centerKey === k)!;
+      return { min: spec.min, max: spec.max };
+    };
+    // metabolicEfficiency widened up (throughput axis the pop rails at), reproThreshold widened DOWN (fast
+    // r-strategist niche), visionRange widened up. Lock the bounds so a future spec edit can't quietly drop them.
+    expect(byKey('metabolicEfficiency').max).toBe(2.0);
+    expect(byKey('reproThreshold').min).toBe(10);
+    expect(byKey('visionRange').max).toBe(384);
+  });
+
   it('seed + mutation keep every gene within its clamp range', () => {
     const g = new Float32Array(4 * SCALAR_GENE_COUNT);
     const wild = defaultConfig({ founderSigma: 50, mutationSigma: 50 }); // huge → would blow past range
