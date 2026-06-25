@@ -65,14 +65,46 @@ describe('World — Phase 0 determinism contract', () => {
     expect(hc.every((v) => v === 0)).toBe(true); // never armed while OFF
   });
 
-  it('huntHandlingTime > 0 is deterministic: same (config, seed) → byte-identical hash', () => {
-    const a = new World(defaultConfig({ seed: 1, huntHandlingTime: 8 }));
-    const b = new World(defaultConfig({ seed: 1, huntHandlingTime: 8 }));
-    for (let t = 0; t < 400; t++) {
-      a.step();
-      b.step();
-    }
-    expect(a.stateHash()).toBe(b.stateHash());
+  it('huntHandlingTime > 0 CHANGES world behavior where bites land, and stays deterministic (Type-II)', () => {
+    // A small DENSE world so predators actually land bites within a short run (predEncounter>0 quickly):
+    // 512² with 400 founders, 40% predators seeded in the upper size band (the weapon to bite smaller prey).
+    // Self-validating: the run is only a meaningful divergence test if predation actually occurred, which we
+    // assert via huntCooldownLeft going nonzero — otherwise ON==OFF would be vacuous (as it is at 8192²).
+    const dense = (huntHandlingTime: number) =>
+      defaultConfig({
+        seed: 1,
+        worldWidth: 512,
+        worldHeight: 512,
+        maxOrganisms: 4096,
+        initialPopulation: 400,
+        predatorFraction: 0.4,
+        predatorSizeBoost: 0.8,
+        huntHandlingTime,
+      });
+    /** Run a world N ticks; report whether the refractory was ever armed (= a bite landed) + the final hash. */
+    const run = (cfg: ReturnType<typeof dense>): { everArmed: boolean; hash: string } => {
+      const w = new World(cfg);
+      let everArmed = false;
+      for (let t = 0; t < 300; t++) {
+        w.step();
+        const hc = w.store.huntCooldownLeft;
+        for (let i = 0; i < hc.length; i++)
+          if (hc[i]! > 0) {
+            everArmed = true;
+            break;
+          }
+      }
+      return { everArmed, hash: w.stateHash() };
+    };
+
+    const on = run(dense(10));
+    const off = run(dense(0));
+    expect(on.everArmed).toBe(true); // predation genuinely occurred with the feature ON (test is non-vacuous)
+    expect(off.everArmed).toBe(false); // OFF never arms the counter (the gate holds)
+    expect(on.hash).not.toBe(off.hash); // the handling-time refractory actually changes the world's evolution
+
+    // Determinism with the feature ON: same (config, seed) → byte-identical hash.
+    expect(run(dense(10)).hash).toBe(on.hash);
   });
 
   it('predatorSizeBoost 0 is byte-identical to default; >0 perturbs (predator founders seeded big, same draw count)', () => {
