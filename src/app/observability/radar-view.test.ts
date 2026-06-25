@@ -105,7 +105,7 @@ describe('radar lenses', () => {
 
   it('the subsystem lenses (everything past capability) cover every heritable gene', () => {
     // Capability is a curated overview; the remaining lenses are the genome walk and together must
-    // surface all 26 scalar genes so the dropdown gives a full read of a creature.
+    // surface every scalar gene (SCALAR_GENE_COUNT) so the dropdown gives a full read of a creature.
     const covered = new Set<number>();
     for (const lens of LENSES) {
       if (lens.key === 'capability') continue;

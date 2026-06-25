@@ -49,8 +49,9 @@ const fatal = el('fatal'); // boot-fatal banner (renderer init failure)
 let config: Config = defaultConfig({
   // Spatial structure + legibility.
   wallRegionCount: 5,
-  flowStrength: 4, // strong current — measured strongest value that keeps the population robustly alive AND
-  // breeding (births fall ~32% from baseline as the push sweeps bodies off food; fs≥8 craters them).
+  flowStrength: 1, // visible current (3× the old 0.35) reconciled with resilience: on the consolidated
+  // engine (latest brain + foodDriveFloor + wider ranges) fs=1 is the ONLY zero-extinction setting across
+  // 8 seeds (mean end-pop 326); fs≥2 sweeps bodies off food → 1/8 seeds goes extinct. flowPush stays live.
   flowPushStrength: 0.25,
   motorSquash: true,
   // Density (the proven lever): more + bigger pockets → dense → predators + niche partitioning return.
