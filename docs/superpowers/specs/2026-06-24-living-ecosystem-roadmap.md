@@ -88,6 +88,9 @@ neighbor-count scan already exists in `economy.metabolize` — plumb a sense-tim
 → does chase-vs-flee become learnable? Report the behavior shift or its absence.
 
 ### A2 — Brain-gated OUTPUTS (unlocks predation-as-decision)
+**Progress (2026-06-24):** sliced A2a/A2b/A2c (spec: `docs/superpowers/specs/2026-06-24-A2-brain-gated-outputs-design.md`; bite learns, scent/breed evolve-only).
+✅ **A2a (BITE_GATE) SHIPPED to main `6fa3f93`** — predation is a brain decision: `biteGate` (hidden output col 3, `HIDDEN_OUTPUTS 3→4`, seeded gate-open, LEARNS) scales `hunt()`'s drain behind `cfg.brainGatedBiting` (OFF=×1 byte-identical); `BRAIN_GENES 170→175`; 384 green, review clean. **MEASURED: predFrac 0.0% ON AND OFF — predators are EXTINCT under the demo regime (engine ceiling), so brain-gated bite is a non-regressive no-op. The bite-as-decision lever Bucket B needs is now built, but it (and the A1 inputs) stay INERT until Bucket B keeps predators alive + concentrates prey.** ⏳ A2b (SCENT_GATE) / A2c (BREED_GATE) queued — these operate on the live grazer population, so they're more likely to engage than bite. **Strategic note: across A1+A2a, the consistent finding is that wired brain I/O is mostly inert until the density/predation wall (Bucket B) is cracked — B is now the critical path.**
+
 Promote reflexes to hidden-layer outputs (grow `HIDDEN_OUTPUTS` 3→6):
 - **BITE_GATE** — predation becomes a decision. `hunt()` (economy.ts:~63–128) currently auto-bites the
   nearest edible target every tick using the DAMAGE gene. Gate the drain (economy.ts:~112) on a `biteGate[i]`
