@@ -831,6 +831,47 @@ describe('reproduce (breed at the per-creature satiated bar)', () => {
     expect(s.energy[child]!).toBeCloseTo(25); // provisioned to its birthEnergy gene
   });
 
+  it('brainGatedBreeding: breedGate below threshold skips breeding (no births, no rng); at/above breeds (A2c)', () => {
+    // A single satiated, mature, viable creature that WOULD breed this tick (energy above its satiated
+    // bar). With the gate shut (breedGate 0 < threshold 0.5) reproduce() must skip it — 0 births, the
+    // population unchanged. With the gate open (breedGate 1 ≥ 0.5) it breeds — 1 birth.
+    const c = defaultConfig({
+      reproThreshold: 40,
+      satiatedThreshold: 60,
+      birthEnergy: 25,
+      reproOverhead: 15,
+      mutationSigma: 0,
+      sexualReproduction: false,
+      brainGatedBreeding: true,
+      breedGateThreshold: 0.5,
+      worldWidth: W,
+      worldHeight: H,
+    });
+    // Gate shut → no birth, population unchanged.
+    const shut = new OrganismStore(4);
+    const ps = shut.alloc();
+    shut.x[ps] = 50;
+    shut.y[ps] = 50;
+    shut.energy[ps] = 100;
+    genes(shut, ps, c);
+    shut.breedGate[ps] = 0; // below threshold → skip
+    shut.rebuildLive();
+    expect(reproduce(shut, new Rng(1), c, false, false, null, emptyHash(shut, c))).toBe(0);
+    shut.rebuildLive();
+    expect(shut.liveCount).toBe(1); // unchanged
+
+    // Gate open → breeds (same creature, same energy).
+    const open = new OrganismStore(4);
+    const po = open.alloc();
+    open.x[po] = 50;
+    open.y[po] = 50;
+    open.energy[po] = 100;
+    genes(open, po, c);
+    open.breedGate[po] = 1; // at/above threshold → breeds
+    open.rebuildLive();
+    expect(reproduce(open, new Rng(1), c, false, false, null, emptyHash(open, c))).toBe(1);
+  });
+
   it('breedCooldown blocks repeat breeding for the refractory period, then allows it again', () => {
     // The satiation-dwell lever: a fresh creature breeds, then is blocked for breedCooldown ticks even while
     // energy-rich, then breeds again. Energy kept far above the bar to ISOLATE the cooldown from the bar.
