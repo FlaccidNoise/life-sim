@@ -76,8 +76,13 @@ export const ScalarGene = {
   SENSE_RANGE_C: 20, // smell range for channel C
   // F2 pheromone (gated cfg.pheromoneEnabled): how strongly this creature deposits into the pheromone field.
   PHERO_DEPOSIT: 21,
+  // Movement-style gene: per-creature velocity retention (drift ↔ dart). Read by physics.integrate when
+  // cfg.evolvableDamping is on, replacing the global cfg.damping. High = coasts on momentum (drifter);
+  // low = velocity dies fast (darter). Always drawn (ungated) and appended at the TAIL so genes 0–21's
+  // RNG draws are unchanged → the food-channel ablation byte-identity holds.
+  DAMPING: 22,
 } as const;
-export const SCALAR_GENE_COUNT = 22;
+export const SCALAR_GENE_COUNT = 23;
 
 /** Minimum reproductive-band width: satiated is read as max(satiatedGene, reproGene + this) so the two
  *  life-history bars can mutate independently without inverting (which would break the learn gate). */
@@ -105,7 +110,8 @@ interface ScalarGeneSpec {
     | 'cohesionDrive'
     | 'foragePref'
     | 'foragePrefC'
-    | 'pheroDeposit';
+    | 'pheroDeposit'
+    | 'damping';
   /** Config key for the per-unit-above-center basal cost coeff, or null for a non-upkeep gene. */
   costKey:
     | 'maxSpeedCost'
@@ -172,6 +178,10 @@ export const SCALAR_GENE_SPECS: readonly ScalarGeneSpec[] = [
   { centerKey: 'senseStep', costKey: 'senseRangeCost', min: 8, max: 256 },
   // F2: pheromone deposit strength — costed (no free chemical broadcast); the tradeoff for signalling.
   { centerKey: 'pheroDeposit', costKey: 'pheroDepositCost', min: 0, max: 5 },
+  // DAMPING — per-creature velocity retention. costKey null: the tradeoff is pure physics (coasting saves
+  // thrust-energy but overshoots food/walls), not an upkeep tax. Center reuses cfg.damping (0.9); range
+  // gives a ~20× coast-distance spread (1/(1−d): 0.6→~2.5 ticks, 0.98→~50). Upper bound < 1 for stability.
+  { centerKey: 'damping', costKey: null, min: 0.6, max: 0.98 },
 ];
 
 /** Tail-gated scalar genes: each takes its founder CENTER (seed) / parent value (mutate) WITHOUT drawing

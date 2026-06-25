@@ -263,3 +263,31 @@ describe('FORAGE_PREF gene (lever B — two-channel niche axis, RNG-gated)', () 
     expect(Math.abs(c - 0.4)).toBeLessThan(0.5);
   });
 });
+
+describe('DAMPING gene', () => {
+  it('is the 23rd scalar gene at the tail', () => {
+    expect(SCALAR_GENE_COUNT).toBe(23);
+    expect(ScalarGene.DAMPING).toBe(22);
+  });
+
+  it('is an uncosted physics gene clamped to [0.6, 0.98]', () => {
+    const spec = SCALAR_GENE_SPECS[ScalarGene.DAMPING]!;
+    expect(spec.centerKey).toBe('damping');
+    expect(spec.costKey).toBeNull();
+    expect(spec.min).toBe(0.6);
+    expect(spec.max).toBe(0.98);
+  });
+
+  it('seeds founders around the config damping center (0.9), within clamp', () => {
+    const cfg = defaultConfig({ seed: 1 });
+    const genes = new Float32Array(8 * SCALAR_GENE_COUNT);
+    const rng = new Rng(1);
+    for (let s = 0; s < 8; s++) seedScalarGenes(genes, s, rng, cfg);
+    for (let s = 0; s < 8; s++) {
+      const d = genes[s * SCALAR_GENE_COUNT + ScalarGene.DAMPING]!;
+      const eps = 1e-4; // genes are stored Float32 → a clamped bound can round a hair past it
+      expect(d).toBeGreaterThanOrEqual(0.6 - eps);
+      expect(d).toBeLessThanOrEqual(0.98 + eps);
+    }
+  });
+});
