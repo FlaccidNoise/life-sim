@@ -59,4 +59,14 @@ describe('OrganismStore', () => {
     expect(b).toBe(a);
     expect(s.breedCooldownLeft[b]!).toBe(0); // the new occupant starts ready, not inheriting stale cooldown
   });
+
+  it('alloc resets huntCooldownLeft so a recycled slot is hunt-ready (Type-II refractory)', () => {
+    const s = new OrganismStore(2);
+    const a = s.alloc();
+    s.huntCooldownLeft[a] = 99; // simulate a predator mid handling-time refractory
+    s.free(a);
+    const b = s.alloc(); // LIFO → reuses the same slot
+    expect(b).toBe(a);
+    expect(s.huntCooldownLeft[b]!).toBe(0); // the new occupant starts hunt-ready, not inheriting stale cooldown
+  });
 });

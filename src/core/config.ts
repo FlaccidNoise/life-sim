@@ -225,6 +225,12 @@ export interface Config {
    *  payoff vs grazing (deliberately not energy-conserving) — the incentive to hunt instead of sit.
    *  NB: too high is an energy printer → runaway to the population cap; keep modest. */
   predationGain: number;
+  /** Holling Type-II handling-time refractory (ticks). After a SUCCESSFUL bite a predator is "busy handling
+   *  prey" and cannot feed again for this many ticks — a per-predator deterministic countdown (no gene, no
+   *  RNG). This caps kills-per-time regardless of prey density (the Type-II functional response), bounding
+   *  the predator energy-printer that otherwise booms without limit on dense prey. 0 = OFF = byte-identical
+   *  to today (every read/write of the counter is gated on this being >0). */
+  huntHandlingTime: number;
   /** Exponent on the herbivory falloff: plant income ∝ (1−diet)^this. 1 = linear (predators keep a real
    *  plant fallback → FACULTATIVE, viable at low density); higher pushes toward OBLIGATE predation (which
    *  starves at this world's sparse encounter rate). */
@@ -739,6 +745,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     predationGain: 1.8, // meat is concentrated: a bite yields 1.8× the drain, so even RARE kills pay
     // through sparse stretches → carnivory resists diet-dilution and predators persist (was 1, which left
     // hunting too marginal at this encounter rate; combined with basalCost 0.12 it rescues 2/3 probe seeds)
+    huntHandlingTime: 0, // OFF: no handling-time refractory → byte-identical; >0 = Type-II cap on kills/time
     herbivoryExp: 1.3, // predators get little from algae → lean on HUNTING (max viable on seeds 1/2;
     // obligate carnivory, exp≥1.6, starves predators at this encounter rate — proven by probe)
     cannibalism: true, // current behavior (bite anyone nearest); flip off to spare same-diet peers

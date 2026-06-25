@@ -111,6 +111,11 @@ export class OrganismStore {
   // cfg.breedCooldown > 0, so the OFF path never reads/writes it. Auxiliary runtime state — NOT hashed
   // (the determinism golden hash stays byte-identical when the cooldown feature is off).
   readonly breedCooldownLeft: Uint32Array;
+  // Predation handling-time refractory countdown (ticks until this predator may feed again after a kill;
+  // 0 = ready). The Holling Type-II functional response. Only touched when cfg.huntHandlingTime > 0, so the
+  // OFF path never reads/writes it. Auxiliary runtime state — NOT hashed (the determinism golden hash stays
+  // byte-identical when the handling-time feature is off).
+  readonly huntCooldownLeft: Uint32Array;
 
   /** Mate-seeking state (life-sim-xa90): 1 while actively looking for a mate; seekTicksLeft counts the
    *  current search window down. Hashed (part of the determinism contract — they steer future behaviour). */
@@ -163,6 +168,7 @@ export class OrganismStore {
     this.genId = new Uint32Array(capacity);
     this.alive = new Uint8Array(capacity);
     this.breedCooldownLeft = new Uint32Array(capacity);
+    this.huntCooldownLeft = new Uint32Array(capacity);
     this.seeking = new Uint8Array(capacity);
     this.seekTicksLeft = new Uint32Array(capacity);
     this.liveIndices = new Uint32Array(capacity);
@@ -180,6 +186,7 @@ export class OrganismStore {
     this.age.fill(0);
     this.genId.fill(0);
     this.breedCooldownLeft.fill(0);
+    this.huntCooldownLeft.fill(0);
     this.seeking.fill(0);
     this.seekTicksLeft.fill(0);
     this.freeStack.length = 0;
@@ -195,6 +202,7 @@ export class OrganismStore {
     this.genId[slot] = (this.genId[slot]! + 1) >>> 0;
     this.age[slot] = 0;
     this.breedCooldownLeft[slot] = 0; // a newborn is breeding-ready (first breed is never gated)
+    this.huntCooldownLeft[slot] = 0; // a newborn predator is hunt-ready (no inherited handling-time refractory)
     this.seeking[slot] = 0;
     this.seekTicksLeft[slot] = 0;
     this.eatGate[slot] = 1; // default full eating until steer() recomputes (avoids a stale pre-steer read)

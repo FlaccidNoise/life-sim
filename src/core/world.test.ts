@@ -51,6 +51,30 @@ describe('World — Phase 0 determinism contract', () => {
     expect(on.stateHash()).not.toBe(baseline.stateHash());
   });
 
+  it('huntHandlingTime 0 (OFF) is byte-identical to default and never touches huntCooldownLeft (Type-II refractory)', () => {
+    // The feature's only behavioral gate: every read/write of huntCooldownLeft is guarded by
+    // huntHandlingTime>0, so the OFF path is byte-identical to today and the aux counter stays all-zero.
+    const baseline = new World(defaultConfig({ seed: 1 }));
+    const off = new World(defaultConfig({ seed: 1, huntHandlingTime: 0 }));
+    for (let t = 0; t < 400; t++) {
+      baseline.step();
+      off.step();
+    }
+    expect(off.stateHash()).toBe(baseline.stateHash()); // OFF == default → byte-identical
+    const hc = off.store.huntCooldownLeft;
+    expect(hc.every((v) => v === 0)).toBe(true); // never armed while OFF
+  });
+
+  it('huntHandlingTime > 0 is deterministic: same (config, seed) → byte-identical hash', () => {
+    const a = new World(defaultConfig({ seed: 1, huntHandlingTime: 8 }));
+    const b = new World(defaultConfig({ seed: 1, huntHandlingTime: 8 }));
+    for (let t = 0; t < 400; t++) {
+      a.step();
+      b.step();
+    }
+    expect(a.stateHash()).toBe(b.stateHash());
+  });
+
   it('predatorSizeBoost 0 is byte-identical to default; >0 perturbs (predator founders seeded big, same draw count)', () => {
     const baseline = new World(defaultConfig({ seed: 1 }));
     const off = new World(defaultConfig({ seed: 1, predatorSizeBoost: 0 }));
@@ -87,7 +111,9 @@ describe('World — Phase 0 determinism contract', () => {
     const floorButGateOff = new World(defaultConfig({ seed, foodDriveFloor: 0.7 }));
     const gateOnly = new World(defaultConfig({ seed, hungerGatesFood: true }));
     const gateFloor0 = new World(defaultConfig({ seed, hungerGatesFood: true, foodDriveFloor: 0 }));
-    const gateFloor07 = new World(defaultConfig({ seed, hungerGatesFood: true, foodDriveFloor: 0.7 }));
+    const gateFloor07 = new World(
+      defaultConfig({ seed, hungerGatesFood: true, foodDriveFloor: 0.7 }),
+    );
     for (let t = 0; t < 1000; t++) {
       baseline.step();
       floorButGateOff.step();
@@ -121,7 +147,9 @@ describe('World — Phase 0 determinism contract', () => {
   it('perPocketDrift OFF vs ON diverge; both deterministic (B-food-1, forked-rng safe)', () => {
     const off = new World(defaultConfig({ seed: 2, fertilityDriftRate: 1, perPocketDrift: false }));
     const on = new World(defaultConfig({ seed: 2, fertilityDriftRate: 1, perPocketDrift: true }));
-    const off2 = new World(defaultConfig({ seed: 2, fertilityDriftRate: 1, perPocketDrift: false }));
+    const off2 = new World(
+      defaultConfig({ seed: 2, fertilityDriftRate: 1, perPocketDrift: false }),
+    );
     for (let t = 0; t < 400; t++) {
       off.step();
       on.step();

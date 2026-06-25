@@ -62,8 +62,8 @@ function wrapDelta(d: number, size: number): number {
  */
 export function hunt(store: OrganismStore, hash: SpatialHash, cfg: Config): void {
   const { biteRange, worldWidth, worldHeight, cannibalism, predationGain, huntSizeRatio } = cfg;
-  const { counterBiteFraction } = cfg;
-  const { liveIndices, liveCount, x, y, energy, scalarGenes, biteGate } = store;
+  const { counterBiteFraction, huntHandlingTime } = cfg;
+  const { liveIndices, liveCount, x, y, energy, scalarGenes, biteGate, huntCooldownLeft } = store;
   const brainGatedBiting = cfg.brainGatedBiting;
   const { cols, rows, bucketStart, sorted } = hash;
   const range2 = biteRange * biteRange;
@@ -77,6 +77,9 @@ export function hunt(store: OrganismStore, hash: SpatialHash, cfg: Config): void
     const sg = i * SCALAR_GENE_COUNT;
     const diet = scalarGenes[sg + ScalarGene.DIET]!;
     if (diet <= 0) continue; // pure grazer — never hunts
+    // Holling Type-II handling-time refractory: a predator still digesting its last kill can't feed again.
+    // Gated on huntHandlingTime>0 so the OFF path never reads the counter → byte-identical. RNG-free.
+    if (huntHandlingTime > 0 && huntCooldownLeft[i]! > 0) continue; // busy handling its last kill
     const sizeI = scalarGenes[sg + ScalarGene.SIZE]!;
     const maxPreySize = sizeI / huntSizeRatio; // can only bite prey this small or smaller
     const xi = x[i]!;
@@ -118,6 +121,9 @@ export function hunt(store: OrganismStore, hash: SpatialHash, cfg: Config): void
     // deliberately CREATES energy (not strictly conserved) so hunting is a big payoff vs. grazing — the
     // incentive to seek prey instead of sitting on the food field.
     energy[i] = energy[i]! + drain * predationGain;
+    // The bite landed → arm the handling-time refractory so this predator can't feed again for
+    // huntHandlingTime ticks (the Type-II cap on kills/time). Gated so OFF never writes the counter.
+    if (huntHandlingTime > 0) huntCooldownLeft[i] = huntHandlingTime;
     // Red Queen counter-bite (lever E1): the prey bites back — the predator pays back counterBiteFraction
     // of the prey's DAMAGE gene. The drain already landed (a costly bite is still a bite) and the prey is
     // NOT spared, so this is purely a predator-side tax: biting high-DAMAGE prey hurts the attacker. Whether
@@ -159,8 +165,25 @@ export function depositScent(store: OrganismStore, scent: ScentField, cfg: Confi
   }
 }
 
-export function metabolize(store: OrganismStore, food: FoodField, hash: SpatialHash, cfg: Config): void {
-  const { liveIndices, liveCount, x, y, vx, vy, energy, age, scalarGenes, eatGate } = store;
+export function metabolize(
+  store: OrganismStore,
+  food: FoodField,
+  hash: SpatialHash,
+  cfg: Config,
+): void {
+  const {
+    liveIndices,
+    liveCount,
+    x,
+    y,
+    vx,
+    vy,
+    energy,
+    age,
+    scalarGenes,
+    eatGate,
+    huntCooldownLeft,
+  } = store;
   const { basalCost, moveCost, deadWaterCost } = cfg;
   const { crowdingMortality, crowdThreshold, crowdRadius, worldWidth, worldHeight } = cfg;
   // Lever D (density-dependent mortality): when crowdingMortality>0 each creature pays an energy drain
@@ -204,7 +227,8 @@ export function metabolize(store: OrganismStore, food: FoodField, hash: SpatialH
       // so a generalist earns LESS per grazed unit than a specialist eating its own channel — the penalty
       // that pulls FORAGE_PREF off 0.5 into two niches.
       const s01 = 2 * Math.abs(pref - 0.5);
-      const spec = cfg.forageGeneralistFloor + (1 + cfg.forageSpecBonus - cfg.forageGeneralistFloor) * s01;
+      const spec =
+        cfg.forageGeneralistFloor + (1 + cfg.forageSpecBonus - cfg.forageGeneralistFloor) * s01;
       const budget = effEatRate * herbivory;
       if (cfg.forageAvailabilityWeighted) {
         // Availability-weighted split (mirrors the 3-channel branch): allocate the budget by pref·localBiomass
@@ -243,7 +267,8 @@ export function metabolize(store: OrganismStore, food: FoodField, hash: SpatialH
       const wA = (1 - pref) * (1 - prefC);
       const maxW = wA > wB ? (wA > wC ? wA : wC) : wB > wC ? wB : wC;
       const s01 = (maxW - 1 / 3) / (2 / 3); // 0 = even (generalist) … 1 = all-in on one channel
-      const spec = cfg.forageGeneralistFloor + (1 + cfg.forageSpecBonus - cfg.forageGeneralistFloor) * s01;
+      const spec =
+        cfg.forageGeneralistFloor + (1 + cfg.forageSpecBonus - cfg.forageGeneralistFloor) * s01;
       const budget = effEatRate * herbivory;
       // Availability-weighted split: e_ch = w_ch · localBiomass_ch, renormalized so Σ = budget. The budget
       // flows to present-and-preferred resources; nothing is wasted on an empty channel.
@@ -316,6 +341,11 @@ export function metabolize(store: OrganismStore, food: FoodField, hash: SpatialH
       const over = neighbors - crowdThreshold;
       if (over > 0) energy[i] = energy[i]! - crowdingMortality * over;
     }
+    // Tick down the Holling Type-II handling-time refractory (mirrors the breedCooldown decrement in
+    // reproduce): a predator handling a kill counts toward being able to feed again. Gated on
+    // huntHandlingTime>0 so the OFF path never touches the counter → byte-identical. RNG-free.
+    if (cfg.huntHandlingTime > 0 && huntCooldownLeft[i]! > 0)
+      huntCooldownLeft[i] = huntCooldownLeft[i]! - 1;
     age[i] = (age[i]! + 1) >>> 0;
   }
 }
@@ -376,7 +406,10 @@ function findMate(store: OrganismStore, p: number, cfg: Config, hash: SpatialHas
     if (dx * dx + dy * dy > range2) return; // out of contact range
     if (geneticDistance(scalarGenes, p, j, cfg) >= cfg.mateCompatThreshold) return; // incompatible
     const score = Math.abs(scalarGenes[j * N + ScalarGene.DISPLAY]! - pref);
-    if (score < bestScore || (score === bestScore && j < best)) { bestScore = score; best = j; }
+    if (score < bestScore || (score === bestScore && j < best)) {
+      bestScore = score;
+      best = j;
+    }
   });
   return best;
 }
@@ -397,10 +430,19 @@ function spawnChildSlot(
   const angle = rng.range(0, Math.PI * 2);
   let cx = x[mom]! + Math.cos(angle) * cfg.offspringOffset;
   let cy = y[mom]! + Math.sin(angle) * cfg.offspringOffset;
-  cx %= cfg.worldWidth; if (cx < 0) cx += cfg.worldWidth;
-  cy %= cfg.worldHeight; if (cy < 0) cy += cfg.worldHeight;
-  if (walls !== null && walls.active && walls.isSolidAt(cx, cy)) { cx = x[mom]!; cy = y[mom]!; }
-  x[child] = cx; y[child] = cy; vx[child] = vx[mom]!; vy[child] = vy[mom]!; heading[child] = heading[mom]!;
+  cx %= cfg.worldWidth;
+  if (cx < 0) cx += cfg.worldWidth;
+  cy %= cfg.worldHeight;
+  if (cy < 0) cy += cfg.worldHeight;
+  if (walls !== null && walls.active && walls.isSolidAt(cx, cy)) {
+    cx = x[mom]!;
+    cy = y[mom]!;
+  }
+  x[child] = cx;
+  y[child] = cy;
+  vx[child] = vx[mom]!;
+  vy[child] = vy[mom]!;
+  heading[child] = heading[mom]!;
   return child;
 }
 
@@ -455,7 +497,8 @@ export function reproduce(
     // is BEFORE alloc/RNG (like the cooldown/satiated checks below), so it consumes no RNG; gated on ageStages
     // so the OFF path never reads age/gene and stays byte-identical. A juvenile's breedCooldownLeft is 0, so
     // sitting ahead of the cooldown decrement is harmless (a not-yet-bred creature has nothing to cool down).
-    if (cfg.ageStages && age[p]! < scalarGenes[p * SCALAR_GENE_COUNT + ScalarGene.MATURITY_AGE]!) continue;
+    if (cfg.ageStages && age[p]! < scalarGenes[p * SCALAR_GENE_COUNT + ScalarGene.MATURITY_AGE]!)
+      continue;
     // Breeding refractory (the satiation-dwell lever): a creature still cooling from a recent birth ticks
     // its counter down and skips — it can be FULL yet NOT breed, which is exactly the "well-fed but idle"
     // state the hunger-gate turns into wandering. Gated on breedCooldown>0 so the OFF path never touches the
@@ -487,8 +530,17 @@ export function reproduce(
       const child = spawnChildSlot(store, p, rng, cfg, walls);
       if (child < 0) break; // store full
       mutateGenome(
-        store.brain, store.hue, child, p, rng, cfg.mutationSigma, cfg.hueMutationSigma,
-        wallSenseGenes, flowSenseGenes, cfg.hungerSense, cfg.pheromoneEnabled,
+        store.brain,
+        store.hue,
+        child,
+        p,
+        rng,
+        cfg.mutationSigma,
+        cfg.hueMutationSigma,
+        wallSenseGenes,
+        flowSenseGenes,
+        cfg.hungerSense,
+        cfg.pheromoneEnabled,
       );
       mutateScalarGenes(store.scalarGenes, child, p, rng, cfg);
       provisionAndFinalize(store, p, child, cfg);
@@ -499,7 +551,10 @@ export function reproduce(
     // ── Sexual path ──
     const ready = energy[p]! >= satiatedBar(scalarGenes, p, cfg);
     if (store.seeking[p]! === 1) {
-      if (!ready) { store.seeking[p] = 0; continue; } // dropped below the bar → abandon the search
+      if (!ready) {
+        store.seeking[p] = 0;
+        continue;
+      } // dropped below the bar → abandon the search
       const mate = findMate(store, p, cfg, hash);
       if (mate < 0) {
         store.seekTicksLeft[p] = store.seekTicksLeft[p]! - 1;
@@ -514,8 +569,18 @@ export function reproduce(
       const child = spawnChildSlot(store, p, rng, cfg, walls);
       if (child < 0) break;
       crossoverBrain(
-        store.brain, store.hue, child, p, mate, rng, cfg.mutationSigma, cfg.hueMutationSigma,
-        wallSenseGenes, flowSenseGenes, cfg.hungerSense, cfg.pheromoneEnabled,
+        store.brain,
+        store.hue,
+        child,
+        p,
+        mate,
+        rng,
+        cfg.mutationSigma,
+        cfg.hueMutationSigma,
+        wallSenseGenes,
+        flowSenseGenes,
+        cfg.hungerSense,
+        cfg.pheromoneEnabled,
       );
       crossoverScalarGenes(store.scalarGenes, child, p, mate, rng, cfg);
       provisionAndFinalize(store, p, child, cfg);
