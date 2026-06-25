@@ -97,26 +97,41 @@ const TOGGLES: { key: keyof Config; label: string }[] = [
   { key: 'hungerSense', label: 'hunger sense' },
 ];
 
+/** Split the sliders into CREATURE (per-organism genes + their selection costs + the mutation rate) vs
+ *  WORLD (how the world is built + the global ecology/economy) so the two are never confused — creature
+ *  knobs sit up top, world-creation knobs at the bottom of the panel. gene·/cost· prefixed sliders + the
+ *  mutation rate are creature; everything else (food, pockets, predation, basal economy, seeding) is world. */
+function knobGroup(key: keyof Config, label: string): 'creature' | 'world' {
+  if (label.startsWith('gene·') || label.startsWith('cost·') || key === 'mutationSigma') return 'creature';
+  return 'world';
+}
+
 export class Knobs {
   constructor(root: HTMLElement, config: Config, h: KnobsHandlers) {
-    root.innerHTML =
-      TOGGLES.map(
-        (t) => `
-        <label class="knob toggle" data-key="${t.key}">
-          <input class="check" type="checkbox" ${config[t.key] ? 'checked' : ''} />
-          <span class="lbl">${t.label}</span>
-        </label>`,
-      ).join('') +
-      SPECS.map(
-        (s) => `
+    const sliderHtml = (s: KnobSpec): string => `
         <div class="knob" data-key="${s.key}">
           <div class="knob-head">
             <span class="lbl">${s.label}${s.live ? '' : ' *'}</span><span class="knob-val"></span>
           </div>
           <input class="slider" type="range" min="${s.min}" max="${s.max}" step="${s.step}"
                  value="${config[s.key] as number}" />
-        </div>`,
-      ).join('');
+        </div>`;
+    const toggleHtml = (t: { key: keyof Config; label: string }): string => `
+        <label class="knob toggle" data-key="${t.key}">
+          <input class="check" type="checkbox" ${config[t.key] ? 'checked' : ''} />
+          <span class="lbl">${t.label}</span>
+        </label>`;
+    const header = (txt: string): string =>
+      `<div class="knob-section" style="margin:10px 0 4px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.12);font-size:10px;letter-spacing:0.08em;text-transform:uppercase;opacity:0.6;">${txt}</div>`;
+    const creature = SPECS.filter((s) => knobGroup(s.key, s.label) === 'creature');
+    const world = SPECS.filter((s) => knobGroup(s.key, s.label) === 'world');
+
+    root.innerHTML =
+      header('creature · genes, costs & behaviour') +
+      TOGGLES.map(toggleHtml).join('') +
+      creature.map(sliderHtml).join('') +
+      header('world · environment & ecology') +
+      world.map(sliderHtml).join('');
 
     for (const s of SPECS) {
       const wrap = root.querySelector<HTMLElement>(`[data-key="${s.key}"]`)!;

@@ -2,11 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { OrganismStore } from './store';
 import { FoodField } from './food-field';
 import { SpatialHash } from './spatial-hash';
-import { senseFood, senseCreatures, senseEnv } from './sense';
+import { senseFood, senseCreatures, senseEnv, senseCrowding, senseFertility } from './sense';
 import { PheroField } from './phero-field';
 import { Walls } from './walls';
 import { defaultConfig } from './config';
 import { ScalarGene, SCALAR_GENE_COUNT } from './genome';
+import { ScentField, SCENT_CHANNELS, Scent } from './scent-field';
 
 const W = 256;
 const H = 256;
@@ -157,6 +158,20 @@ describe('senseEnv', () => {
       defaultConfig({ wallRegionCount: 0, flowStrength: 0 }),
     );
     expect(s.glowSenseX[i]!).toBeGreaterThan(0); // ∇G points up-gradient, toward the glow blob (+x)
+  });
+
+  it('writes per-channel scent gradients when the field is active', () => {
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.rebuildLive();
+    s.x[i] = 590;
+    s.y[i] = 500;
+    s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.SENSE_RANGE] = 20;
+    const scent = new ScentField(1000, 1000, 50, 50);
+    scent.deposit(610, 500, 0, 0, 100, true); // PREY blob one cell to the +x (590±20 straddles it)
+    senseEnv(s, null, null, scent, null, defaultConfig({ pheromoneEnabled: true }));
+    expect(s.scentSenseX[i * SCENT_CHANNELS + Scent.PREY]!).toBeGreaterThan(0); // gradient toward the blob
+    expect(s.scentSenseX[i * SCENT_CHANNELS + Scent.PRED]!).toBe(0); // PRED channel empty → flat
   });
 });
 
@@ -414,5 +429,107 @@ describe('senseCreatures (sight)', () => {
     const cfgNoOcc = defaultConfig({ worldWidth: W, worldHeight: H, wallOccludesVision: false });
     senseCreatures(s, hashOf(s), cfgNoOcc, walls, null);
     expect(Math.abs(s.sightX[0]!)).toBeGreaterThan(0); // ablation off → wall ignored, target seen
+  });
+
+  it('a seeking creature is pulled toward a similar-hue same-class neighbour', () => {
+    const cfg = defaultConfig({ mateSenseAttraction: 2, cohesionGain: 0, shelterGain: 0 });
+    const s = new OrganismStore(4);
+    const N = SCALAR_GENE_COUNT;
+    const a = s.alloc();
+    const b = s.alloc();
+    s.x[a] = 100;
+    s.y[a] = 100;
+    s.heading[a] = 0;
+    s.x[b] = 130;
+    s.y[b] = 100; // directly ahead (+x)
+    for (const slot of [a, b]) {
+      s.scalarGenes[slot * N + ScalarGene.VISION_RANGE] = 100;
+      s.scalarGenes[slot * N + ScalarGene.VISION_ACUITY] = 1;
+      s.scalarGenes[slot * N + ScalarGene.VISION_FOV] = 3;
+      s.scalarGenes[slot * N + ScalarGene.DIET] = 0;
+      s.hue[slot] = 0.5;
+    }
+    s.rebuildLive();
+    const hash = new SpatialHash(cfg.worldWidth, cfg.worldHeight, 2 * cfg.cellRadius, s.capacity);
+    hash.build(s);
+    // not seeking → baseline sight
+    senseCreatures(s, hash, cfg, null, null);
+    const baseX = s.sightX[a]!;
+    // seeking → stronger forward pull toward b
+    s.seeking[a] = 1;
+    senseCreatures(s, hash, cfg, null, null);
+    expect(s.sightX[a]!).toBeGreaterThan(baseX);
+  });
+});
+
+describe('senseCrowding', () => {
+  it('senseCrowding counts live neighbors within crowdSenseRange (A1b)', () => {
+    const cfg = defaultConfig({ bodySense: true, crowdSenseRange: 36, worldWidth: 512, worldHeight: 512 });
+    const s = new OrganismStore(8);
+    // Place 4 creatures: i0 at origin; i1,i2 within 36u; i3 at ~100u (outside).
+    const place = (slot: number, x: number, y: number): void => {
+      s.alloc();
+      s.x[slot] = x;
+      s.y[slot] = y;
+    };
+    place(0, 100, 100);
+    place(1, 110, 100); // 10u from i0 — inside
+    place(2, 100, 130); // 30u — inside
+    place(3, 100, 200); // 100u — outside
+    s.rebuildLive();
+    // SpatialHash signature is (worldWidth, worldHeight, cellSize, capacity); cellSize = 2·cellRadius (12u)
+    // is the house convention (sense.test.ts already uses it). cr = ceil(36/12)=3 cells covers the 36u range.
+    const hash = new SpatialHash(cfg.worldWidth, cfg.worldHeight, 2 * cfg.cellRadius, s.capacity);
+    hash.build(s);
+    senseCrowding(s, hash, cfg);
+    expect(s.crowding[0]).toBe(2); // i1 + i2 within 36u, i3 excluded
+    expect(s.crowding[3]).toBe(0); // i3 is alone within 36u
+  });
+
+  it('senseCrowding leaves crowding untouched when bodySense is off', () => {
+    const cfg = defaultConfig({ bodySense: false });
+    const s = new OrganismStore(4);
+    s.alloc();
+    s.alloc();
+    s.x[0] = 10;
+    s.y[0] = 10;
+    s.x[1] = 12;
+    s.y[1] = 10;
+    s.rebuildLive();
+    const hash = new SpatialHash(cfg.worldWidth, cfg.worldHeight, 2 * cfg.cellRadius, s.capacity);
+    hash.build(s);
+    senseCrowding(s, hash, cfg);
+    expect(s.crowding[0]).toBe(0); // skipped → stays at its zero-init
+  });
+});
+
+describe('senseFertility', () => {
+  it('senseFertility sums local biomass across active channels into fertHere (A1c)', () => {
+    const cfg = defaultConfig({ bodySense: true, foodChannels: 2 });
+    const s = new OrganismStore(4);
+    s.alloc();
+    s.x[0] = 100;
+    s.y[0] = 100;
+    s.alloc();
+    s.x[1] = 300;
+    s.y[1] = 300;
+    s.rebuildLive();
+    const food = new FoodField(512, 512, 64, 64, cfg.foodCap, 1, 2, 0.5); // 2 channels, full, symmetric split
+    senseFertility(s, food, cfg);
+    // fertHere is exactly the sum of the two channels' biomass at the body (the value steer will normalize).
+    expect(s.fertHere[0]).toBeCloseTo(food.sampleAt(100, 100) + food.sampleAt2(100, 100), 10);
+    expect(s.fertHere[1]).toBeCloseTo(food.sampleAt(300, 300) + food.sampleAt2(300, 300), 10);
+  });
+
+  it('senseFertility leaves fertHere untouched when bodySense is off', () => {
+    const cfg = defaultConfig({ bodySense: false, foodChannels: 2 });
+    const s = new OrganismStore(4);
+    s.alloc();
+    s.x[0] = 100;
+    s.y[0] = 100;
+    s.rebuildLive();
+    const food = new FoodField(512, 512, 64, 64, cfg.foodCap, 1, 2, 0.5);
+    senseFertility(s, food, cfg);
+    expect(s.fertHere[0]).toBe(0); // skipped → stays at its zero-init
   });
 });

@@ -1,6 +1,6 @@
 /**
  * F2 pheromone BREATHING probe — at the shipped 8192² scale with pheromoneEnabled=true, does the field
- * actually populate (mean/max P > 0) and does the PHERO_FWD_THRUST brain gene evolve AWAY from its
+ * actually populate (mean/max P > 0) and does the PHERO_C0_FWD_THRUST brain gene evolve AWAY from its
  * founder 0 over a few thousand ticks (i.e. does selection pick a flee-or-aggregate response)?
  *
  * Honest diagnostic — it's fine if the field populates but the gene does NOT move off 0 yet (that just
@@ -10,6 +10,7 @@
 import { defaultConfig } from '../core/config';
 import { World } from '../core/world';
 import { Brain, BRAIN_GENES } from '../core/genome';
+import { Scent } from '../core/scent-field';
 
 const TICKS = 4000;
 const SEED = 1;
@@ -57,17 +58,17 @@ console.log(header);
 console.log('-'.repeat(header.length));
 
 const sample = (tick: number): void => {
-  const phero = w.phero!;
-  const meanP = phero.total() / cells;
+  const prey = w.scent!.channel(Scent.PREY); // sample the PREY channel as the representative trail
+  const meanP = prey.total() / cells;
   const row =
     `${tick}`.padStart(6) +
     `${w.population}`.padStart(8) +
     meanP.toExponential(3).padStart(12) +
-    phero.max().toExponential(3).padStart(12) +
-    meanPheroGene(w, Brain.PHERO_FWD_THRUST).toFixed(5).padStart(12) +
-    absMeanPheroGene(w, Brain.PHERO_FWD_THRUST).toFixed(5).padStart(12) +
-    meanPheroGene(w, Brain.PHERO_LAT_TURN).toFixed(5).padStart(12) +
-    absMeanPheroGene(w, Brain.PHERO_LAT_TURN).toFixed(5).padStart(12);
+    prey.max().toExponential(3).padStart(12) +
+    meanPheroGene(w, Brain.PHERO_C0_FWD_THRUST).toFixed(5).padStart(12) +
+    absMeanPheroGene(w, Brain.PHERO_C0_FWD_THRUST).toFixed(5).padStart(12) +
+    meanPheroGene(w, Brain.PHERO_C0_LAT_TURN).toFixed(5).padStart(12) +
+    absMeanPheroGene(w, Brain.PHERO_C0_LAT_TURN).toFixed(5).padStart(12);
   console.log(row);
 };
 

@@ -62,6 +62,10 @@ const GENE_NAMES = [
   'senseRangeB',
   'senseRangeC',
   'pheroDeposit',
+  'maturityAge',
+  'senescenceAge',
+  'display',
+  'preference',
   'damping',
 ] as const;
 

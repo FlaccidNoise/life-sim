@@ -34,6 +34,7 @@ import {
   GLOW_SENSE_LAT_THRUST,
   GLOW_SENSE_FWD_THRUST,
 } from './genome';
+import { SCENT_CHANNELS } from './scent-field';
 
 /**
  * Run each creature's runtime brain: food gradient (heading frame) → turn + thrust. Turns the heading
@@ -67,20 +68,30 @@ export function steer(
     forceX,
     forceY,
     eatGate,
+    biteGate,
     glow,
     age,
+    crowding,
+    fertHere,
   } = store;
-  const { wallSenseX, wallSenseY, flowSenseX, flowSenseY, pheroSenseX, pheroSenseY } = store;
+  const { wallSenseX, wallSenseY, flowSenseX, flowSenseY, scentSenseX, scentSenseY } = store;
   const { glowSenseX, glowSenseY } = store;
   const { learnedBrain, elig, energy } = store;
   const genes = store.scalarGenes;
   const hungerSense = cfg.hungerSense;
+  const hungerGatesFood = cfg.hungerGatesFood;
+  const foodGateThreshold = cfg.foodGateThreshold;
   const reverseFrac = cfg.reverseThrustFraction; // 0 = forward-only (legacy); 0.5 = back away at half power
   const brainGatedEating = cfg.brainGatedEating; // eatGate output throttles intake + costs mobility
+  const brainGatedBiting = cfg.brainGatedBiting; // A2a: biteGate output (col 3) is the predation decision
   const eatMovePenalty = cfg.eatMovePenalty; // thrust ×= 1 − eatGate·penalty while eating
   const ageSense = cfg.ageSense; // feed maturity = min(age/ageNorm,1) as an interoceptive input
   const ageNorm = cfg.ageNorm;
   const readinessSense = cfg.readinessSense; // feed repro-readiness (clamped to the breeding band)
+  const bodySense = cfg.bodySense; // A1a: feed own-SIZE/own-DIET as interoceptive inputs
+  const cellRadius = cfg.cellRadius; // SIZE normalization divisor (2·cellRadius)
+  const crowdSenseNorm = cfg.crowdSenseNorm; // A1b: local-crowding count → [0,1] divisor
+  const foodCap = cfg.foodCap; // A1c: fertility-under-foot normalization divisor (local biomass → [0,1])
   const hiddenLayer = cfg.hiddenLayer; // nonlinear tanh layer (conditional logic) on top of the linear map
   const moodGlow = cfg.moodGlow; // bioluminescence output read from the hidden "mood" layer (display + signal)
   // Per-creature scratch for the hidden layer (reused each iteration — no per-creature allocation).
@@ -97,8 +108,30 @@ export function steer(
     const dy = Math.sin(h);
     const gx = senseX[i]!;
     const gy = senseY[i]!;
-    const fwd = gx * dx + gy * dy; // food gradient ahead
-    const lat = -gx * dy + gy * dx; // food gradient to the left
+    let fwd = gx * dx + gy * dy; // food gradient ahead
+    let lat = -gx * dy + gy * dx; // food gradient to the left
+    // Hunger scalar = clamp(1 − energy/satiatedBar, 0, 1): 0 = full, 1 = empty. Shared by the food-drive
+    // gate (below) and the interoceptive hunger synapses (further down). Computed ONCE, only when a consumer
+    // is on, so the all-off path never consults satiatedBar and stays byte-identical to pre-feature.
+    let hunger = 0;
+    if (hungerSense || hungerGatesFood) {
+      const sb = satiatedBar(genes, i, cfg);
+      hunger = sb > 0 ? 1 - energy[i]! / sb : 1;
+      if (hunger < 0) hunger = 0;
+      else if (hunger > 1) hunger = 1;
+    }
+    // Food-drive gate (satiation → stop seeking): scale the FOOD gradient by a drive that is FULL while
+    // the creature is hungry and eases to 0 only as it approaches satiation — drive = clamp(hunger /
+    // foodGateThreshold, 0, 1) (raw hunger when threshold ≤ 0). So a full creature stops seeking food and
+    // steers on its other drives (sight/flow/pheromone/bias) → wanders, a NEARLY-full one eases off, and
+    // the still-hungry majority forages at full strength (no handicap). ONLY the food gradient is scaled.
+    // Gated so the OFF path leaves fwd/lat untouched (byte-identical). Scaling at the source feeds the elig.
+    if (hungerGatesFood) {
+      let drive = foodGateThreshold > 0 ? hunger / foodGateThreshold : hunger;
+      if (drive > 1) drive = 1; // lower bound is implicit: hunger ≥ 0 → drive ≥ 0
+      fwd *= drive;
+      lat *= drive;
+    }
     const vx = sightX[i]!;
     const vy = sightY[i]!;
     const sFwd = vx * dx + vy * dy; // sight vector ahead (appeal-signed)
@@ -111,16 +144,12 @@ export function steer(
     const flowVy = flowSenseY[i]!;
     const flFwd = flowVx * dx + flowVy * dy; // current/flow vector ahead
     const flLat = -flowVx * dy + flowVy * dx; // current/flow vector to the left
-    const pheroVx = pheroSenseX[i]!;
-    const pheroVy = pheroSenseY[i]!;
-    const pFwd = pheroVx * dx + pheroVy * dy; // pheromone gradient ahead (∇P)
-    const pLat = -pheroVx * dy + pheroVy * dx; // pheromone gradient to the left
     const glowVx = glowSenseX[i]!;
     const glowVy = glowSenseY[i]!;
     const glFwd = glowVx * dx + glowVy * dy; // glow-field gradient ahead (∇G)
     const glLat = -glowVx * dy + glowVy * dx; // glow-field gradient to the left
-
     const b = i * BRAIN_GENES;
+    const sb = i * SCENT_CHANNELS;
     // Turn/thrust = food-gradient + sight + wall + flow responses (+ hunger when on); all heading-frame.
     let turnRaw =
       learnedBrain[b + Brain.LAT_TURN]! * lat +
@@ -131,8 +160,6 @@ export function steer(
       learnedBrain[b + Brain.WALL_FWD_TURN]! * wFwd +
       learnedBrain[b + Brain.FLOW_LAT_TURN]! * flLat +
       learnedBrain[b + Brain.FLOW_FWD_TURN]! * flFwd +
-      learnedBrain[b + Brain.PHERO_LAT_TURN]! * pLat +
-      learnedBrain[b + Brain.PHERO_FWD_TURN]! * pFwd +
       learnedBrain[b + GLOW_SENSE_LAT_TURN]! * glLat +
       learnedBrain[b + GLOW_SENSE_FWD_TURN]! * glFwd +
       learnedBrain[b + Brain.TURN_BIAS]!;
@@ -145,20 +172,32 @@ export function steer(
       learnedBrain[b + Brain.WALL_FWD_THRUST]! * wFwd +
       learnedBrain[b + Brain.FLOW_LAT_THRUST]! * flLat +
       learnedBrain[b + Brain.FLOW_FWD_THRUST]! * flFwd +
-      learnedBrain[b + Brain.PHERO_LAT_THRUST]! * pLat +
-      learnedBrain[b + Brain.PHERO_FWD_THRUST]! * pFwd +
       learnedBrain[b + GLOW_SENSE_LAT_THRUST]! * glLat +
       learnedBrain[b + GLOW_SENSE_FWD_THRUST]! * glFwd +
       learnedBrain[b + Brain.THRUST_BIAS]!;
+    // F2 scent: each channel's gradient (heading frame) on its own 4 synapses. N-generic loop. Base for
+    // channel c = PHERO_C0_LAT_TURN + c*4 → {lat_turn, fwd_turn, lat_thrust, fwd_thrust}. Seeded 0 so the
+    // sign evolves (climb prey-scent / descend predator-scent / cluster on kin-hue). Each channel's gradient
+    // ALSO feeds the hidden layer (HiddenInput.SCENT_C{c}_FWD/LAT) so scent reaches the NONLINEAR logic, not
+    // just the linear synapses — the same dual path food/sight/wall/flow use (mandate 1).
+    for (let c = 0; c < SCENT_CHANNELS; c++) {
+      const cvx = scentSenseX[sb + c]!;
+      const cvy = scentSenseY[sb + c]!;
+      const cFwd = cvx * dx + cvy * dy;
+      const cLat = -cvx * dy + cvy * dx;
+      const pb = b + Brain.PHERO_C0_LAT_TURN + c * 4;
+      turnRaw += learnedBrain[pb]! * cLat + learnedBrain[pb + 1]! * cFwd;
+      thrustRaw += learnedBrain[pb + 2]! * cLat + learnedBrain[pb + 3]! * cFwd;
+      if (hiddenLayer) {
+        hidIn[HiddenInput.SCENT_C0_FWD + c * 2] = cFwd;
+        hidIn[HiddenInput.SCENT_C0_FWD + c * 2 + 1] = cLat;
+      }
+    }
 
-    // Interoceptive hunger (lever E2): a scalar drive on its own pair of synapses. Gated, not +0'd,
-    // so the OFF path leaves turn/thrust byte-identical (satiatedBar isn't even consulted when off).
-    let hunger = 0;
+    // Interoceptive hunger (lever E2): the shared hunger scalar (computed above) on its own pair of
+    // synapses. Gated, not +0'd, so the OFF path leaves turn/thrust byte-identical (hunger stays 0 / was
+    // never computed when both hunger levers are off).
     if (hungerSense) {
-      const sb = satiatedBar(genes, i, cfg);
-      hunger = sb > 0 ? 1 - energy[i]! / sb : 1;
-      if (hunger < 0) hunger = 0;
-      else if (hunger > 1) hunger = 1;
       turnRaw += learnedBrain[b + Brain.HUNGER_TURN]! * hunger;
       thrustRaw += learnedBrain[b + Brain.HUNGER_THRUST]! * hunger;
     }
@@ -186,6 +225,31 @@ export function steer(
       thrustRaw += learnedBrain[b + Brain.READINESS_THRUST]! * readiness;
     }
 
+    // Interoceptive own-body inputs (A1a): own normalized SIZE + own DIET on their own synapses. Constant
+    // within a life → EVOLVE-ONLY (no eligibility below; a learning synapse on a constant input is the bias
+    // positive-feedback runaway learn() excludes biases for). Gated, not +0'd, so the OFF path is untouched.
+    let sizeN = 0;
+    let dietN = 0;
+    let crowdN = 0;
+    let fertN = 0;
+    if (bodySense) {
+      sizeN = genes[sg + ScalarGene.SIZE]! / (2 * cellRadius);
+      dietN = genes[sg + ScalarGene.DIET]!;
+      crowdN = crowding[i]! / crowdSenseNorm;
+      if (crowdN > 1) crowdN = 1;
+      turnRaw += learnedBrain[b + Brain.SIZE_TURN]! * sizeN + learnedBrain[b + Brain.DIET_TURN]! * dietN;
+      thrustRaw +=
+        learnedBrain[b + Brain.SIZE_THRUST]! * sizeN + learnedBrain[b + Brain.DIET_THRUST]! * dietN;
+      turnRaw += learnedBrain[b + Brain.CROWD_TURN]! * crowdN;
+      thrustRaw += learnedBrain[b + Brain.CROWD_THRUST]! * crowdN;
+      // A1c fertility-under-foot: total local biomass / foodCap, clamped to 1. VARIES within a life →
+      // gets eligibility below (unlike A1a's constant size/diet). 0 when !bodySense (fertHere stays stale).
+      fertN = fertHere[i]! / foodCap;
+      if (fertN > 1) fertN = 1;
+      turnRaw += learnedBrain[b + Brain.FERT_TURN]! * fertN;
+      thrustRaw += learnedBrain[b + Brain.FERT_THRUST]! * fertN;
+    }
+
     // Hidden layer (slice E): a tanh layer adding a NONLINEAR correction on top of the linear map above
     // (skip-connection). Computed once per creature; its units feed turn + thrust here, eatGate below, and
     // are reused for the hidden→output eligibility traces. Input→hidden is frozen (evolved); hidden→output
@@ -199,11 +263,14 @@ export function steer(
       hidIn[HiddenInput.WALL_LAT] = wLat;
       hidIn[HiddenInput.FLOW_FWD] = flFwd;
       hidIn[HiddenInput.FLOW_LAT] = flLat;
-      hidIn[HiddenInput.PHERO_FWD] = pFwd;
-      hidIn[HiddenInput.PHERO_LAT] = pLat;
+      // SCENT_C0..C3 (hidIn slots 8..15) were written in the scent loop above.
       hidIn[HiddenInput.HUNGER] = hunger;
       hidIn[HiddenInput.AGE] = aged;
       hidIn[HiddenInput.READINESS] = readiness;
+      hidIn[HiddenInput.SIZE] = sizeN; // 0 when !bodySense → no hidden contribution either
+      hidIn[HiddenInput.DIET] = dietN;
+      hidIn[HiddenInput.CROWD] = crowdN; // 0 when !bodySense
+      hidIn[HiddenInput.FERT] = fertN; // 0 when !bodySense
       hidIn[HiddenInput.BIAS] = 1;
       const w1 = b + HIDDEN_W1;
       for (let j = 0; j < HIDDEN_UNITS; j++) {
@@ -223,6 +290,7 @@ export function steer(
     let turn: number;
     let thrust: number;
     let eatGateRaw = 0; // eat-gate pre-sigmoid sum (slice B); stays 0 when brainGatedEating is off
+    let biteGateRaw = 0; // bite-gate pre-sigmoid sum (A2a); stays 0 when brainGatedBiting is off
     // Reverse floor: a creature may push backward down to −reverseFrac·maxThrust (0 ⇒ forward-only, the
     // legacy motor). Capped below the forward max so backing away is a slower retreat, not a launch. The
     // `>0` guard keeps the floor at +0 (not −0) when off, so reverseFrac 0 is bit-identical to the old motor.
@@ -268,6 +336,17 @@ export function steer(
       const gate = 1 / (1 + Math.exp(-eatGateRaw)); // 0 (head up, fast) … 1 (head down, eating, slow)
       eatGate[i] = gate;
       thrust *= 1 - gate * eatMovePenalty; // eating costs mobility — lift the head to flee at full speed
+    }
+    // Brain-gated bite (A2a): a sigmoid decision read from the hidden "mood" layer (output column 3) + a bias.
+    // hunt() scales the bite drain by this. Gated by brainGatedBiting; seeded gate-open so it only subtracts.
+    if (brainGatedBiting) {
+      biteGateRaw = learnedBrain[b + Brain.BITE_GATE_BIAS]!;
+      if (hiddenLayer) {
+        const w2 = b + HIDDEN_W2;
+        for (let j = 0; j < HIDDEN_UNITS; j++)
+          biteGateRaw += hAct[j]! * learnedBrain[w2 + j * HIDDEN_OUTPUTS + 3]!;
+      }
+      biteGate[i] = 1 / (1 + Math.exp(-biteGateRaw));
     }
     forceX[i] = thrust * Math.cos(nh);
     forceY[i] = thrust * Math.sin(nh);
@@ -317,14 +396,17 @@ export function steer(
       keep * elig[b + Brain.FLOW_LAT_THRUST]! + eligLambda * flLat * thrustRaw;
     elig[b + Brain.FLOW_FWD_THRUST] =
       keep * elig[b + Brain.FLOW_FWD_THRUST]! + eligLambda * flFwd * thrustRaw;
-    elig[b + Brain.PHERO_LAT_TURN] =
-      keep * elig[b + Brain.PHERO_LAT_TURN]! + eligLambda * pLat * turnRaw;
-    elig[b + Brain.PHERO_FWD_TURN] =
-      keep * elig[b + Brain.PHERO_FWD_TURN]! + eligLambda * pFwd * turnRaw;
-    elig[b + Brain.PHERO_LAT_THRUST] =
-      keep * elig[b + Brain.PHERO_LAT_THRUST]! + eligLambda * pLat * thrustRaw;
-    elig[b + Brain.PHERO_FWD_THRUST] =
-      keep * elig[b + Brain.PHERO_FWD_THRUST]! + eligLambda * pFwd * thrustRaw;
+    for (let c = 0; c < SCENT_CHANNELS; c++) {
+      const cvx = scentSenseX[sb + c]!;
+      const cvy = scentSenseY[sb + c]!;
+      const cFwd = cvx * dx + cvy * dy;
+      const cLat = -cvx * dy + cvy * dx;
+      const pb = b + Brain.PHERO_C0_LAT_TURN + c * 4;
+      elig[pb] = keep * elig[pb]! + eligLambda * cLat * turnRaw;
+      elig[pb + 1] = keep * elig[pb + 1]! + eligLambda * cFwd * turnRaw;
+      elig[pb + 2] = keep * elig[pb + 2]! + eligLambda * cLat * thrustRaw;
+      elig[pb + 3] = keep * elig[pb + 3]! + eligLambda * cFwd * thrustRaw;
+    }
     // Glow-sense elig (slice F3): real input (∇G), so these LEARN. pre = glLat/glFwd, post = motor output.
     elig[b + GLOW_SENSE_LAT_TURN] =
       keep * elig[b + GLOW_SENSE_LAT_TURN]! + eligLambda * glLat * turnRaw;
@@ -365,6 +447,18 @@ export function steer(
       elig[b + Brain.READINESS_THRUST] =
         keep * elig[b + Brain.READINESS_THRUST]! + eligLambda * readiness * thrustRaw;
     }
+    // Local-crowding eligibility (A1b): pre = crowdN, post = motor output. CROWD VARIES within a life, so it
+    // LEARNS (unlike A1a's constant own-size/diet, which get NO elig). Gated on bodySense.
+    if (bodySense) {
+      elig[b + Brain.CROWD_TURN] = keep * elig[b + Brain.CROWD_TURN]! + eligLambda * crowdN * turnRaw;
+      elig[b + Brain.CROWD_THRUST] =
+        keep * elig[b + Brain.CROWD_THRUST]! + eligLambda * crowdN * thrustRaw;
+      // Fertility-under-foot eligibility (A1c): pre = fertN, post = motor output. FERT VARIES within a life,
+      // so it LEARNS (like CROWD; unlike A1a's constant own-size/diet, which get NO elig).
+      elig[b + Brain.FERT_TURN] = keep * elig[b + Brain.FERT_TURN]! + eligLambda * fertN * turnRaw;
+      elig[b + Brain.FERT_THRUST] =
+        keep * elig[b + Brain.FERT_THRUST]! + eligLambda * fertN * thrustRaw;
+    }
     // Hidden→output eligibility (slice E): ONLY the output layer learns (pre = hidden activation, post =
     // the motor output). The input→hidden weights get NO elig → they stay at the genome (evolved-only),
     // because the Hebbian rule cannot credit-assign reward back through a hidden unit.
@@ -376,6 +470,7 @@ export function steer(
         elig[o + 0] = keep * elig[o + 0]! + eligLambda * a * turnRaw;
         elig[o + 1] = keep * elig[o + 1]! + eligLambda * a * thrustRaw;
         elig[o + 2] = keep * elig[o + 2]! + eligLambda * a * eatGateRaw;
+        if (brainGatedBiting) elig[o + 3] = keep * elig[o + 3]! + eligLambda * a * biteGateRaw;
       }
     }
   }
@@ -414,7 +509,13 @@ export function learn(
       // Biases are NOT plastic: their input is the constant 1, so Hebbian pre·post just accumulates the
       // motor output's own sign → a positive-feedback runaway that saturates turn/thrust (= spinning in
       // place). Sensorimotor synapses self-correct (their input vanishes as the creature aligns).
-      if (g === Brain.TURN_BIAS || g === Brain.THRUST_BIAS || g === Brain.EAT_GATE_BIAS) continue;
+      if (
+        g === Brain.TURN_BIAS ||
+        g === Brain.THRUST_BIAS ||
+        g === Brain.EAT_GATE_BIAS ||
+        g === Brain.BITE_GATE_BIAS
+      )
+        continue;
       const w0 = brain[b + g]!; // genome instinct = the anchor the deviation relaxes toward
       let dev = (learnedBrain[b + g]! - w0) * keep + learningRate * reward * elig[b + g]!;
       if (dev > maxLearnDeviation) dev = maxLearnDeviation;

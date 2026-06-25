@@ -1,4 +1,5 @@
 import { BRAIN_GENES, SCALAR_GENE_COUNT } from './genome';
+import { SCENT_CHANNELS } from './scent-field';
 
 /**
  * Organism store — data-oriented SoA (structure-of-arrays). No per-entity objects: parallel typed
@@ -31,6 +32,11 @@ export class OrganismStore {
   // Not hashed (derived). Defaults to 1 (full eating) on alloc for the edge-case pre-steer read.
   readonly eatGate: Float64Array;
 
+  // Transient per-tick BITE-GATE actuator (0..1): the brain's predation decision (A2a). Recomputed each tick
+  // in steer(); read by hunt() to scale the bite drain. Not hashed (derived). Defaults to 1 (bite-open) on
+  // alloc for the edge-case pre-steer read.
+  readonly biteGate: Float64Array;
+
   // Transient per-tick MOOD-GLOW actuator (0..1): the brain's bioluminescence output (slice F). Recomputed
   // each tick in steer() from the hidden "mood" layer; read by the renderer (biolum brightness) and, when
   // the glow-sense channel is on, deposited into the glow field. Not hashed (derived).
@@ -52,16 +58,24 @@ export class OrganismStore {
   readonly wallSenseY: Float64Array;
   readonly flowSenseX: Float64Array;
   readonly flowSenseY: Float64Array;
-  // Transient per-tick PHEROMONE sense (world frame): the local ∇P gradient. Recomputed each tick by
-  // senseEnv when the field is active (else left 0); not hashed (derived). Wired into steer via the
-  // 4 PHERO brain genes.
-  readonly pheroSenseX: Float64Array;
-  readonly pheroSenseY: Float64Array;
+  // Transient per-tick SCENT sense (world frame): the local ∇P gradient PER CHANNEL, laid out
+  // [i·SCENT_CHANNELS + c]. Recomputed each tick by senseEnv when the field is active (else left 0); not
+  // hashed (derived). Wired into steer via the 16 PHERO brain genes (4 channels × lat/fwd × turn/thrust).
+  readonly scentSenseX: Float64Array;
+  readonly scentSenseY: Float64Array;
   // Transient per-tick GLOW sense (world frame): the local ∇G gradient of the glow field. Recomputed each
   // tick by senseEnv when the field is active (else left 0); not hashed (derived). Wired into steer via the
   // 4 GLOW_SENSE brain genes (slice F3 — the receiver side of the glow communication channel).
   readonly glowSenseX: Float64Array;
   readonly glowSenseY: Float64Array;
+
+  // Transient per-tick LOCAL-CROWDING count (A1b): live neighbors within cfg.crowdSenseRange, written by
+  // senseCrowding each tick (0 when bodySense off). Recomputed each tick; not hashed (derived).
+  readonly crowding: Float64Array;
+
+  // Transient per-tick FERTILITY-UNDER-FOOT (A1c): total food biomass at the body (summed over active
+  // channels), written by senseFertility each tick (0 when bodySense off). Recomputed each tick; not hashed.
+  readonly fertHere: Float64Array;
 
   // Genome (heritable, mutated at birth): the brain weights (BRAIN_GENES per slot) + the hue gene
   // + the scalar genes (SCALAR_GENE_COUNT per slot — see genome.ScalarGene).
@@ -83,6 +97,15 @@ export class OrganismStore {
   readonly age: Uint32Array;
   readonly genId: Uint32Array;
   readonly alive: Uint8Array;
+  // Breeding refractory countdown (ticks until this slot may breed again; 0 = ready). Only touched when
+  // cfg.breedCooldown > 0, so the OFF path never reads/writes it. Auxiliary runtime state — NOT hashed
+  // (the determinism golden hash stays byte-identical when the cooldown feature is off).
+  readonly breedCooldownLeft: Uint32Array;
+
+  /** Mate-seeking state (life-sim-xa90): 1 while actively looking for a mate; seekTicksLeft counts the
+   *  current search window down. Hashed (part of the determinism contract — they steer future behaviour). */
+  readonly seeking: Uint8Array;
+  readonly seekTicksLeft: Uint32Array;
 
   /** Free slots available for allocation (LIFO). Reuse is genId-guarded. */
   private readonly freeStack: number[] = [];
@@ -102,6 +125,7 @@ export class OrganismStore {
     this.forceX = new Float64Array(capacity);
     this.forceY = new Float64Array(capacity);
     this.eatGate = new Float64Array(capacity);
+    this.biteGate = new Float64Array(capacity);
     this.glow = new Float64Array(capacity);
     this.senseX = new Float64Array(capacity);
     this.senseY = new Float64Array(capacity);
@@ -111,10 +135,12 @@ export class OrganismStore {
     this.wallSenseY = new Float64Array(capacity);
     this.flowSenseX = new Float64Array(capacity);
     this.flowSenseY = new Float64Array(capacity);
-    this.pheroSenseX = new Float64Array(capacity);
-    this.pheroSenseY = new Float64Array(capacity);
+    this.scentSenseX = new Float64Array(capacity * SCENT_CHANNELS);
+    this.scentSenseY = new Float64Array(capacity * SCENT_CHANNELS);
     this.glowSenseX = new Float64Array(capacity);
     this.glowSenseY = new Float64Array(capacity);
+    this.crowding = new Float64Array(capacity);
+    this.fertHere = new Float64Array(capacity);
     this.brain = new Float32Array(capacity * BRAIN_GENES);
     this.hue = new Float32Array(capacity);
     this.scalarGenes = new Float32Array(capacity * SCALAR_GENE_COUNT);
@@ -124,6 +150,9 @@ export class OrganismStore {
     this.age = new Uint32Array(capacity);
     this.genId = new Uint32Array(capacity);
     this.alive = new Uint8Array(capacity);
+    this.breedCooldownLeft = new Uint32Array(capacity);
+    this.seeking = new Uint8Array(capacity);
+    this.seekTicksLeft = new Uint32Array(capacity);
     this.liveIndices = new Uint32Array(capacity);
     this.clear();
   }
@@ -138,6 +167,9 @@ export class OrganismStore {
     this.alive.fill(0);
     this.age.fill(0);
     this.genId.fill(0);
+    this.breedCooldownLeft.fill(0);
+    this.seeking.fill(0);
+    this.seekTicksLeft.fill(0);
     this.freeStack.length = 0;
     for (let i = this.capacity - 1; i >= 0; i--) this.freeStack.push(i);
     this.liveCount = 0;
@@ -150,7 +182,11 @@ export class OrganismStore {
     this.alive[slot] = 1;
     this.genId[slot] = (this.genId[slot]! + 1) >>> 0;
     this.age[slot] = 0;
+    this.breedCooldownLeft[slot] = 0; // a newborn is breeding-ready (first breed is never gated)
+    this.seeking[slot] = 0;
+    this.seekTicksLeft[slot] = 0;
     this.eatGate[slot] = 1; // default full eating until steer() recomputes (avoids a stale pre-steer read)
+    this.biteGate[slot] = 1; // default bite-open until steer() recomputes (A2a; avoids a stale pre-steer read)
     return slot;
   }
 

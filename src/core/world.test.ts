@@ -4,6 +4,12 @@ import { defaultConfig } from './config';
 import { Brain, BRAIN_GENES, ScalarGene, SCALAR_GENE_COUNT } from './genome';
 
 describe('World — Phase 0 determinism contract', () => {
+  it('sexualReproduction defaults on and is a config knob', () => {
+    expect(defaultConfig({}).sexualReproduction).toBe(true);
+    expect(defaultConfig({}).mateSeekWindow).toBe(120);
+    expect(defaultConfig({ sexualReproduction: false }).sexualReproduction).toBe(false);
+  });
+
   it('same (config, seed) → byte-identical hash after N ticks', () => {
     const a = new World(defaultConfig({ seed: 3 }));
     const b = new World(defaultConfig({ seed: 3 }));
@@ -75,6 +81,79 @@ describe('World — Phase 0 determinism contract', () => {
     expect(on.stateHash()).not.toBe(baseline.stateHash());
   });
 
+  it('ageStages OFF is byte-identical to default; ON perturbs the world (age-stages gene-gate)', () => {
+    const baseline = new World(defaultConfig({ seed: 1 }));
+    const off = new World(defaultConfig({ seed: 1, ageStages: false }));
+    const on = new World(defaultConfig({ seed: 1, ageStages: true }));
+    for (let t = 0; t < 1000; t++) {
+      baseline.step();
+      off.step();
+      on.step();
+    }
+    // OFF == default → the 2 tail genes (MATURITY_AGE, SENESCENCE_AGE) consume NO RNG when off.
+    expect(off.stateHash()).toBe(baseline.stateHash());
+    // ON diverges → the 2 gene draws (+ senescence tax + maturity gate) actually move the world.
+    expect(on.stateHash()).not.toBe(baseline.stateHash());
+  });
+
+  it('bodySense OFF vs ON diverge — own-SIZE/own-DIET are read by steer (A1a wired, always-drawn)', () => {
+    // Always-drawn pattern: OFF and ON share an IDENTICAL seeded genome (the weights draw regardless of the
+    // flag), so divergence proves the steer() forward pass actually reads the inputs — NOT the off===baseline
+    // byte-identity the draw-skip features assert.
+    const off = new World(defaultConfig({ seed: 1, bodySense: false }));
+    const on = new World(defaultConfig({ seed: 1, bodySense: true }));
+    for (let t = 0; t < 1000; t++) {
+      off.step();
+      on.step();
+    }
+    expect(on.stateHash()).not.toBe(off.stateHash());
+  });
+
+  it('bodySense ON is deterministic (same config+seed → identical hash run-to-run)', () => {
+    const a = new World(defaultConfig({ seed: 5, bodySense: true }));
+    const b = new World(defaultConfig({ seed: 5, bodySense: true }));
+    for (let t = 0; t < 300; t++) {
+      a.step();
+      b.step();
+    }
+    expect(a.stateHash()).toBe(b.stateHash());
+  });
+
+  it('bodySense ON with crowding is deterministic (A1b — same config+seed → identical hash)', () => {
+    const a = new World(defaultConfig({ seed: 9, bodySense: true }));
+    const b = new World(defaultConfig({ seed: 9, bodySense: true }));
+    for (let t = 0; t < 300; t++) {
+      a.step();
+      b.step();
+    }
+    expect(a.stateHash()).toBe(b.stateHash());
+  });
+
+  it('brainGatedBiting ON is deterministic (A2a — same config+seed → identical hash run-to-run)', () => {
+    const a = new World(defaultConfig({ seed: 3, brainGatedBiting: true }));
+    const b = new World(defaultConfig({ seed: 3, brainGatedBiting: true }));
+    for (let t = 0; t < 300; t++) {
+      a.step();
+      b.step();
+    }
+    expect(a.stateHash()).toBe(b.stateHash());
+  });
+
+  it('ageStages OFF: MATURITY_AGE/SENESCENCE_AGE stay exactly at their centers after a long run (ablation)', () => {
+    // The tail-gated-draw contract: with ageStages off, seed/mutateScalarGenes pin both genes to their
+    // config centers WITHOUT drawing RNG — so after a long run every live creature (founders + all
+    // offspring) keeps them byte-identically at center, and the organism RNG stream is unperturbed.
+    const w = new World(defaultConfig({ seed: 13, ageStages: false }));
+    for (let t = 0; t < 500; t++) w.step();
+    const s = w.store;
+    expect(s.liveCount).toBeGreaterThan(0); // non-vacuity: the loop runs over real creatures
+    for (let k = 0; k < s.liveCount; k++) {
+      const base = s.liveIndices[k]! * SCALAR_GENE_COUNT;
+      expect(s.scalarGenes[base + ScalarGene.MATURITY_AGE]!).toBe(w.config.maturityAge);
+      expect(s.scalarGenes[base + ScalarGene.SENESCENCE_AGE]!).toBe(w.config.senescenceAge);
+    }
+  });
+
   it('parcelsEnabled OFF is byte-identical to default; ON perturbs the world (sight-only food gate)', () => {
     const baseline = new World(defaultConfig({ seed: 1 }));
     const off = new World(defaultConfig({ seed: 1, parcelsEnabled: false }));
@@ -125,14 +204,14 @@ describe('World — Phase 0 determinism contract', () => {
     }
   });
 
-  it('pheromoneEnabled OFF: the 4 PHERO brain genes stay exactly 0 after a long run (ablation)', () => {
+  it('pheromoneEnabled OFF: the 16 PHERO brain genes stay exactly 0 after a long run (ablation)', () => {
     const w = new World(defaultConfig({ seed: 13, pheromoneEnabled: false }));
     for (let t = 0; t < 500; t++) w.step();
     const s = w.store;
     expect(s.liveCount).toBeGreaterThan(0);
     for (let k = 0; k < s.liveCount; k++) {
       const base = s.liveIndices[k]! * BRAIN_GENES;
-      for (let g = Brain.PHERO_LAT_TURN; g <= Brain.PHERO_FWD_THRUST; g++) {
+      for (let g = Brain.PHERO_C0_LAT_TURN; g <= Brain.PHERO_C3_FWD_THRUST; g++) {
         expect(s.brain[base + g]!).toBe(0);
       }
     }
@@ -342,6 +421,62 @@ describe('World — Phase 0 determinism contract', () => {
         expect(s.brain[base + g]!).toBe(0);
       }
     }
+  });
+
+  it('seeking store fields are reset-deterministic and hashed', () => {
+    const w = new World(defaultConfig({ seed: 3 }));
+    for (let t = 0; t < 200; t++) w.step();
+    const h1 = w.stateHash();
+    w.reset();
+    for (let t = 0; t < 200; t++) w.step();
+    expect(w.stateHash()).toBe(h1); // reset → byte-identical, incl. seeking state
+    expect(w.store.seeking.length).toBe(w.store.capacity);
+    expect(w.store.seekTicksLeft.length).toBe(w.store.capacity);
+  });
+});
+
+describe('sexual reproduction — determinism + liveness', () => {
+  // A demo-ish config: dense pockets so mate-seeking has partners (per the feasibility probe).
+  // World shrunk 8192→2048: at 8192² the population (~70) is so sparse that seekers almost never
+  // land within the ~12u mate-contact scan, so births trickle to ~2/1500-ticks and the world bleeds
+  // out (90→39). mateSeekWindow/mateCompatThreshold are inert here — the binding constraint is
+  // ENCOUNTER GEOMETRY, not the search window or compatibility (probed: ~26 seekers live at any tick,
+  // yet they can't find each other). Concentrating the same population into a 2048² world is the only
+  // lever that brings seekers into contact range — births jump to ~280-440 and the world grows
+  // (robust across 5 seeds: pop 296-491). This is a TEST-LOCAL override; defaultConfig is unchanged
+  // (no golden-hash re-pin needed).
+  const demoish = () =>
+    defaultConfig({
+      seed: 7,
+      sexualReproduction: true,
+      worldWidth: 2048,
+      worldHeight: 2048,
+      // Pin the founder count for this 2048² test world (independent of the demo's initialPopulation
+      // default, which is tuned for the 8192² demo): 90 founders concentrated here is dense enough for
+      // mate encounters yet light enough that 1500 ticks stay under the 20s test timeout.
+      initialPopulation: 90,
+      foodPatchCount: 40,
+      foodPatchRadius: 8,
+      breedCooldown: 150,
+      ageStages: true,
+      hungerGatesFood: true,
+    });
+
+  it('same (config, seed) → identical hash after 1500 ticks (sexual ON)', () => {
+    const a = new World(demoish());
+    const b = new World(demoish());
+    for (let t = 0; t < 1500; t++) {
+      a.step();
+      b.step();
+    }
+    expect(a.stateHash()).toBe(b.stateHash());
+  });
+
+  it('liveness guardrail: world stays alive + breeds under sexual reproduction', () => {
+    const w = new World(demoish());
+    for (let t = 0; t < 1500; t++) w.step();
+    expect(w.population).toBeGreaterThan(50); // not collapsed to extinction
+    expect(w.totalBirths).toBeGreaterThan(0); // sexual births actually happen
   });
 });
 

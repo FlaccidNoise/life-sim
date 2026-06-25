@@ -76,6 +76,10 @@ const GENE_LABELS: Record<number, string> = {
   [ScalarGene.SENSE_RANGE_B]: 'senseRangeB',
   [ScalarGene.SENSE_RANGE_C]: 'senseRangeC',
   [ScalarGene.PHERO_DEPOSIT]: 'pheroDeposit',
+  [ScalarGene.MATURITY_AGE]: 'maturityAge',
+  [ScalarGene.SENESCENCE_AGE]: 'senescenceAge',
+  [ScalarGene.DISPLAY]: 'display',
+  [ScalarGene.PREFERENCE]: 'preference',
   [ScalarGene.DAMPING]: 'damping',
 };
 

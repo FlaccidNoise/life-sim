@@ -5,6 +5,14 @@ import {
   Brain,
   BRAIN_GENES,
   BRAIN_CORE_GENES,
+  NAMED_BRAIN_GENES,
+  HiddenInput,
+  HIDDEN_INPUTS,
+  HIDDEN_UNITS,
+  HIDDEN_OUTPUTS,
+  HIDDEN_W1,
+  HIDDEN_W2,
+  GLOW_BIAS,
   seedGenome,
   mutateGenome,
   ScalarGene,
@@ -12,11 +20,61 @@ import {
   SCALAR_GENE_SPECS,
   seedScalarGenes,
   mutateScalarGenes,
+  crossoverScalarGenes,
   scalarGeneGatedOff,
   geneUpkeep,
+  geneticDistance,
 } from './genome';
+import { SCENT_CHANNELS } from './scent-field';
+
+describe('unified brain layout (consolidation)', () => {
+  it('places the 16-synapse scent block at 20..35 and the interoceptive tail after readiness', () => {
+    expect(Brain.PHERO_C0_LAT_TURN).toBe(20);
+    expect(Brain.PHERO_C3_FWD_THRUST).toBe(35);
+    expect(Brain.EAT_GATE_BIAS).toBe(36);
+    expect(Brain.READINESS_THRUST).toBe(44);
+    expect(Brain.SIZE_TURN).toBe(45);
+    expect(Brain.DIET_THRUST).toBe(48);
+    expect(Brain.CROWD_TURN).toBe(49);
+    expect(Brain.FERT_TURN).toBe(51); // A1c: fertility-under-foot linear synapses
+    expect(Brain.FERT_THRUST).toBe(52);
+    expect(Brain.BITE_GATE_BIAS).toBe(53); // A2a: brain-gated predation output bias
+    expect(NAMED_BRAIN_GENES).toBe(54);
+  });
+  it('grows the hidden layer to 24 inputs and 4 outputs (turn/thrust/eatGate/biteGate)', () => {
+    expect(SCENT_CHANNELS).toBe(4);
+    expect(HIDDEN_INPUTS).toBe(24);
+    expect(HIDDEN_OUTPUTS).toBe(4);
+    expect(HiddenInput.FERT).toBe(22);
+    expect(HiddenInput.BIAS).toBe(23);
+  });
+  it('derives downstream offsets from the unified sizes', () => {
+    expect(HIDDEN_W1).toBe(NAMED_BRAIN_GENES); // 54
+    expect(HIDDEN_W2).toBe(HIDDEN_W1 + HIDDEN_INPUTS * HIDDEN_UNITS); // 150
+    expect(GLOW_BIAS).toBe(HIDDEN_W2 + HIDDEN_UNITS * HIDDEN_OUTPUTS); // 166
+    expect(BRAIN_GENES).toBe(175);
+  });
+});
 
 describe('genome', () => {
+  it('DISPLAY and PREFERENCE are seeded in range and counted', () => {
+    expect(SCALAR_GENE_COUNT).toBe(27);
+    expect(ScalarGene.DISPLAY).toBe(24);
+    expect(ScalarGene.PREFERENCE).toBe(25);
+    const cfg = defaultConfig({ seed: 1 });
+    const genes = new Float32Array(8 * SCALAR_GENE_COUNT);
+    const rng = new Rng(1);
+    for (let s = 0; s < 8; s++) seedScalarGenes(genes, s, rng, cfg);
+    for (let s = 0; s < 8; s++) {
+      const d = genes[s * SCALAR_GENE_COUNT + ScalarGene.DISPLAY]!;
+      const p = genes[s * SCALAR_GENE_COUNT + ScalarGene.PREFERENCE]!;
+      expect(d).toBeGreaterThanOrEqual(0);
+      expect(d).toBeLessThanOrEqual(1);
+      expect(p).toBeGreaterThanOrEqual(0);
+      expect(p).toBeLessThanOrEqual(1);
+    }
+  });
+
   it('seedGenome spreads founder brains around the seed (initial variation)', () => {
     const brain = new Float32Array(10 * BRAIN_GENES);
     const hue = new Float32Array(10);
@@ -64,7 +122,7 @@ describe('genome', () => {
     const hue = new Float32Array(1);
     seedGenome(brain, hue, 0, a, 0.3, false, false, false, false);
     for (let g = 0; g < BRAIN_CORE_GENES; g++) b.gaussian(0, 0.3);
-    // eat-gate block (slice B) is ALWAYS drawn (on-by-default policy, not gated) — eat-gate (5) + age (2) + readiness (2) + hidden (68) + glow (5) + glow-sense (4), always-drawn, after the core.
+    // eat-gate block (slice B) is ALWAYS drawn (on-by-default policy, not gated) — eat-gate (5) + age (2) + readiness (2) + hidden (92) + glow (5) + glow-sense (4), always-drawn, after the core.
     for (let g = Brain.EAT_GATE_BIAS; g < BRAIN_GENES; g++) b.gaussian(0, 0.3);
     b.float();
     expect(a.state).toBe(b.state);
@@ -80,7 +138,7 @@ describe('genome', () => {
     const hue = new Float32Array(2);
     mutateGenome(brain, hue, 1, 0, a, 0.05, 0.02, false, false, false, false);
     for (let g = 0; g < BRAIN_CORE_GENES; g++) b.gaussian(0, 0.05);
-    // eat-gate block (slice B) is ALWAYS drawn (on-by-default policy, not gated) — eat-gate (5) + age (2) + readiness (2) + hidden (68) + glow (5) + glow-sense (4), always-drawn, after the core.
+    // eat-gate block (slice B) is ALWAYS drawn (on-by-default policy, not gated) — eat-gate (5) + age (2) + readiness (2) + hidden (92) + glow (5) + glow-sense (4), always-drawn, after the core.
     for (let g = Brain.EAT_GATE_BIAS; g < BRAIN_GENES; g++) b.gaussian(0, 0.05);
     b.gaussian(0, 0.02); // hue mutation draw
     expect(a.state).toBe(b.state);
@@ -96,6 +154,23 @@ describe('genome', () => {
       expect(hue[1]!).toBeGreaterThanOrEqual(0);
       expect(hue[1]!).toBeLessThan(1);
     }
+  });
+
+  it('geneticDistance: 0 for identical, symmetric, DIET-dominated, display-blind', () => {
+    const cfg = defaultConfig({ mateDietWeight: 5 });
+    const N = SCALAR_GENE_COUNT;
+    const genes = new Float32Array(4 * N);
+    // slot 0 and 1 identical grazers; slot 2 = grazer differing only in DISPLAY; slot 3 = predator (DIET 1).
+    for (let s = 0; s < 4; s++) {
+      genes[s * N + ScalarGene.DIET] = 0;
+      genes[s * N + ScalarGene.MAX_SPEED] = 5;
+    }
+    genes[2 * N + ScalarGene.DISPLAY] = 1; // only the sexual axis differs
+    genes[3 * N + ScalarGene.DIET] = 1; // predator
+    expect(geneticDistance(genes, 0, 1, cfg)).toBe(0);
+    expect(geneticDistance(genes, 0, 1, cfg)).toBe(geneticDistance(genes, 1, 0, cfg)); // symmetric
+    expect(geneticDistance(genes, 0, 2, cfg)).toBe(0); // DISPLAY weighted 0 → same species
+    expect(geneticDistance(genes, 0, 3, cfg)).toBeGreaterThan(2); // predator vs prey ≫ threshold (~0.6)
   });
 });
 
@@ -262,12 +337,51 @@ describe('FORAGE_PREF gene (lever B — two-channel niche axis, RNG-gated)', () 
     expect(Math.abs(c - 0.4)).toBeGreaterThan(0);
     expect(Math.abs(c - 0.4)).toBeLessThan(0.5);
   });
+
+  it('crossoverScalarGenes: each child gene is near one parent allele, clamped', () => {
+    const cfg = defaultConfig({ mutationSigma: 0 }); // no mutation → child gene EXACTLY one parent's
+    const N = SCALAR_GENE_COUNT;
+    const genes = new Float32Array(3 * N);
+    for (let g = 0; g < N; g++) {
+      genes[0 * N + g] = SCALAR_GENE_SPECS[g]!.min; // mom = min allele
+      genes[1 * N + g] = SCALAR_GENE_SPECS[g]!.max; // dad = max allele
+    }
+    const rng = new Rng(42);
+    crossoverScalarGenes(genes, 2, 0, 1, rng, cfg);
+    let fromMom = 0;
+    let fromDad = 0;
+    for (let g = 0; g < N; g++) {
+      const v = genes[2 * N + g]!;
+      const spec = SCALAR_GENE_SPECS[g]!;
+      const min = Math.fround(spec.min); // parent alleles round-trip through Float32 storage
+      const max = Math.fround(spec.max);
+      expect(v === min || v === max).toBe(true); // exactly one parent (sigma 0)
+      if (v === min) fromMom++;
+      else fromDad++;
+    }
+    expect(fromMom).toBeGreaterThan(0); // mixes both parents (not all from one)
+    expect(fromDad).toBeGreaterThan(0);
+  });
+
+  it('crossoverScalarGenes is deterministic for a given rng state', () => {
+    const cfg = defaultConfig({});
+    const N = SCALAR_GENE_COUNT;
+    const a = new Float32Array(3 * N);
+    const b = new Float32Array(3 * N);
+    for (let g = 0; g < N; g++) {
+      a[g] = b[g] = 1;
+      a[N + g] = b[N + g] = 2;
+    }
+    crossoverScalarGenes(a, 2, 0, 1, new Rng(7), cfg);
+    crossoverScalarGenes(b, 2, 0, 1, new Rng(7), cfg);
+    for (let g = 0; g < N; g++) expect(a[2 * N + g]).toBe(b[2 * N + g]);
+  });
 });
 
 describe('DAMPING gene', () => {
-  it('is the 23rd scalar gene at the tail', () => {
-    expect(SCALAR_GENE_COUNT).toBe(23);
-    expect(ScalarGene.DAMPING).toBe(22);
+  it('is the 27th scalar gene at the tail', () => {
+    expect(SCALAR_GENE_COUNT).toBe(27);
+    expect(ScalarGene.DAMPING).toBe(26);
   });
 
   it('is an uncosted physics gene clamped to [0.6, 0.98]', () => {

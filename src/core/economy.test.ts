@@ -47,7 +47,7 @@ describe('metabolize', () => {
     genes(s, i, cfg, { [ScalarGene.EAT_RATE]: 2 });
     s.rebuildLive();
     const food = new FoodField(W, H, 16, 16, 10, 1); // cell full (B=10)
-    metabolize(s, food, hashOf(s), cfg, null);
+    metabolize(s, food, hashOf(s), cfg);
     expect(s.energy[i]).toBeCloseTo(5 + 2 - 0.4); // eat 2, basal 0.4·eff(1), no movement, no gene cost
     expect(food.sampleAt(10, 10)).toBeCloseTo(8); // 2 grazed
     expect(s.age[i]!).toBe(1);
@@ -63,7 +63,7 @@ describe('metabolize', () => {
     genes(s, i, cfg, { [ScalarGene.EAT_RATE]: 2 });
     s.rebuildLive();
     const food = new FoodField(W, H, 16, 16, 10, 1);
-    metabolize(s, food, hashOf(s), cfg, null);
+    metabolize(s, food, hashOf(s), cfg);
     expect(s.energy[i]).toBeCloseTo(5 + 1 - 0.4); // eat 2·0.5 = 1
     expect(food.sampleAt(10, 10)).toBeCloseTo(9); // only 1 grazed — depletion scales with the gate too
   });
@@ -84,7 +84,7 @@ describe('metabolize', () => {
     genes(s, i, cfgOff, { [ScalarGene.EAT_RATE]: 2 });
     s.rebuildLive();
     const food = new FoodField(W, H, 16, 16, 10, 1);
-    metabolize(s, food, hashOf(s), cfgOff, null);
+    metabolize(s, food, hashOf(s), cfgOff);
     expect(s.energy[i]).toBeCloseTo(5 + 2 - 0.4); // full eat 2 despite eatGate 0
   });
 
@@ -98,7 +98,7 @@ describe('metabolize', () => {
     genes(s, i, cfgSat, { [ScalarGene.EAT_RATE]: 2 });
     s.rebuildLive();
     const food = new FoodField(W, H, 16, 16, 10, 1);
-    metabolize(s, food, hashOf(s), cfgSat, null);
+    metabolize(s, food, hashOf(s), cfgSat);
     expect(food.sampleAt(10, 10)).toBeCloseTo(10); // nothing grazed
     expect(s.energy[i]).toBeCloseTo(100 - 0.4); // still pays basal
   });
@@ -114,7 +114,7 @@ describe('metabolize', () => {
     genes(s, i, cfg, { [ScalarGene.EAT_RATE]: 2 });
     s.rebuildLive();
     const food = new FoodField(W, H, 16, 16, 10, 0); // empty → no eat income
-    metabolize(s, food, hashOf(s), cfg, null);
+    metabolize(s, food, hashOf(s), cfg);
     expect(s.energy[i]).toBeCloseTo(50 - 0.4 - 0.01 * 25);
   });
 
@@ -131,7 +131,7 @@ describe('metabolize', () => {
     });
     s.rebuildLive();
     const food = new FoodField(W, H, 16, 16, 10, 0); // empty → isolate the costs
-    metabolize(s, food, hashOf(s), cfg, null);
+    metabolize(s, food, hashOf(s), cfg);
     // upkeep = basal(0.4)·eff(1) + 4·maxSpeedCost(0.05) + 2·eatRateCost(0.15) = 0.4 + 0.2 + 0.3 = 0.9
     expect(s.energy[i]).toBeCloseTo(50 - 0.9);
   });
@@ -145,7 +145,7 @@ describe('metabolize', () => {
     genes(s, i, cfg, { [ScalarGene.METAB_EFF]: 0.5 }); // half-efficiency metabolism
     s.rebuildLive();
     const food = new FoodField(W, H, 16, 16, 10, 0); // empty
-    metabolize(s, food, hashOf(s), cfg, null);
+    metabolize(s, food, hashOf(s), cfg);
     expect(s.energy[i]).toBeCloseTo(50 - 0.4 * 0.5); // basal halved, no gene upkeep
   });
 
@@ -178,7 +178,6 @@ describe('metabolize', () => {
         food,
         hashOf(s),
         defaultConfig({ basalCost: 0.4, moveCost: 0, deadWaterCost }),
-        null,
       );
       return 50 - s.energy[i];
     };
@@ -219,21 +218,21 @@ describe('metabolize density-dependent crowding drain (lever D)', () => {
   it('crowdingMortality=0 → no drain even when densely packed (the byte-identical OFF path)', () => {
     const cfg = defaultConfig({ ...base, crowdingMortality: 0 });
     const { s, focal } = cluster(cfg, 9); // focal + 8 neighbors
-    metabolize(s, empty(), hashOf(s), cfg, null);
+    metabolize(s, empty(), hashOf(s), cfg);
     expect(s.energy[focal]).toBeCloseTo(50); // OFF → unchanged (gained 0, costs 0)
   });
 
   it('drains crowdingMortality per neighbor above crowdThreshold', () => {
     const cfg = defaultConfig({ ...base, crowdingMortality: 0.3 });
     const { s, focal } = cluster(cfg, 9); // focal sees 8 neighbors; over = 8 − 6 = 2
-    metabolize(s, empty(), hashOf(s), cfg, null);
+    metabolize(s, empty(), hashOf(s), cfg);
     expect(s.energy[focal]).toBeCloseTo(50 - 0.3 * 2); // drain 0.6
   });
 
   it('a creature inside the free band (neighbors ≤ crowdThreshold) pays nothing', () => {
     const cfg = defaultConfig({ ...base, crowdingMortality: 0.3 });
     const { s, focal } = cluster(cfg, 5); // focal sees 4 ≤ 6 → no drain
-    metabolize(s, empty(), hashOf(s), cfg, null);
+    metabolize(s, empty(), hashOf(s), cfg);
     expect(s.energy[focal]).toBeCloseTo(50);
   });
 
@@ -251,7 +250,7 @@ describe('metabolize density-dependent crowding drain (lever D)', () => {
     s.energy[b] = 50;
     genes(s, b, cfg);
     s.rebuildLive();
-    metabolize(s, empty(), hashOf(s), cfg, null);
+    metabolize(s, empty(), hashOf(s), cfg);
     expect(s.energy[a]).toBeCloseTo(50);
     expect(s.energy[b]).toBeCloseTo(50);
   });
@@ -266,11 +265,12 @@ describe('metabolize two-channel niche split (lever B)', () => {
     satiatedThreshold: 1000,
     foodChannels: 2,
     forageSpecBonus: 0.5,
+    forageGeneralistFloor: 0.7,
   });
   // K=10 split 0.5/0.5 → each channel's cap = 5, both full. eatRate 2 = center → no gene upkeep.
   const dualFood = (): FoodField => new FoodField(W, H, 16, 16, 10, 1, 2, 0.5);
 
-  it('a generalist (pref 0.5) grazes BOTH channels equally at base conversion (spec=1)', () => {
+  it('a generalist (pref 0.5) grazes BOTH channels but is PENALISED to the generalist floor (0.7×)', () => {
     const s = new OrganismStore(4);
     const i = s.alloc();
     s.x[i] = 10;
@@ -279,10 +279,31 @@ describe('metabolize two-channel niche split (lever B)', () => {
     genes(s, i, cfg, { [ScalarGene.EAT_RATE]: 2, [ScalarGene.FORAGE_PREF]: 0.5 });
     s.rebuildLive();
     const food = dualFood();
-    metabolize(s, food, hashOf(s), cfg, null);
-    expect(s.energy[i]).toBeCloseTo(5 + 2); // take 1 from A + 1 from B, spec=1 → gained 2
-    expect(food.sampleAt(10, 10)).toBeCloseTo(5 - 1);
+    metabolize(s, food, hashOf(s), cfg);
+    expect(s.energy[i]).toBeCloseTo(5 + 1.4); // take 1 from A + 1 from B = 2, ×floor 0.7 → gained 1.4
+    expect(food.sampleAt(10, 10)).toBeCloseTo(5 - 1); // biomass still depletes by the grazed amount (no windfall)
     expect(food.sampleAt2(10, 10)).toBeCloseTo(5 - 1);
+  });
+
+  it('forageGeneralistFloor=1 restores the legacy no-penalty generalist (spec=1)', () => {
+    const cfgNoPenalty = defaultConfig({
+      basalCost: 0,
+      moveCost: 0,
+      satiatedThreshold: 1000,
+      foodChannels: 2,
+      forageSpecBonus: 0.5,
+      forageGeneralistFloor: 1,
+    });
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.x[i] = 10;
+    s.y[i] = 10;
+    s.energy[i] = 5;
+    genes(s, i, cfgNoPenalty, { [ScalarGene.EAT_RATE]: 2, [ScalarGene.FORAGE_PREF]: 0.5 });
+    s.rebuildLive();
+    const food = dualFood();
+    metabolize(s, food, hashOf(s), cfgNoPenalty);
+    expect(s.energy[i]).toBeCloseTo(5 + 2); // spec=1 → gained 2 (legacy)
   });
 
   it('a hard B-specialist (pref 1) eats only channel B and converts at the 1.5× bonus', () => {
@@ -294,7 +315,7 @@ describe('metabolize two-channel niche split (lever B)', () => {
     genes(s, i, cfg, { [ScalarGene.EAT_RATE]: 2, [ScalarGene.FORAGE_PREF]: 1 });
     s.rebuildLive();
     const food = dualFood();
-    metabolize(s, food, hashOf(s), cfg, null);
+    metabolize(s, food, hashOf(s), cfg);
     expect(s.energy[i]).toBeCloseTo(5 + 3); // takeB 2, spec=1.5 → gained 3
     expect(food.sampleAt(10, 10)).toBeCloseTo(5); // channel A untouched
     expect(food.sampleAt2(10, 10)).toBeCloseTo(5 - 2); // channel B depleted by 2
@@ -316,7 +337,7 @@ describe('metabolize two-channel niche split (lever B)', () => {
     genes(s, i, cfg0, { [ScalarGene.EAT_RATE]: 2, [ScalarGene.FORAGE_PREF]: 1 });
     s.rebuildLive();
     const food = dualFood();
-    metabolize(s, food, hashOf(s), cfg0, null);
+    metabolize(s, food, hashOf(s), cfg0);
     expect(s.energy[i]).toBeCloseTo(5 + 2); // takeB 2, spec=1 → gained 2 (no specialization bonus)
   });
 });
@@ -333,6 +354,7 @@ describe('metabolize three-channel place-coupled niche (F1)', () => {
     foodChannels: 3,
     foodPocketChannelMode: 1,
     forageSpecBonus: 0.5,
+    forageGeneralistFloor: 0.7,
   });
   // Replays a fixed RNG sequence → three well-separated pockets so cell (16,16)→A, (48,48)→B, (80,80)→C.
   class QueueRng {
@@ -368,7 +390,7 @@ describe('metabolize three-channel place-coupled niche (F1)', () => {
     });
     s.rebuildLive();
     const cBefore = food.sampleAt3(pC.x, pC.y);
-    metabolize(s, food, hashOf(s), cfg, null);
+    metabolize(s, food, hashOf(s), cfg);
     // takeC = budget·wC = 2, spec = 1+0.5·1 = 1.5 → gained 3.
     expect(s.energy[i]).toBeCloseTo(5 + 3);
     expect(food.sampleAt3(pC.x, pC.y)).toBeCloseTo(cBefore - 2); // channel C depleted by exactly the take
@@ -391,7 +413,7 @@ describe('metabolize three-channel place-coupled niche (F1)', () => {
       [ScalarGene.FORAGE_PREF_C]: 1, // pure C eater
     });
     s.rebuildLive();
-    metabolize(s, food, hashOf(s), cfg, null);
+    metabolize(s, food, hashOf(s), cfg);
     expect(s.energy[i]).toBeCloseTo(5); // wA=wB=0, no C here → grazed nothing, no costs → unchanged
     expect(food.sampleAt(pA.x, pA.y)).toBeGreaterThan(5); // the A resource it can't use is untouched
   });
@@ -413,10 +435,11 @@ describe('metabolize three-channel place-coupled niche (F1)', () => {
       [ScalarGene.FORAGE_PREF_C]: 0.5,
     });
     s.rebuildLive();
-    metabolize(s, food, hashOf(s), cfg, null);
-    // Only C present → eSum = wC·avC, so takeC = budget·(eC/eSum) = budget = 2. maxW = 0.5 → spec = 1.125.
-    // gained = 2·1.125 = 2.25 (vs the old waste-the-A/B-share model's 1.125).
-    expect(s.energy[i]).toBeCloseTo(5 + 2.25);
+    metabolize(s, food, hashOf(s), cfg);
+    // Only C present → eSum = wC·avC, so takeC = budget·(eC/eSum) = budget = 2 (availability-weighting works).
+    // maxW = 0.5 → s01 = 0.25 → spec = floor 0.7 + (1.5−0.7)·0.25 = 0.9 (the generalist penalty applies).
+    // gained = 2·0.9 = 1.8.
+    expect(s.energy[i]).toBeCloseTo(5 + 1.8);
   });
 });
 
@@ -478,7 +501,7 @@ describe('metabolize size→move-cost coupling', () => {
     genes(s, i, cfg, { [ScalarGene.SIZE]: 12 }); // 2× reference → moveFactor (12/6)^1 = 2
     s.rebuildLive();
     const food = new FoodField(W, H, 16, 16, 10, 0); // empty → isolate the costs
-    metabolize(s, food, hashOf(s), cfg, null);
+    metabolize(s, food, hashOf(s), cfg);
     expect(s.energy[i]).toBeCloseTo(50 - 0.4 - 0.01 * 2 * 25); // movement cost doubled by size
   });
 });
@@ -504,7 +527,7 @@ describe('hunt (predation)', () => {
     genes(s, pred, cfg, { [ScalarGene.DIET]: 1, [ScalarGene.DAMAGE]: 5, [ScalarGene.SIZE]: 10 });
     genes(s, prey, cfg, { [ScalarGene.DIET]: 0, [ScalarGene.SIZE]: 5 }); // small enough to eat
     s.rebuildLive();
-    hunt(s, mkHash(s), cfg, null);
+    hunt(s, mkHash(s), cfg);
     // drain = min(damage(5)·diet(1), preyEnergy) = 5; prey loses the drain, predator absorbs drain×gain.
     expect(s.energy[prey]).toBeCloseTo(25);
     expect(s.energy[pred]).toBeCloseTo(20 + 5 * cfg.predationGain);
@@ -523,7 +546,7 @@ describe('hunt (predation)', () => {
     genes(s, a, cfg, { [ScalarGene.DIET]: 0 });
     genes(s, b, cfg, { [ScalarGene.DIET]: 0 });
     s.rebuildLive();
-    hunt(s, mkHash(s), cfg, null);
+    hunt(s, mkHash(s), cfg);
     expect(s.energy[a]).toBe(20);
     expect(s.energy[b]).toBe(30);
   });
@@ -541,7 +564,7 @@ describe('hunt (predation)', () => {
     genes(s, pred, cfg, { [ScalarGene.DIET]: 1, [ScalarGene.DAMAGE]: 20, [ScalarGene.SIZE]: 10 });
     genes(s, prey, cfg, { [ScalarGene.DIET]: 0, [ScalarGene.SIZE]: 5 });
     s.rebuildLive();
-    hunt(s, mkHash(s), cfg, null);
+    hunt(s, mkHash(s), cfg);
     expect(s.energy[prey]).toBeCloseTo(0); // drained to 0 (capped) → dies next cull
     expect(s.energy[pred]).toBeCloseTo(10 + 3 * cfg.predationGain); // gained the 3 that existed × gain
   });
@@ -572,7 +595,7 @@ describe('hunt (predation)', () => {
     genes(s, peer, cfg, { [ScalarGene.DIET]: 0.9, [ScalarGene.DAMAGE]: 0, [ScalarGene.SIZE]: 5 });
     genes(s, prey, cfg, { [ScalarGene.DIET]: 0, [ScalarGene.SIZE]: 5 });
     s.rebuildLive();
-    hunt(s, mkHash(s), noCannibal, null);
+    hunt(s, mkHash(s), noCannibal);
     expect(s.energy[peer]).toBe(30); // peer spared despite being nearest
     expect(s.energy[prey]).toBeCloseTo(30 - 5 * 0.9); // prey eaten instead
   });
@@ -594,7 +617,7 @@ describe('hunt (predation)', () => {
     });
     genes(s, peer, cfg, { [ScalarGene.DIET]: 0.9, [ScalarGene.DAMAGE]: 0, [ScalarGene.SIZE]: 5 }); // small → eatable
     s.rebuildLive();
-    hunt(s, mkHash(s), cfg, null); // cannibalism true
+    hunt(s, mkHash(s), cfg); // cannibalism true
     expect(s.energy[peer]).toBeCloseTo(30 - 5 * 0.9); // peer drained
   });
 
@@ -616,7 +639,7 @@ describe('hunt (predation)', () => {
       });
       genes(s, prey, cfg, { [ScalarGene.DIET]: 0, [ScalarGene.SIZE]: preySize });
       s.rebuildLive();
-      hunt(s, mkHash(s), cfg, null); // huntSizeRatio 1.15
+      hunt(s, mkHash(s), cfg); // huntSizeRatio 1.15
       return s.energy[prey];
     };
     expect(mk(10, 5)).toBeCloseTo(25); // 10 ≥ 5×1.15 → eaten (lost 5)
@@ -637,7 +660,7 @@ describe('hunt (predation)', () => {
     genes(s, pred, cfg, { [ScalarGene.DIET]: 1, [ScalarGene.DAMAGE]: 5 });
     genes(s, prey, cfg, { [ScalarGene.DIET]: 0 });
     s.rebuildLive();
-    hunt(s, mkHash(s), cfg, null);
+    hunt(s, mkHash(s), cfg);
     expect(s.energy[pred]).toBe(20);
     expect(s.energy[prey]).toBe(30);
   });
@@ -668,14 +691,14 @@ describe('hunt (predation)', () => {
 
     it('counterBiteFraction 0 (OFF) → predator pays no counter-cost (byte-identical bite)', () => {
       const { s, pred, prey } = setup(8);
-      hunt(s, mkHash(s), { ...cfg, counterBiteFraction: 0 }, null);
+      hunt(s, mkHash(s), { ...cfg, counterBiteFraction: 0 });
       expect(s.energy[prey]).toBeCloseTo(25); // drained 5
       expect(s.energy[pred]).toBeCloseTo(20 + 5 * cfg.predationGain); // pure gain, no counter
     });
 
     it('counterBiteFraction > 0 → predator pays counterBiteFraction × prey DAMAGE', () => {
       const { s, pred, prey } = setup(8);
-      hunt(s, mkHash(s), { ...cfg, counterBiteFraction: 0.15 }, null);
+      hunt(s, mkHash(s), { ...cfg, counterBiteFraction: 0.15 });
       expect(s.energy[prey]).toBeCloseTo(25); // prey still loses exactly the drain
       // gain 5×gain, then counter-bite 0.15×8 = 1.2 back out → biting an armed prey costs the attacker
       expect(s.energy[pred]).toBeCloseTo(20 + 5 * cfg.predationGain - 0.15 * 8);
@@ -683,9 +706,35 @@ describe('hunt (predation)', () => {
 
     it('a toothless prey (DAMAGE 0) imposes no counter-cost even when ON (defense scales with the gene)', () => {
       const { s, pred } = setup(0);
-      hunt(s, mkHash(s), { ...cfg, counterBiteFraction: 0.15 }, null);
+      hunt(s, mkHash(s), { ...cfg, counterBiteFraction: 0.15 });
       expect(s.energy[pred]).toBeCloseTo(20 + 5 * cfg.predationGain); // 0.15×0 = 0 → same as OFF
     });
+  });
+
+  it('brain-gated bite: biteGate 0 → no drain, biteGate 1 → full drain (A2a)', () => {
+    // A diet-1 predator above a diet-0 prey, within biteRange. With brainGatedBiting ON, the drain
+    // scales by biteGate: a shut gate (0) bites nothing, an open gate (1) lands the full bite.
+    const gated = { ...cfg, brainGatedBiting: true };
+    const preyEnergyAfter = (gate: number): number => {
+      const s = new OrganismStore(4);
+      const pred = s.alloc();
+      const prey = s.alloc();
+      s.x[pred] = 50;
+      s.y[pred] = 50;
+      s.energy[pred] = 50;
+      s.x[prey] = 54; // 4 units away, within biteRange 12
+      s.y[prey] = 50;
+      s.energy[prey] = 50;
+      genes(s, pred, cfg, { [ScalarGene.DIET]: 1, [ScalarGene.DAMAGE]: 5, [ScalarGene.SIZE]: 10 });
+      genes(s, prey, cfg, { [ScalarGene.DIET]: 0, [ScalarGene.SIZE]: 5 });
+      s.biteGate[pred] = gate;
+      s.biteGate[prey] = gate;
+      s.rebuildLive();
+      hunt(s, mkHash(s), gated);
+      return s.energy[prey]!;
+    };
+    expect(preyEnergyAfter(0)).toBe(50); // gate shut → no bite, prey untouched
+    expect(preyEnergyAfter(1)).toBeLessThan(50); // gate open → bite lands
   });
 });
 
@@ -714,9 +763,12 @@ describe('reproduce (breed at the per-creature satiated bar)', () => {
     mutationSigma: 0,
     hueMutationSigma: 0,
     offspringOffset: 8,
+    sexualReproduction: false,
     worldWidth: W,
     worldHeight: H,
   });
+  const emptyHash = (s: OrganismStore, c: Config): SpatialHash =>
+    new SpatialHash(c.worldWidth, c.worldHeight, 2 * c.cellRadius, s.capacity);
 
   it('provisions the child to its birthEnergy gene; parent pays that + reproOverhead', () => {
     const s = new OrganismStore(4);
@@ -726,7 +778,7 @@ describe('reproduce (breed at the per-creature satiated bar)', () => {
     s.energy[p] = 100;
     genes(s, p, cfg); // parent genes at centers (satiated 60, birthEnergy 25)
     s.rebuildLive();
-    const births = reproduce(s, new Rng(1), cfg, false, false, null);
+    const births = reproduce(s, new Rng(1), cfg, false, false, null, emptyHash(s, cfg));
     expect(births).toBe(1);
     expect(s.energy[p]).toBeCloseTo(100 - 25 - 15); // paid childBirthEnergy(25) + reproOverhead(15)
     s.rebuildLive();
@@ -735,13 +787,43 @@ describe('reproduce (breed at the per-creature satiated bar)', () => {
     expect(s.energy[child]!).toBeCloseTo(25); // provisioned to its birthEnergy gene
   });
 
+  it('breedCooldown blocks repeat breeding for the refractory period, then allows it again', () => {
+    // The satiation-dwell lever: a fresh creature breeds, then is blocked for breedCooldown ticks even while
+    // energy-rich, then breeds again. Energy kept far above the bar to ISOLATE the cooldown from the bar.
+    // (Each reproduce() = one tick over the SAME single live parent — we don't rebuildLive, so children
+    // never enter the parent set; only the parent's cooldown is exercised.)
+    const c = defaultConfig({
+      reproThreshold: 40,
+      satiatedThreshold: 60,
+      birthEnergy: 25,
+      reproOverhead: 15,
+      mutationSigma: 0,
+      breedCooldown: 3,
+      sexualReproduction: false,
+      worldWidth: W,
+      worldHeight: H,
+    });
+    const s = new OrganismStore(16);
+    const p = s.alloc();
+    s.x[p] = 50;
+    s.y[p] = 50;
+    s.energy[p] = 100000; // far above the bar — stays breeding-eligible on energy through every call
+    genes(s, p, c);
+    s.rebuildLive(); // liveIndices = [p]; not rebuilt again, so p is the only parent considered
+    const rng = new Rng(1);
+    const ch = emptyHash(s, c);
+    const seq = [0, 1, 2, 3, 4].map(() => reproduce(s, rng, c, false, false, null, ch));
+    // first breed (newborn starts ready), then 3 blocked ticks, then breeds again
+    expect(seq).toEqual([1, 0, 0, 0, 1]);
+  });
+
   it('does not reproduce below the per-creature satiated bar', () => {
     const s = new OrganismStore(4);
     const p = s.alloc();
     s.energy[p] = 59; // < satiated gene 60
     genes(s, p, cfg);
     s.rebuildLive();
-    expect(reproduce(s, new Rng(1), cfg, false, false, null)).toBe(0);
+    expect(reproduce(s, new Rng(1), cfg, false, false, null, emptyHash(s, cfg))).toBe(0);
   });
 
   it('breeds at the parent’s OWN satiated GENE, not the config default', () => {
@@ -751,6 +833,7 @@ describe('reproduce (breed at the per-creature satiated bar)', () => {
       satiatedThreshold: 100,
       reproOverhead: 15,
       mutationSigma: 0,
+      sexualReproduction: false,
       worldWidth: W,
       worldHeight: H,
     });
@@ -765,11 +848,11 @@ describe('reproduce (breed at the per-creature satiated bar)', () => {
       [ScalarGene.BIRTH_ENERGY]: 20,
     });
     s.rebuildLive();
-    expect(reproduce(s, new Rng(1), cfgHigh, false, false, null)).toBe(1); // breeds on its gene, not the config 100
+    expect(reproduce(s, new Rng(1), cfgHigh, false, false, null, emptyHash(s, cfgHigh))).toBe(1); // breeds on its gene, not the config 100
   });
 
   it('breed bar is reproGene+MIN_BAND when the satiated gene is below the repro gene', () => {
-    const c = defaultConfig({ reproOverhead: 15, mutationSigma: 0, worldWidth: W, worldHeight: H });
+    const c = defaultConfig({ reproOverhead: 2, mutationSigma: 0, sexualReproduction: false, worldWidth: W, worldHeight: H });
     const breeds = (energy: number): number => {
       const s = new OrganismStore(4);
       const p = s.alloc();
@@ -782,10 +865,13 @@ describe('reproduce (breed at the per-creature satiated bar)', () => {
         [ScalarGene.BIRTH_ENERGY]: 20,
       });
       s.rebuildLive();
-      return reproduce(s, new Rng(1), c, false, false, null);
+      return reproduce(s, new Rng(1), c, false, false, null, emptyHash(s, c));
     };
-    expect(breeds(60 + MIN_BAND - 1)).toBe(0); // below the guarded bar (NOT the inverted satiated 40)
-    expect(breeds(60 + MIN_BAND + 1)).toBe(1); // above it → breeds
+    // reproOverhead (2) is set below MIN_BAND (5) so the viability floor (reproOverhead 2 +
+    // reproThreshold 60 = 62) sits below the satiated bar (60+MIN_BAND=65). The satiated bar — not the
+    // viability floor — is the binding constraint being probed here.
+    expect(breeds(60 + MIN_BAND - 1)).toBe(0); // energy 64: above the floor (62) but below the bar (65) → blocked by the bar
+    expect(breeds(60 + MIN_BAND + 1)).toBe(1); // energy 66: above the bar (65) AND the floor (62) → breeds
   });
 
   it('provisions the child to ITS OWN (mutated) birthEnergy gene, not the parent’s', () => {
@@ -795,6 +881,7 @@ describe('reproduce (breed at the per-creature satiated bar)', () => {
       satiatedThreshold: 60,
       reproOverhead: 15,
       mutationSigma: 0.5,
+      sexualReproduction: false,
       worldWidth: W,
       worldHeight: H,
     });
@@ -805,7 +892,7 @@ describe('reproduce (breed at the per-creature satiated bar)', () => {
     s.energy[p] = 500;
     genes(s, p, c, { [ScalarGene.BIRTH_ENERGY]: 30 });
     s.rebuildLive();
-    expect(reproduce(s, new Rng(5), c, false, false, null)).toBe(1);
+    expect(reproduce(s, new Rng(5), c, false, false, null, emptyHash(s, c))).toBe(1);
     s.rebuildLive();
     const child = s.liveIndices[1]!;
     const childGene = s.scalarGenes[child * SCALAR_GENE_COUNT + ScalarGene.BIRTH_ENERGY]!;
@@ -820,6 +907,7 @@ describe('reproduce (breed at the per-creature satiated bar)', () => {
       satiatedThreshold: 60,
       reproOverhead: 15,
       offspringOffset: 8,
+      sexualReproduction: false,
       worldWidth: W,
       worldHeight: H,
     });
@@ -837,10 +925,10 @@ describe('reproduce (breed at the per-creature satiated bar)', () => {
       return s;
     };
     const s1 = make();
-    reproduce(s1, new Rng(7), detCfg, false, false, null);
+    reproduce(s1, new Rng(7), detCfg, false, false, null, emptyHash(s1, detCfg));
     s1.rebuildLive();
     const s2 = make();
-    reproduce(s2, new Rng(7), detCfg, false, false, null);
+    reproduce(s2, new Rng(7), detCfg, false, false, null, emptyHash(s2, detCfg));
     s2.rebuildLive();
     for (let k = 0; k < s1.liveCount; k++) {
       const i = s1.liveIndices[k]!;
@@ -853,5 +941,221 @@ describe('reproduce (breed at the per-creature satiated bar)', () => {
         );
       }
     }
+  });
+});
+
+describe('metabolize senescence tax (age stages)', () => {
+  // basal 0.4, empty food, no movement → the energy delta is exactly the (basal + senescence) cost.
+  // senescenceAgeCost 0 isolates the elder TAX from the longevity UPKEEP; gene at center 100 → no upkeep anyway.
+  const cfg = defaultConfig({
+    basalCost: 0.4,
+    moveCost: 0,
+    satiatedThreshold: 1000,
+    ageStages: true,
+    senescenceRate: 0.01,
+    senescenceAge: 100,
+    senescenceAgeCost: 0,
+    worldWidth: W,
+    worldHeight: H,
+  });
+  const lossAtAge = (age: number, c: Config = cfg): number => {
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.x[i] = 10;
+    s.y[i] = 10;
+    s.energy[i] = 50;
+    genes(s, i, c, { [ScalarGene.SENESCENCE_AGE]: 100 });
+    s.age[i] = age;
+    s.rebuildLive();
+    const food = new FoodField(W, H, 16, 16, 10, 0); // empty → isolate the costs
+    metabolize(s, food, hashOf(s), c);
+    return 50 - s.energy[i]!;
+  };
+
+  it('a young adult (age < SENESCENCE_AGE) pays only basal', () => {
+    expect(lossAtAge(50)).toBeCloseTo(0.4); // 50 < 100 → no tax
+  });
+
+  it('an elder (age past SENESCENCE_AGE) pays basal·(1 + rate·over)', () => {
+    // age 300 → over = 300 − 100 = 200; basal 0.4·(1 + 0.01·200) = 0.4·3 = 1.2 (death-of-old-age clock)
+    expect(lossAtAge(300)).toBeCloseTo(1.2);
+  });
+
+  it('the tax reads age at/above SENESCENCE_AGE only (exactly at the threshold → over 0, no tax)', () => {
+    expect(lossAtAge(100)).toBeCloseTo(0.4); // age == senescenceAge → over 0 → basal only
+  });
+
+  it('senescenceRate 0 → no tax even for an elder (senescence-only ablation within ageStages on)', () => {
+    expect(lossAtAge(300, defaultConfig({ ...cfg, senescenceRate: 0 }))).toBeCloseTo(0.4);
+  });
+
+  it('ageStages false → no tax even for an elder (master OFF = byte-identical)', () => {
+    expect(lossAtAge(300, defaultConfig({ ...cfg, ageStages: false }))).toBeCloseTo(0.4);
+  });
+});
+
+describe('metabolize SENESCENCE_AGE longevity cost (geneUpkeep)', () => {
+  // senescenceRate 0 → the elder tax is off, isolating the per-tick UPKEEP a durable body pays for its
+  // SENESCENCE_AGE gene above center (the disposable-soma tradeoff). Young (age 0) → no tax confound.
+  const cfg = defaultConfig({
+    basalCost: 0.4,
+    moveCost: 0,
+    satiatedThreshold: 1000,
+    ageStages: true,
+    senescenceRate: 0,
+    senescenceAge: 400,
+    senescenceAgeCost: 0.0005,
+    worldWidth: W,
+    worldHeight: H,
+  });
+  const lossWithGene = (senAge: number): number => {
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.x[i] = 10;
+    s.y[i] = 10;
+    s.energy[i] = 50;
+    genes(s, i, cfg, { [ScalarGene.SENESCENCE_AGE]: senAge });
+    s.age[i] = 0;
+    s.rebuildLive();
+    const food = new FoodField(W, H, 16, 16, 10, 0); // empty
+    metabolize(s, food, hashOf(s), cfg);
+    return 50 - s.energy[i]!;
+  };
+
+  it('SENESCENCE_AGE above center adds over·senescenceAgeCost basal upkeep', () => {
+    // 600 − 400 = 200 above center; upkeep = basal 0.4 + 200·0.0005 = 0.4 + 0.1 = 0.5
+    expect(lossWithGene(600)).toBeCloseTo(0.5);
+  });
+
+  it('SENESCENCE_AGE at center adds no upkeep (longevity below baseline is free)', () => {
+    expect(lossWithGene(400)).toBeCloseTo(0.4);
+  });
+});
+
+describe('reproduce maturity gate (age stages)', () => {
+  // Satiated bar = SATIATED_THRESHOLD gene 60 (SIZE at center → no size-scaling). Energy 100 ≫ 60, so the
+  // ONLY thing that can stop a breed is the juvenile gate. breedCooldown 0 (default) → cooldown never fires.
+  const cfg = defaultConfig({
+    reproThreshold: 40,
+    satiatedThreshold: 60,
+    birthEnergy: 25,
+    reproOverhead: 15,
+    mutationSigma: 0,
+    hueMutationSigma: 0,
+    offspringOffset: 8,
+    ageStages: true,
+    maturityAge: 100,
+    sexualReproduction: false,
+    worldWidth: W,
+    worldHeight: H,
+  });
+  const breedsAtAge = (age: number, c: Config = cfg): number => {
+    const s = new OrganismStore(4);
+    const p = s.alloc();
+    s.x[p] = 50;
+    s.y[p] = 50;
+    s.energy[p] = 100; // well above the satiated bar 60
+    genes(s, p, c, { [ScalarGene.MATURITY_AGE]: 100 });
+    s.age[p] = age;
+    s.rebuildLive();
+    const ch = new SpatialHash(c.worldWidth, c.worldHeight, 2 * c.cellRadius, s.capacity);
+    ch.build(s);
+    return reproduce(s, new Rng(1), c, false, false, null, ch);
+  };
+
+  it('a juvenile (age < MATURITY_AGE) at the satiated bar does NOT breed', () => {
+    expect(breedsAtAge(50)).toBe(0);
+  });
+
+  it('an adult (age ≥ MATURITY_AGE) breeds', () => {
+    expect(breedsAtAge(100)).toBe(1); // age == maturity → mature → breeds
+    expect(breedsAtAge(150)).toBe(1);
+  });
+
+  it('ageStages false → a young creature breeds as today (byte-identical OFF path)', () => {
+    expect(breedsAtAge(50, defaultConfig({ ...cfg, ageStages: false }))).toBe(1);
+  });
+});
+
+describe('sexual reproduction (crossover + compatibility + seeking)', () => {
+  // Helper: a store with two adjacent satiated adults, scalar genes seeded compatible or not.
+  function twoAdults(dietA: number, dietB: number) {
+    const cfg = defaultConfig({
+      sexualReproduction: true, ageStages: false, breedCooldown: 0,
+      satiatedThreshold: 100, reproThreshold: 40, mateContactRange: 50, mateSeekWindow: 5,
+    });
+    const s = new OrganismStore(8);
+    const N = SCALAR_GENE_COUNT;
+    for (let i = 0; i < 2; i++) {
+      const slot = s.alloc();
+      s.x[slot] = 100 + i * 5; s.y[slot] = 100; // 5u apart, within mateContactRange
+      s.energy[slot] = 200; // above satiatedBar
+      for (let g = 0; g < N; g++) s.scalarGenes[slot * N + g] = defaultConfig({})[
+        SCALAR_GENE_SPECS[g]!.centerKey
+      ] as number;
+      s.scalarGenes[slot * N + ScalarGene.SATIATED_THRESHOLD] = 100;
+      s.scalarGenes[slot * N + ScalarGene.REPRO_THRESHOLD] = 40;
+      s.scalarGenes[slot * N + ScalarGene.BIRTH_ENERGY] = 30;
+    }
+    s.scalarGenes[0 * N + ScalarGene.DIET] = dietA;
+    s.scalarGenes[1 * N + ScalarGene.DIET] = dietB;
+    s.rebuildLive();
+    const hash = new SpatialHash(cfg.worldWidth, cfg.worldHeight, 2 * cfg.cellRadius, s.capacity);
+    const tick = () => {
+      hash.build(s);
+      const b = reproduce(s, new Rng(1), cfg, false, false, null, hash);
+      s.rebuildLive();
+      return b;
+    };
+    return { cfg, s, tick };
+  }
+
+  it('compatible adults: enter seeking, then mate on a later tick', () => {
+    const { s, tick } = twoAdults(0, 0); // identical diet → compatible
+    expect(tick()).toBe(0); // tick 1: both enter SEEKING, no birth yet
+    expect(s.seeking[0]).toBe(1);
+    let births = 0;
+    for (let t = 0; t < 5; t++) births += tick();
+    expect(births).toBeGreaterThan(0); // mate on a seeking tick
+  });
+
+  it('predator × prey never breed (compatibility gate)', () => {
+    const { tick } = twoAdults(0, 1); // grazer + predator → incompatible (DIET-dominated distance)
+    let births = 0;
+    for (let t = 0; t < 10; t++) births += tick();
+    expect(births).toBe(0);
+  });
+
+  it('a lone satiated adult seeks then times out without breeding', () => {
+    // window 9 so the 10-tick loop below ends on the timeout tick (enter t0 → exit t9). With a shorter
+    // window the seeker would re-enter (breedCooldown 0 → no forage pause in this isolated harness) and
+    // the loop would catch it mid-search; the behaviour under test is "seek → time out → exit", not the
+    // re-entry cadence (which the real sim gates via the post-metabolize cooldown).
+    const { cfg } = twoAdults(0, 0);
+    cfg.mateSeekWindow = 9;
+    const s = new OrganismStore(4);
+    const N = SCALAR_GENE_COUNT;
+    const slot = s.alloc();
+    s.x[slot] = 100; s.y[slot] = 100; s.energy[slot] = 200;
+    for (let g = 0; g < N; g++) s.scalarGenes[slot * N + g] = 1;
+    s.scalarGenes[slot * N + ScalarGene.SATIATED_THRESHOLD] = 100;
+    s.scalarGenes[slot * N + ScalarGene.REPRO_THRESHOLD] = 40;
+    s.rebuildLive();
+    const hash = new SpatialHash(cfg.worldWidth, cfg.worldHeight, 2 * cfg.cellRadius, s.capacity);
+    let births = 0;
+    for (let t = 0; t < 10; t++) { hash.build(s); births += reproduce(s, new Rng(1), cfg, false, false, null, hash); }
+    expect(births).toBe(0);
+    expect(s.seeking[slot]).toBe(0); // timed out, exited seeking
+  });
+
+  it('energy is conserved on a sexual birth (mother pays, father unchanged)', () => {
+    const { s, tick } = twoAdults(0, 0);
+    const before = s.energy[0]! + s.energy[1]!;
+    let bornSlot = -1;
+    for (let t = 0; t < 6 && bornSlot < 0; t++) { tick(); if (s.liveCount > 2) bornSlot = 2; }
+    expect(bornSlot).toBe(2);
+    const after = s.energy[0]! + s.energy[1]! + s.energy[2]!;
+    // total drops by exactly reproOverhead (provisioning is an internal transfer mother→child).
+    expect(before - after).toBeCloseTo(defaultConfig({}).reproOverhead, 5);
   });
 });

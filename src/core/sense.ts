@@ -11,6 +11,7 @@ import { type SpatialHash } from './spatial-hash';
 import { type Config } from './config';
 import { type Walls } from './walls';
 import { type FlowField } from './flow-field';
+import { type ScentField, SCENT_CHANNELS } from './scent-field';
 import { type PheroField } from './phero-field';
 import { type Parcels } from './parcels';
 import { ScalarGene, SCALAR_GENE_COUNT } from './genome';
@@ -119,17 +120,17 @@ export function senseEnv(
   store: OrganismStore,
   walls: Walls | null,
   flow: FlowField | null,
-  phero: PheroField | null,
+  scent: ScentField | null,
   glowField: PheroField | null,
   cfg: Config,
 ): void {
   const { liveIndices, liveCount, x, y, wallSenseX, wallSenseY, flowSenseX, flowSenseY } = store;
-  const { pheroSenseX, pheroSenseY, glowSenseX, glowSenseY, scalarGenes } = store;
+  const { scentSenseX, scentSenseY, glowSenseX, glowSenseY, scalarGenes } = store;
   const wallsOn = walls !== null && walls.active;
   const flowOn = flow !== null && cfg.flowStrength > 0;
-  // Pheromone sense is live only when the field is allocated (cfg.pheromoneEnabled). Sampled at the
-  // creature's own SENSE_RANGE gene (the same smell half-step as the food gradient), so the perception
-  // is at the creature's evolved scale. When off, pheroSenseX/Y stay 0 → the PHERO brain inputs are inert.
+  // Scent sense is live only when the field is allocated (cfg.pheromoneEnabled). Each of the N channels'
+  // ∇P is sampled at the creature's own SENSE_RANGE gene (the same smell half-step as the food gradient),
+  // so the perception is at the creature's evolved scale. When off, all channels stay 0 → PHERO inputs inert.
   for (let k = 0; k < liveCount; k++) {
     const i = liveIndices[k]!;
     if (wallsOn) {
@@ -147,14 +148,15 @@ export function senseEnv(
       flowSenseX[i] = 0;
       flowSenseY[i] = 0;
     }
-    if (phero !== null) {
+    if (scent !== null) {
       const step = scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.SENSE_RANGE]!;
-      const g = phero.gradientAt(x[i]!, y[i]!, step);
-      pheroSenseX[i] = g.gx;
-      pheroSenseY[i] = g.gy;
+      scent.gradientsInto(x[i]!, y[i]!, step, scentSenseX, scentSenseY, i * SCENT_CHANNELS);
     } else {
-      pheroSenseX[i] = 0;
-      pheroSenseY[i] = 0;
+      const b = i * SCENT_CHANNELS;
+      for (let c = 0; c < SCENT_CHANNELS; c++) {
+        scentSenseX[b + c] = 0;
+        scentSenseY[b + c] = 0;
+      }
     }
     // Glow sense (slice F3): the ∇G gradient of the glow field, sampled at the creature's own SENSE_RANGE
     // (same half-step as food/phero). Live only when the field is allocated (cfg.glowSense); else 0 → the
@@ -276,6 +278,18 @@ export function senseCreatures(
               pull += cohesion * (1 - 2 * hd); // identical hue → +cohesion, opposite → 0
             }
           }
+          // Mate-seeking pull (life-sim-xa90): while SEEKING, add attraction toward creatures that LOOK
+          // like compatible mates — same diet class + similar hue (cheap kin-by-appearance proxy; true
+          // compatibility is decided at the contact gate in reproduce). Modular seam: replaced by the
+          // kin-scent gradient when that field lands. Bounded by mateSenseAttraction so it can't swamp flee.
+          if (store.seeking[i] === 1 && cfg.mateSenseAttraction > 0) {
+            const sameClass = (myDiet < 0.5) === (itsDiet < 0.5) ? 1 : 0;
+            if (sameClass) {
+              let hd = Math.abs(myHue - hue[j]!);
+              if (hd > 0.5) hd = 1 - hd;
+              pull += cfg.mateSenseAttraction * (1 - 2 * hd);
+            }
+          }
           const w = pull * (1 - d / range) * acuity;
           sx += ux * w;
           sy += uy * w;
@@ -312,5 +326,63 @@ export function senseCreatures(
     }
     sightX[i] = sx;
     sightY[i] = sy;
+  }
+}
+
+/** Count each creature's live neighbors within cfg.crowdSenseRange via the start-of-tick hash — the A1b
+ *  interoceptive density sense, written into store.crowding. Independent of vision (a blind creature still
+ *  feels its crowd) and of the dead lever-D crowdingMortality scan. Gated on bodySense (skipped → crowding
+ *  stays 0). Integer count, ascending live-slot order, RNG-free → deterministic. */
+export function senseCrowding(store: OrganismStore, hash: SpatialHash, cfg: Config): void {
+  const { liveIndices, liveCount, x, y, crowding } = store;
+  if (!cfg.bodySense) return; // steer gates crowdN on bodySense too, so leaving crowding stale is harmless
+  const { cols, rows, bucketStart, sorted } = hash;
+  const { worldWidth, worldHeight, crowdSenseRange } = cfg;
+  const r2 = crowdSenseRange * crowdSenseRange;
+  const cellSize = Math.min(worldWidth / cols, worldHeight / rows);
+  const halfGrid = Math.floor((Math.min(cols, rows) - 1) / 2);
+  const cr = Math.min(halfGrid, Math.max(1, Math.ceil(crowdSenseRange / cellSize)));
+  for (let k = 0; k < liveCount; k++) {
+    const i = liveIndices[k]!;
+    const xi = x[i]!;
+    const yi = y[i]!;
+    const ci = hash.colOf(xi);
+    const cj = hash.rowOf(yi);
+    let n = 0;
+    for (let dy = -cr; dy <= cr; dy++) {
+      const by = (cj + dy + rows) % rows;
+      for (let dx = -cr; dx <= cr; dx++) {
+        const bx = (ci + dx + cols) % cols;
+        const b = by * cols + bx;
+        const end = bucketStart[b + 1]!;
+        for (let idx = bucketStart[b]!; idx < end; idx++) {
+          const j = sorted[idx]!;
+          if (j === i) continue;
+          const ddx = wrapDelta(xi - x[j]!, worldWidth);
+          const ddy = wrapDelta(yi - y[j]!, worldHeight);
+          if (ddx * ddx + ddy * ddy <= r2) n++;
+        }
+      }
+    }
+    crowding[i] = n;
+  }
+}
+
+/** Sum the food-field biomass at each creature's body across the active channels into store.fertHere — the
+ *  A1c interoceptive "how much food is right here" sense (distinct from the food GRADIENT, which is ~0 at a
+ *  pocket's peak). Gated on bodySense (skipped → fertHere stays 0). Field sampling only, ascending live-slot
+ *  order, RNG-free → deterministic. steer normalizes by cfg.foodCap. */
+export function senseFertility(store: OrganismStore, food: FoodField, cfg: Config): void {
+  const { liveIndices, liveCount, x, y, fertHere } = store;
+  if (!cfg.bodySense) return; // steer gates fertN on bodySense too, so leaving fertHere stale is harmless
+  const channels = cfg.foodChannels;
+  for (let k = 0; k < liveCount; k++) {
+    const i = liveIndices[k]!;
+    const xi = x[i]!;
+    const yi = y[i]!;
+    let b = food.sampleAt(xi, yi);
+    if (channels >= 2) b += food.sampleAt2(xi, yi);
+    if (channels >= 3) b += food.sampleAt3(xi, yi);
+    fertHere[i] = b;
   }
 }

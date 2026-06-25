@@ -26,7 +26,12 @@ import {
   HIDDEN_W2,
   GLOW_BIAS,
   GLOW_HID,
+  GLOW_SENSE_LAT_TURN,
+  GLOW_SENSE_FWD_TURN,
+  GLOW_SENSE_LAT_THRUST,
+  GLOW_SENSE_FWD_THRUST,
 } from '../../core/genome';
+import { SCENT_CHANNELS } from '../../core/scent-field';
 
 export interface BrainInputNode {
   label: string;
@@ -48,6 +53,7 @@ export interface BrainState {
   turn: number; // applied turn (clamped to ±maxTurn gene)
   thrust: number; // applied thrust (reverse floor … maxThrust, ×metabolic efficiency, ×eat-gate penalty)
   eatGate: number; // eat-gate output 0..1 (slice B): 1 = head-down eating (slow), 0 = head-up (full speed)
+  biteGate: number; // bite-gate output 0..1 (A2a): the predation decision read from the hidden layer; 0 when off
   hidden: number[]; // hidden-unit activations (slice E), one per HIDDEN_UNITS; empty when hiddenLayer off
   glow: number; // mood-glow output 0..1 (slice F): bioluminescence read from the hidden layer; 0 when moodGlow off
   drift: number; // Σ|learned − instinct| over all brain weights (within-life learning so far)
@@ -78,11 +84,21 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
   const fy = store.flowSenseY[slot]!;
   const flFwd = fx * dx + fy * dy;
   const flLat = -fx * dy + fy * dx;
-  // Phero gradient — not shown as an input node, but the hidden layer reads it (must match steer's 14 inputs).
-  const px = store.pheroSenseX[slot]!;
-  const py = store.pheroSenseY[slot]!;
-  const pFwd = px * dx + py * dy;
-  const pLat = -px * dy + py * dx;
+  // Scent gradients per channel — not shown as input nodes yet, but the hidden layer reads all 8 (must match
+  // steer's 20 inputs). Layout [c0_fwd, c0_lat, c1_fwd, c1_lat, …] in HiddenInput.SCENT_C* order.
+  const sc = slot * SCENT_CHANNELS;
+  const scentGrad: number[] = [];
+  for (let c = 0; c < SCENT_CHANNELS; c++) {
+    const cx = store.scentSenseX[sc + c]!;
+    const cy = store.scentSenseY[sc + c]!;
+    scentGrad.push(cx * dx + cy * dy, -cx * dy + cy * dx);
+  }
+  // Glow-sense gradient (slice F3) — the ∇G of the glow field in the heading frame. LINEAR-only (no hidden
+  // input); shown as its own fwd/lat nodes below.
+  const glx = store.glowSenseX[slot]!;
+  const gly = store.glowSenseY[slot]!;
+  const glFwd = glx * dx + gly * dy;
+  const glLat = -glx * dy + gly * dx;
 
   const node = (
     label: string,
@@ -139,8 +155,19 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
     node('wall lat', wLat, Brain.WALL_LAT_TURN, Brain.WALL_LAT_THRUST, HiddenInput.WALL_LAT),
     node('flow fwd', flFwd, Brain.FLOW_FWD_TURN, Brain.FLOW_FWD_THRUST, HiddenInput.FLOW_FWD),
     node('flow lat', flLat, Brain.FLOW_LAT_TURN, Brain.FLOW_LAT_THRUST, HiddenInput.FLOW_LAT),
-    node('bias', 1, Brain.TURN_BIAS, Brain.THRUST_BIAS, HiddenInput.BIAS, Brain.EAT_GATE_BIAS),
   ];
+  // 4-channel identity scent (slice F2): each channel's heading-frame gradient on its own fwd/lat node, so the
+  // 16 linear synapses + the 8 hidden-layer inputs are VISIBLE (they were summed but never drawn). Channels:
+  // prey (∝1−diet), pred (∝diet), kin·c/kin·s (hue compass → kin clustering). Base synapse for channel c =
+  // PHERO_C0_LAT_TURN + c*4 → {lat_turn, fwd_turn, lat_thrust, fwd_thrust}; hidden input = SCENT_C0_* + c*2.
+  const SCENT_LABELS = ['prey', 'pred', 'kin·c', 'kin·s'];
+  for (let c = 0; c < SCENT_CHANNELS; c++) {
+    const pb = Brain.PHERO_C0_LAT_TURN + c * 4;
+    const name = SCENT_LABELS[c] ?? `sc${c}`;
+    inputs.push(node(`${name} fwd`, scentGrad[c * 2]!, pb + 1, pb + 3, HiddenInput.SCENT_C0_FWD + c * 2));
+    inputs.push(node(`${name} lat`, scentGrad[c * 2 + 1]!, pb, pb + 2, HiddenInput.SCENT_C0_LAT + c * 2));
+  }
+  inputs.push(node('bias', 1, Brain.TURN_BIAS, Brain.THRUST_BIAS, HiddenInput.BIAS, Brain.EAT_GATE_BIAS));
   // Interoceptive scalars — hoisted to function scope so the hidden layer below can read them (steer parity).
   // Each is 0 unless its lever is on, exactly mirroring steer().
   let hunger = 0;
@@ -173,7 +200,30 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
       node('ready', readiness, Brain.READINESS_TURN, Brain.READINESS_THRUST, HiddenInput.READINESS),
     );
   }
+  // Interoceptive own-body inputs (A1a): own normalized SIZE + own DIET, mirroring steer()'s gate (0 when
+  // !bodySense). Pushed BEFORE the glow-sense nodes so existing positional input assertions are preserved.
+  let sizeN = 0;
+  let dietN = 0;
+  let crowdN = 0;
+  let fertN = 0;
+  if (cfg.bodySense) {
+    sizeN = store.scalarGenes[sg + ScalarGene.SIZE]! / (2 * cfg.cellRadius);
+    dietN = store.scalarGenes[sg + ScalarGene.DIET]!;
+    crowdN = Math.min(store.crowding[slot]! / cfg.crowdSenseNorm, 1);
+    fertN = Math.min(store.fertHere[slot]! / cfg.foodCap, 1);
+    inputs.push(node('size', sizeN, Brain.SIZE_TURN, Brain.SIZE_THRUST, HiddenInput.SIZE));
+    inputs.push(node('diet', dietN, Brain.DIET_TURN, Brain.DIET_THRUST, HiddenInput.DIET));
+    inputs.push(node('crowd', crowdN, Brain.CROWD_TURN, Brain.CROWD_THRUST, HiddenInput.CROWD));
+    inputs.push(node('fert', fertN, Brain.FERT_TURN, Brain.FERT_THRUST, HiddenInput.FERT));
+  }
+  // Glow-sense nodes (slice F3): linear-only receiver weights (no hidden input → hidIdx -1, drawn as direct
+  // edges below). Always present (the synapses are always drawn); the gradient is 0 when the field is off.
+  inputs.push(node('glow fwd', glFwd, GLOW_SENSE_FWD_TURN, GLOW_SENSE_FWD_THRUST, -1));
+  inputs.push(node('glow lat', glLat, GLOW_SENSE_LAT_TURN, GLOW_SENSE_LAT_THRUST, -1));
 
+  // Linear sum over EVERY input node (food/sight/wall/flow + 4-channel scent + bias + interoceptive +
+  // glow-sense) — scent and glow are now nodes, so this single loop reproduces steer()'s full linear map
+  // (no separate scent/glow sum needed). The hidden layer adds its nonlinear correction below.
   let turnRaw = 0;
   let thrustRaw = 0;
   for (const n of inputs) {
@@ -182,7 +232,8 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
   }
 
   // Hidden layer (slice E): the nonlinear correction on top of the linear sum, mirroring steer() exactly —
-  // same 14 inputs (HiddenInput order, incl. the unshown phero pair + bias=1), same tanh, same W1/W2 blocks.
+  // same 20 inputs (HiddenInput order: 8 sense pairs incl. the unshown 4-channel scent + bias=1), same tanh,
+  // same W1/W2 blocks.
   const hidden: number[] = [];
   if (cfg.hiddenLayer) {
     const hin = [
@@ -194,12 +245,15 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
       wLat,
       flFwd,
       flLat,
-      pFwd,
-      pLat,
+      ...scentGrad,
       hunger,
       aged,
       readiness,
-      1,
+      sizeN,
+      dietN,
+      crowdN, // CROWD (A1b): 0 when !bodySense (mirrors steer's hidIn[HiddenInput.CROWD])
+      fertN, // FERT (A1c): 0 when !bodySense (mirrors steer's hidIn[HiddenInput.FERT])
+      1, // BIAS (now HiddenInput slot 23)
     ];
     for (let j = 0; j < HIDDEN_UNITS; j++) {
       let s = 0;
@@ -251,6 +305,18 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
     thrust *= 1 - eatGate * cfg.eatMovePenalty;
   }
 
+  // Bite-gate (A2a): mirror steer() — biteGate = sigmoid(BITE_GATE_BIAS + Σ_j hidden_j·W2[col 3]) from the
+  // hidden "mood" layer. The predation decision (read by hunt); does not affect the motor here. 0 when off.
+  let biteGate = 0;
+  if (cfg.brainGatedBiting) {
+    let biteGateRaw = lb[b + Brain.BITE_GATE_BIAS]!;
+    if (cfg.hiddenLayer) {
+      for (let j = 0; j < HIDDEN_UNITS; j++)
+        biteGateRaw += hidden[j]! * lb[b + HIDDEN_W2 + j * HIDDEN_OUTPUTS + 3]!;
+    }
+    biteGate = 1 / (1 + Math.exp(-biteGateRaw));
+  }
+
   // Mood-glow (slice F): mirror steer() — glow = sigmoid(GLOW_BIAS + Σ_j hidden_j·GLOW_HID_j) from the
   // hidden "mood" layer. Display-only; 0 when off.
   let glow = 0;
@@ -265,7 +331,7 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
   let drift = 0;
   for (let g = 0; g < BRAIN_GENES; g++) drift += Math.abs(lb[b + g]! - ib[b + g]!);
 
-  return { inputs, turnRaw, thrustRaw, turn, thrust, eatGate, hidden, glow, drift };
+  return { inputs, turnRaw, thrustRaw, turn, thrust, eatGate, biteGate, hidden, glow, drift };
 }
 
 // Edge thickness maps |weight| → [0,1] against this reference (weights are O(1–2)); purely cosmetic.
@@ -327,7 +393,7 @@ export class BrainView {
     const bot = h - 12 * dpr;
     const inN = st.inputs.length;
     const inY = (i: number): number => top + ((bot - top) * i) / (inN - 1);
-    const outY = (o: number): number => top + ((bot - top) * (o + 1)) / 5; // 4 outputs: turn, thrust, eat, glow
+    const outY = (o: number): number => top + ((bot - top) * (o + 1)) / 6; // 5 outputs: turn, thrust, eat, glow, bite
     const hidN = st.hidden.length;
     const hidY = (j: number): number => top + ((bot - top) * (j + 0.5)) / Math.max(1, hidN); // centered cells
     const nodeR = 5 * dpr;
@@ -370,6 +436,13 @@ export class BrainView {
       for (let i = 0; i < inN; i++) {
         const n = st.inputs[i]!;
         const iy = inY(i);
+        if (n.hidIdx < 0) {
+          // Linear-only input (glow-sense): no hidden row, so draw its direct edges to turn/thrust — the
+          // only place its wiring shows in the 3-layer view (other inputs' skip edges are intentionally hidden).
+          edge(inX, iy, outX, outY(0), n.turnW, n.value * n.turnW);
+          edge(inX, iy, outX, outY(1), n.thrustW, n.value * n.thrustW);
+          continue;
+        }
         for (let j = 0; j < hidN; j++) {
           const wgt = lbw[hb + HIDDEN_W1 + n.hidIdx * HIDDEN_UNITS + j]!;
           edge(inX, iy, hidX, hidY(j), wgt, n.value * wgt);
@@ -379,9 +452,11 @@ export class BrainView {
         const a = st.hidden[j]!;
         for (let o = 0; o < HIDDEN_OUTPUTS; o++) {
           const wgt = lbw[hb + HIDDEN_W2 + j * HIDDEN_OUTPUTS + o]!;
-          edge(hidX, hidY(j), outX, outY(o), wgt, a * wgt);
+          // W2 columns: 0=turn, 1=thrust, 2=eat, 3=biteGate. Glow (node 3) reads the separate GLOW_HID block,
+          // so route the biteGate column (3) to its own node (4) and keep turn/thrust/eat at 0..2.
+          edge(hidX, hidY(j), outX, outY(o === 3 ? 4 : o), wgt, a * wgt);
         }
-        // hidden→glow (slice F): glow is a 4th output (index 3) reading the hidden layer via the GLOW_HID block.
+        // hidden→glow (slice F): glow is output node 3, reading the hidden layer via the GLOW_HID block.
         const gwgt = lbw[hb + GLOW_HID + j]!;
         edge(hidX, hidY(j), outX, outY(3), gwgt, a * gwgt);
       }
@@ -395,7 +470,11 @@ export class BrainView {
       }
     }
 
-    ctx.font = `${Math.round(10 * dpr)}px ui-monospace, monospace`;
+    // Input label font scales down to the row spacing so the (up to 22) labels never overlap — the full
+    // input set is food/sight/wall/flow + 4-channel scent + bias + interoceptive + glow-sense.
+    const rowGap = (bot - top) / Math.max(1, inN - 1); // device px between input rows
+    const inLabelPx = Math.max(6.5, Math.min(10, (rowGap / dpr) * 0.92));
+    ctx.font = `${Math.round(inLabelPx * dpr)}px ui-monospace, monospace`;
     ctx.textBaseline = 'middle';
 
     // Input nodes: fill by sign/strength of the live value; label on the left, value on the node.
@@ -429,7 +508,8 @@ export class BrainView {
       ctx.fill();
     }
 
-    // Output nodes.
+    // Output nodes (reset to the standard font — 5 outputs: turn/thrust/eat/glow/bite, plenty of room).
+    ctx.font = `${Math.round(10 * dpr)}px ui-monospace, monospace`;
     const drawOut = (o: number, label: string, value: number): void => {
       const oy = outY(o);
       const v = Math.tanh(value);
@@ -448,13 +528,14 @@ export class BrainView {
     drawOut(1, 'thrust', st.thrust);
     drawOut(2, 'eat', st.eatGate); // eat-gate output (slice B): 1 = head-down eating, 0 = head-up fleeing
     drawOut(3, 'glow', st.glow); // mood-glow output (slice F): bioluminescence from the hidden mood layer
+    drawOut(4, 'bite', st.biteGate); // bite-gate output (A2a): the predation decision read from the hidden layer
 
     // Header: raw outputs + learning drift.
     ctx.fillStyle = 'rgba(150,170,190,0.8)';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     ctx.fillText(
-      `turn ${st.turnRaw.toFixed(2)}→${st.turn.toFixed(2)}  thrust ${st.thrustRaw.toFixed(2)}→${st.thrust.toFixed(2)}  eat ${st.eatGate.toFixed(2)}  glow ${st.glow.toFixed(2)}  drift ${st.drift.toFixed(2)}`,
+      `turn ${st.turnRaw.toFixed(2)}→${st.turn.toFixed(2)}  thrust ${st.thrustRaw.toFixed(2)}→${st.thrust.toFixed(2)}  eat ${st.eatGate.toFixed(2)}  glow ${st.glow.toFixed(2)}  bite ${st.biteGate.toFixed(2)}  drift ${st.drift.toFixed(2)}`,
       6 * dpr,
       6 * dpr,
     );

@@ -10,7 +10,7 @@
  */
 import { type OrganismStore } from '../core/store';
 import { type FoodField } from '../core/food-field';
-import { type PheroField } from '../core/phero-field';
+import { type ScentField } from '../core/scent-field';
 import { type Walls } from '../core/walls';
 import { ScalarGene, SCALAR_GENE_COUNT, SCALAR_GENE_SPECS, MIN_BAND } from '../core/genome';
 import {
@@ -26,21 +26,25 @@ import {
   GLOW_CORE_B,
   CHANNEL_HUE,
   channelTintRgb,
-  pheroTintRgb,
+  scentTintRgb,
 } from './palette';
 
 /** Canvas color-by mode (cycled with 'c'): which gene/state drives dot hue. */
 export const ColorMode = { LINEAGE: 0, DIET: 1, ENERGY: 2, FORAGE: 3 } as const;
 export type ColorMode = (typeof ColorMode)[keyof typeof ColorMode];
 
-/** Food-field overlay layer (cycled with 'f'): which field the heatmap shows + its tint. */
+/** Food-field overlay layer (cycled with 'f'): which field the heatmap shows + its tint. The four SCENT_*
+ *  layers map 1:1 to the ScentField channels (index = layer − SCENT_PREY = Scent channel). */
 export const FoodLayer = {
   OFF: -1,
   TOTAL: 0,
   CHANNEL_A: 1,
   CHANNEL_B: 2,
   CHANNEL_C: 3,
-  PHEROMONE: 4,
+  SCENT_PREY: 4, // grazer-scent (∝1−diet)
+  SCENT_PRED: 5, // predator-scent (∝diet)
+  SCENT_KIN_COS: 6, // hue signature, cos axis
+  SCENT_KIN_SIN: 7, // hue signature, sin axis
 } as const;
 export type FoodLayer = (typeof FoodLayer)[keyof typeof FoodLayer];
 
@@ -542,12 +546,12 @@ export class Renderer {
 
   /**
    * Resolve a foodLayer to its grid + a PURE-READ texture-fill closure + the overlay tint, or null
-   * when the layer has no data (OFF, channel C with foodChannels<3, or pheromone with phero===null) so
+   * when the layer has no data (OFF, channel C with foodChannels<3, or a scent layer with scent===null) so
    * draw() skips the heatmap entirely. The fill closures call the read-only fillTexture* helpers.
    */
   private fieldSource(
     food: FoodField | null,
-    phero: PheroField | null,
+    scent: ScentField | null,
     layer: FoodLayer,
   ): {
     cols: number;
@@ -555,13 +559,15 @@ export class Renderer {
     tint: [number, number, number];
     fill: (o: Uint8Array) => void;
   } | null {
-    if (layer === FoodLayer.PHEROMONE) {
-      if (!phero) return null;
+    if (layer >= FoodLayer.SCENT_PREY && layer <= FoodLayer.SCENT_KIN_SIN) {
+      if (!scent) return null;
+      const c = layer - FoodLayer.SCENT_PREY; // → Scent channel index (PREY=0 … SIG_SIN=3)
+      const ch = scent.channel(c);
       return {
-        cols: phero.cols,
-        rows: phero.rows,
-        tint: pheroTintRgb(),
-        fill: (o) => phero.fillTexture(o),
+        cols: ch.cols,
+        rows: ch.rows,
+        tint: scentTintRgb(c),
+        fill: (o) => scent.fillTexture(c, o),
       };
     }
     if (!food || layer === FoodLayer.OFF) return null;
@@ -593,7 +599,7 @@ export class Renderer {
   draw(
     store: OrganismStore,
     food: FoodField | null,
-    phero: PheroField | null,
+    scent: ScentField | null,
     walls: Walls | null,
     foodLayer: FoodLayer,
     showWalls: boolean,
@@ -612,9 +618,9 @@ export class Renderer {
 
     // ── Field heatmap (under the dots) ──
     // foodLayer selects which scalar field is shown + how it's tinted: TOTAL/A = green (legacy look),
-    // B = amber, C = violet, PHEROMONE = cyan. A layer with no data (channel C when foodChannels<3, or
-    // pheromone when phero===null) renders nothing (src===null below → block skipped).
-    const src = this.fieldSource(food, phero, foodLayer);
+    // B = amber, C = violet, SCENT_PREY = cyan, SCENT_PRED = red, SCENT_KIN_COS/SIN = blue/pink. A layer with
+    // no data (channel C when foodChannels<3, or a scent layer when scent===null) renders nothing (src===null).
+    const src = this.fieldSource(food, scent, foodLayer);
     if (src) {
       const { cols, rows, tint } = src;
       const cells = cols * rows;

@@ -20,6 +20,8 @@ import { RadarView, LENSES, DEFAULT_LENS } from './observability/radar-view';
 import { Distributions } from './observability/distributions';
 import { Legend } from './observability/legend';
 import { FollowRecorder } from './observability/follow-recorder';
+import { Lineage } from './observability/lineage';
+import { LineageModal } from './observability/lineage-modal';
 import { TimeSeriesGraph } from './observability/graph';
 
 function el<T extends HTMLElement>(id: string): T {
@@ -37,7 +39,7 @@ const hudBody = el('hud-body');
 //   • motorSquash          — legibility: graded tanh steering (kills the motor-saturation spin/vibrate)
 //   • foodChannels 3 +     — multi-resource: 3 resources, each grown in its OWN pockets (round-robin), so diet
 //     pocketChannelMode 1     couples to PLACE — a specialist must live in its resource's island (allopatry).
-//   • pheromoneEnabled     — a diffusing deposit-and-sense field (on-graze); the delayed-feedback substrate.
+//   • pheromoneEnabled     — a 4-channel identity-bearing scent field (role + hue signature, per-tick deposit).
 //   • flowPushStrength     — mixing: the current carries bodies between pockets.
 //   • bioluminescence      — render glow (set below). NB the 3-channel world runs SPARSER + loses predators
 //     vs ch2 (food is segregated); it stays alive on all tested seeds. Tune live across seeds to taste.
@@ -55,6 +57,7 @@ let config: Config = defaultConfig({
   foodPocketChannelMode: 1,
   foodChannelAWallTied: true,
   foodChannelBDriftMult: 3,
+  // Identity-bearing scent (4-channel: prey/predator role + hue signature; passive per-tick deposit).
   // Migrating pockets — two crossing seasonal currents: channel A creeps slowly one way, channel B sweeps
   // the normal rate in a different direction, so the resource zones constantly rearrange (kills the static
   // "camp on a fixed gradient forever" equilibrium; food you must follow).
@@ -65,6 +68,8 @@ let config: Config = defaultConfig({
   pocketDriftSpeed: 0.6,
   // Pheromones (delayed-feedback substrate).
   pheromoneEnabled: true,
+  hungerSense: true, // DEMO: the brain senses its own energy deficit (dead in default config — audit)
+  scentIdentity: true,
   // Sight-only drifting food parcels + the census-proven vision-cost cut → the dead vision genes get a
   // reason to evolve up (this tuning lives in the demo so defaultConfig stays byte-identical to legacy).
   parcelsEnabled: true,
@@ -73,8 +78,30 @@ let config: Config = defaultConfig({
   parcelCapacity: 120,
   visionFovCost: 0.02,
   visionAcuityCost: 0.02,
+  // Lifespan + behavior depth (this work stream). Margin: a softer starvation clock so creatures get a
+  // real runway off the food field (basalCost 0.12→0.08 — measured +20% median lifespan; NB this overlaps
+  // the food worktree's income tuning → reconcile the combined margin at merge). Satiation behavior:
+  // hungerGatesFood makes a full creature's food-seeking fade so it wanders on its other drives, and
+  // breedCooldown spaces reproduction so creatures actually DWELL well-fed (the regime the gate needs —
+  // measured: cooldown 150 → satiation dwell appears + median lifespan +30%, %bred up). All live-tunable.
+  basalCost: 0.08,
+  hungerGatesFood: true,
+  breedCooldown: 150,
+  // Age / life stages (life-sim-bd8a): juvenile (can't breed) → adult → elder (senescence tax = death of
+  // old age). Tail-gated genes MATURITY_AGE/SENESCENCE_AGE evolve in-life. Measured under this demo config
+  // (4000t seed1): the immortal tail is capped (max lifespan 3832→2455), the population thrives (54% bred),
+  // and the genes stay bounded (SENESCENCE_AGE settles ~480, not railed). senescenceRate is a live knob —
+  // crank it in the panel for a more dramatic elder die-off.
+  ageStages: true,
 });
 let world = new World(config);
+
+// Lineage recorder — fed by the read-only onBirth hook (pure observation, determinism-safe). The
+// hook lives on the config object the world holds; the spreads in reset/Knobs preserve the function
+// reference, and economy.ts reads cfg.onBirth live, so it survives rebuild().
+const lineage = new Lineage();
+config.onBirth = lineage.onBirth;
+lineage.reset(world.store); // snapshot the seeded population as gen-0 founders
 
 let renderer: Renderer;
 try {
@@ -111,10 +138,14 @@ const distributions = new Distributions(el<HTMLCanvasElement>('dist'));
 distributions.mountPicker(el('dist-fields'));
 const legend = new Legend(el('legend-panel'), el('legend-pill'));
 const recorder = new FollowRecorder();
+const lineageModal = new LineageModal(el('lineage-panel'), lineage, (slot, gen) =>
+  selectCreature(slot, gen),
+);
+el<HTMLButtonElement>('lineage-open').addEventListener('click', () => lineageModal.setOpen(true));
 
 let running = false;
 let speed = 1; // sim ticks per animation frame; <1 = slow-mo (interpolated for fluid motion)
-// Food-field overlay layer (cycled with 'f'): off → total → channel A/B/C → pheromone → off, skipping
+// Food-field overlay layer (cycled with 'f'): off → total → channel A/B/C → scent prey/predator/kin → off, skipping
 // layers that don't exist for the current config so the user never lands on a blank.
 let foodLayer: FoodLayer = FoodLayer.TOTAL;
 let showWalls = true; // wall slate layer (toggle with 'w')
@@ -131,28 +162,40 @@ const FOOD_LAYER_NAMES: Record<number, string> = {
   [FoodLayer.CHANNEL_A]: 'channel A',
   [FoodLayer.CHANNEL_B]: 'channel B',
   [FoodLayer.CHANNEL_C]: 'channel C',
-  [FoodLayer.PHEROMONE]: 'pheromone',
+  [FoodLayer.SCENT_PREY]: 'scent: prey',
+  [FoodLayer.SCENT_PRED]: 'scent: predator',
+  [FoodLayer.SCENT_KIN_COS]: 'scent: kin (cos)',
+  [FoodLayer.SCENT_KIN_SIN]: 'scent: kin (sin)',
 };
 const COLOR_MODE_NAMES = ['lineage', 'diet', 'energy', 'forage'];
 const foodLayerLabel = el('food-layer-label');
 const colorModeLabel = el('color-mode-label');
 
 /** The ring of layers that actually have data for the current world, in cycle order. Off is always in
- *  the ring; channels B/C only when foodChannels covers them; pheromone only when the field exists. */
+ *  the ring; channels B/C only when foodChannels covers them; the 4 scent channels only when the field exists. */
 function availableFoodLayers(): FoodLayer[] {
   const ring: FoodLayer[] = [FoodLayer.OFF, FoodLayer.TOTAL, FoodLayer.CHANNEL_A];
   if (config.foodChannels >= 2) ring.push(FoodLayer.CHANNEL_B);
   if (config.foodChannels >= 3) ring.push(FoodLayer.CHANNEL_C);
-  if (world.phero) ring.push(FoodLayer.PHEROMONE);
+  if (world.scent) {
+    ring.push(
+      FoodLayer.SCENT_PREY,
+      FoodLayer.SCENT_PRED,
+      FoodLayer.SCENT_KIN_COS,
+      FoodLayer.SCENT_KIN_SIN,
+    );
+  }
   return ring;
 }
 
-/** Advance foodLayer to the next existing layer (skips blanks), then refresh the HUD label. */
-function cycleFoodLayer(): void {
+/** Step foodLayer to the next (dir=+1) or previous (dir=−1) existing layer (skips blanks), then refresh
+ *  the HUD label. 'f' steps forward, Shift+F steps backward. */
+function cycleFoodLayer(dir = 1): void {
   const ring = availableFoodLayers();
   const cur = ring.indexOf(foodLayer);
   // If the current layer vanished (e.g. a reset dropped a channel), restart the ring at off.
-  foodLayer = ring[(cur < 0 ? 0 : cur + 1) % ring.length]!;
+  const next = cur < 0 ? 0 : (cur + dir + ring.length) % ring.length;
+  foodLayer = ring[next]!;
   foodLayerLabel.textContent = FOOD_LAYER_NAMES[foodLayer] ?? 'off';
 }
 foodLayerLabel.textContent = FOOD_LAYER_NAMES[foodLayer] ?? 'off';
@@ -188,6 +231,7 @@ function clearTrail(): void {
 // Advance the per-tick follow recording + trail together (called once per sim tick).
 function followTick(): void {
   recorder.record(world.store, config, world.tick);
+  lineage.commit(world.store, world.tick); // drain this tick's births into the family-tree forest
   if (recorder.isFollowedAlive(world.store))
     pushTrail(world.store.x[recorder.followedSlot]!, world.store.y[recorder.followedSlot]!);
 }
@@ -303,6 +347,8 @@ mbarStats.addEventListener('click', () =>
 
 function rebuild(): void {
   world = new World(config);
+  lineage.reset(world.store); // new world → re-snapshot founders, drop the old forest
+  lineageModal.select(-1, 0); // clear the modal's target (it stays open if it was open)
   selected = null;
   inspector.clear();
   brainView.clear();
@@ -330,12 +376,17 @@ function selectAt(clientX: number, clientY: number): void {
       best = i;
     }
   }
-  if (best >= 0) {
-    selected = { slot: best, gen: s.genId[best]! };
-    inspector.select(best, selected.gen);
-    brainView.select(best, selected.gen);
-    radar.select(best, selected.gen);
-  }
+  if (best >= 0) selectCreature(best, s.genId[best]!);
+}
+
+// Centralized selection: re-roots the whole inspector shell + the lineage modal onto one individual.
+// Used by click-to-inspect AND by clicking a live node inside the family-tree modal.
+function selectCreature(slot: number, gen: number): void {
+  selected = { slot, gen };
+  inspector.select(slot, gen);
+  brainView.select(slot, gen);
+  radar.select(slot, gen);
+  lineageModal.select(slot, gen);
 }
 
 // Scroll to zoom, around the cursor (the world point under the cursor stays put).
@@ -383,7 +434,7 @@ globalThis.addEventListener('resize', () => renderer.resize());
 
 // 'f' cycle food/field layer · 'w' wall layer · 'o' creature overlay · 'v' flow arrows · 'c' cycle dot color-mode · 'l' lock follow-cam + record.
 globalThis.addEventListener('keydown', (e) => {
-  if (e.key === 'f' || e.key === 'F') cycleFoodLayer();
+  if (e.key === 'f' || e.key === 'F') cycleFoodLayer(e.shiftKey ? -1 : 1); // Shift+F steps backward
   if (e.key === 'w' || e.key === 'W') showWalls = !showWalls;
   if (e.key === 'o' || e.key === 'O') showOverlay = !showOverlay;
   if (e.key === 'v' || e.key === 'V') showFlow = !showFlow;
@@ -403,6 +454,7 @@ globalThis.addEventListener('keydown', (e) => {
       clearTrail();
     }
   }
+  if (e.key === 't' || e.key === 'T') lineageModal.toggle(); // family tree of the selection
 });
 
 // tps measurement (display only — never fed back into the sim).
@@ -482,7 +534,7 @@ function frame(): void {
   renderer.draw(
     world.store,
     world.food,
-    world.phero,
+    world.scent, // the renderer picks the channel from the active SCENT_* foodLayer
     world.walls,
     foodLayer,
     showWalls,
@@ -583,6 +635,7 @@ function frame(): void {
   inspector.render(world.store, config);
   brainView.render(world.store, config);
   radar.render(world.store, config);
+  lineageModal.render(world.store); // family-tree modal (no-op while closed)
 
   const now = performance.now();
   if (now - lastT >= 500) {

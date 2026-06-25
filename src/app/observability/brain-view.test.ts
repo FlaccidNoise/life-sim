@@ -7,7 +7,17 @@ import {
   SCALAR_GENE_COUNT,
   SCALAR_GENE_SPECS,
   BRAIN_GENES,
+  GLOW_SENSE_LAT_TURN,
+  GLOW_SENSE_FWD_TURN,
+  GLOW_SENSE_LAT_THRUST,
+  GLOW_SENSE_FWD_THRUST,
+  HIDDEN_W1,
+  HIDDEN_W2,
+  HIDDEN_OUTPUTS,
+  HIDDEN_UNITS,
+  HiddenInput,
 } from '../../core/genome';
+import { SCENT_CHANNELS } from '../../core/scent-field';
 import { steer } from '../../core/brain';
 import { satiatedBar } from '../../core/economy';
 import { computeBrainState } from './brain-view';
@@ -53,6 +63,134 @@ describe('computeBrainState', () => {
     expect(st.thrust).toBeCloseTo(appliedThrust, 10); // brain-view thrust already includes ×efficiency
   });
 
+  it('reproduces turn/thrust from the linear scent synapses (non-saturated, scent active)', () => {
+    // Small scent-only weights so the motor does NOT saturate — a saturated motor would mask a missing
+    // linear-scent term (both clamp to maxTurn). This pins the inspector to steer()'s scent contribution.
+    const s = new OrganismStore(8);
+    const i = s.alloc();
+    s.heading[i] = 0;
+    const base = i * SCALAR_GENE_COUNT;
+    for (let g = 0; g < SCALAR_GENE_COUNT; g++)
+      s.scalarGenes[base + g] = cfg[SCALAR_GENE_SPECS[g]!.centerKey];
+    const b = i * BRAIN_GENES;
+    s.brain[b + Brain.PHERO_C0_LAT_TURN] = 0.2;
+    s.brain[b + Brain.PHERO_C0_FWD_TURN] = 0.1;
+    s.brain[b + Brain.PHERO_C0_LAT_THRUST] = 0.15;
+    s.brain[b + Brain.PHERO_C0_FWD_THRUST] = 0.25;
+    s.scentSenseX[i * SCENT_CHANNELS + 0] = 0.5;
+    s.scentSenseY[i * SCENT_CHANNELS + 0] = 0.3;
+    s.resetLearned(i);
+    s.rebuildLive();
+    const h0 = s.heading[i]!;
+    const st = computeBrainState(s, cfg, i);
+    steer(s, false, cfg.eligLambda, cfg.motorSquash, cfg);
+    expect(st.turn).toBeCloseTo(s.heading[i]! - h0, 10);
+    expect(st.thrust).toBeCloseTo(Math.hypot(s.forceX[i]!, s.forceY[i]!), 10);
+    expect(Math.abs(st.turn)).toBeGreaterThan(1e-6); // guard: the scent path is actually exercised
+  });
+
+  it('reproduces turn/thrust from the linear glow-sense synapses (non-saturated, glow active)', () => {
+    // Glow-sense (slice F3) is a LINEAR-only receiver; steer() sums it. Small weights so no saturation masks
+    // a missing term. Pins the inspector to steer()'s glow-sense contribution.
+    const s = new OrganismStore(8);
+    const i = s.alloc();
+    s.heading[i] = 0;
+    const base = i * SCALAR_GENE_COUNT;
+    for (let g = 0; g < SCALAR_GENE_COUNT; g++)
+      s.scalarGenes[base + g] = cfg[SCALAR_GENE_SPECS[g]!.centerKey];
+    const b = i * BRAIN_GENES;
+    s.brain[b + GLOW_SENSE_LAT_TURN] = 0.2;
+    s.brain[b + GLOW_SENSE_FWD_TURN] = 0.1;
+    s.brain[b + GLOW_SENSE_LAT_THRUST] = 0.15;
+    s.brain[b + GLOW_SENSE_FWD_THRUST] = 0.25;
+    s.glowSenseX[i] = 0.5;
+    s.glowSenseY[i] = 0.3;
+    s.resetLearned(i);
+    s.rebuildLive();
+    const h0 = s.heading[i]!;
+    const st = computeBrainState(s, cfg, i);
+    steer(s, false, cfg.eligLambda, cfg.motorSquash, cfg);
+    expect(st.turn).toBeCloseTo(s.heading[i]! - h0, 10);
+    expect(st.thrust).toBeCloseTo(Math.hypot(s.forceX[i]!, s.forceY[i]!), 10);
+    expect(Math.abs(st.turn)).toBeGreaterThan(1e-6); // guard: the glow-sense path is actually exercised
+  });
+
+  it('adds own-SIZE + own-DIET nodes that match a real steer() run (A1a, non-saturated)', () => {
+    // own-SIZE/own-DIET feed the linear map + hidden layer; small weights so no saturation masks a missing
+    // term (the consolidation lesson). Pins the inspector to steer()'s body-sense contribution.
+    const s = new OrganismStore(8);
+    const i = s.alloc();
+    s.heading[i] = 0;
+    const base = i * SCALAR_GENE_COUNT;
+    for (let g = 0; g < SCALAR_GENE_COUNT; g++)
+      s.scalarGenes[base + g] = cfg[SCALAR_GENE_SPECS[g]!.centerKey];
+    s.scalarGenes[base + ScalarGene.SIZE] = 12; // sizeN = 12/(2·cellRadius=12) = 1.0
+    s.scalarGenes[base + ScalarGene.DIET] = 0.8;
+    const b = i * BRAIN_GENES;
+    s.brain[b + Brain.SIZE_TURN] = 0.05;
+    s.brain[b + Brain.DIET_THRUST] = 0.07;
+    s.resetLearned(i);
+    s.rebuildLive();
+    const h0 = s.heading[i]!;
+    const st = computeBrainState(s, cfg, i);
+    steer(s, false, cfg.eligLambda, cfg.motorSquash, cfg);
+    expect(st.turn).toBeCloseTo(s.heading[i]! - h0, 10);
+    expect(st.thrust).toBeCloseTo(Math.hypot(s.forceX[i]!, s.forceY[i]!), 10);
+    const sizeNode = st.inputs.find((n) => n.label === 'size')!;
+    const dietNode = st.inputs.find((n) => n.label === 'diet')!;
+    expect(sizeNode.value).toBeCloseTo(1.0, 10); // SIZE 12 / (2·cellRadius 6) = 1.0 (exact in Float32)
+    // DIET is read from the Float32 scalarGenes store, so 0.8 round-trips to 0.80000001 — pin to the
+    // stored value, not the literal (the inspector must surface exactly what steer() reads).
+    expect(dietNode.value).toBeCloseTo(s.scalarGenes[base + ScalarGene.DIET]!, 10);
+    expect(Math.abs(st.turn)).toBeGreaterThan(1e-6); // guard: the size→turn path is actually exercised
+  });
+
+  it('adds a local-CROWDING node that matches a real steer() run (A1b, non-saturated)', () => {
+    const s = new OrganismStore(8);
+    const i = s.alloc();
+    s.heading[i] = 0;
+    const base = i * SCALAR_GENE_COUNT;
+    for (let g = 0; g < SCALAR_GENE_COUNT; g++)
+      s.scalarGenes[base + g] = cfg[SCALAR_GENE_SPECS[g]!.centerKey];
+    s.crowding[i] = 4; // crowdN = min(4 / crowdSenseNorm(8), 1) = 0.5
+    const b = i * BRAIN_GENES;
+    s.brain[b + Brain.CROWD_TURN] = 0.06;
+    s.brain[b + Brain.CROWD_THRUST] = 0.04;
+    s.resetLearned(i);
+    s.rebuildLive();
+    const h0 = s.heading[i]!;
+    const st = computeBrainState(s, cfg, i);
+    steer(s, false, cfg.eligLambda, cfg.motorSquash, cfg);
+    expect(st.turn).toBeCloseTo(s.heading[i]! - h0, 10);
+    expect(st.thrust).toBeCloseTo(Math.hypot(s.forceX[i]!, s.forceY[i]!), 10);
+    const crowdNode = st.inputs.find((n) => n.label === 'crowd')!;
+    expect(crowdNode.value).toBeCloseTo(0.5, 10);
+    expect(Math.abs(st.turn)).toBeGreaterThan(1e-6); // guard: the crowd→turn path is exercised
+  });
+
+  it('adds a fertility-under-foot node that matches a real steer() run (A1c, non-saturated)', () => {
+    const s = new OrganismStore(8);
+    const i = s.alloc();
+    s.heading[i] = 0;
+    const base = i * SCALAR_GENE_COUNT;
+    for (let g = 0; g < SCALAR_GENE_COUNT; g++)
+      s.scalarGenes[base + g] = cfg[SCALAR_GENE_SPECS[g]!.centerKey];
+    s.fertHere[i] = cfg.foodCap / 2; // fertN = min((foodCap/2)/foodCap, 1) = 0.5
+    const b = i * BRAIN_GENES;
+    s.brain[b + Brain.FERT_TURN] = 0.06;
+    s.brain[b + Brain.FERT_THRUST] = 0.04;
+    s.resetLearned(i);
+    s.rebuildLive();
+    const h0 = s.heading[i]!;
+    const st = computeBrainState(s, cfg, i);
+    steer(s, false, cfg.eligLambda, cfg.motorSquash, cfg);
+    expect(st.turn).toBeCloseTo(s.heading[i]! - h0, 10);
+    expect(st.thrust).toBeCloseTo(Math.hypot(s.forceX[i]!, s.forceY[i]!), 10);
+    const fertNode = st.inputs.find((n) => n.label === 'fert')!;
+    expect(fertNode.value).toBeCloseTo(0.5, 10);
+    expect(Math.abs(st.turn)).toBeGreaterThan(1e-6); // guard: the fert→turn path is exercised
+  });
+
   it('exposes the base inputs incl. age in the documented order with their live values', () => {
     const s = setup();
     const st = computeBrainState(s, cfg, 0); // default cfg: ageSense on, hungerSense off
@@ -65,13 +203,30 @@ describe('computeBrainState', () => {
       'wall lat',
       'flow fwd',
       'flow lat',
+      'prey fwd',
+      'prey lat',
+      'pred fwd',
+      'pred lat',
+      'kin·c fwd',
+      'kin·c lat',
+      'kin·s fwd',
+      'kin·s lat',
       'bias',
       'age',
       'ready',
+      'size',
+      'diet',
+      'crowd',
+      'fert',
+      'glow fwd',
+      'glow lat',
     ]);
-    expect(st.inputs[8]!.value).toBe(1); // bias is constant 1
-    expect(st.inputs[9]!.label).toBe('age'); // interoceptive maturity input (slice C)
-    expect(st.inputs[10]!.label).toBe('ready'); // interoceptive repro-readiness input (slice D)
+    expect(st.inputs[16]!.value).toBe(1); // bias is constant 1 (after the 8 base + 8 scent inputs)
+    expect(st.inputs[16]!.label).toBe('bias');
+    expect(st.inputs[17]!.label).toBe('age'); // interoceptive maturity input (slice C)
+    expect(st.inputs[18]!.label).toBe('ready'); // interoceptive repro-readiness input (slice D)
+    expect(st.inputs.find((n) => n.label === 'prey fwd')).toBeDefined(); // 4-channel scent now drawn
+    expect(st.inputs.find((n) => n.label === 'glow lat')).toBeDefined(); // glow-sense now drawn
   });
 
   it('exposes the eat-gate output (slice B): 1 when off, the sigmoid of its inputs when on', () => {
@@ -114,16 +269,56 @@ describe('computeBrainState', () => {
       'wall lat',
       'flow fwd',
       'flow lat',
+      'prey fwd',
+      'prey lat',
+      'pred fwd',
+      'pred lat',
+      'kin·c fwd',
+      'kin·c lat',
+      'kin·s fwd',
+      'kin·s lat',
       'bias',
       'hunger',
       'age',
       'ready',
+      'size',
+      'diet',
+      'crowd',
+      'fert',
+      'glow fwd',
+      'glow lat',
     ]);
-    expect(st.inputs[9]!.value).toBeCloseTo(0.5, 10); // fractional drive, genuinely exercised (idx 9 = hunger)
+    expect(st.inputs[17]!.label).toBe('hunger');
+    expect(st.inputs[17]!.value).toBeCloseTo(0.5, 10); // fractional hunger drive, genuinely exercised (idx 17)
     // The hunger node must reproduce the turn/thrust steer() actually applies under the SAME mode.
     steer(s, false, hc.eligLambda, hc.motorSquash, hc);
     expect(st.turn).toBeCloseTo(s.heading[i]! - h0, 10);
     expect(st.thrust).toBeCloseTo(Math.hypot(s.forceX[i]!, s.forceY[i]!), 10);
+  });
+
+  it('computes a biteGate output that matches a real steer() run, exercising the hidden→bite column (A2a)', () => {
+    const c = defaultConfig({ brainGatedBiting: true, hiddenLayer: true });
+    const s = new OrganismStore(8);
+    const i = s.alloc();
+    s.heading[i] = 0;
+    const base = i * SCALAR_GENE_COUNT;
+    for (let g = 0; g < SCALAR_GENE_COUNT; g++)
+      s.scalarGenes[base + g] = c[SCALAR_GENE_SPECS[g]!.centerKey];
+    const b = i * BRAIN_GENES;
+    // Drive hidden unit 0 off food-fwd, then feed it to the biteGate column (3). Small weights → non-saturated
+    // sigmoid, so a wrong W2 column (e.g. reading eatGate col 2 = 0) would change biteGateRaw and fail parity.
+    s.brain[b + Brain.BITE_GATE_BIAS] = 0.3;
+    s.brain[b + HIDDEN_W1 + HiddenInput.FOOD_FWD * HIDDEN_UNITS + 0] = 0.8; // food-fwd → hidden unit 0
+    s.brain[b + HIDDEN_W2 + 0 * HIDDEN_OUTPUTS + 3] = 0.6; // hidden unit 0 → biteGate column (3)
+    s.senseX[i] = 0.5; // heading 0 → fwd = 0.5 → hAct[0] = tanh(0.5·0.8) ≈ 0.38 (nonzero)
+    s.resetLearned(i);
+    s.rebuildLive();
+    const st = computeBrainState(s, c, i);
+    steer(s, false, c.eligLambda, c.motorSquash, c);
+    expect(st.biteGate).toBeCloseTo(s.biteGate[i]!, 10); // inspector == sim
+    // The hidden→bite term is genuinely contributing (not just the bias): biteGate ≈ sigmoid(0.3 + 0.38·0.6).
+    expect(st.biteGate).toBeGreaterThan(0.5);
+    expect(st.biteGate).toBeLessThan(0.7); // non-saturated (would be ~1 if it read a saturating path)
   });
 
   it('reports learning drift = Σ|learned − instinct|', () => {
@@ -144,8 +339,9 @@ describe('computeBrainState', () => {
   });
 
   it('matches steer() under motorSquash and eases below the limit (ON-mode contract)', () => {
-    // hiddenLayer off so the large setup() hidden weights don't saturate tanh — isolate the squash mechanic.
-    const sq = defaultConfig({ motorSquash: true, hiddenLayer: false });
+    // hiddenLayer off so the large setup() hidden weights don't saturate tanh; bodySense off so the A1a
+    // size/diet linear terms don't add enough signal to tip tanh to EXACT 1.0 — isolate the squash mechanic.
+    const sq = defaultConfig({ motorSquash: true, hiddenLayer: false, bodySense: false });
     const s = setup();
     const i = 0;
     // Drive turn into the saturation region so the tanh path (not the ~linear toe) is exercised.

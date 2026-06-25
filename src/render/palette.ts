@@ -115,7 +115,9 @@ export const GLOW_CORE_B = 1.0;
 // hues; the overlay shader tints its heatmap toward CHANNEL_RGB[ch] and the dot shader colors a
 // specialist with CHANNEL_HUE[ch]. Total reuses channel A (green = the legacy food look).
 export const CHANNEL_HUE = [0.33, 0.11, 0.83] as const; // A green · B amber · C violet
-export const PHERO_HUE = 0.5; // cyan
+// Per scent-channel overlay hue (index = Scent channel): PREY cyan · PRED red · KIN_COS blue · KIN_SIN pink.
+// Chosen distinct from the food channels and from each other so the four scent overlays read apart.
+export const SCENT_HUE = [0.5, 0.0, 0.62, 0.88] as const;
 
 /** Lit RGB (0..1) for an overlay tint at hue `h` — the bright end of the heatmap ramp. */
 function tintRgb01(h: number): RGB {
@@ -128,9 +130,9 @@ export function channelTintRgb(ch: number): RGB {
   return tintRgb01(CHANNEL_HUE[ch] ?? 0.33);
 }
 
-/** Lit RGB (0..1) tint for the pheromone food-layer overlay (cyan). */
-export function pheroTintRgb(): RGB {
-  return tintRgb01(PHERO_HUE);
+/** Lit RGB (0..1) tint for a scent-channel overlay (PREY cyan · PRED red · KIN_COS blue · KIN_SIN pink). */
+export function scentTintRgb(channel: number): RGB {
+  return tintRgb01(SCENT_HUE[channel] ?? 0.5);
 }
 
 // ── Distribution field hues ───────────────────────────────────────────────────────────────────
