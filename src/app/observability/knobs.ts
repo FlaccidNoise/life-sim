@@ -119,8 +119,11 @@ export const SPECS: readonly KnobSpec[] = [
   // default is 16, so the slider reaches 24 to keep the seeded value representable.
   { key: 'biteRange', label: 'bite range', min: 0, max: 24, step: 1, live: true, group: 'predation' },
   { key: 'predationGain', label: 'predation gain', min: 1, max: 6, step: 0.5, live: true, group: 'predation' }, // prettier-ignore
-  { key: 'herbivoryExp', label: 'herbivory exp', min: 1, max: 2, step: 0.05, live: true, group: 'predation' }, // prettier-ignore
+  { key: 'herbivoryExp', label: 'herbivory exp', min: 0.5, max: 2, step: 0.05, live: true, group: 'predation' }, // prettier-ignore
   { key: 'predatorSeedClusters', label: 'pred nurseries', min: 0, max: 6, step: 1, live: false, group: 'predation' }, // prettier-ignore
+  // Predator revival: seed hunters in the upper size band so they have the size weapon from t0 — the lever
+  // that lets a predator lineage persist instead of starving small. 0 = full band (off).
+  { key: 'predatorSizeBoost', label: 'predator size boost', min: 0, max: 1, step: 0.05, live: false, group: 'predation' }, // prettier-ignore
   // Red Queen (lever E1): predator pays this fraction of prey DAMAGE on a bite. Capped at 0.3 — the
   // documented safe band (≥0.5 starves predators).
   { key: 'counterBiteFraction', label: 'counter-bite', min: 0, max: 0.3, step: 0.05, live: true, group: 'predation' }, // prettier-ignore

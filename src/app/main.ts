@@ -105,6 +105,11 @@ let config: Config = defaultConfig({
   // and the genes stay bounded (SENESCENCE_AGE settles ~480, not railed). senescenceRate is a live knob —
   // crank it in the panel for a more dramatic elder die-off.
   ageStages: true,
+  // PREDATOR REVIVAL — available via the knobs (predator size boost / herbivory exp / predation gain), but NOT
+  // on by default: the bundle (predatorSizeBoost 0.85 + herbivoryExp 0.7 + predationGain 3) revives predators on
+  // ~half the seeds, but it makes the world high-variance — on seed 1 the seeded hunters over-graze the prey
+  // and the world drops from ~1076 to ~60. Default keeps the stable all-grazer world (survival-first). To watch
+  // predators: bump "predator size boost" to ~0.85, "predation gain" to 3, "herbivory exp" to 0.7, and reset.
 });
 let world = new World(config);
 

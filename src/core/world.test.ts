@@ -51,6 +51,21 @@ describe('World — Phase 0 determinism contract', () => {
     expect(on.stateHash()).not.toBe(baseline.stateHash());
   });
 
+  it('predatorSizeBoost 0 is byte-identical to default; >0 perturbs (predator founders seeded big, same draw count)', () => {
+    const baseline = new World(defaultConfig({ seed: 1 }));
+    const off = new World(defaultConfig({ seed: 1, predatorSizeBoost: 0 }));
+    const on = new World(defaultConfig({ seed: 1, predatorSizeBoost: 0.7 }));
+    for (let t = 0; t < 1000; t++) {
+      baseline.step();
+      off.step();
+      on.step();
+    }
+    // boost 0 == default → the predator size draw uses the same [lo,hi] bounds (same rng.range draw)
+    expect(off.stateHash()).toBe(baseline.stateHash());
+    // boost 0.7 → predator founders seed in the upper band → the world diverges (lever live, not dead config)
+    expect(on.stateHash()).not.toBe(baseline.stateHash());
+  });
+
   it('hungerSense OFF is byte-identical to default; ON perturbs the world (lever E2 RNG-safe + wired)', () => {
     const baseline = new World(defaultConfig({ seed: 1 }));
     const off = new World(defaultConfig({ seed: 1, hungerSense: false }));

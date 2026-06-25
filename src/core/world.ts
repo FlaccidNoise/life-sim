@@ -265,7 +265,11 @@ export class World {
         const sizeSpec = SCALAR_GENE_SPECS[ScalarGene.SIZE]!;
         const lo = Math.max(sizeSpec.min, c * (1 - spread));
         const hi = Math.min(sizeSpec.max, c * (1 + spread));
-        s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.SIZE] = this.rng.range(lo, hi);
+        // Predators seed in the UPPER band (lo lifted by predatorSizeBoost·range) so they have the size
+        // weapon to hunt from t0; prey use the full band. Same rng.range draw COUNT either way, and
+        // boost 0 leaves the predator floor at lo → byte-identical to the un-boosted seed.
+        const plo = isPredator ? lo + this.config.predatorSizeBoost * (hi - lo) : lo;
+        s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.SIZE] = this.rng.range(plo, hi);
       }
       // Founder starts at its own (seeded) BIRTH_ENERGY gene — consistent with how offspring are provisioned.
       s.energy[i] = s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.BIRTH_ENERGY]!;
