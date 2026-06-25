@@ -168,6 +168,9 @@ export const DEMO_OVERRIDES: Partial<Config> = {
   // breeding cooldown so creatures dwell well-fed. Override on the CLI to A/B against the old demo.
   basalCost: 0.08,
   hungerGatesFood: true,
+  foodDriveFloor: 0.7, // a satiated creature keeps 70% food drive → it relocates + keeps topping up (so it
+  // can breed through the cooldown) instead of parking. Measured: 5× end-pop + 5× births vs floor 0 (the
+  // satiation-parking failure mode that craters reproduction), while still easing off near satiation.
   breedCooldown: 150,
   // Age / life stages (life-sim-bd8a): juvenile breed-lock + elder senescence tax + costed longevity gene.
   ageStages: true,
