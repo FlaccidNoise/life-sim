@@ -36,6 +36,11 @@ export class Parcels {
   private readonly parcelRng: Rng;
   private readonly worldWidth: number;
   private readonly worldHeight: number;
+  /** Static clustered-spawn hotspot centers (drawn once from parcelRng) — length 0 when clustering is off,
+   *  so the off path never draws cluster RNG and the spawn stream is identical to uniform spawn. */
+  private readonly clusterX: Float64Array;
+  private readonly clusterY: Float64Array;
+  private readonly clusterCount: number;
 
   constructor(cfg: Config) {
     this.cfg = cfg;
@@ -48,6 +53,24 @@ export class Parcels {
     this.life = new Float64Array(this.capacity);
     this.alive = new Uint8Array(this.capacity);
     this.parcelRng = new Rng((cfg.seed ^ SALT) >>> 0);
+    // Clustered spawn (optional): allocate + draw the hotspot centers ONCE from the parcel forked RNG. When
+    // clustering is off we allocate length 0 and never draw, so the spawn stream stays byte-identical to
+    // the uniform path. clusterCount is floored at 1 so an on+count-0 misconfig can't index out of bounds.
+    this.clusterCount = Math.max(1, cfg.parcelClusterCount);
+    const nClusters = cfg.parcelClustering ? this.clusterCount : 0;
+    this.clusterX = new Float64Array(nClusters);
+    this.clusterY = new Float64Array(nClusters);
+    this.seedClusters();
+  }
+
+  /** (Re)generate the static cluster centers from the parcel forked RNG. No-op (no draw) when clustering is
+   *  off. Called at construction and on reset(), each right AFTER parcelRng is (re)seeded, so the centers —
+   *  and every spawn that follows — reproduce byte-for-byte. */
+  private seedClusters(): void {
+    for (let i = 0; i < this.clusterX.length; i++) {
+      this.clusterX[i] = this.parcelRng.range(0, this.worldWidth);
+      this.clusterY[i] = this.parcelRng.range(0, this.worldHeight);
+    }
   }
 
   /** Reset to empty + re-seed the spawn RNG, so reset() reproduces construction byte-for-byte. */
@@ -55,6 +78,7 @@ export class Parcels {
     this.alive.fill(0);
     this.count = 0;
     this.parcelRng.state = (this.cfg.seed ^ SALT) >>> 0;
+    this.seedClusters();
   }
 
   /** Find a free slot (first dead in ascending order) or -1 if the pool is full. */
@@ -65,15 +89,31 @@ export class Parcels {
   }
 
   /**
-   * Spawn one parcel at a random world position, using ONLY the dedicated parcelRng (2 draws: x, y). No-op
-   * (no RNG draw) when the pool is full, so a full pool can't silently shift the parcel stream. Returns the
-   * slot used, or -1 if full.
+   * Spawn one parcel using ONLY the dedicated parcelRng. Uniform spawn (clustering off) draws 2 values
+   * (x, y); clustered spawn draws 3 (cluster index, angle, radius) to place the parcel in a disk about a
+   * hotspot. No-op (no RNG draw) when the pool is full, so a full pool can't silently shift the parcel
+   * stream. Returns the slot used, or -1 if full.
    */
   spawn(): number {
     const slot = this.freeSlot();
     if (slot < 0) return -1;
-    this.x[slot] = this.parcelRng.range(0, this.worldWidth);
-    this.y[slot] = this.parcelRng.range(0, this.worldHeight);
+    if (this.clusterX.length > 0) {
+      // Clustered: pick a hotspot, then a uniform point in a disk of parcelClusterRadius about it.
+      const ci = this.parcelRng.int(this.clusterCount);
+      const ang = this.parcelRng.range(0, 2 * Math.PI);
+      const rad = this.cfg.parcelClusterRadius * Math.sqrt(this.parcelRng.float());
+      let px = this.clusterX[ci]! + rad * Math.cos(ang);
+      let py = this.clusterY[ci]! + rad * Math.sin(ang);
+      px %= this.worldWidth;
+      if (px < 0) px += this.worldWidth;
+      py %= this.worldHeight;
+      if (py < 0) py += this.worldHeight;
+      this.x[slot] = px;
+      this.y[slot] = py;
+    } else {
+      this.x[slot] = this.parcelRng.range(0, this.worldWidth);
+      this.y[slot] = this.parcelRng.range(0, this.worldHeight);
+    }
     this.energy[slot] = this.cfg.parcelEnergy;
     this.life[slot] = this.cfg.parcelLifetime;
     this.alive[slot] = 1;

@@ -23,6 +23,7 @@ import { defaultConfig, type Config } from '../core/config';
 import { ScalarGene, SCALAR_GENE_COUNT } from '../core/genome';
 import { satiatedBar } from '../core/economy';
 import { computeBrainState } from '../app/observability/brain-view';
+import { livingWorldOverrides } from '../app/living-world-config';
 import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -140,60 +141,18 @@ interface SeedResult {
   reportMd: string;
 }
 
-// Live-demo overrides — mirrors src/app/main.ts (the world the user actually watches). Kept here so the
-// probe can measure the demo regime, not just the byte-clean default. Update if main.ts's config changes.
-export const DEMO_OVERRIDES: Partial<Config> = {
-  // Spatial structure + legibility.
-  wallRegionCount: 5,
-  flowStrength: 1, // visible current (3× old 0.35) reconciled with resilience: only zero-extinction setting
-  flowPushStrength: 0.25,
-  motorSquash: true,
-  // Density + two differentiated resources (channel A wall-tied, B drifting) + parcels (vision-revival).
-  // B-food-2: separate A/B patches (mode 1), blobbier (radius 8→14). count 40→24 (NOT the plan's 20: 20 went
-  // extinct on 2/3 seeds by 8000t — sparser drifting pockets strand the population; 24 is the measured floor
-  // that holds liveness at 8000t across 5 seeds while staying sparser+blobbier than 40/8). MUST mirror main.ts.
-  foodPatchCount: 24,
-  foodPatchRadius: 14,
-  foodChannels: 2,
-  foodPocketChannelMode: 1,
-  foodChannelAWallTied: true,
-  foodChannelBDriftMult: 3,
-  pheromoneEnabled: true,
-  hungerSense: true, // DEMO: the brain senses its own energy deficit (dead in default config — audit)
-  scentIdentity: true,
-  parcelsEnabled: true,
-  parcelEnergy: 80,
-  parcelSpawnInterval: 6,
-  parcelCapacity: 120,
-  visionFovCost: 0.02,
-  visionAcuityCost: 0.02,
-  // Lifespan + behavior depth (mirrors main.ts): softer starvation clock + satiation-driven wander +
-  // breeding cooldown so creatures dwell well-fed. Override on the CLI to A/B against the old demo.
-  basalCost: 0.06, // RESILIENCE: softer starvation clock (the biggest min-floor lever; stack → floor 67).
-  hungerGatesFood: true,
-  foodDriveFloor: 0.7, // a satiated creature keeps 70% food drive → it relocates + keeps topping up (so it
-  // can breed through the cooldown) instead of parking. Measured: 5× end-pop + 5× births vs floor 0 (the
-  // satiation-parking failure mode that craters reproduction), while still easing off near satiation.
-  bodySense: false, // RESILIENCE: bodySense CRASHES the demo — seed-1 end-pop 8 → 931, 1/8 extinction gone,
-  // mean end-pop 226 → 347 (8 seeds). The size/diet interoceptive inputs were scale-walled yet tank survival.
-  breedCooldown: 100, // RESILIENCE: faster recovery from dips (adds births/mean-end back over the soft clock).
-  // Migrating pockets (MIRROR FIX — these live in main.ts but had drifted OUT of this headless mirror, so the
-  // probe was measuring a STATIC-food world that's easier than the live demo). Food zones rearrange over time
-  // so creatures must follow the food (kills the "camp on a fixed gradient forever" equilibrium).
-  fertilityDriftRate: 0.5, // RESILIENCE: gentler drift (food still moves, half-rate) so weak starts survive.
-  fertilityDriftInterval: 20,
-  foodPocketDriftRateA: 0.2,
-  foodPocketDriftRateB: 1.0,
-  pocketDriftSpeed: 0.3,
-  // Age / life stages (life-sim-bd8a): juvenile breed-lock + elder senescence tax + costed longevity gene.
-  ageStages: true,
-  // PREDATOR REVIVAL is OFF by default (mirrors main.ts): the bundle (predatorSizeBoost 0.85 + herbivoryExp 0.7
-  // + predationGain 3) revives predators on ~half the seeds but crashes seed-1's world (1076→60), so the demo
-  // keeps the stable all-grazer regime. Override on the CLI to study predators: predatorSizeBoost=0.85 etc.
-};
+// Live-demo overrides — re-exported from the SINGLE shared source (src/app/living-world-config.ts), also
+// used by the browser entry + the vision census, so this probe measures the EXACT world the user watches
+// (no drift). Override on the CLI to A/B against the byte-clean default or to study predators.
+export const DEMO_OVERRIDES: Partial<Config> = livingWorldOverrides;
 
 // ── One seed: run the sim, observe every tick, build the per-seed report, return structured stats ──────
-function runSeed(seed: number, ticks: number, stride: number, overrides: Partial<Config>): SeedResult {
+function runSeed(
+  seed: number,
+  ticks: number,
+  stride: number,
+  overrides: Partial<Config>,
+): SeedResult {
   const config: Config = defaultConfig({ seed, ...overrides });
   const world = new World(config);
 
@@ -668,184 +627,198 @@ export function parseSeeds(spec: string): number[] {
 // side-effect-free, or the importer would trigger a full life-history run on its own argv.
 const isMain = process.argv[1] !== undefined && fileURLToPath(import.meta.url) === process.argv[1];
 if (isMain) {
-const FLAGS = process.argv.slice(2).filter((a) => a.startsWith('--'));
-const POS = process.argv.slice(2).filter((a) => !a.startsWith('--'));
-const DEMO = FLAGS.includes('--demo');
-// Any `--key=value` flag (other than the valueless --demo) is a config override, applied ON TOP of the
-// demo overrides: e.g. `--demo --hungerGatesFood=true --basalCost=0.08`. Coerces true/false/number.
-const setOverrides: Record<string, unknown> = {};
-for (const f of FLAGS) {
-  const eq = f.indexOf('=');
-  if (eq < 0) continue; // valueless flag (--demo)
-  const key = f.slice(2, eq);
-  const raw = f.slice(eq + 1);
-  setOverrides[key] =
-    raw === 'true' ? true : raw === 'false' ? false : /^-?\d*\.?\d+$/.test(raw) ? Number(raw) : raw;
-}
-const OVERRIDES: Partial<Config> = { ...(DEMO ? DEMO_OVERRIDES : {}), ...(setOverrides as Partial<Config>) };
-const TICKS = Number(POS[0] ?? 6000);
-const SEEDS = parseSeeds(POS[1] ?? '1-5');
-const STRIDE = Number(POS[2] ?? 5); // store a full sample every STRIDE ticks (detection is per-tick)
+  const FLAGS = process.argv.slice(2).filter((a) => a.startsWith('--'));
+  const POS = process.argv.slice(2).filter((a) => !a.startsWith('--'));
+  const DEMO = FLAGS.includes('--demo');
+  // Any `--key=value` flag (other than the valueless --demo) is a config override, applied ON TOP of the
+  // demo overrides: e.g. `--demo --hungerGatesFood=true --basalCost=0.08`. Coerces true/false/number.
+  const setOverrides: Record<string, unknown> = {};
+  for (const f of FLAGS) {
+    const eq = f.indexOf('=');
+    if (eq < 0) continue; // valueless flag (--demo)
+    const key = f.slice(2, eq);
+    const raw = f.slice(eq + 1);
+    setOverrides[key] =
+      raw === 'true'
+        ? true
+        : raw === 'false'
+          ? false
+          : /^-?\d*\.?\d+$/.test(raw)
+            ? Number(raw)
+            : raw;
+  }
+  const OVERRIDES: Partial<Config> = {
+    ...(DEMO ? DEMO_OVERRIDES : {}),
+    ...(setOverrides as Partial<Config>),
+  };
+  const TICKS = Number(POS[0] ?? 6000);
+  const SEEDS = parseSeeds(POS[1] ?? '1-5');
+  const STRIDE = Number(POS[2] ?? 5); // store a full sample every STRIDE ticks (detection is per-tick)
 
-const results: SeedResult[] = [];
-for (const seed of SEEDS) {
-  const ovStr = Object.keys(setOverrides).length ? ` ${JSON.stringify(setOverrides)}` : '';
-  process.stderr.write(`[seed ${seed}] running ${TICKS} ticks${DEMO ? ' (DEMO config)' : ''}${ovStr}…\n`);
-  const r = runSeed(seed, TICKS, STRIDE, OVERRIDES);
-  results.push(r);
-  process.stderr.write(
-    `[seed ${seed}] ${r.alive ? 'ALIVE' : 'EXTINCT'} pop ${r.finalPop} · births ${r.totalBirths} · ` +
-      `maxGen ${r.maxGen} · bred ${r.bredPct.toFixed(0)}% · topDynasty ${r.topDynasty} ` +
-      `(${(100 * r.topDynastyShare).toFixed(0)}% of births) · Δbirths ${r.unattributedBreeds === 0 ? 'ok' : 'WARN'}\n`,
-  );
-}
-
-// Single seed → the per-seed report IS the answer; print it (matches the old single-seed behavior).
-if (results.length === 1) {
-  console.log(results[0]!.reportMd);
-  console.log(`\n[wrote life-histories-seed${SEEDS[0]}.md and .csv]`);
-} else {
-  // ── Cross-seed aggregate ──
-  const A: string[] = [];
-  const p = (s = '') => A.push(s);
-  const n = results.length;
-  const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / (xs.length || 1);
-  const fmtRange = (xs: number[], dp = 0) =>
-    `${mean(xs).toFixed(dp)} [${Math.min(...xs).toFixed(dp)}–${Math.max(...xs).toFixed(dp)}]`;
-
-  p(`# Life-history — cross-seed aggregate (${n} seeds: ${SEEDS.join(', ')}, ${TICKS} ticks each)`);
-  p();
-  p(
-    `Separates typical dynamics from single-run flukes. Each seed is an independent world (different RNG, ` +
-      `same config). Per-seed reports: life-histories-seed{S}.md.`,
-  );
-  p();
-  p(`## Per-seed headline`);
-  p('```');
-  p('seed  state    pop   births  maxGen  bred%   topDyn  share%  top1:2');
-  for (const r of results) {
-    p(
-      `${String(r.seed).padStart(4)}  ${(r.alive ? 'ALIVE' : 'EXTINCT').padEnd(7)} ` +
-        `${String(r.finalPop).padStart(5)} ${String(r.totalBirths).padStart(7)} ` +
-        `${String(r.maxGen).padStart(7)} ${r.bredPct.toFixed(0).padStart(5)}% ` +
-        `${String(r.topDynasty).padStart(7)} ${(100 * r.topDynastyShare).toFixed(0).padStart(5)}% ` +
-        `${(r.top1to2 === Infinity ? '∞' : r.top1to2.toFixed(1)).padStart(6)}`,
+  const results: SeedResult[] = [];
+  for (const seed of SEEDS) {
+    const ovStr = Object.keys(setOverrides).length ? ` ${JSON.stringify(setOverrides)}` : '';
+    process.stderr.write(
+      `[seed ${seed}] running ${TICKS} ticks${DEMO ? ' (DEMO config)' : ''}${ovStr}…\n`,
+    );
+    const r = runSeed(seed, TICKS, STRIDE, OVERRIDES);
+    results.push(r);
+    process.stderr.write(
+      `[seed ${seed}] ${r.alive ? 'ALIVE' : 'EXTINCT'} pop ${r.finalPop} · births ${r.totalBirths} · ` +
+        `maxGen ${r.maxGen} · bred ${r.bredPct.toFixed(0)}% · topDynasty ${r.topDynasty} ` +
+        `(${(100 * r.topDynastyShare).toFixed(0)}% of births) · Δbirths ${r.unattributedBreeds === 0 ? 'ok' : 'WARN'}\n`,
     );
   }
-  p('```');
-  p();
-  p(`## Cross-seed summary (mean [min–max])`);
-  p(`- Survived to run end: **${results.filter((r) => r.alive).length}/${n} seeds**`);
-  p(`- Final population: ${fmtRange(results.map((r) => r.finalPop))}`);
-  p(`- Total births: ${fmtRange(results.map((r) => r.totalBirths))}`);
-  p(`- Deepest generation: ${fmtRange(results.map((r) => r.maxGen))}`);
-  p(
-    `- % ever reproduced: ${fmtRange(
-      results.map((r) => r.bredPct),
-      0,
-    )}%`,
-  );
-  p(`- Median lifespan: ${fmtRange(results.map((r) => r.lsMed))} ticks`);
-  p();
-  p(`## Monopoly check — is one dynasty's dominance typical or a fluke?`);
-  p(
-    `Top dynasty = the single founder with the most transitive descendants. "share%" = that dynasty as a ` +
-      `fraction of ALL in-sim births; "top1:2" = its size over the 2nd-largest dynasty (monopoly sharpness).`,
-  );
-  p(
-    `- Top-dynasty share of births: **${fmtRange(
-      results.map((r) => 100 * r.topDynastyShare),
-      0,
-    )}%**`,
-  );
-  const ratios = results.map((r) => r.top1to2).filter((x) => Number.isFinite(x));
-  p(
-    `- top1:2 ratio: ${ratios.length ? fmtRange(ratios, 1) : 'n/a'}` +
-      `${ratios.length < n ? ` (${n - ratios.length} seed(s) had a single dynasty → ∞)` : ''}`,
-  );
-  const monopolySeeds = results.filter((r) => r.topDynastyShare >= 0.5).length;
-  p(
-    `- Verdict: ${monopolySeeds}/${n} seeds had a SINGLE dynasty owning ≥50% of births → ` +
-      `${monopolySeeds >= Math.ceil(n / 2) ? 'monopoly dominance is **TYPICAL**, not a fluke.' : monopolySeeds === 0 ? 'no seed showed monopoly — the earlier single-run dominance was a **FLUKE**.' : 'mixed — monopoly happens in some seeds but is not the rule.'}`,
-  );
-  p();
 
-  // Per-gene early→late drift consistency across seeds: a trend is robust only if most seeds agree on sign.
-  p(`## Gene drift consistency (early→late cohort Δ, per seed)`);
-  p(
-    `For each gene: how many of the ${n} seeds moved it up vs down, and the mean Δ. A trend is only ` +
-      `believable if the seeds AGREE on direction — split votes mean drift, not selection.`,
-  );
-  p('```');
-  p(`gene                 ↑seeds ↓seeds  meanΔ   agree?`);
-  for (let g = 0; g < SCALAR_GENE_COUNT; g++) {
-    const deltas = results.map((r) => r.lateMeans[g]! - r.earlyMeans[g]!);
-    const up = deltas.filter((d) => d > 1e-6).length;
-    const down = deltas.filter((d) => d < -1e-6).length;
-    const md = mean(deltas);
-    const agree = Math.max(up, down) >= Math.ceil((n * 2) / 3) ? (up >= down ? '↑↑' : '↓↓') : '··';
+  // Single seed → the per-seed report IS the answer; print it (matches the old single-seed behavior).
+  if (results.length === 1) {
+    console.log(results[0]!.reportMd);
+    console.log(`\n[wrote life-histories-seed${SEEDS[0]}.md and .csv]`);
+  } else {
+    // ── Cross-seed aggregate ──
+    const A: string[] = [];
+    const p = (s = '') => A.push(s);
+    const n = results.length;
+    const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / (xs.length || 1);
+    const fmtRange = (xs: number[], dp = 0) =>
+      `${mean(xs).toFixed(dp)} [${Math.min(...xs).toFixed(dp)}–${Math.max(...xs).toFixed(dp)}]`;
+
     p(
-      `${G[g]!.padEnd(20)} ${String(up).padStart(6)} ${String(down).padStart(6)} ` +
-        `${(md >= 0 ? '+' : '') + md.toFixed(2)}`.padStart(8) +
-        `   ${agree}`,
+      `# Life-history — cross-seed aggregate (${n} seeds: ${SEEDS.join(', ')}, ${TICKS} ticks each)`,
     );
-  }
-  p('```');
-  p(`(agree? = ↑↑/↓↓ when ≥⅔ of seeds share a direction; ·· = no consensus)`);
-  p();
-
-  // Pooled generation-vs-gene plot: combine all individuals across seeds by generation depth. Pooling is
-  // sound because generation depth is comparable across seeds, and it suppresses the per-seed noise that
-  // makes deep, low-n generations jump around — the clearest read on WHEN a trait drifts.
-  const poolMaxGen = Math.max(...results.map((r) => r.maxGen));
-  const poolGenN = new Array<number>(poolMaxGen + 1).fill(0);
-  const poolGeneSum: number[][] = Array.from({ length: poolMaxGen + 1 }, () =>
-    new Array<number>(SCALAR_GENE_COUNT).fill(0),
-  );
-  for (const r of results) {
-    for (let gg = 0; gg <= r.maxGen; gg++) {
-      const cnt = r.genHist[gg]!;
-      if (cnt === 0) continue;
-      poolGenN[gg]! += cnt;
-      for (let g = 0; g < SCALAR_GENE_COUNT; g++)
-        poolGeneSum[gg]![g]! += r.geneByGen[gg]![g]! * cnt; // weight by seed's n
+    p();
+    p(
+      `Separates typical dynamics from single-run flukes. Each seed is an independent world (different RNG, ` +
+        `same config). Per-seed reports: life-histories-seed{S}.md.`,
+    );
+    p();
+    p(`## Per-seed headline`);
+    p('```');
+    p('seed  state    pop   births  maxGen  bred%   topDyn  share%  top1:2');
+    for (const r of results) {
+      p(
+        `${String(r.seed).padStart(4)}  ${(r.alive ? 'ALIVE' : 'EXTINCT').padEnd(7)} ` +
+          `${String(r.finalPop).padStart(5)} ${String(r.totalBirths).padStart(7)} ` +
+          `${String(r.maxGen).padStart(7)} ${r.bredPct.toFixed(0).padStart(5)}% ` +
+          `${String(r.topDynasty).padStart(7)} ${(100 * r.topDynastyShare).toFixed(0).padStart(5)}% ` +
+          `${(r.top1to2 === Infinity ? '∞' : r.top1to2.toFixed(1)).padStart(6)}`,
+      );
     }
-  }
-  const poolGeneMean: number[][] = poolGeneSum.map((row, gg) =>
-    poolGenN[gg]! > 0 ? row.map((s) => s / poolGenN[gg]!) : row.map(() => NaN),
-  );
-  p(`## Generation-vs-gene plot — POOLED across all ${n} seeds`);
-  p(
-    `Mean birth-gene at each generation depth, pooled (weighted by per-seed n). Sparkline gen 0 → gen ` +
-      `${poolMaxGen}; ▁ = gene's min across generations, █ = its max. This is the robust read on WHEN a ` +
-      `trait (e.g. vision) drifts as lineages deepen.`,
-  );
-  p('```');
-  const poolPopSeries = poolGenN.map((c) => (c > 0 ? c : NaN));
-  p(
-    `${'individuals/gen'.padEnd(20)} ${sparkline(poolPopSeries)}   gen0=${poolGenN[0]} … gen${poolMaxGen}=${poolGenN[poolMaxGen]}`,
-  );
-  p(`${''.padEnd(20)} ${'·'.repeat(poolMaxGen + 1)}`);
-  for (let g = 0; g < SCALAR_GENE_COUNT; g++) {
-    const series = poolGeneMean.map((row, gg) => (poolGenN[gg]! > 0 ? row[g]! : NaN));
-    const finite = series.filter((v) => Number.isFinite(v));
-    const first = finite[0]!;
-    const last = finite[finite.length - 1]!;
-    const d = last - first;
-    const arrow = Math.abs(d) < 1e-6 ? ' ' : d > 0 ? '↑' : '↓';
+    p('```');
+    p();
+    p(`## Cross-seed summary (mean [min–max])`);
+    p(`- Survived to run end: **${results.filter((r) => r.alive).length}/${n} seeds**`);
+    p(`- Final population: ${fmtRange(results.map((r) => r.finalPop))}`);
+    p(`- Total births: ${fmtRange(results.map((r) => r.totalBirths))}`);
+    p(`- Deepest generation: ${fmtRange(results.map((r) => r.maxGen))}`);
     p(
-      `${G[g]!.padEnd(20)} ${sparkline(series)}   ${first.toFixed(2).padStart(7)} → ${last.toFixed(2).padStart(7)}  ${arrow}`,
+      `- % ever reproduced: ${fmtRange(
+        results.map((r) => r.bredPct),
+        0,
+      )}%`,
+    );
+    p(`- Median lifespan: ${fmtRange(results.map((r) => r.lsMed))} ticks`);
+    p();
+    p(`## Monopoly check — is one dynasty's dominance typical or a fluke?`);
+    p(
+      `Top dynasty = the single founder with the most transitive descendants. "share%" = that dynasty as a ` +
+        `fraction of ALL in-sim births; "top1:2" = its size over the 2nd-largest dynasty (monopoly sharpness).`,
+    );
+    p(
+      `- Top-dynasty share of births: **${fmtRange(
+        results.map((r) => 100 * r.topDynastyShare),
+        0,
+      )}%**`,
+    );
+    const ratios = results.map((r) => r.top1to2).filter((x) => Number.isFinite(x));
+    p(
+      `- top1:2 ratio: ${ratios.length ? fmtRange(ratios, 1) : 'n/a'}` +
+        `${ratios.length < n ? ` (${n - ratios.length} seed(s) had a single dynasty → ∞)` : ''}`,
+    );
+    const monopolySeeds = results.filter((r) => r.topDynastyShare >= 0.5).length;
+    p(
+      `- Verdict: ${monopolySeeds}/${n} seeds had a SINGLE dynasty owning ≥50% of births → ` +
+        `${monopolySeeds >= Math.ceil(n / 2) ? 'monopoly dominance is **TYPICAL**, not a fluke.' : monopolySeeds === 0 ? 'no seed showed monopoly — the earlier single-run dominance was a **FLUKE**.' : 'mixed — monopoly happens in some seeds but is not the rule.'}`,
+    );
+    p();
+
+    // Per-gene early→late drift consistency across seeds: a trend is robust only if most seeds agree on sign.
+    p(`## Gene drift consistency (early→late cohort Δ, per seed)`);
+    p(
+      `For each gene: how many of the ${n} seeds moved it up vs down, and the mean Δ. A trend is only ` +
+        `believable if the seeds AGREE on direction — split votes mean drift, not selection.`,
+    );
+    p('```');
+    p(`gene                 ↑seeds ↓seeds  meanΔ   agree?`);
+    for (let g = 0; g < SCALAR_GENE_COUNT; g++) {
+      const deltas = results.map((r) => r.lateMeans[g]! - r.earlyMeans[g]!);
+      const up = deltas.filter((d) => d > 1e-6).length;
+      const down = deltas.filter((d) => d < -1e-6).length;
+      const md = mean(deltas);
+      const agree =
+        Math.max(up, down) >= Math.ceil((n * 2) / 3) ? (up >= down ? '↑↑' : '↓↓') : '··';
+      p(
+        `${G[g]!.padEnd(20)} ${String(up).padStart(6)} ${String(down).padStart(6)} ` +
+          `${(md >= 0 ? '+' : '') + md.toFixed(2)}`.padStart(8) +
+          `   ${agree}`,
+      );
+    }
+    p('```');
+    p(`(agree? = ↑↑/↓↓ when ≥⅔ of seeds share a direction; ·· = no consensus)`);
+    p();
+
+    // Pooled generation-vs-gene plot: combine all individuals across seeds by generation depth. Pooling is
+    // sound because generation depth is comparable across seeds, and it suppresses the per-seed noise that
+    // makes deep, low-n generations jump around — the clearest read on WHEN a trait drifts.
+    const poolMaxGen = Math.max(...results.map((r) => r.maxGen));
+    const poolGenN = new Array<number>(poolMaxGen + 1).fill(0);
+    const poolGeneSum: number[][] = Array.from({ length: poolMaxGen + 1 }, () =>
+      new Array<number>(SCALAR_GENE_COUNT).fill(0),
+    );
+    for (const r of results) {
+      for (let gg = 0; gg <= r.maxGen; gg++) {
+        const cnt = r.genHist[gg]!;
+        if (cnt === 0) continue;
+        poolGenN[gg]! += cnt;
+        for (let g = 0; g < SCALAR_GENE_COUNT; g++)
+          poolGeneSum[gg]![g]! += r.geneByGen[gg]![g]! * cnt; // weight by seed's n
+      }
+    }
+    const poolGeneMean: number[][] = poolGeneSum.map((row, gg) =>
+      poolGenN[gg]! > 0 ? row.map((s) => s / poolGenN[gg]!) : row.map(() => NaN),
+    );
+    p(`## Generation-vs-gene plot — POOLED across all ${n} seeds`);
+    p(
+      `Mean birth-gene at each generation depth, pooled (weighted by per-seed n). Sparkline gen 0 → gen ` +
+        `${poolMaxGen}; ▁ = gene's min across generations, █ = its max. This is the robust read on WHEN a ` +
+        `trait (e.g. vision) drifts as lineages deepen.`,
+    );
+    p('```');
+    const poolPopSeries = poolGenN.map((c) => (c > 0 ? c : NaN));
+    p(
+      `${'individuals/gen'.padEnd(20)} ${sparkline(poolPopSeries)}   gen0=${poolGenN[0]} … gen${poolMaxGen}=${poolGenN[poolMaxGen]}`,
+    );
+    p(`${''.padEnd(20)} ${'·'.repeat(poolMaxGen + 1)}`);
+    for (let g = 0; g < SCALAR_GENE_COUNT; g++) {
+      const series = poolGeneMean.map((row, gg) => (poolGenN[gg]! > 0 ? row[g]! : NaN));
+      const finite = series.filter((v) => Number.isFinite(v));
+      const first = finite[0]!;
+      const last = finite[finite.length - 1]!;
+      const d = last - first;
+      const arrow = Math.abs(d) < 1e-6 ? ' ' : d > 0 ? '↑' : '↓';
+      p(
+        `${G[g]!.padEnd(20)} ${sparkline(series)}   ${first.toFixed(2).padStart(7)} → ${last.toFixed(2).padStart(7)}  ${arrow}`,
+      );
+    }
+    p('```');
+    p();
+
+    const aggReport = A.join('\n');
+    console.log(aggReport);
+    const aggPath = 'life-histories-multiseed.md';
+    writeFileSync(aggPath, aggReport + '\n');
+    console.log(
+      `\n[wrote ${aggPath} + ${n} per-seed life-histories-seed{${SEEDS.join(',')}}.md/.csv]`,
     );
   }
-  p('```');
-  p();
-
-  const aggReport = A.join('\n');
-  console.log(aggReport);
-  const aggPath = 'life-histories-multiseed.md';
-  writeFileSync(aggPath, aggReport + '\n');
-  console.log(
-    `\n[wrote ${aggPath} + ${n} per-seed life-histories-seed{${SEEDS.join(',')}}.md/.csv]`,
-  );
-}
 } // end if (isMain)
