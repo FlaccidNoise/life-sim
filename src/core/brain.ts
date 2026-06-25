@@ -70,6 +70,7 @@ export function steer(
     eatGate,
     biteGate,
     scentGate,
+    breedGate,
     glow,
     age,
     crowding,
@@ -89,6 +90,7 @@ export function steer(
   const brainGatedEating = cfg.brainGatedEating; // eatGate output throttles intake + costs mobility
   const brainGatedBiting = cfg.brainGatedBiting; // A2a: biteGate output (col 3) is the predation decision
   const brainGatedScent = cfg.brainGatedScent; // A2b: scentGate output (col 4) is the broadcast decision
+  const brainGatedBreeding = cfg.brainGatedBreeding; // A2c: breedGate output (col 5) is the breeding-timing decision
   const eatMovePenalty = cfg.eatMovePenalty; // thrust ×= 1 − eatGate·penalty while eating
   const ageSense = cfg.ageSense; // feed maturity = min(age/ageNorm,1) as an interoceptive input
   const ageNorm = cfg.ageNorm;
@@ -301,6 +303,7 @@ export function steer(
     let eatGateRaw = 0; // eat-gate pre-sigmoid sum (slice B); stays 0 when brainGatedEating is off
     let biteGateRaw = 0; // bite-gate pre-sigmoid sum (A2a); stays 0 when brainGatedBiting is off
     let scentGateRaw = 0; // scent-gate pre-sigmoid sum (A2b); stays 0 when brainGatedScent is off
+    let breedGateRaw = 0; // breed-gate pre-sigmoid sum (A2c); stays 0 when brainGatedBreeding is off
     // Reverse floor: a creature may push backward down to −reverseFrac·maxThrust (0 ⇒ forward-only, the
     // legacy motor). Capped below the forward max so backing away is a slower retreat, not a launch. The
     // `>0` guard keeps the floor at +0 (not −0) when off, so reverseFrac 0 is bit-identical to the old motor.
@@ -368,6 +371,17 @@ export function steer(
           scentGateRaw += hAct[j]! * learnedBrain[w2 + j * HIDDEN_OUTPUTS + 4]!;
       }
       scentGate[i] = 1 / (1 + Math.exp(-scentGateRaw));
+    }
+    // Brain-gated breeding (A2c): a sigmoid timing decision from the hidden layer (output column 5) + a bias.
+    // reproduce() gates breeding on this. EVOLVE-ONLY (no eligibility below — breeding cost would unlearn it).
+    if (brainGatedBreeding) {
+      breedGateRaw = learnedBrain[b + Brain.BREED_GATE_BIAS]!;
+      if (hiddenLayer) {
+        const w2 = b + HIDDEN_W2;
+        for (let j = 0; j < HIDDEN_UNITS; j++)
+          breedGateRaw += hAct[j]! * learnedBrain[w2 + j * HIDDEN_OUTPUTS + 5]!;
+      }
+      breedGate[i] = 1 / (1 + Math.exp(-breedGateRaw));
     }
     forceX[i] = thrust * Math.cos(nh);
     forceY[i] = thrust * Math.sin(nh);
@@ -535,7 +549,8 @@ export function learn(
         g === Brain.THRUST_BIAS ||
         g === Brain.EAT_GATE_BIAS ||
         g === Brain.BITE_GATE_BIAS ||
-        g === Brain.SCENT_GATE_BIAS
+        g === Brain.SCENT_GATE_BIAS ||
+        g === Brain.BREED_GATE_BIAS
       )
         continue;
       const w0 = brain[b + g]!; // genome instinct = the anchor the deviation relaxes toward
