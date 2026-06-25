@@ -102,6 +102,15 @@ export interface Config {
    *  per grazed unit than a specialist eating its own channel. This is what pulls FORAGE_PREF off 0.5 and
    *  into two niches (the owner's "everyone is gray" fix). 1 = no penalty (legacy). Read at foodChannels≥2. */
   forageGeneralistFloor: number;
+  /** Availability-weight the TWO-channel eat budget (mirrors the 3-channel branch). false = legacy split:
+   *  the budget is allocated by FORAGE_PREF alone (budget·(1−pref) on A, budget·pref on B) REGARDLESS of
+   *  what biomass is present — so a soft B-specialist that drifts onto A-only food wastes its B share on an
+   *  empty channel and slowly starves, which collapses the fugitive B niche to an A-monoculture. true =
+   *  allocate by pref·localBiomass (renormalized): the budget flows to the resource actually present, so an
+   *  off-channel specialist falls back to what's there and survives transit between drifting pockets — the
+   *  B niche stays viable. The specialization-bonus commitment reward is unchanged. Only read at
+   *  foodChannels===2; equal-availability cells (both channels present) are identical to the legacy split. */
+  forageAvailabilityWeighted: boolean;
   /** Max biomass an organism ingests per tick from its current cell (→ energy 1:1). */
   eatRate: number;
   /** Basal metabolic cost per tick (the starvation clock — high enough that not-eating kills). */
@@ -673,6 +682,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     foodChannelRatio: 0.5, // symmetric A/B split when channels===2 (total per-cell cap unchanged)
     forageSpecBonus: 0.5, // specialists convert up to 1.5× energy (the disruptive niche-split pressure)
     forageGeneralistFloor: 0.85, // gentle generalist penalty: pulls FORAGE_PREF off 0.5 without a t=0 founder crash
+    forageAvailabilityWeighted: false, // legacy pref-only 2-channel split; demo opts in (keeps the fugitive B niche alive)
     eatRate: 2,
     basalCost: 0.12, // low starvation clock → longer lives + a SOFTER early crash, so predator founders
     // survive the sparse phase long enough to reach the prey boom (predator-viability fix; was 0.2)

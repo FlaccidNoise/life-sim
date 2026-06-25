@@ -343,6 +343,90 @@ describe('metabolize two-channel niche split (lever B)', () => {
   });
 });
 
+describe('metabolize two-channel availability-weighting (fugitive-B-niche fix)', () => {
+  // forageAvailabilityWeighted: a soft specialist OFF its preferred resource falls back to what's present
+  // instead of wasting its preferred share on an empty channel and starving — the fix that keeps the
+  // drifting/fugitive B niche alive (place-coupled pockets where one channel is locally absent).
+  const base = {
+    basalCost: 0,
+    moveCost: 0,
+    satiatedThreshold: 1000,
+    foodChannels: 2,
+    forageSpecBonus: 0.5,
+    forageGeneralistFloor: 0.7,
+  } as const;
+  const cfgLegacy = defaultConfig({ ...base, forageAvailabilityWeighted: false });
+  const cfgAvail = defaultConfig({ ...base, forageAvailabilityWeighted: true });
+  // A-only cell: build the balanced dual field, then strip channel B at (10,10) so only A is present there.
+  const aOnlyFood = (): FoodField => {
+    const f = new FoodField(W, H, 16, 16, 10, 1, 2, 0.5);
+    f.grazeAt2(10, 10, 100); // remove all of channel B at this cell (B cap was 5)
+    return f;
+  };
+  const forager = (cfg: ReturnType<typeof defaultConfig>): OrganismStore => {
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.x[i] = 10;
+    s.y[i] = 10;
+    s.energy[i] = 5;
+    genes(s, i, cfg, { [ScalarGene.EAT_RATE]: 2, [ScalarGene.FORAGE_PREF]: 0.8 });
+    s.rebuildLive();
+    return s;
+  };
+
+  it('LEGACY: a soft B-specialist (pref 0.8) on A-only food under-eats (wastes its B share on empty B)', () => {
+    const s = forager(cfgLegacy);
+    const food = aOnlyFood();
+    metabolize(s, food, hashOf(s), cfgLegacy);
+    // budget 2 split by pref: takeA=2·0.2=0.4 from A, takeB=2·0.8=1.6 but B is empty → 0. spec(0.8)=1.18.
+    expect(s.energy[0]).toBeCloseTo(5 + 0.4 * 1.18); // gained 0.472 — starving despite A all around
+    expect(food.sampleAt(10, 10)).toBeCloseTo(5 - 0.4); // only 0.4 of the available A grazed
+  });
+
+  it('AVAIL-WEIGHTED: the same forager spends its full budget on the present resource (A)', () => {
+    const s = forager(cfgAvail);
+    const food = aOnlyFood();
+    metabolize(s, food, hashOf(s), cfgAvail);
+    // availability renormalizes the budget onto A (B absent): takeA=2 from A, takeB=0. spec(0.8)=1.18.
+    expect(s.energy[0]).toBeCloseTo(5 + 2 * 1.18); // gained 2.36 — fallback feeds it (5× the legacy)
+    expect(food.sampleAt(10, 10)).toBeCloseTo(5 - 2); // full budget grazed from A
+  });
+
+  it('no resource present (both channels empty under foot) → gained 0, only upkeep is paid', () => {
+    const s = forager(cfgAvail);
+    const food = aOnlyFood();
+    food.grazeAt(10, 10, 100); // strip channel A too → this cell is now barren in both channels
+    const before = s.energy[0]!;
+    metabolize(s, food, hashOf(s), cfgAvail);
+    expect(s.energy[0]).toBeLessThanOrEqual(before); // no food gained (eSum=0 guard); costs are zeroed in cfg
+    expect(s.energy[0]).toBeCloseTo(before); // basalCost/moveCost are 0 here → energy unchanged, not NaN
+    expect(food.sampleAt(10, 10)).toBeCloseTo(0); // nothing to graze
+  });
+
+  it('equal availability is byte-identical to the legacy split (no regression where both present)', () => {
+    // Generalist pref 0.5 on a BALANCED field: availability-weighting reduces to the 50/50 legacy split.
+    const mk = (cfg: ReturnType<typeof defaultConfig>): OrganismStore => {
+      const s = new OrganismStore(4);
+      const i = s.alloc();
+      s.x[i] = 10;
+      s.y[i] = 10;
+      s.energy[i] = 5;
+      genes(s, i, cfg, { [ScalarGene.EAT_RATE]: 2, [ScalarGene.FORAGE_PREF]: 0.5 });
+      s.rebuildLive();
+      return s;
+    };
+    const sL = mk(cfgLegacy);
+    const fL = new FoodField(W, H, 16, 16, 10, 1, 2, 0.5);
+    metabolize(sL, fL, hashOf(sL), cfgLegacy);
+    const sA = mk(cfgAvail);
+    const fA = new FoodField(W, H, 16, 16, 10, 1, 2, 0.5);
+    metabolize(sA, fA, hashOf(sA), cfgAvail);
+    expect(sA.energy[0]).toBe(sL.energy[0]); // exact equality — same arithmetic when both channels are present
+    expect(fA.sampleAt(10, 10)).toBe(fL.sampleAt(10, 10));
+    expect(fA.sampleAt2(10, 10)).toBe(fL.sampleAt2(10, 10));
+  });
+});
+
 describe('metabolize three-channel place-coupled niche (F1)', () => {
   // foodChannels=3, foodPocketChannelMode=1: pockets grow distinct resources (A/B/C round-robin). The eat
   // budget splits across {A,B,C} by the barycentric FORAGE_PREF + FORAGE_PREF_C preference, then converts at

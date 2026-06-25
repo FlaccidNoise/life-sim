@@ -206,9 +206,28 @@ export function metabolize(store: OrganismStore, food: FoodField, hash: SpatialH
       const s01 = 2 * Math.abs(pref - 0.5);
       const spec = cfg.forageGeneralistFloor + (1 + cfg.forageSpecBonus - cfg.forageGeneralistFloor) * s01;
       const budget = effEatRate * herbivory;
-      const takeA = food.grazeAt(x[i]!, y[i]!, budget * (1 - pref));
-      const takeB = food.grazeAt2(x[i]!, y[i]!, budget * pref);
-      gained = (takeA + takeB) * spec;
+      if (cfg.forageAvailabilityWeighted) {
+        // Availability-weighted split (mirrors the 3-channel branch): allocate the budget by pref·localBiomass
+        // so it flows to the resource ACTUALLY present. A soft B-specialist on A-only food spends its whole
+        // budget on A (survives transit) instead of wasting the B share on an empty channel and starving — the
+        // fix that keeps the fugitive B niche alive. Equal-availability cells reduce to the legacy split.
+        const avA = food.sampleAt(x[i]!, y[i]!);
+        const avB = food.sampleAt2(x[i]!, y[i]!);
+        const eA = (1 - pref) * avA;
+        const eB = pref * avB;
+        const eSum = eA + eB;
+        if (eSum > 0) {
+          const takeA = food.grazeAt(x[i]!, y[i]!, (budget * eA) / eSum);
+          const takeB = food.grazeAt2(x[i]!, y[i]!, (budget * eB) / eSum);
+          gained = (takeA + takeB) * spec;
+        } else {
+          gained = 0; // no preferred resource present here
+        }
+      } else {
+        const takeA = food.grazeAt(x[i]!, y[i]!, budget * (1 - pref));
+        const takeB = food.grazeAt2(x[i]!, y[i]!, budget * pref);
+        gained = (takeA + takeB) * spec;
+      }
     } else if (cfg.foodChannels === 3) {
       // THREE place-coupled channels {A,B,C} with per-pocket segregation. Preference is a barycentric weight
       // (same wA/wB/wC as sense.ts), but the eat budget is allocated by preference WEIGHTED BY LOCAL
