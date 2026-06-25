@@ -76,6 +76,7 @@ const GENE_LABELS: Record<number, string> = {
   [ScalarGene.SENSE_RANGE_B]: 'senseRangeB',
   [ScalarGene.SENSE_RANGE_C]: 'senseRangeC',
   [ScalarGene.PHERO_DEPOSIT]: 'pheroDeposit',
+  [ScalarGene.DAMPING]: 'damping',
 };
 
 /** The full field registry: energy + age + every scalar gene (range pulled from SCALAR_GENE_SPECS). */

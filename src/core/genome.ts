@@ -188,7 +188,7 @@ export const SCALAR_GENE_SPECS: readonly ScalarGeneSpec[] = [
  *  RNG when its gate is off, so the draw stream is byte-identical for any OFF subset (the FORAGE_PREF
  *  pattern generalized). Every gated gene lives at the tail (17..21) after all always-drawn genes; the
  *  gates are monotonic in foodChannels so widening FORAGE_PREF's gate from `!==2` to `<2` preserves the
- *  channels=1 (skip) and channels=2 (draw) streams exactly. */
+ *  channels=1 (skip) and channels=2 (draw) streams exactly. (22/DAMPING is always-drawn, ungated.) */
 export function scalarGeneGatedOff(g: number, cfg: Config): boolean {
   if (g === ScalarGene.FORAGE_PREF) return cfg.foodChannels < 2;
   if (
