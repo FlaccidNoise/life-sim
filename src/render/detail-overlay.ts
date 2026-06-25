@@ -16,6 +16,9 @@ export class DetailOverlay {
   private camY: number;
   private zoom = 1;
   private opts: VisualOpts = { showCone: false };
+  // When false, draw() clears the overlay and skips the per-creature Canvas2D pass entirely (the zoomed-in
+  // sprite rendering). The far swarm stays on the WebGL pass, so the world is still visible — just as dots.
+  private enabled = true;
 
   constructor(
     private readonly host: HTMLCanvasElement,
@@ -61,6 +64,10 @@ export class DetailOverlay {
     this.opts.showCone = v;
   }
 
+  setEnabled(v: boolean): void {
+    this.enabled = v;
+  }
+
   setCamera(x: number, y: number, zoom: number): void {
     this.camX = x;
     this.camY = y;
@@ -96,6 +103,7 @@ export class DetailOverlay {
     const ctx = this.ctx;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    if (!this.enabled) return; // sprite/detail pass disabled — far swarm still renders on the WebGL pass
     const { liveIndices, liveCount, x, y } = store;
     const W = this.canvas.width;
     const H = this.canvas.height;
