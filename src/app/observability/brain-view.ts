@@ -508,7 +508,7 @@ export class BrainView {
       ctx.fill();
     }
 
-    // Output nodes (reset to the standard font — only 4 outputs, plenty of room).
+    // Output nodes (reset to the standard font — 5 outputs: turn/thrust/eat/glow/bite, plenty of room).
     ctx.font = `${Math.round(10 * dpr)}px ui-monospace, monospace`;
     const drawOut = (o: number, label: string, value: number): void => {
       const oy = outY(o);
