@@ -123,6 +123,9 @@ export function hunt(store: OrganismStore, hash: SpatialHash, cfg: Config): void
     energy[i] = energy[i]! + drain * predationGain;
     // The bite landed → arm the handling-time refractory so this predator can't feed again for
     // huntHandlingTime ticks (the Type-II cap on kills/time). Gated so OFF never writes the counter.
+    // Tuner note: metabolize() decrements this counter LATER IN THE SAME TICK, so the bite-tick is consumed
+    // by that same-tick decrement — huntHandlingTime=N means the predator feeds again exactly N ticks after a
+    // kill (arm N → end this tick at N−1 → N−1 further skipped ticks → eligible again on the Nth tick).
     if (huntHandlingTime > 0) huntCooldownLeft[i] = huntHandlingTime;
     // Red Queen counter-bite (lever E1): the prey bites back — the predator pays back counterBiteFraction
     // of the prey's DAMAGE gene. The drain already landed (a costly bite is still a bite) and the prey is
