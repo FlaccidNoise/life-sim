@@ -316,8 +316,10 @@ describe('computeBrainState', () => {
     const st = computeBrainState(s, c, i);
     steer(s, false, c.eligLambda, c.motorSquash, c);
     expect(st.biteGate).toBeCloseTo(s.biteGate[i]!, 10); // inspector == sim
-    // The hidden→bite term is genuinely contributing (not just the bias): biteGate ≈ sigmoid(0.3 + 0.38·0.6).
-    expect(st.biteGate).toBeGreaterThan(0.5);
+    // Correct (col 3, w 0.6) → sigmoid(0.3+0.38·0.6) ≈ 0.629. A bias-only / wrong-column read → sigmoid(0.3) ≈
+    // 0.574, so the >0.60 lower bound (not 0.5) is what actually proves the hidden→bite term lands (parity alone
+    // would pass if BOTH steer and the inspector read the same wrong column).
+    expect(st.biteGate).toBeGreaterThan(0.6);
     expect(st.biteGate).toBeLessThan(0.7); // non-saturated (would be ~1 if it read a saturating path)
   });
 
@@ -339,7 +341,9 @@ describe('computeBrainState', () => {
     const st = computeBrainState(s, c, i);
     steer(s, false, c.eligLambda, c.motorSquash, c);
     expect(st.scentGate).toBeCloseTo(s.scentGate[i]!, 10);
-    expect(st.scentGate).toBeGreaterThan(0.5);
+    // Correct (col 4, w 0.6) → sigmoid(0.3+0.38·0.6) ≈ 0.629. A bias-only / wrong-column read → sigmoid(0.3) ≈
+    // 0.574, so the >0.60 lower bound (not 0.5) is what actually catches a wrong W2 column (not just the parity line).
+    expect(st.scentGate).toBeGreaterThan(0.6);
     expect(st.scentGate).toBeLessThan(0.7); // non-saturated; a wrong W2 column (e.g. 3) changes the value
   });
 

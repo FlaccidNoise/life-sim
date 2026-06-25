@@ -590,6 +590,15 @@ const FOUNDER_BRAIN: readonly number[] = [
   ...new Array<number>(4).fill(0),
 ];
 
+// Layout guard: FOUNDER_BRAIN is hand-maintained but indexed by `g` up to BRAIN_GENES in seedGenome (which
+// reads FOUNDER_BRAIN[g]! with a non-null assertion). An off-by-one from a layout edit would otherwise read
+// `undefined`, producing NaN founder weights that silently poison the run. Fail loudly at module load instead.
+if (FOUNDER_BRAIN.length !== BRAIN_GENES) {
+  throw new Error(
+    `FOUNDER_BRAIN length ${FOUNDER_BRAIN.length} !== BRAIN_GENES ${BRAIN_GENES} — a layout edit is out of sync`,
+  );
+}
+
 /** Seed a founder's genome: founder brain + Gaussian spread, random hue (lineage colors diverge).
  *  The 8 env-sense weights (wall/flow) and the 2 hunger weights are GATED: a WALL weight is drawn only
  *  when `wallSenseGenes`, a FLOW weight only when `flowSenseGenes`, a HUNGER weight only when `hungerSense`.
