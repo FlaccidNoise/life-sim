@@ -66,11 +66,11 @@ let config: Config = defaultConfig({
   // Migrating pockets — two crossing seasonal currents: channel A creeps slowly one way, channel B sweeps
   // the normal rate in a different direction, so the resource zones constantly rearrange (kills the static
   // "camp on a fixed gradient forever" equilibrium; food you must follow).
-  fertilityDriftRate: 1,
-  fertilityDriftInterval: 20,
+  fertilityDriftRate: 0.5, // RESILIENCE: gentler drift (was 1 / 0.6) — food still MOVES (chasing behaviour
+  fertilityDriftInterval: 20, // retained) but half-rate, so weak starts aren't stranded chasing fast food.
   foodPocketDriftRateA: 0.2,
   foodPocketDriftRateB: 1.0,
-  pocketDriftSpeed: 0.6,
+  pocketDriftSpeed: 0.3,
   // Pheromones (delayed-feedback substrate).
   pheromoneEnabled: true,
   hungerSense: true, // DEMO: the brain senses its own energy deficit (dead in default config — audit)
@@ -89,14 +89,16 @@ let config: Config = defaultConfig({
   // hungerGatesFood makes a full creature's food-seeking fade so it wanders on its other drives, and
   // breedCooldown spaces reproduction so creatures actually DWELL well-fed (the regime the gate needs —
   // measured: cooldown 150 → satiation dwell appears + median lifespan +30%, %bred up). All live-tunable.
-  basalCost: 0.08,
+  basalCost: 0.06, // RESILIENCE: softer starvation clock (0.08→0.06) — the single biggest min-floor lever
+  // (worst-seed trough 2→5 alone; stacked with breedCooldown+gentler-drift → 67). Longer lives, no extinctions.
   hungerGatesFood: true,
   foodDriveFloor: 0.7, // a satiated creature keeps 70% food drive → relocates + keeps topping up (can breed
   // through the cooldown) instead of parking on empty food. Measured: 5× end-pop + 5× births vs floor 0.
   bodySense: false, // RESILIENCE: bodySense (own size/diet/crowding interoceptive inputs) CRASHES the demo —
   // measured seed-1 end-pop 8 → 931, the 1/8 extinction eliminated, mean end-pop 226 → 347 across 8 seeds.
   // Those inputs were scale-walled (barely behavioral) but the constant size/diet synapses tank survival.
-  breedCooldown: 150,
+  breedCooldown: 100, // RESILIENCE: faster recovery from population dips (150→100) — adds births/mean-end
+  // back on top of the softer starvation clock without re-introducing the over-boom of an even lower basalCost.
   // Age / life stages (life-sim-bd8a): juvenile (can't breed) → adult → elder (senescence tax = death of
   // old age). Tail-gated genes MATURITY_AGE/SENESCENCE_AGE evolve in-life. Measured under this demo config
   // (4000t seed1): the immortal tail is capped (max lifespan 3832→2455), the population thrives (54% bred),
