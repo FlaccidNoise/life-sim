@@ -174,12 +174,7 @@ describe('metabolize', () => {
       s.energy[i] = 50;
       genes(s, i, cfg); // herbivore, centred genes → no gene upkeep, efficiency 1
       s.rebuildLive();
-      metabolize(
-        s,
-        food,
-        hashOf(s),
-        defaultConfig({ basalCost: 0.4, moveCost: 0, deadWaterCost }),
-      );
+      metabolize(s, food, hashOf(s), defaultConfig({ basalCost: 0.4, moveCost: 0, deadWaterCost }));
       return 50 - s.energy[i];
     };
     expect(lossAt(0)).toBeCloseTo(0.4); // OFF: just basal (no food in dead water → no graze income)
@@ -823,11 +818,103 @@ describe('hunt (predation)', () => {
   });
 });
 
+describe('hunt Holling Type-II handling-time refractory (huntHandlingTime)', () => {
+  // After a SUCCESSFUL bite a predator is "busy handling prey" for huntHandlingTime ticks: hunt() skips it
+  // while huntCooldownLeft>0, and metabolize() ticks that counter down. This caps kills-per-time (Type-II
+  // functional response) regardless of prey density. All metabolize costs zeroed so energy moves ONLY via
+  // hunt — the prey's energy is the clean "did a bite land?" signal, independent of any predator upkeep.
+  const cfg = defaultConfig({
+    biteRange: 12,
+    damage: 5,
+    worldWidth: W,
+    worldHeight: H,
+    huntHandlingTime: 5,
+    basalCost: 0,
+    moveCost: 0,
+    deadWaterCost: 0,
+    sizeCost: 0,
+    damageCost: 0,
+  });
+  const mkHash = (s: OrganismStore): SpatialHash => {
+    const h = new SpatialHash(W, H, 12, 8); // cell = biteRange
+    h.build(s);
+    return h;
+  };
+
+  it('a successful bite arms the refractory; the predator cannot feed again until it counts down to 0', () => {
+    const s = new OrganismStore(4);
+    const pred = s.alloc();
+    const prey = s.alloc();
+    s.x[pred] = 50;
+    s.y[pred] = 50;
+    s.energy[pred] = 20;
+    s.x[prey] = 54; // 4 units away, within biteRange 12
+    s.y[prey] = 50;
+    s.energy[prey] = 1000; // huge so it survives many bites and never confounds with a cull
+    genes(s, pred, cfg, { [ScalarGene.DIET]: 1, [ScalarGene.DAMAGE]: 5, [ScalarGene.SIZE]: 10 });
+    genes(s, prey, cfg, { [ScalarGene.DIET]: 0, [ScalarGene.SIZE]: 5 }); // small enough to eat
+    s.rebuildLive();
+    const hash = mkHash(s); // positions never change in this test → reuse it for hunt + metabolize
+
+    // First hunt: the bite lands. Predator energy rises and the handling-time refractory is armed.
+    hunt(s, hash, cfg);
+    expect(s.energy[pred]).toBeCloseTo(20 + 5 * cfg.predationGain); // fed (drain 5 × gain)
+    expect(s.energy[prey]).toBeCloseTo(1000 - 5); // prey lost the drain
+    expect(s.huntCooldownLeft[pred]!).toBe(5); // refractory armed to huntHandlingTime
+
+    // The 4 refractory ticks: metabolize counts the cooldown 5→1 and hunt() refuses to feed while it is >0.
+    for (let expected = 4; expected >= 1; expected--) {
+      const preyBefore = s.energy[prey]!;
+      const predBefore = s.energy[pred]!;
+      metabolize(s, new FoodField(W, H, 16, 16, 10, 0), hash, cfg); // empty food → no graze income
+      expect(s.huntCooldownLeft[pred]!).toBe(expected); // decremented by exactly 1
+      hunt(s, hash, cfg);
+      expect(s.energy[prey]).toBeCloseTo(preyBefore); // busy handling → no bite landed
+      expect(s.energy[pred]).toBeCloseTo(predBefore); // predator gained nothing this tick
+    }
+
+    // One more metabolize drives the cooldown to 0 → the predator may feed again on the next hunt.
+    metabolize(s, new FoodField(W, H, 16, 16, 10, 0), hash, cfg);
+    expect(s.huntCooldownLeft[pred]!).toBe(0);
+    const preyBefore = s.energy[prey]!;
+    hunt(s, hash, cfg);
+    expect(s.energy[prey]).toBeCloseTo(preyBefore - 5); // bite lands again
+    expect(s.huntCooldownLeft[pred]!).toBe(5); // and the refractory re-arms
+  });
+
+  it('huntHandlingTime 0 (OFF) never arms the refractory — a predator can bite every tick', () => {
+    const off = { ...cfg, huntHandlingTime: 0 };
+    const s = new OrganismStore(4);
+    const pred = s.alloc();
+    const prey = s.alloc();
+    s.x[pred] = 50;
+    s.y[pred] = 50;
+    s.energy[pred] = 20;
+    s.x[prey] = 54;
+    s.y[prey] = 50;
+    s.energy[prey] = 1000;
+    genes(s, pred, off, { [ScalarGene.DIET]: 1, [ScalarGene.DAMAGE]: 5, [ScalarGene.SIZE]: 10 });
+    genes(s, prey, off, { [ScalarGene.DIET]: 0, [ScalarGene.SIZE]: 5 });
+    s.rebuildLive();
+    const hash = mkHash(s);
+    hunt(s, hash, off);
+    expect(s.huntCooldownLeft[pred]!).toBe(0); // OFF path never writes the counter
+    metabolize(s, new FoodField(W, H, 16, 16, 10, 0), hash, off);
+    const preyBefore = s.energy[prey]!;
+    hunt(s, hash, off); // no refractory → bites again immediately
+    expect(s.energy[prey]).toBeCloseTo(preyBefore - 5);
+  });
+});
+
 describe('depositScent brain-gated broadcast (A2b)', () => {
   // A grazer (diet 0, hue 0) with a positive PHERO_DEPOSIT gene broadcasts into the PREY channel. With
   // brainGatedScent ON the deposited amount is scaled by the creature's scentGate: a shut gate (0) lays
   // NOTHING, an open gate (1) lays the full passive amount. pheroDepositStrength 1 so amount == the gene.
-  const cfg = defaultConfig({ brainGatedScent: true, pheroDepositStrength: 1, scentIdentity: true });
+  const cfg = defaultConfig({
+    brainGatedScent: true,
+    pheroDepositStrength: 1,
+    scentIdentity: true,
+  });
   const scentAt = (gate: number): number => {
     const s = new OrganismStore(4);
     const i = s.alloc();
@@ -851,7 +938,11 @@ describe('depositScent brain-gated broadcast (A2b)', () => {
   });
 
   it('brainGatedScent OFF ignores the gate (unconditional passive deposit)', () => {
-    const off = defaultConfig({ brainGatedScent: false, pheroDepositStrength: 1, scentIdentity: true });
+    const off = defaultConfig({
+      brainGatedScent: false,
+      pheroDepositStrength: 1,
+      scentIdentity: true,
+    });
     const s = new OrganismStore(4);
     const i = s.alloc();
     s.x[i] = 500;
@@ -1021,7 +1112,13 @@ describe('reproduce (breed at the per-creature satiated bar)', () => {
   });
 
   it('breed bar is reproGene+MIN_BAND when the satiated gene is below the repro gene', () => {
-    const c = defaultConfig({ reproOverhead: 2, mutationSigma: 0, sexualReproduction: false, worldWidth: W, worldHeight: H });
+    const c = defaultConfig({
+      reproOverhead: 2,
+      mutationSigma: 0,
+      sexualReproduction: false,
+      worldWidth: W,
+      worldHeight: H,
+    });
     const breeds = (energy: number): number => {
       const s = new OrganismStore(4);
       const p = s.alloc();
@@ -1250,18 +1347,23 @@ describe('sexual reproduction (crossover + compatibility + seeking)', () => {
   // Helper: a store with two adjacent satiated adults, scalar genes seeded compatible or not.
   function twoAdults(dietA: number, dietB: number) {
     const cfg = defaultConfig({
-      sexualReproduction: true, ageStages: false, breedCooldown: 0,
-      satiatedThreshold: 100, reproThreshold: 40, mateContactRange: 50, mateSeekWindow: 5,
+      sexualReproduction: true,
+      ageStages: false,
+      breedCooldown: 0,
+      satiatedThreshold: 100,
+      reproThreshold: 40,
+      mateContactRange: 50,
+      mateSeekWindow: 5,
     });
     const s = new OrganismStore(8);
     const N = SCALAR_GENE_COUNT;
     for (let i = 0; i < 2; i++) {
       const slot = s.alloc();
-      s.x[slot] = 100 + i * 5; s.y[slot] = 100; // 5u apart, within mateContactRange
+      s.x[slot] = 100 + i * 5;
+      s.y[slot] = 100; // 5u apart, within mateContactRange
       s.energy[slot] = 200; // above satiatedBar
-      for (let g = 0; g < N; g++) s.scalarGenes[slot * N + g] = defaultConfig({})[
-        SCALAR_GENE_SPECS[g]!.centerKey
-      ] as number;
+      for (let g = 0; g < N; g++)
+        s.scalarGenes[slot * N + g] = defaultConfig({})[SCALAR_GENE_SPECS[g]!.centerKey] as number;
       s.scalarGenes[slot * N + ScalarGene.SATIATED_THRESHOLD] = 100;
       s.scalarGenes[slot * N + ScalarGene.REPRO_THRESHOLD] = 40;
       s.scalarGenes[slot * N + ScalarGene.BIRTH_ENERGY] = 30;
@@ -1305,14 +1407,19 @@ describe('sexual reproduction (crossover + compatibility + seeking)', () => {
     const s = new OrganismStore(4);
     const N = SCALAR_GENE_COUNT;
     const slot = s.alloc();
-    s.x[slot] = 100; s.y[slot] = 100; s.energy[slot] = 200;
+    s.x[slot] = 100;
+    s.y[slot] = 100;
+    s.energy[slot] = 200;
     for (let g = 0; g < N; g++) s.scalarGenes[slot * N + g] = 1;
     s.scalarGenes[slot * N + ScalarGene.SATIATED_THRESHOLD] = 100;
     s.scalarGenes[slot * N + ScalarGene.REPRO_THRESHOLD] = 40;
     s.rebuildLive();
     const hash = new SpatialHash(cfg.worldWidth, cfg.worldHeight, 2 * cfg.cellRadius, s.capacity);
     let births = 0;
-    for (let t = 0; t < 10; t++) { hash.build(s); births += reproduce(s, new Rng(1), cfg, false, false, null, hash); }
+    for (let t = 0; t < 10; t++) {
+      hash.build(s);
+      births += reproduce(s, new Rng(1), cfg, false, false, null, hash);
+    }
     expect(births).toBe(0);
     expect(s.seeking[slot]).toBe(0); // timed out, exited seeking
   });
@@ -1321,7 +1428,10 @@ describe('sexual reproduction (crossover + compatibility + seeking)', () => {
     const { s, tick } = twoAdults(0, 0);
     const before = s.energy[0]! + s.energy[1]!;
     let bornSlot = -1;
-    for (let t = 0; t < 6 && bornSlot < 0; t++) { tick(); if (s.liveCount > 2) bornSlot = 2; }
+    for (let t = 0; t < 6 && bornSlot < 0; t++) {
+      tick();
+      if (s.liveCount > 2) bornSlot = 2;
+    }
     expect(bornSlot).toBe(2);
     const after = s.energy[0]! + s.energy[1]! + s.energy[2]!;
     // total drops by exactly reproOverhead (provisioning is an internal transfer mother→child).
