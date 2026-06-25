@@ -68,6 +68,12 @@ let config: Config = defaultConfig({
   foodPocketChannelMode: 1,
   foodChannelAWallTied: true,
   foodChannelBDriftMult: 3,
+  // Availability-weight the 2-channel graze: a soft specialist that drifts off its resource falls back to
+  // what's present instead of starving. THIS is what breaks the A-monoculture — without it the fugitive B
+  // niche (B drifts ×3 + migrating pockets) collapses to all-A on most seeds. Measured (bodySense OFF, 5k,
+  // seeds 1/3/5/7): B-specialists go 0%→38-81% on EVERY seed, prefVar ~0.005→0.07-0.13, population stays
+  // sparse (193-486 — no inflation). Leaves forageSpecBonus at its default 0.5 (raising it only bloats pop).
+  forageAvailabilityWeighted: true,
   // Identity-bearing scent (4-channel: prey/predator role + hue signature; passive per-tick deposit).
   // Migrating pockets — two crossing seasonal currents: channel A creeps slowly one way, channel B sweeps
   // the normal rate in a different direction, so the resource zones constantly rearrange (kills the static

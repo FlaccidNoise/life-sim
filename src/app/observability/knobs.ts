@@ -69,10 +69,26 @@ export const KNOB_GROUPS: readonly KnobGroupMeta[] = [
 export const SPECS: readonly KnobSpec[] = [
   // ── World & food ──────────────────────────────────────────────────────────────────────────────────
   { key: 'initialPopulation', label: 'initial pop', min: 1, max: 2000, step: 1, live: false, group: 'world' }, // prettier-ignore
-  { key: 'driftSpeed', label: 'drift speed', min: 0, max: 3, step: 0.1, live: false, group: 'world' },
+  {
+    key: 'driftSpeed',
+    label: 'drift speed',
+    min: 0,
+    max: 3,
+    step: 0.1,
+    live: false,
+    group: 'world',
+  },
   { key: 'flowStrength', label: 'flow strength', min: 0, max: 16, step: 0.5, live: false, group: 'world' }, // prettier-ignore
   { key: 'flowPushStrength', label: 'flow push (drift bodies)', min: 0, max: 1.5, step: 0.05, live: true, group: 'world' }, // prettier-ignore
-  { key: 'foodRegen', label: 'food regen', min: 0, max: 0.2, step: 0.005, live: true, group: 'world' },
+  {
+    key: 'foodRegen',
+    label: 'food regen',
+    min: 0,
+    max: 0.2,
+    step: 0.005,
+    live: true,
+    group: 'world',
+  },
   { key: 'foodPatchRichness', label: 'pocket richness', min: 1, max: 4, step: 0.5, live: false, group: 'world' }, // prettier-ignore
   { key: 'foodPatchRichnessVar', label: 'pocket variation', min: 0, max: 1, step: 0.1, live: false, group: 'world' }, // prettier-ignore
   { key: 'foodMaxFertility', label: 'max fertility', min: 1, max: 6, step: 0.5, live: false, group: 'world' }, // prettier-ignore
@@ -80,9 +96,25 @@ export const SPECS: readonly KnobSpec[] = [
 
   // ── Creature genes (founder centers; seed-time) ─────────────────────────────────────────────────────
   { key: 'maxSpeed', label: 'gene· max speed', min: 1, max: 20, step: 0.5, live: false, group: 'genes' }, // prettier-ignore
-  { key: 'eatRate', label: 'gene· eat rate', min: 0.2, max: 6, step: 0.1, live: false, group: 'genes' },
+  {
+    key: 'eatRate',
+    label: 'gene· eat rate',
+    min: 0.2,
+    max: 6,
+    step: 0.1,
+    live: false,
+    group: 'genes',
+  },
   { key: 'senseStep', label: 'gene· sense range', min: 8, max: 256, step: 4, live: false, group: 'genes' }, // prettier-ignore
-  { key: 'cellRadius', label: 'gene· size', min: 2, max: 32, step: 0.5, live: false, group: 'genes' },
+  {
+    key: 'cellRadius',
+    label: 'gene· size',
+    min: 2,
+    max: 32,
+    step: 0.5,
+    live: false,
+    group: 'genes',
+  },
   { key: 'maxTurn', label: 'gene· max turn', min: 0.05, max: 1.2, step: 0.05, live: false, group: 'genes' }, // prettier-ignore
   { key: 'maxThrust', label: 'gene· max thrust', min: 0.1, max: 4, step: 0.1, live: false, group: 'genes' }, // prettier-ignore
   { key: 'metabolicEfficiency', label: 'gene· metab eff', min: 0.5, max: 2.0, step: 0.05, live: false, group: 'genes' }, // prettier-ignore
@@ -96,9 +128,25 @@ export const SPECS: readonly KnobSpec[] = [
 
   // ── Selection costs (live) ──────────────────────────────────────────────────────────────────────────
   { key: 'maxSpeedCost', label: 'cost· speed', min: 0, max: 0.5, step: 0.01, live: true, group: 'costs' }, // prettier-ignore
-  { key: 'eatRateCost', label: 'cost· eat', min: 0, max: 1, step: 0.01, live: true, group: 'costs' },
+  {
+    key: 'eatRateCost',
+    label: 'cost· eat',
+    min: 0,
+    max: 1,
+    step: 0.01,
+    live: true,
+    group: 'costs',
+  },
   { key: 'senseRangeCost', label: 'cost· sense', min: 0, max: 0.05, step: 0.001, live: true, group: 'costs' }, // prettier-ignore
-  { key: 'maxTurnCost', label: 'cost· turn', min: 0, max: 2, step: 0.05, live: true, group: 'costs' },
+  {
+    key: 'maxTurnCost',
+    label: 'cost· turn',
+    min: 0,
+    max: 2,
+    step: 0.05,
+    live: true,
+    group: 'costs',
+  },
   { key: 'maxThrustCost', label: 'cost· thrust', min: 0, max: 1, step: 0.02, live: true, group: 'costs' }, // prettier-ignore
   { key: 'damageCost', label: 'cost· damage', min: 0, max: 0.5, step: 0.01, live: true, group: 'costs' }, // prettier-ignore
   { key: 'visionRangeCost', label: 'cost· vis range', min: 0, max: 0.2, step: 0.005, live: true, group: 'costs' }, // prettier-ignore
@@ -106,7 +154,15 @@ export const SPECS: readonly KnobSpec[] = [
   { key: 'visionAcuityCost', label: 'cost· vis acuity', min: 0, max: 1, step: 0.02, live: true, group: 'costs' }, // prettier-ignore
 
   // ── Economy & evolution (live) ──────────────────────────────────────────────────────────────────────
-  { key: 'basalCost', label: 'basal cost', min: 0, max: 2, step: 0.05, live: true, group: 'economy' },
+  {
+    key: 'basalCost',
+    label: 'basal cost',
+    min: 0,
+    max: 2,
+    step: 0.05,
+    live: true,
+    group: 'economy',
+  },
   // Satiation food-drive floor (only bites when the hunger gate is on): 0 = a fed creature parks (births
   // crater); 1 = gate off (always forages). 0.7 keeps it relocating + topping up so it can breed.
   { key: 'foodDriveFloor', label: 'food-drive floor', min: 0, max: 1, step: 0.05, live: true, group: 'economy' }, // prettier-ignore
@@ -117,7 +173,15 @@ export const SPECS: readonly KnobSpec[] = [
   { key: 'predatorFraction', label: 'predator frac', min: 0, max: 0.6, step: 0.05, live: false, group: 'predation' }, // prettier-ignore
   // hunt scans a neighbourhood sized to biteRange (economy.ts), so it can exceed one hash cell; the
   // default is 16, so the slider reaches 24 to keep the seeded value representable.
-  { key: 'biteRange', label: 'bite range', min: 0, max: 24, step: 1, live: true, group: 'predation' },
+  {
+    key: 'biteRange',
+    label: 'bite range',
+    min: 0,
+    max: 24,
+    step: 1,
+    live: true,
+    group: 'predation',
+  },
   { key: 'predationGain', label: 'predation gain', min: 1, max: 6, step: 0.5, live: true, group: 'predation' }, // prettier-ignore
   { key: 'herbivoryExp', label: 'herbivory exp', min: 0.5, max: 2, step: 0.05, live: true, group: 'predation' }, // prettier-ignore
   { key: 'predatorSeedClusters', label: 'pred nurseries', min: 0, max: 6, step: 1, live: false, group: 'predation' }, // prettier-ignore
@@ -133,4 +197,5 @@ export const SPECS: readonly KnobSpec[] = [
 export const TOGGLES: readonly { key: keyof Config; label: string; group: KnobGroup }[] = [
   { key: 'learningEnabled', label: 'learning on', group: 'economy' },
   { key: 'hungerSense', label: 'hunger sense', group: 'economy' },
+  { key: 'forageAvailabilityWeighted', label: 'forage fallback', group: 'economy' },
 ];
