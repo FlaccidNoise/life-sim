@@ -90,6 +90,8 @@ let config: Config = defaultConfig({
   // measured: cooldown 150 → satiation dwell appears + median lifespan +30%, %bred up). All live-tunable.
   basalCost: 0.08,
   hungerGatesFood: true,
+  foodDriveFloor: 0.7, // a satiated creature keeps 70% food drive → relocates + keeps topping up (can breed
+  // through the cooldown) instead of parking on empty food. Measured: 5× end-pop + 5× births vs floor 0.
   breedCooldown: 150,
   // Age / life stages (life-sim-bd8a): juvenile (can't breed) → adult → elder (senescence tax = death of
   // old age). Tail-gated genes MATURITY_AGE/SENESCENCE_AGE evolve in-life. Measured under this demo config

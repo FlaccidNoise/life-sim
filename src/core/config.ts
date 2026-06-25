@@ -371,7 +371,10 @@ export interface Config {
   /** Scale on the per-tick glow deposit: each creature adds store.glow·glowDepositStrength into its cell. */
   glowDepositStrength: number;
 
-  /** Gaussian σ spread of founder brain weights around the seed brain (initial behavioral variation). */
+  /** Gaussian σ spread of founder brain weights AND scalar genes around the seed center (initial variation).
+   *  NB the population is fragile to this: raising it past ~0.3 floods the founding pool with unfit extremes
+   *  (ruinous costed-gene upkeep + unreachable repro thresholds) that starve before breeding — measured
+   *  births collapse to ~0 at 0.5–0.7. Widen the trait SPACE via the gene RANGES, not this founder spread. */
   founderSigma: number;
   /** Founder SIZE-variety spread: founders' SIZE gene is seeded UNIFORMLY in cellRadius·[1−s, 1+s]
    *  (clamped to the gene range), so distinct body-size niches exist from t0 instead of all clustering
@@ -563,6 +566,15 @@ export interface Config {
    *  doesn't handicap the still-hungry majority). 0.4 ≈ "ease off only in the top 40% of the energy range".
    *  Set ≤0 for the raw-linear gate (drive = hunger). Unused when hungerGatesFood is off. */
   foodGateThreshold: number;
+
+  /** Lower bound on the satiation food-drive (only meaningful when hungerGatesFood is on). The gate's
+   *  drive is floored at this value, so drive ∈ [foodDriveFloor, 1]. 0 = the full gate (a fed creature's
+   *  food gradient is zeroed → it stops relocating and parks in place — the satiation-parking failure mode
+   *  that craters births: a parked creature never tops up its energy and so can't reproduce through the
+   *  breed cooldown). 1 = the gate is effectively off (always forages at full strength → keeps chasing the
+   *  depleting gradient into fresh pockets = roams). Intermediate values let a fed creature keep relocating
+   *  toward fresh food while still easing off near satiation. Default 0 = byte-identical to the pre-floor gate. */
+  foodDriveFloor: number;
 
   // ── Age / life stages (juvenile/adult/elder; OFF by default = byte-identical) ─────────────────────
   /** Master switch for age-dependent metabolism + life stages. false = the two age genes (MATURITY_AGE,
@@ -846,6 +858,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     // Flip on so a full creature stops climbing the food gradient and drifts on its other drives.
     hungerGatesFood: false,
     foodGateThreshold: 0.4, // ease off food-seeking only in the top ~40% of the energy range (unused when gate off)
+    foodDriveFloor: 0, // full gate (byte-identical): a fed creature's food drive falls to 0. >0 keeps it relocating.
     // Age / life stages (OFF default: ageStages false → the 2 age genes never draw, neither the senescence
     // tax nor the maturity gate fires → byte-identical). Flip on to make `age` a real axis: juvenile breeding
     // lock + elder senescence decline + a costed longevity gene. Rate/cost/centers tuned via life-history probe.
