@@ -135,8 +135,8 @@ renderer.setGlow(true, 1);
 const graph = new TimeSeriesGraph(el<HTMLCanvasElement>('graph'), [
   { label: 'pop', color: '#8ad9f2' }, // cyan
   { label: 'food', color: '#7fe0a0' }, // green
-  { label: 'births', color: '#e8d36b' }, // yellow
-  { label: 'deaths', color: '#e08a8a' }, // red
+  { label: 'avg births/t', color: '#e8d36b' }, // yellow — 100-tick trailing rate
+  { label: 'avg deaths/t', color: '#e08a8a' }, // red — 100-tick trailing rate
 ]);
 const inspector = new Inspector(el('inspector'));
 const brainView = new BrainView(el<HTMLCanvasElement>('brain'));
@@ -466,8 +466,7 @@ function rebuild(): void {
   setCreatureVisible(false); // back to the empty state on a fresh world
   setFollowStatus(-1, 0, false);
   syncFollowUi();
-  prevBirths = 0;
-  prevDeaths = 0;
+  vitalSamples = [];
 }
 
 // Inspect: pick the nearest live organism to a screen point.
@@ -566,9 +565,10 @@ let tps = 0;
 // perf: EMA of wall-clock cost per sim tick + the steps taken last frame (display only).
 let stepMsEma = 0;
 let lastStepsPerFrame = 0;
-// vital-rate deltas for the graph (births/deaths since the last frame).
-let prevBirths = 0;
-let prevDeaths = 0;
+// Trailing 100-tick vital window: samples of cumulative {tick, totalBirths, totalDeaths}. The trailing
+// per-tick rate = Δcumulative / Δticks against the oldest sample still spanning ≥100 ticks.
+const VITAL_WINDOW_TICKS = 100;
+let vitalSamples: { tick: number; b: number; d: number }[] = [];
 
 // Render interpolation state: a snapshot of positions BEFORE the most recent step, so the renderer
 // can lerp toward the current state for fluid motion at fractional speeds. Sized to capacity.
@@ -765,14 +765,23 @@ function frame(): void {
       recorder.isFollowedAlive(world.store),
     );
   }
-  const dB = world.totalBirths - prevBirths;
-  const dD = world.totalDeaths - prevDeaths;
-  prevBirths = world.totalBirths;
-  prevDeaths = world.totalDeaths;
-  graph.push(world.tick, [world.population, world.food.total(), dB, dD]);
+  // Trailing 100-tick rates: append this frame's cumulative sample, drop samples beyond the window
+  // (keeping the one that still spans it), then average per tick over the covered span.
+  vitalSamples.push({ tick: world.tick, b: world.totalBirths, d: world.totalDeaths });
+  while (
+    vitalSamples.length > 2 &&
+    world.tick - vitalSamples[1]!.tick >= VITAL_WINDOW_TICKS
+  ) {
+    vitalSamples.shift();
+  }
+  const head = vitalSamples[0]!;
+  const span = Math.max(1, world.tick - head.tick);
+  const avgB = (world.totalBirths - head.b) / span;
+  const avgD = (world.totalDeaths - head.d) / span;
+  graph.push(world.tick, [world.population, world.food.total(), avgB, avgD]);
   graph.render();
   distributions.render(world.store);
-  worldStats.render(world.store, world.lastBirths, world.lastDeaths);
+  worldStats.render(world.store, avgB, avgD);
   controls.setStatus(world.tick, tps, world.population, world.stateHash());
   // keep the selection panel honest if the dot was recycled
   if (selected && !world.store.isAlive(selected.slot, selected.gen)) {
