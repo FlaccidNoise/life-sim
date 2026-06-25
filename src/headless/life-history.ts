@@ -171,6 +171,8 @@ export const DEMO_OVERRIDES: Partial<Config> = {
   foodDriveFloor: 0.7, // a satiated creature keeps 70% food drive → it relocates + keeps topping up (so it
   // can breed through the cooldown) instead of parking. Measured: 5× end-pop + 5× births vs floor 0 (the
   // satiation-parking failure mode that craters reproduction), while still easing off near satiation.
+  bodySense: false, // RESILIENCE: bodySense CRASHES the demo — seed-1 end-pop 8 → 931, 1/8 extinction gone,
+  // mean end-pop 226 → 347 (8 seeds). The size/diet interoceptive inputs were scale-walled yet tank survival.
   breedCooldown: 150,
   // Age / life stages (life-sim-bd8a): juvenile breed-lock + elder senescence tax + costed longevity gene.
   ageStages: true,
