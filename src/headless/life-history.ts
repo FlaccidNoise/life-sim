@@ -166,22 +166,22 @@ export const DEMO_OVERRIDES: Partial<Config> = {
   visionAcuityCost: 0.02,
   // Lifespan + behavior depth (mirrors main.ts): softer starvation clock + satiation-driven wander +
   // breeding cooldown so creatures dwell well-fed. Override on the CLI to A/B against the old demo.
-  basalCost: 0.08,
+  basalCost: 0.06, // RESILIENCE: softer starvation clock (the biggest min-floor lever; stack → floor 67).
   hungerGatesFood: true,
   foodDriveFloor: 0.7, // a satiated creature keeps 70% food drive → it relocates + keeps topping up (so it
   // can breed through the cooldown) instead of parking. Measured: 5× end-pop + 5× births vs floor 0 (the
   // satiation-parking failure mode that craters reproduction), while still easing off near satiation.
   bodySense: false, // RESILIENCE: bodySense CRASHES the demo — seed-1 end-pop 8 → 931, 1/8 extinction gone,
   // mean end-pop 226 → 347 (8 seeds). The size/diet interoceptive inputs were scale-walled yet tank survival.
-  breedCooldown: 150,
+  breedCooldown: 100, // RESILIENCE: faster recovery from dips (adds births/mean-end back over the soft clock).
   // Migrating pockets (MIRROR FIX — these live in main.ts but had drifted OUT of this headless mirror, so the
   // probe was measuring a STATIC-food world that's easier than the live demo). Food zones rearrange over time
   // so creatures must follow the food (kills the "camp on a fixed gradient forever" equilibrium).
-  fertilityDriftRate: 1,
+  fertilityDriftRate: 0.5, // RESILIENCE: gentler drift (food still moves, half-rate) so weak starts survive.
   fertilityDriftInterval: 20,
   foodPocketDriftRateA: 0.2,
   foodPocketDriftRateB: 1.0,
-  pocketDriftSpeed: 0.6,
+  pocketDriftSpeed: 0.3,
   // Age / life stages (life-sim-bd8a): juvenile breed-lock + elder senescence tax + costed longevity gene.
   ageStages: true,
 };
