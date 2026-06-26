@@ -22,8 +22,23 @@ export const livingWorldOverrides: Partial<Config> = {
   // extinct — the area argument ignores that fewer drifting pockets strand the population in gaps). 24 is the
   // measured floor that holds liveness at 8000t across 5 seeds (938/27/325/4319/549, no extinction) while still
   // sparser+blobbier than the 40/8 original. See bfood2-report.md.
-  foodPatchCount: 24,
-  foodPatchRadius: 14,
+  // BIOGEOGRAPHIC DEMES (2026-06-25): concentrate population into DEEP, isolated, STATIC pockets so local
+  // density revives a predation layer (the root fix — at 8192² spread-thin, NND ~75u ≫ biteRange 16u, so
+  // predation was geometrically impossible). Headless (predator-probe, 4 seeds): with these deep pockets the
+  // seeded predator guild goes predExtinct@NEVER on every seed (vs the OLD demo where it died ~t4000 on all
+  // seeds), and densest-pocket localNND collapses to ~12u < biteRange. See the Wave 1-3 sweep in
+  // .superpowers/sdd/ + docs/superpowers/specs/2026-06-25-biogeographic-demes-design.md.
+  // MICRO-POCKETS: many SMALL but DEEP pockets. Small radius bounds each pocket's prey count → total pop
+  // stays ~5-7k (vs ~16-22k with big pockets) which (a) keeps the frame rate smooth at speed and (b) is the
+  // "grand scale, micro-pockets of intense detail" shape — lots of dense little demes, not a few huge blobs.
+  // Live-tested: radius 14 → pop balloons to 16k+ and tanks fps; radius 7 holds ~5-7k while staying locally
+  // dense enough for predation (localNND < biteRange).
+  foodPatchCount: 20, // more regions (more distinct demes / histories)
+  foodPatchRadius: 7, // small footprint per pocket (14→7) → bounded total pop + intense local density
+  foodPatchRichness: 3, // DEEP reservoirs: peak fertility 3 → K = cap·3, a dense prey cluster per pocket
+  foodMaxFertility: 3, // raise the per-cell K clamp so richness>1 actually deepens the reservoir
+  foodPatchRichnessVar: 0.5, // per-pocket depth variation → deep predator-havens vs shallow grazer-refuges
+  deadWaterCost: 0.02, // dead-water tax between pockets → real isolation (residents stay home → demes diverge)
   // Two differentiated resources: channel A wall-tied (structural), channel B drifting in the current.
   foodChannels: 2,
   foodPocketChannelMode: 1,
@@ -39,8 +54,12 @@ export const livingWorldOverrides: Partial<Config> = {
   // Migrating pockets — two crossing seasonal currents: channel A creeps slowly one way, channel B sweeps
   // the normal rate in a different direction, so the resource zones constantly rearrange (kills the static
   // "camp on a fixed gradient forever" equilibrium; food you must follow).
-  fertilityDriftRate: 0.5, // RESILIENCE: gentler drift (was 1 / 0.6) — food still MOVES (chasing behaviour
-  fertilityDriftInterval: 20, // retained) but half-rate, so weak starts aren't stranded chasing fast food.
+  fertilityDriftRate: 0, // DEMES: pocket-center drift OFF — pockets hold a FIXED location so each becomes a
+  // stable deme that builds its own regional history (the "unique evolutionary paths per region" goal).
+  // Drift previously kept food moving to prevent camp-on-gradient stagnation; the bet is that dense LOCAL
+  // predation now supplies the motion/interest instead. (Channel-B flow advection below still smears B
+  // downstream, so resources aren't fully frozen.) The drift-rate knobs below are inert at rate 0.
+  fertilityDriftInterval: 20,
   foodPocketDriftRateA: 0.2,
   foodPocketDriftRateB: 1.0,
   pocketDriftSpeed: 0.3,
@@ -72,9 +91,31 @@ export const livingWorldOverrides: Partial<Config> = {
   // Age / life stages (life-sim-bd8a): juvenile (can't breed) → adult → elder (senescence tax = death of
   // old age). Tail-gated genes MATURITY_AGE/SENESCENCE_AGE evolve in-life. senescenceRate is a live knob.
   ageStages: true,
-  // PREDATOR REVIVAL — available via the knobs (predator size boost / herbivory exp / predation gain), but NOT
-  // on by default: the bundle (predatorSizeBoost 0.85 + herbivoryExp 0.7 + predationGain 3) revives predators on
-  // ~half the seeds, but it makes the world high-variance — on seed 1 the seeded hunters over-graze the prey
-  // and the world drops from ~1076 to ~60. Default keeps the stable all-grazer world (survival-first). To watch
-  // predators: bump "predator size boost" to ~0.85, "predation gain" to 3, "herbivory exp" to 0.7, and reset.
+  // PREDATOR REVIVAL — now ON by default. The bundle was previously OFF because at the OLD spread-thin density
+  // it was high-variance (predators revived on ~half the seeds, over-grazed, crashed). Paired with the DEEP
+  // pockets above it stops fighting geometry: across 4 headless seeds the predator guild persists on every seed
+  // (predExtinct@NEVER). The dynamics still run dense + seed-variable (some seeds boom predators, some stay
+  // sparse) — that per-region variance is the "distinct histories" feature, but the explosiveness is a live
+  // tuning target (predationGain is the knob to ease down if a seed runs to the cap).
+  predatorFraction: 0.3, // FOUND MORE HUNTERS (0.15→0.3): the bootstrap valley kills most predator lineages, so
+  // seeding ~300 (not 150) is what carries a guild through to the prey boom. Live-tested in-browser: at 0.15 the
+  // default seed BUSTS to ~24 predators (dense prey monoculture); at 0.3 it holds ~300 through the valley then
+  // climbs to a visible ~1200-predator layer (~10%) with a cleanly BIMODAL diet distribution (real grazer/hunter
+  // split, not omnivory drift). Founding is the dominant lever on whether the demo seed gets a predator layer.
+  predatorSizeBoost: 0.85, // seed hunters in the upper size band so they can actually catch prey (huntSizeRatio)
+  herbivoryExp: 0.7, // predators lean on hunting but keep a plant fallback to survive the bootstrap valley
+  predationGain: 3, // meat pays enough to sustain hunters through sparse stretches (lower = predators starve)
+  predatorSeedClusters: 8, // found the hunter guild into the 8 deepest pockets so it doesn't die in the gaps
+  dietGeneralistFloor: 0.6, // DIET-AXIS DISRUPTIVE SELECTION: graze + hunt income ×= 0.6 + 0.4·2·|diet−0.5|,
+  // so the omnivore (diet 0.5) earns 60% while committed grazers (diet 0) and hunters (diet 1) earn 100%.
+  // Without this the diet axis has no penalty for the jack-of-all-trades, so the grazer/predator split erodes
+  // to a uniform-omnivore monoculture (omniv 90%, σ→0.10) by ~20k. 0.6 is the measured sweet spot: across 4
+  // seeds at t20k the split PERSISTS (omniv suppressed to 4-20%, predators 14-25%, σ 0.27-0.34) — robust, not
+  // seed-lucky. 0.5 was seed-fragile (tipped to grazer-mono on some seeds), 0.65 let omnivores creep back / taxed
+  // predators out. See diet-bimodal-probe sweeps in .superpowers/sdd/.
+  cannibalism: false, // predators eat only LOWER-diet prey, not each other. With cannibalism ON, when prey
+  // crash the predators sustain themselves by eating each other → a runaway predator monoculture (prey down to
+  // ~400, 85% predators by t10k). OFF restores predator/prey negative frequency-dependence (rare predators
+  // thrive on abundant prey, common predators starve as prey crash → both guilds persist). Measured seed 1
+  // @20k: prey 413→2592, predator fraction 85%→41%. predExtinct@NEVER either way.
 };
