@@ -102,6 +102,13 @@ export interface Config {
    *  per grazed unit than a specialist eating its own channel. This is what pulls FORAGE_PREF off 0.5 and
    *  into two niches (the owner's "everyone is gray" fix). 1 = no penalty (legacy). Read at foodChannels≥2. */
   forageGeneralistFloor: number;
+  /** Diet-axis disruptive selection (the forage-spec pattern mirrored onto DIET): graze AND hunt income
+   *  ×= dietGeneralistFloor + (1−dietGeneralistFloor)·2·|diet−0.5|, so the omnivore (diet 0.5) earns
+   *  dietGeneralistFloor× while committed grazers/hunters (diet 0 or 1) earn 1×. <1 PENALISES omnivory,
+   *  pulling DIET off the jack-of-all-trades midpoint into committed grazer/predator niches. No biomass or
+   *  drain is changed — it's a conversion efficiency on the absorbed energy. 1 = OFF = byte-identical
+   *  (1+(1−1)·d01 = 1, income ×1). No gene, no RNG — a pure coefficient read in the per-creature loops. */
+  dietGeneralistFloor: number;
   /** Availability-weight the TWO-channel eat budget (mirrors the 3-channel branch). false = legacy split:
    *  the budget is allocated by FORAGE_PREF alone (budget·(1−pref) on A, budget·pref on B) REGARDLESS of
    *  what biomass is present — so a soft B-specialist that drifts onto A-only food wastes its B share on an
@@ -688,6 +695,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     foodChannelRatio: 0.5, // symmetric A/B split when channels===2 (total per-cell cap unchanged)
     forageSpecBonus: 0.5, // specialists convert up to 1.5× energy (the disruptive niche-split pressure)
     forageGeneralistFloor: 0.85, // gentle generalist penalty: pulls FORAGE_PREF off 0.5 without a t=0 founder crash
+    dietGeneralistFloor: 1, // OFF (byte-identical): 1+(1−1)·d01 = 1 → income ×1; <1 penalises the omnivore (diet 0.5)
     forageAvailabilityWeighted: false, // legacy pref-only 2-channel split; demo opts in (keeps the fugitive B niche alive)
     eatRate: 2,
     basalCost: 0.12, // low starvation clock → longer lives + a SOFTER early crash, so predator founders
