@@ -62,7 +62,7 @@ function wrapDelta(d: number, size: number): number {
  */
 export function hunt(store: OrganismStore, hash: SpatialHash, cfg: Config): void {
   const { biteRange, worldWidth, worldHeight, cannibalism, predationGain, huntSizeRatio } = cfg;
-  const { counterBiteFraction, huntHandlingTime } = cfg;
+  const { counterBiteFraction, huntHandlingTime, dietGeneralistFloor } = cfg;
   const { liveIndices, liveCount, x, y, energy, scalarGenes, biteGate, huntCooldownLeft } = store;
   const brainGatedBiting = cfg.brainGatedBiting;
   const { cols, rows, bucketStart, sorted } = hash;
@@ -119,8 +119,13 @@ export function hunt(store: OrganismStore, hash: SpatialHash, cfg: Config): void
     energy[best] = energy[best]! - drain;
     // Meat is concentrated energy: the predator absorbs the drain × predationGain. With gain > 1 this
     // deliberately CREATES energy (not strictly conserved) so hunting is a big payoff vs. grazing — the
-    // incentive to seek prey instead of sitting on the food field.
-    energy[i] = energy[i]! + drain * predationGain;
+    // incentive to seek prey instead of sitting on the food field. Diet-axis disruptive selection scales the
+    // absorbed energy by the BITER's dietSpec (the forage-spec pattern mirrored onto DIET): a committed hunter
+    // (diet 1, d01=1) keeps the full payoff while an omnivore (diet→0.5, d01→0) is penalised toward the floor.
+    // floor=1 → dietSpec ≡ 1 → byte-identical (1+(1−1)·d01 = 1, ×1). The drain (above) is unchanged.
+    const d01 = 2 * Math.abs(diet - 0.5);
+    const dietSpec = dietGeneralistFloor + (1 - dietGeneralistFloor) * d01;
+    energy[i] = energy[i]! + drain * predationGain * dietSpec;
     // The bite landed → arm the handling-time refractory so this predator can't feed again for
     // huntHandlingTime ticks (the Type-II cap on kills/time). Gated so OFF never writes the counter.
     // Tuner note: metabolize() decrements this counter LATER IN THE SAME TICK, so the bite-tick is consumed
@@ -293,6 +298,13 @@ export function metabolize(
     } else {
       gained = food.grazeAt(x[i]!, y[i]!, effEatRate * herbivory); // single channel (eatGate-throttled)
     }
+    // Diet-axis disruptive selection (the forage-spec pattern mirrored onto DIET): scale graze income by
+    // dietSpec, which ramps from dietGeneralistFloor at the omnivore midpoint (d01=0) up to 1 for a committed
+    // grazer/hunter (d01=1) — so the jack-of-all-diets earns less per grazed unit than a committed specialist.
+    // floor=1 → dietSpec ≡ 1 → byte-identical (1+(1−1)·d01 = 1, ×1). No RNG, no gene.
+    const d01 = 2 * Math.abs(diet - 0.5);
+    const dietSpec = cfg.dietGeneralistFloor + (1 - cfg.dietGeneralistFloor) * d01;
+    gained *= dietSpec;
     const speed2 = vx[i]! * vx[i]! + vy[i]! * vy[i]!;
     // Bigger bodies are costlier to move (mass): the speed² cost scales by (size/cellRadius)^sizeMoveCostExp.
     let moveFactor = 1;

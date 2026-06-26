@@ -51,6 +51,31 @@ describe('World — Phase 0 determinism contract', () => {
     expect(on.stateHash()).not.toBe(baseline.stateHash());
   });
 
+  it('dietGeneralistFloor 1 (OFF/default) is byte-identical to default; <1 perturbs (diet-axis disruptive selection wired + ablatable)', () => {
+    const baseline = new World(defaultConfig({ seed: 1 }));
+    const off = new World(defaultConfig({ seed: 1, dietGeneralistFloor: 1 }));
+    const on = new World(defaultConfig({ seed: 1, dietGeneralistFloor: 0.5 }));
+    for (let t = 0; t < 1000; t++) {
+      baseline.step();
+      off.step();
+      on.step();
+    }
+    // explicit floor 1 == default → 1+(1−1)·d01 = 1, income ×1 → byte-identical OFF (safeguard #1)
+    expect(off.stateHash()).toBe(baseline.stateHash());
+    // floor<1 diverges → the dietSpec coefficient is actually read by the graze + hunt loops, not dead config
+    expect(on.stateHash()).not.toBe(baseline.stateHash());
+  });
+
+  it('dietGeneralistFloor < 1 stays deterministic: same (config, seed) → byte-identical hash', () => {
+    const a = new World(defaultConfig({ seed: 3, dietGeneralistFloor: 0.5 }));
+    const b = new World(defaultConfig({ seed: 3, dietGeneralistFloor: 0.5 }));
+    for (let t = 0; t < 1000; t++) {
+      a.step();
+      b.step();
+    }
+    expect(a.stateHash()).toBe(b.stateHash());
+  });
+
   it('huntHandlingTime 0 (OFF) is byte-identical to default and never touches huntCooldownLeft (Type-II refractory)', () => {
     // The feature's only behavioral gate: every read/write of huntCooldownLeft is guarded by
     // huntHandlingTime>0, so the OFF path is byte-identical to today and the aux counter stays all-zero.

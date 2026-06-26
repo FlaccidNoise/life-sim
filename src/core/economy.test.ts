@@ -523,6 +523,48 @@ describe('metabolize three-channel place-coupled niche (F1)', () => {
   });
 });
 
+describe('metabolize diet-axis disruptive selection (dietGeneralistFloor)', () => {
+  // Mirror of the forage spec on the DIET axis: graze income ×= dietSpec = floor + (1−floor)·2·|diet−0.5|,
+  // so the omnivore (diet 0.5, d01=0) earns floor× while a committed grazer (diet 0, d01=1) earns 1×.
+  // herbivoryExp 0 makes the graze BUDGET diet-independent, isolating dietSpec as the ONLY diet effect.
+  // Costs zeroed + satiatedThreshold high → the energy delta == graze income. Single channel, cell full (B=10).
+  const food = (): FoodField => new FoodField(W, H, 16, 16, 10, 1);
+  const grazeGain = (dietGeneralistFloor: number, diet: number): number => {
+    const cfg = defaultConfig({
+      basalCost: 0,
+      moveCost: 0,
+      satiatedThreshold: 1000,
+      herbivoryExp: 0,
+      dietGeneralistFloor,
+    });
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.x[i] = 10;
+    s.y[i] = 10;
+    s.energy[i] = 5;
+    genes(s, i, cfg, { [ScalarGene.EAT_RATE]: 2, [ScalarGene.DIET]: diet });
+    s.rebuildLive();
+    metabolize(s, food(), hashOf(s), cfg);
+    return s.energy[i]! - 5; // == graze income (all costs zeroed)
+  };
+
+  it('floor 0.5 PENALISES the omnivore (diet 0.5 → 0.5×) but not a committed grazer (diet 0 → 1×)', () => {
+    expect(grazeGain(0.5, 0)).toBeCloseTo(2); // d01=1 → dietSpec 1 → full budget 2 grazed
+    expect(grazeGain(0.5, 0.5)).toBeCloseTo(1); // d01=0 → dietSpec 0.5 → half
+    expect(grazeGain(0.5, 0.5)).toBeLessThan(grazeGain(0.5, 0)); // omnivore earns LESS than the grazer
+  });
+
+  it('a committed grazer (diet 0) earns the same under floor 0.5 as under floor 1 (no-op at d01=1)', () => {
+    expect(grazeGain(0.5, 0)).toBeCloseTo(grazeGain(1, 0)); // dietSpec=1 at diet 0 regardless of floor
+  });
+
+  it('floor 1 (OFF) is diet-independent: grazer and omnivore earn the SAME graze income (byte-identical no-op)', () => {
+    expect(grazeGain(1, 0)).toBeCloseTo(2);
+    expect(grazeGain(1, 0.5)).toBeCloseTo(2); // dietSpec ≡ 1 for every diet → no penalty
+    expect(grazeGain(1, 0.5)).toBe(grazeGain(1, 0)); // EXACT equality: floor 1 never perturbs the income
+  });
+});
+
 describe('satiatedBar (size-scaled energy reserve)', () => {
   it('scales the full bar with body size — a 2×-size body has a 2× reserve (exp 1)', () => {
     const cfg = defaultConfig({ cellRadius: 6, sizeStoreExp: 1 });
@@ -815,6 +857,64 @@ describe('hunt (predation)', () => {
     };
     expect(preyEnergyAfter(0)).toBe(50); // gate shut → no bite, prey untouched
     expect(preyEnergyAfter(1)).toBeLessThan(50); // gate open → bite lands
+  });
+});
+
+describe('hunt diet-axis disruptive selection (dietGeneralistFloor)', () => {
+  // The forage spec mirrored onto HUNT income: the predator absorbs drain·predationGain·dietSpec, where
+  // dietSpec = floor + (1−floor)·2·|diet−0.5|. A committed hunter (diet 1, d01=1) keeps the full payoff (×1);
+  // an omnivore-hunter (diet 0.6, d01=0.2) is penalised toward the floor. Comparing the SAME predDiet at
+  // floor 0.5 vs floor 1 holds the drain fixed, isolating dietSpec as the only difference in absorption.
+  const cfg = defaultConfig({ biteRange: 12, damage: 5, worldWidth: W, worldHeight: H });
+  const mkHash = (s: OrganismStore): SpatialHash => {
+    const h = new SpatialHash(W, H, 12, 8); // cell = biteRange
+    h.build(s);
+    return h;
+  };
+  // A predator (given diet) over a diet-0 prey 4 units away; returns the predator's energy GAIN this tick.
+  const predGain = (dietGeneralistFloor: number, predDiet: number): number => {
+    const c = defaultConfig({
+      biteRange: 12,
+      damage: 5,
+      worldWidth: W,
+      worldHeight: H,
+      dietGeneralistFloor,
+    });
+    const s = new OrganismStore(4);
+    const pred = s.alloc();
+    const prey = s.alloc();
+    s.x[pred] = 50;
+    s.y[pred] = 50;
+    s.energy[pred] = 20;
+    s.x[prey] = 54; // 4 units away, within biteRange 12
+    s.y[prey] = 50;
+    s.energy[prey] = 30;
+    genes(s, pred, c, {
+      [ScalarGene.DIET]: predDiet,
+      [ScalarGene.DAMAGE]: 5,
+      [ScalarGene.SIZE]: 10,
+    });
+    genes(s, prey, c, { [ScalarGene.DIET]: 0, [ScalarGene.SIZE]: 5 });
+    s.rebuildLive();
+    hunt(s, mkHash(s), c);
+    return s.energy[pred]! - 20;
+  };
+
+  it('floor<1 scales the biter’s absorbed energy by its dietSpec (omnivore-hunter absorbs less than at floor 1)', () => {
+    // diet 0.6 → drain = min(5·0.6, 30) = 3 in BOTH runs; only dietSpec differs (1 vs 0.6), isolating the penalty.
+    expect(predGain(1, 0.6)).toBeCloseTo(3 * cfg.predationGain); // dietSpec 1 → full absorption
+    expect(predGain(0.5, 0.6)).toBeCloseTo(3 * cfg.predationGain * 0.6); // dietSpec 0.5+0.5·0.2 = 0.6
+    expect(predGain(0.5, 0.6)).toBeLessThan(predGain(1, 0.6));
+  });
+
+  it('an omnivore-hunter (diet 0.6) absorbs LESS per bite than a committed hunter (diet 1) under floor 0.5', () => {
+    expect(predGain(0.5, 0.6)).toBeLessThan(predGain(0.5, 1));
+  });
+
+  it('a committed hunter (diet 1) is unpenalised even under floor 0.5 (dietSpec=1 at d01=1)', () => {
+    // drain = min(5·1, 30) = 5; dietSpec at diet 1 = floor + (1−floor)·1 = 1 regardless of floor.
+    expect(predGain(0.5, 1)).toBeCloseTo(5 * cfg.predationGain);
+    expect(predGain(0.5, 1)).toBeCloseTo(predGain(1, 1));
   });
 });
 
