@@ -521,6 +521,9 @@ let tps = 0;
 // perf: EMA of wall-clock cost per sim tick + the steps taken last frame (display only).
 let stepMsEma = 0;
 let lastStepsPerFrame = 0;
+// Status-line determinism digest. stateHash() is O(pop) and walks every heritable gene, so recompute it
+// on the 500ms status cadence (not every frame) and reuse the cached value for the per-frame setStatus.
+let lastHash = '';
 // Trailing 100-tick vital window: samples of cumulative {tick, totalBirths, totalDeaths}. The trailing
 // per-tick rate = Δcumulative / Δticks against the oldest sample still spanning ≥100 ticks.
 const VITAL_WINDOW_TICKS = 100;
@@ -715,8 +718,10 @@ function frame(): void {
     tps = ((world.tick - lastTick) * 1000) / (now - lastT);
     lastT = now;
     lastTick = world.tick;
-    // Perf line updated on the same cadence (hash.stats() scans every bucket — too costly per frame).
+    // Perf line + determinism digest updated on the same cadence (both are O(pop)/bucket scans — too
+    // costly per frame).
     controls.setPerf(stepMsEma, lastStepsPerFrame, world.hash.stats());
+    lastHash = world.stateHash();
     setFollowStatus(
       recorder.following ? recorder.followedSlot : -1,
       recorder.count,
@@ -740,7 +745,7 @@ function frame(): void {
   graph.render();
   distributions.render(world.store);
   worldStats.render(world.store, avgB, avgD);
-  controls.setStatus(world.tick, tps, world.population, world.stateHash());
+  controls.setStatus(world.tick, tps, world.population, lastHash);
   // keep the selection panel honest if the dot was recycled
   if (selected && !world.store.isAlive(selected.slot, selected.gen)) {
     inspector.clear();

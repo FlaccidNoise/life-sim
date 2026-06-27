@@ -513,7 +513,7 @@ export function reproduce(
   let births = 0;
   for (let k = 0; k < n; k++) {
     const p = parents[k]!;
-    if (!store.isAlive(p, parentGens[k]!)) continue; // died in the cull, or its slot was recycled into a newborn, this tick
+    if (!store.isAlive(p, parentGens[k]!)) continue; // dead, or slot recycled into a newborn (see above)
     // Maturity gate (age stages): a juvenile (younger than its MATURITY_AGE gene) cannot breed yet. The skip
     // is BEFORE alloc/RNG (like the cooldown/satiated checks below), so it consumes no RNG; gated on ageStages
     // so the OFF path never reads age/gene and stays byte-identical. A juvenile's breedCooldownLeft is 0, so

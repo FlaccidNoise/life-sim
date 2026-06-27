@@ -40,6 +40,24 @@ describe('OrganismStore', () => {
     expect(live).toEqual([0, 2, 3, 5]);
   });
 
+  it('rebuildLive captures liveGen parallel to liveIndices → guards a slot recycled mid-iteration', () => {
+    // The exact reproduce() hazard: a slot live at rebuildLive is freed (cull) then re-allocated as a
+    // newborn the SAME tick. The captured generation must flag the recycled slot as no-longer-the-original,
+    // so reproduce's isAlive(p, parentGens[k]) skips it instead of re-breeding the newborn as a parent.
+    const s = new OrganismStore(4);
+    for (let i = 0; i < 3; i++) s.alloc(); // slots 0,1,2 live
+    s.rebuildLive();
+    const k = 1;
+    const slot = s.liveIndices[k]!;
+    const capturedGen = s.liveGen[k]!;
+    expect(s.isAlive(slot, capturedGen)).toBe(true); // still the original creature
+    s.free(slot); // culled this tick
+    const child = s.alloc(); // newborn recycles the freed slot (LIFO)
+    expect(child).toBe(slot);
+    expect(s.isAlive(slot)).toBe(true); // bare check: alive (the newborn) — what the OLD buggy guard saw
+    expect(s.isAlive(slot, capturedGen)).toBe(false); // generation guard: correctly stale → newborn skipped
+  });
+
   it('clear() empties and resets allocation to ascending', () => {
     const s = new OrganismStore(4);
     s.alloc();
