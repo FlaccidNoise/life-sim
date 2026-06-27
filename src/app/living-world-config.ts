@@ -113,6 +113,11 @@ export const livingWorldOverrides: Partial<Config> = {
   // seeds at t20k the split PERSISTS (omniv suppressed to 4-20%, predators 14-25%, σ 0.27-0.34) — robust, not
   // seed-lucky. 0.5 was seed-fragile (tipped to grazer-mono on some seeds), 0.65 let omnivores creep back / taxed
   // predators out. See diet-bimodal-probe sweeps in .superpowers/sdd/.
+  huntDietGap: 0.1, // a predator needs a MEANINGFUL diet advantage to eat its target (prey diet ≤ attacker
+  // diet − 0.1), so a 0.78 hunter won't drain a 0.77 near-peer but a 0.8/0.99 hunter still eats a ≤0.5 omnivore.
+  // Stops the unrealistic near-peer cannibalism the strict-lower rule allowed. Size refuge (huntSizeRatio) still
+  // applies. Tuned to 0.1 not 0.25: predators are marginal, and 0.25 starved them out on seed 1 (pred 19%→0%);
+  // 0.1 keeps the bimodal split on all 3 tested seeds (pred 6-34% at t20k) while still killing near-peer kills.
   cannibalism: false, // predators eat only LOWER-diet prey, not each other. With cannibalism ON, when prey
   // crash the predators sustain themselves by eating each other → a runaway predator monoculture (prey down to
   // ~400, 85% predators by t10k). OFF restores predator/prey negative frequency-dependence (rare predators

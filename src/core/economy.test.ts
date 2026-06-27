@@ -722,6 +722,37 @@ describe('hunt (predation)', () => {
     expect(s.energy[prey]).toBeCloseTo(30 - 5 * 0.9); // prey eaten instead
   });
 
+  it('huntDietGap spares a near-peer (0.77) but allows eating a meaningfully-lower omnivore (0.5)', () => {
+    const gapCfg = { ...cfg, cannibalism: false, huntDietGap: 0.25 };
+    // hunter 0.78; a 0.77 near-peer sits NEARER than a 0.5 omnivore. With gap 0.25 the hunter needs
+    // prey diet ≤ 0.78−0.25 = 0.53, so the 0.77 peer is spared and the 0.5 omnivore is eaten.
+    const s = new OrganismStore(4);
+    const hunter = s.alloc();
+    const peer = s.alloc();
+    const prey = s.alloc();
+    s.x[hunter] = 50;
+    s.y[hunter] = 50;
+    s.energy[hunter] = 20;
+    s.x[peer] = 52; // nearer than the omnivore
+    s.y[peer] = 50;
+    s.energy[peer] = 30;
+    s.x[prey] = 56;
+    s.y[prey] = 50; // within biteRange 12
+    s.energy[prey] = 30;
+    genes(s, hunter, cfg, {
+      [ScalarGene.DIET]: 0.78,
+      [ScalarGene.DAMAGE]: 5,
+      [ScalarGene.SIZE]: 10,
+    });
+    // peer small enough to eat (size) + toothless → only the diet-gap can spare it; only 0.01 lower than hunter.
+    genes(s, peer, cfg, { [ScalarGene.DIET]: 0.77, [ScalarGene.DAMAGE]: 0, [ScalarGene.SIZE]: 5 });
+    genes(s, prey, cfg, { [ScalarGene.DIET]: 0.5, [ScalarGene.DAMAGE]: 0, [ScalarGene.SIZE]: 5 });
+    s.rebuildLive();
+    hunt(s, mkHash(s), gapCfg);
+    expect(s.energy[peer]).toBe(30); // 0.77 near-peer spared (within the 0.25 gap)
+    expect(s.energy[prey]).toBeCloseTo(30 - 5 * 0.78); // 0.5 omnivore eaten (drain = damage·hunterDiet)
+  });
+
   it('with cannibalism ON (default), the predator bites the nearest peer', () => {
     const s = new OrganismStore(4);
     const hunter = s.alloc();

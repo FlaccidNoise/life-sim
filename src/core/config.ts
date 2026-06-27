@@ -247,6 +247,12 @@ export interface Config {
    *  itself (prey, not peers) — so similar-diet "guild-mates" are spared, preventing predator-on-
    *  predator drain. Kinship here is the diet gap (the same signal sight uses), not genetic lineage. */
   cannibalism: boolean;
+  /** Minimum DIET advantage a predator needs over its prey (only read when cannibalism is false). A target
+   *  is edible only if its DIET ≤ attacker DIET − this — so prey must be MEANINGFULLY lower on the diet axis,
+   *  not merely an ε lower. 0 = the strict-lower rule (any lower diet is edible) → byte-identical to today.
+   *  0.25 means a 0.78 predator won't eat a 0.77 near-peer (realistic) but a 0.8/0.99 predator can still eat a
+   *  0.5 omnivore. The SIZE refuge (huntSizeRatio) applies on top either way — prey must also be small enough. */
+  huntDietGap: number;
   /** Red Queen counter-damage (lever E1). When a predator lands a bite it pays back this FRACTION of the
    *  prey's DAMAGE gene in energy: predatorEnergy −= counterBiteFraction · preyDAMAGE. 0 = OFF (hunt skips
    *  the subtraction → byte-identical to today). No gene, no RNG — a pure coefficient read in hunt.
@@ -343,8 +349,6 @@ export interface Config {
    *  large value pushes the moved fraction past the CFL=0.25 ceiling and the upwind scheme can go negative. */
   foodChannelBDriftMult: number;
 
-  // ── F2 identity-bearing scent (a 4-channel deposit-and-sense field; pheromoneEnabled master switch) ──
-  /** Master switch for the ScentField + the 16 PHERO brain genes + PHERO_DEPOSIT scalar gene. false =
   // ── Migrating food pockets (the pocket CENTRES drift over time so food moves; OFF default = byte-identical) ──
   /** Master multiplier on pocket drift. 0 (default) = pockets are STATIC: driftPockets is a no-op, no
    *  forked velocity RNG is drawn, no recarve runs → byte-identical to a fixed archipelago (the OFF state).
@@ -757,6 +761,7 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     herbivoryExp: 1.3, // predators get little from algae → lean on HUNTING (max viable on seeds 1/2;
     // obligate carnivory, exp≥1.6, starves predators at this encounter rate — proven by probe)
     cannibalism: true, // current behavior (bite anyone nearest); flip off to spare same-diet peers
+    huntDietGap: 0, // OFF (byte-identical): prey edible if any lower diet. >0 = require a meaningful diet gap
     // Red Queen counter-damage (lever E1) OFF by default: 0 → hunt skips the counter-bite, byte-identical.
     // >0 (live-tune ~0.1–0.3) taxes the predator by counterBiteFraction·preyDAMAGE per bite; the prey-side
     // arms-race response is a hypothesis to probe, not a given (see the interface doc).
