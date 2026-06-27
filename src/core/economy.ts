@@ -502,15 +502,18 @@ export function reproduce(
   walls: Walls | null,
   hash: SpatialHash,
 ): number {
-  // Snapshot the parents up front: alloc() mutates liveIndices' backing only via rebuildLive (not
-  // here), but children land in freed slots — iterating a fixed count avoids touching them anyway.
+  // Snapshot the parents up front. cullDead (earlier this tick) freed the dead slots WITHOUT bumping their
+  // genId, and spawnChildSlot reuses freed slots for newborns — bumping genId on alloc. So a newborn can land
+  // in a freed parent slot this loop hasn't reached yet; guarding on the captured generation (not bare
+  // isAlive) skips it, instead of re-processing the newborn as a breeding parent the same tick it was born.
   const parents = store.liveIndices;
+  const parentGens = store.liveGen;
   const n = store.liveCount;
   const { energy, scalarGenes, age } = store;
   let births = 0;
   for (let k = 0; k < n; k++) {
     const p = parents[k]!;
-    if (!store.isAlive(p)) continue; // died in the cull this tick
+    if (!store.isAlive(p, parentGens[k]!)) continue; // died in the cull, or its slot was recycled into a newborn, this tick
     // Maturity gate (age stages): a juvenile (younger than its MATURITY_AGE gene) cannot breed yet. The skip
     // is BEFORE alloc/RNG (like the cooldown/satiated checks below), so it consumes no RNG; gated on ageStages
     // so the OFF path never reads age/gene and stays byte-identical. A juvenile's breedCooldownLeft is 0, so

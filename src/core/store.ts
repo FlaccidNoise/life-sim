@@ -127,6 +127,10 @@ export class OrganismStore {
 
   /** Ascending list of live slots, rebuilt by rebuildLive(). */
   readonly liveIndices: Uint32Array;
+  /** Generation id of each live slot, parallel to liveIndices, captured at rebuildLive. Lets a consumer
+   *  that allocates into freed slots mid-iteration (reproduce) tell that a slot it hasn't reached yet was
+   *  recycled into a newborn (alloc bumps genId; free does not) rather than still being the original. */
+  readonly liveGen: Uint32Array;
   liveCount = 0;
 
   constructor(capacity: number) {
@@ -172,6 +176,7 @@ export class OrganismStore {
     this.seeking = new Uint8Array(capacity);
     this.seekTicksLeft = new Uint32Array(capacity);
     this.liveIndices = new Uint32Array(capacity);
+    this.liveGen = new Uint32Array(capacity);
     this.clear();
   }
 
@@ -241,9 +246,13 @@ export class OrganismStore {
   /** Rebuild the ascending live-slot list. Call after any births/deaths and before iterating/hashing. */
   rebuildLive(): void {
     let n = 0;
-    const { alive, liveIndices, capacity } = this;
+    const { alive, liveIndices, liveGen, genId, capacity } = this;
     for (let i = 0; i < capacity; i++) {
-      if (alive[i] === 1) liveIndices[n++] = i;
+      if (alive[i] === 1) {
+        liveIndices[n] = i;
+        liveGen[n] = genId[i]!;
+        n++;
+      }
     }
     this.liveCount = n;
   }
