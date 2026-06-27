@@ -132,6 +132,28 @@ describe('World — Phase 0 determinism contract', () => {
     expect(run(dense(10)).hash).toBe(on.hash);
   });
 
+  it('huntDietGap is inert while cannibalism is on (default), and stays deterministic when active (diet-gap refuge)', () => {
+    // huntDietGap only refines the cannibalism=false target filter (diet[j] >= diet − gap), so with the
+    // default cannibalism=true it is never read → setting it changes nothing (byte-identical to default).
+    const baseline = new World(defaultConfig({ seed: 1 }));
+    const inert = new World(defaultConfig({ seed: 1, huntDietGap: 0.5 })); // cannibalism still default true
+    for (let t = 0; t < 400; t++) {
+      baseline.step();
+      inert.step();
+    }
+    expect(inert.stateHash()).toBe(baseline.stateHash()); // gap ignored while cannibalism on → byte-identical
+
+    // When active (cannibalism off + gap > 0): same (config, seed) → byte-identical hash (no RNG, no
+    // nondeterminism introduced by the extra diet comparison).
+    const a = new World(defaultConfig({ seed: 3, cannibalism: false, huntDietGap: 0.3 }));
+    const b = new World(defaultConfig({ seed: 3, cannibalism: false, huntDietGap: 0.3 }));
+    for (let t = 0; t < 200; t++) {
+      a.step();
+      b.step();
+    }
+    expect(a.stateHash()).toBe(b.stateHash());
+  });
+
   it('predatorSizeBoost 0 is byte-identical to default; >0 perturbs (predator founders seeded big, same draw count)', () => {
     const baseline = new World(defaultConfig({ seed: 1 }));
     const off = new World(defaultConfig({ seed: 1, predatorSizeBoost: 0 }));
