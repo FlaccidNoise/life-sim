@@ -62,7 +62,7 @@ function wrapDelta(d: number, size: number): number {
  */
 export function hunt(store: OrganismStore, hash: SpatialHash, cfg: Config): void {
   const { biteRange, worldWidth, worldHeight, cannibalism, predationGain, huntSizeRatio } = cfg;
-  const { counterBiteFraction, huntHandlingTime, dietGeneralistFloor } = cfg;
+  const { counterBiteFraction, huntHandlingTime, dietGeneralistFloor, huntDietGap } = cfg;
   const { liveIndices, liveCount, x, y, energy, scalarGenes, biteGate, huntCooldownLeft } = store;
   const brainGatedBiting = cfg.brainGatedBiting;
   const { cols, rows, bucketStart, sorted } = hash;
@@ -101,7 +101,10 @@ export function hunt(store: OrganismStore, hash: SpatialHash, cfg: Config): void
           if (j === i) continue;
           const jg = j * SCALAR_GENE_COUNT;
           if (scalarGenes[jg + ScalarGene.SIZE]! > maxPreySize) continue; // too big to eat (size refuge)
-          if (!cannibalism && scalarGenes[jg + ScalarGene.DIET]! >= diet) continue;
+          // Diet-gap refuge: prey must be MEANINGFULLY lower on the diet axis (diet[j] ≤ diet − huntDietGap),
+          // not just any ε lower — so a 0.78 predator won't eat a 0.77 near-peer, but a 0.8 can eat a 0.5
+          // omnivore. huntDietGap=0 → `>= diet` → byte-identical to the strict-lower cannibalism=false rule.
+          if (!cannibalism && scalarGenes[jg + ScalarGene.DIET]! >= diet - huntDietGap) continue;
           const ddx = wrapDelta(xi - x[j]!, worldWidth);
           const ddy = wrapDelta(yi - y[j]!, worldHeight);
           const d2 = ddx * ddx + ddy * ddy;
