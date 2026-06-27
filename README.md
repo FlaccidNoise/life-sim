@@ -10,13 +10,16 @@ tune any knob, drop food, and follow one creature while watching its brain fire.
 **Rebuilt (2026-06-20 pivot) as the feel-first Evolution Playground**, and **all feature branches
 consolidated to `main` (2026-06-22)**: environmental **walls + divergence-free flow field** with neural
 env-sensing, **heterogeneous food pockets** (per-pocket richness + isolation), **two-channel
-foraging** + the A–E diversity levers, an OFF-by-default **predator bundle** (founding-protection),
-graded (tanh) steering, and god-tools (live knobs, inspect/follow, color-by-lineage). The live demo
-ships the three guardrail-verified pillars — **walls+flow + motorSquash + two food channels** — with a
-manual **mobile/desktop UI toggle**. Every other feature is an **OFF-by-default knob** that keeps the
-seeded baseline byte-identical. WebGL2 viewer; `defaultConfig()` is the single source of truth for the
-demo, headless harness, and tests. Decision log in `docs/decisions/INDEX.md` (read the 2026-06-20
-rebuild pivot + 2026-06-22 entries); the prior M0–M7.5 engine is archived/superseded.
+foraging** + the A–E diversity levers, graded (tanh) steering, and god-tools (live knobs, inspect/follow,
+color-by-lineage). **Biogeographic-demes redesign (2026-06-26/27)**: the demo is now a live
+**grazer/predator world** — population concentrated into deep, small, isolated food pockets so local
+density makes predation geometrically possible (the root fix), an **ON predator bundle** + founding,
+**diet-axis disruptive selection** (`dietGeneralistFloor`) so a bimodal grazer/predator split persists
+past 20k, and a **meaningful-diet-gap** predation rule (`huntDietGap`) instead of near-peer cannibalism.
+New mechanisms remain **OFF-default knobs** (byte-identical when off) — the demo opts in via
+`src/app/living-world-config.ts`. WebGL2 viewer; `defaultConfig()` is the single source of truth for the
+demo, headless harness, and tests. Decision log in `docs/decisions/INDEX.md`; the prior M0–M7.5 engine is
+archived/superseded.
 
 ## Docs
 - Design spec: `docs/superpowers/specs/2026-06-15-life-sim-design.md`
