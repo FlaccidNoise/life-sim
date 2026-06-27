@@ -724,8 +724,11 @@ function frame(): void {
     );
   }
   // Trailing 100-tick rates: append this frame's cumulative sample, drop samples beyond the window
-  // (keeping the one that still spans it), then average per tick over the covered span.
-  vitalSamples.push({ tick: world.tick, b: world.totalBirths, d: world.totalDeaths });
+  // (keeping the one that still spans it), then average per tick over the covered span. Dedupe by
+  // tick: a paused (or sub-1×) frame doesn't advance world.tick, so re-pushing would grow the buffer
+  // without bound (the window-drop test never fires when every sample shares the frozen tick).
+  if (vitalSamples.length === 0 || vitalSamples[vitalSamples.length - 1]!.tick !== world.tick)
+    vitalSamples.push({ tick: world.tick, b: world.totalBirths, d: world.totalDeaths });
   while (vitalSamples.length > 2 && world.tick - vitalSamples[1]!.tick >= VITAL_WINDOW_TICKS) {
     vitalSamples.shift();
   }
