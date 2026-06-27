@@ -56,14 +56,21 @@ export class SettingsModal {
       </label>`;
 
     bodyEl.innerHTML = KNOB_GROUPS.map((g) => {
-      const toggles = TOGGLES.filter((t) => t.group === g.key).map(toggleHtml).join('');
-      const sliders = SPECS.filter((s) => s.group === g.key).map(sliderHtml).join('');
+      const toggles = TOGGLES.filter((t) => t.group === g.key)
+        .map(toggleHtml)
+        .join('');
+      const sliders = SPECS.filter((s) => s.group === g.key)
+        .map(sliderHtml)
+        .join('');
       return `<section data-group="${g.key}" hidden>
         <div class="group-hint">${g.hint}</div>${toggles}${sliders}
       </section>`;
     }).join('');
     for (const g of KNOB_GROUPS) {
-      this.sections.set(g.key, bodyEl.querySelector<HTMLElement>(`section[data-group="${g.key}"]`)!);
+      this.sections.set(
+        g.key,
+        bodyEl.querySelector<HTMLElement>(`section[data-group="${g.key}"]`)!,
+      );
     }
 
     // ── Wire sliders + toggles (same routing the old Knobs used) ──
@@ -73,12 +80,15 @@ export class SettingsModal {
       const val = wrap.querySelector<HTMLElement>('.knob-val')!;
       const show = (v: number): string => (s.step < 1 ? v.toFixed(3) : String(v));
       val.textContent = show(config[s.key] as number);
+      // Live knobs apply continuously on `input` (instant feedback while dragging). Seed-time knobs
+      // (live:false) rebuild the whole world, so they fire on `change` (drag-release) only — binding
+      // them to `input` reconstructs the sim on every drag delta (dozens of full re-seeds per drag).
       slider.addEventListener('input', () => {
         const v = Number(slider.value);
         val.textContent = show(v);
         if (s.live) h.onLive(s.key, v);
-        else h.onReset(s.key, v);
       });
+      if (!s.live) slider.addEventListener('change', () => h.onReset(s.key, Number(slider.value)));
     }
     for (const t of TOGGLES) {
       const wrap = bodyEl.querySelector<HTMLElement>(`.toggle[data-key="${t.key}"]`)!;
@@ -93,9 +103,9 @@ export class SettingsModal {
     });
 
     // ── Close affordances: ✕, backdrop click, Escape ──
-    overlay.querySelector<HTMLButtonElement>('[data-close="settings"]')!.addEventListener('click', () =>
-      this.setOpen(false),
-    );
+    overlay
+      .querySelector<HTMLButtonElement>('[data-close="settings"]')!
+      .addEventListener('click', () => this.setOpen(false));
     overlay.addEventListener('mousedown', (e) => {
       if (e.target === overlay) this.setOpen(false); // click outside the .modal card
     });
