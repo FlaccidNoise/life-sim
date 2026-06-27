@@ -252,7 +252,7 @@ export class World {
         this.pheroSenseGenes,
       );
       seedScalarGenes(s.scalarGenes, i, this.rng, this.config); // incl. life-history + trophic genes
-      // Seed predators as OMNIVORES (diet 0.6): they survive on plants through the sparse early phase
+      // Seed predators as OMNIVORES (diet 0.7): they survive on plants through the sparse early phase
       // AND hunt opportunistically, so the trait isn't wiped before prey density builds (without
       // prey-sensing a pure hunter starves first). Diet then evolves up where hunting pays.
       s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.DIET] = isPredator ? 0.7 : 0;
@@ -406,14 +406,32 @@ export class World {
     return this.store.liveCount;
   }
 
-  /** Deterministic fingerprint of the full dynamic state (the determinism-contract digest). */
+  /** Deterministic fingerprint of the dynamic state (the determinism-contract digest). Covers kinematics,
+   *  energy, age, genId, the mate-seeking counters, ALL heritable scalar genes + hue, and the active fields.
+   *  The brain weights are intentionally excluded: they drive steer→motion, so a divergence surfaces in
+   *  x/y/v transitively, and a full per-creature brain hash on every frame would be prohibitively costly. */
   stateHash(): string {
     const h = new Hasher();
     const s = this.store;
     h.u32(this.tick);
     h.u32(this.rng.state);
     h.u32(s.liveCount);
-    const { liveIndices, liveCount, x, y, vx, vy, heading, energy, age, genId, seeking, seekTicksLeft } = s;
+    const {
+      liveIndices,
+      liveCount,
+      x,
+      y,
+      vx,
+      vy,
+      heading,
+      energy,
+      age,
+      genId,
+      seeking,
+      seekTicksLeft,
+      scalarGenes,
+      hue,
+    } = s;
     for (let k = 0; k < liveCount; k++) {
       const i = liveIndices[k]!;
       h.f(x[i]!);
@@ -426,6 +444,11 @@ export class World {
       h.u32(genId[i]!);
       h.u32(seeking[i]!);
       h.u32(seekTicksLeft[i]!);
+      // Heritable genome: motor genes are caught transitively via motion, but motor-inert genes (DISPLAY/
+      // PREFERENCE; hue when scent is off) would otherwise be an invisible divergence — fold them in here.
+      const g = i * SCALAR_GENE_COUNT;
+      for (let j = 0; j < SCALAR_GENE_COUNT; j++) h.f(scalarGenes[g + j]!);
+      h.f(hue[i]!);
     }
     this.food.hashInto(h); // food is part of the sim state
     // The scent field is part of sim state ONLY when active (after food, gated) → byte-identical when off.
