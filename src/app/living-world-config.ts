@@ -36,13 +36,19 @@ export const livingWorldOverrides: Partial<Config> = {
   foodPatchCount: 20, // more regions (more distinct demes / histories)
   foodPatchRadius: 7, // small footprint per pocket (14→7) → bounded total pop + intense local density
   foodPatchRichness: 3, // DEEP reservoirs: peak fertility 3 → K = cap·3, a dense prey cluster per pocket
-  foodMaxFertility: 3, // raise the per-cell K clamp so richness>1 actually deepens the reservoir
-  foodPatchRichnessVar: 0.5, // per-pocket depth variation → deep predator-havens vs shallow grazer-refuges
+  foodMaxFertility: 5, // K-clamp raised 3→5 (diversity pass): with richness 3 + var 0.8, pocket peaks span
+  // 3·[0.2,1.8]=[0.6,5.4]; a clamp at 3 flattened the whole upper half to a uniform max ("everything maxed
+  // out"), so raising it to 5 lets the depth variation actually express (only the rare >5 peak clips).
+  foodPatchRichnessVar: 0.8, // per-pocket depth variation 0.5→0.8 → wider shallow-grazer-refuge ↔ deep-
+  // predator-haven spread across all three channels (peaks now genuinely range, not pinned at the clamp)
   deadWaterCost: 0.02, // dead-water tax between pockets → real isolation (residents stay home → demes diverge)
-  // Two differentiated resources: channel A wall-tied (structural), channel B drifting in the current.
-  foodChannels: 2,
+  // THREE differentiated resources (diversity pass: 2→3 → a third diet niche). Channels are assigned to
+  // pockets round-robin (p % 3) via pocketChannelMode 1. NB foodChannelAWallTied MUST be false here: the
+  // wall-tie split is binary (near-wall→A / open-water→B, food-field.ts), so it would starve channel C of
+  // pockets. Dropping wall-tie trades A's near-wall structural identity for a working third channel.
+  foodChannels: 3,
   foodPocketChannelMode: 1,
-  foodChannelAWallTied: true,
+  foodChannelAWallTied: false,
   foodChannelBDriftMult: 3,
   // Availability-weight the 2-channel graze: a soft specialist that drifts off its resource falls back to
   // what's present instead of starving. THIS is what breaks the A-monoculture — without it the fugitive B
@@ -123,4 +129,16 @@ export const livingWorldOverrides: Partial<Config> = {
   // ~400, 85% predators by t10k). OFF restores predator/prey negative frequency-dependence (rare predators
   // thrive on abundant prey, common predators starve as prey crash → both guilds persist). Measured seed 1
   // @20k: prey 413→2592, predator fraction 85%→41%. predExtinct@NEVER either way.
+  // ── Variability pass (diversity tuning) ──────────────────────────────────────────────────────────────
+  // Widen the realized trait spread WITHOUT touching founderSigma (which floods the founding pool with unfit
+  // extremes and crashes births past ~0.3 — see config.ts). These are the safe levers: a bigger mutation step
+  // keeps more standing variation against selection, faster hue drift makes lineages visibly diverge, a
+  // sharper forage floor pulls FORAGE_PREF off the generalist center into committed A/B/C specialists, and a
+  // lower vision cost lets the now-tripled VISION_RANGE gene actually get used (the perf throttle — raise it
+  // back toward 0.002 if too much of the pop goes long-sighted and fps drops).
+  mutationSigma: 0.08, // evolutionary step 0.05→0.08: more standing variation maintained against selection
+  hueMutationSigma: 0.04, // lineage colors diverge faster (0.02→0.04) → more visible variety, no fitness effect
+  forageGeneralistFloor: 0.7, // sharpen the specialist split (0.85→0.7): generalists earn less → bimodal niches
+  visionRangeCost: 0.0006, // ~3× lower (0.002→0.0006) so the tripled VISION_RANGE cap is reachable, not taxed
+  // away instantly. Scan cost scales as range², so this is the live throttle on how many creatures pay it.
 };

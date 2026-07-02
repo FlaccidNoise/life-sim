@@ -161,10 +161,11 @@ export const SCALAR_GENE_SPECS: readonly ScalarGeneSpec[] = [
   { centerKey: 'cellRadius', costKey: 'sizeCost', min: 2, max: 32 }, // SIZE: physical (refuge + bite + speed/move/store couplings), so costed; max 2× for big-body strategies
   { centerKey: 'maxTurn', costKey: 'maxTurnCost', min: 0.05, max: 1.2 },
   { centerKey: 'maxThrust', costKey: 'maxThrustCost', min: 0.1, max: 4 },
-  // METAB_EFF max raised 1.5→2.0: the live population RAILS at 1.5 (gene census), so selection wants more
-  // throughput than the cap allows. Cost is the multiplicative basal×eff (no costKey), and graze income also
-  // scales with eff, so a high-throughput body is a real tradeoff (eats more, burns more), not a free win.
-  { centerKey: 'metabolicEfficiency', costKey: null, min: 0.5, max: 2.0 },
+  // METAB_EFF max raised 2.0→2.5 (diversity pass): the live population RAILS at the cap (gene census), so
+  // selection wants more throughput than allowed → giving headroom widens the realized spread. Cost is the
+  // multiplicative basal×eff (no costKey), and graze income also scales with eff, so a high-throughput body is
+  // a real tradeoff (eats more, burns more), not a free win — the cap is self-limiting.
+  { centerKey: 'metabolicEfficiency', costKey: null, min: 0.5, max: 2.5 },
   // Life-history genes — costKey null (no upkeep; their "cost" is the strategy tradeoff itself).
   // reproThreshold min lowered 20→10: adds a fast-breeding r-strategist niche (breed at low energy reserve —
   // cheap, risky offspring) for variety + resilience. Max kept at 120: the pop rails HIGH (census 117/120),
@@ -177,12 +178,14 @@ export const SCALAR_GENE_SPECS: readonly ScalarGeneSpec[] = [
   // fraction ~0.9) in world.seedWorld, not around the center. DAMAGE is costed (teeth cost upkeep).
   { centerKey: 'diet', costKey: null, min: 0, max: 1 },
   { centerKey: 'damage', costKey: 'damageCost', min: 0, max: 20 },
-  // Vision genes — ALL costed (no free eyes). Range cap raised to 256u (~21 hash cells) for the
-  // long-sight experiment: the sight scan radius now DERIVES from each creature's range (sense.ts), so
-  // big eyes see far (and cost more cells to scan). FOV is a half-angle [~6°, 180°]; acuity scales signal.
-  // Max raised 256→384: the pop RAILS at 256 (census 244/256) chasing the sight-only parcels, so selection
-  // wants longer sight. visionRangeCost scales the upkeep linearly with range, so the wider cap is self-costing.
-  { centerKey: 'visionRange', costKey: 'visionRangeCost', min: 0, max: 384 },
+  // Vision genes — ALL costed (no free eyes). The sight scan radius DERIVES from each creature's range
+  // (sense.ts), so big eyes see far (and cost more cells to scan). FOV is a half-angle [~6°, 180°]; acuity
+  // scales signal. Max TRIPLED 384→1152 (diversity pass): the pop rails at the cap chasing sight-only
+  // parcels, so selection wants longer sight. To make the tripled cap REAL (not shadowed), MAX_VISION_CELLS
+  // in sense.ts was raised 24→96 so the scan can actually reach 1152u, and visionRangeCost was lowered in the
+  // demo so the long range isn't instantly taxed away. Scan cost scales as range² — the demo's visionRangeCost
+  // is the throttle on how many creatures pay it.
+  { centerKey: 'visionRange', costKey: 'visionRangeCost', min: 0, max: 1152 },
   { centerKey: 'visionFov', costKey: 'visionFovCost', min: 0.1, max: 3.14159 },
   { centerKey: 'visionAcuity', costKey: 'visionAcuityCost', min: 0, max: 3 },
   // SHELTER_DRIVE — costed social attraction toward bigger same-guild creatures (no free herding).
@@ -346,8 +349,17 @@ export function crossoverBrain(
   pheroSenseGenes: boolean,
 ): void {
   mutateGenome(
-    brain, hue, child, mom, rng, sigma, hueSigma,
-    wallSenseGenes, flowSenseGenes, hungerSense, pheroSenseGenes,
+    brain,
+    hue,
+    child,
+    mom,
+    rng,
+    sigma,
+    hueSigma,
+    wallSenseGenes,
+    flowSenseGenes,
+    hungerSense,
+    pheroSenseGenes,
   );
 }
 
@@ -581,21 +593,66 @@ export const BRAIN_GENES = GLOW_SENSE_LAT_TURN + 4; // derived; the genome.test 
  *   0; the repro-readiness pair seeds 0 (the repro-timing response evolves); every other weight 0. */
 const FOUNDER_BRAIN: readonly number[] = [
   // core (0-9): chemotaxis + sight
-  1.2, 0, 0, 1.5, 0, 0.3, 1.0, 0, 0, 1.2,
+  1.2,
+  0,
+  0,
+  1.5,
+  0,
+  0.3,
+  1.0,
+  0,
+  0,
+  1.2,
   // wall (10-13), flow (14-17), hunger (18-19) — neutral
-  0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
   // scent C0..C3 (20-35) — 16 weights seed 0 (evolution picks each channel's sign)
-  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
+  0,
   // eat-gate (36-40): BIAS 4, FWD 0, LAT 0, SIGHT_FWD 2, SIGHT_LAT 0
-  4, 0, 0, 2, 0,
+  4,
+  0,
+  0,
+  2,
+  0,
   // age (41-42): AGE_TURN 0, AGE_THRUST 0.3 ; readiness (43-44): 0, 0
-  0, 0.3, 0, 0,
+  0,
+  0.3,
+  0,
+  0,
   // A1a own-SIZE/own-DIET (45-48): SIZE_TURN, SIZE_THRUST, DIET_TURN, DIET_THRUST — seed 0 (response evolves).
-  0, 0, 0, 0,
+  0,
+  0,
+  0,
+  0,
   // A1b local-CROWDING (49-50): CROWD_TURN, CROWD_THRUST — seed 0 (the density response evolves + learns).
-  0, 0,
+  0,
+  0,
   // A1c fertility-under-foot (51-52): FERT_TURN, FERT_THRUST — seed 0 (the settle/leave response evolves + learns).
-  0, 0,
+  0,
+  0,
   // A2a BITE_GATE_BIAS (53): seeded gate-OPEN (sigmoid(4)≈0.98 → bite by default; evolution/learning refine).
   4,
   // A2b SCENT_GATE_BIAS (54): seeded gate-OPEN (sigmoid(4)≈0.98 → broadcast by default; evolution refines).

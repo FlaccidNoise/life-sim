@@ -183,8 +183,11 @@ export function senseEnv(
  * hash neighborhood (±2 cells ≈ the 24u range cap); ascending order; toroidal-correct.
  */
 /** Hard cap on the sight-scan half-width in hash cells, so a runaway vision gene can't make the scan
- *  unbounded. 24 cells ≈ 288u reach at the default cell size — generous for the long-sight experiment. */
-const MAX_VISION_CELLS = 24;
+ *  unbounded. Raised 24→96 (diversity pass) to match the TRIPLED VISION_RANGE cap (1152u / ~12u cell ≈ 96
+ *  cells) so the long-sight gene is REAL, not shadowed by this cap. Scan area is (2·cr+1)² ≈ range²: a
+ *  max-range creature now scans ~96² vs ~24² cells (~15× more). The per-creature cr still derives from each
+ *  creature's own range, so only creatures that evolve big eyes pay it — visionRangeCost gates how many do. */
+const MAX_VISION_CELLS = 96;
 
 export function senseCreatures(
   store: OrganismStore,
@@ -283,7 +286,7 @@ export function senseCreatures(
           // compatibility is decided at the contact gate in reproduce). Modular seam: replaced by the
           // kin-scent gradient when that field lands. Bounded by mateSenseAttraction so it can't swamp flee.
           if (store.seeking[i] === 1 && cfg.mateSenseAttraction > 0) {
-            const sameClass = (myDiet < 0.5) === (itsDiet < 0.5) ? 1 : 0;
+            const sameClass = myDiet < 0.5 === itsDiet < 0.5 ? 1 : 0;
             if (sameClass) {
               let hd = Math.abs(myHue - hue[j]!);
               if (hd > 0.5) hd = 1 - hd;
