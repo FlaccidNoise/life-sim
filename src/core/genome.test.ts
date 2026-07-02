@@ -219,10 +219,11 @@ describe('scalar genes (evolvable per-creature traits)', () => {
       return { min: spec.min, max: spec.max };
     };
     // metabolicEfficiency widened up (throughput axis the pop rails at), reproThreshold widened DOWN (fast
-    // r-strategist niche), visionRange widened up. Lock the bounds so a future spec edit can't quietly drop them.
-    expect(byKey('metabolicEfficiency').max).toBe(2.0);
+    // r-strategist niche), visionRange TRIPLED up (diversity pass; MAX_VISION_CELLS bumped in lockstep so the
+    // cap is real, not shadowed). Lock the bounds so a future spec edit can't quietly drop them.
+    expect(byKey('metabolicEfficiency').max).toBe(2.5);
     expect(byKey('reproThreshold').min).toBe(10);
-    expect(byKey('visionRange').max).toBe(384);
+    expect(byKey('visionRange').max).toBe(1152);
   });
 
   it('seed + mutation keep every gene within its clamp range', () => {
