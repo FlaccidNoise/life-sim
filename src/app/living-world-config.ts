@@ -94,6 +94,12 @@ export const livingWorldOverrides: Partial<Config> = {
   // Those inputs were scale-walled (barely behavioral) but the constant size/diet synapses tank survival.
   breedCooldown: 100, // RESILIENCE: faster recovery from population dips (150→100) — adds births/mean-end
   // back on top of the softer starvation clock without re-introducing the over-boom of an even lower basalCost.
+  mateContactRange: 36, // MATE REACH (B1): 12→36. Mate-encounter is the #1 reproduction bottleneck at this
+  // spread-thin density (an 8192² world with ~12u reach ≪ natural NND), so the demo opened in a dead-looking
+  // bootstrap valley (pop 1000→~450 with births≈0). Only real now that B0 unhardwired findMate's 3×3 scan to
+  // honour the full range. Multi-seed validated (evolve-probe 20k, seeds 1–3): all sustain a bimodal grazer/
+  // hunter split t5k→20k (dietσ 0.26–0.38 vs baseline 0.07–0.19), pop settles 3–5k (no cap), turnover deepens
+  // (mean lineage gen ~33 vs ~27), shallower valley. Regression-guarded by demo-health-gate.ts (nightly.yml).
   // Age / life stages (life-sim-bd8a): juvenile (can't breed) → adult → elder (senescence tax = death of
   // old age). Tail-gated genes MATURITY_AGE/SENESCENCE_AGE evolve in-life. senescenceRate is a live knob.
   ageStages: true,

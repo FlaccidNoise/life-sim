@@ -5,9 +5,18 @@ on:
   workflow_dispatch:
 
 jobs:
-  statistical:
+  # Demo-health gate: the CI gates prove the sim is not DEAD (determinism, no NaN); this one proves it is
+  # ALIVE. It runs the SHIPPED demo (living-world-config.ts) headless across seeds and fails if the promised
+  # ecology regresses — extinct, turnover stalled, no predator layer, or diet collapsed to a monoculture.
+  demo-health:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Placeholder for long statistical/evolutionary runs (added at M7)
-        run: echo "No statistical tests yet — see spec §6 tier 5 (M7)."
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Demo stays bimodal + turning over (seeds 1-3)
+        run: npx tsx src/headless/demo-health-gate.ts
