@@ -12,8 +12,12 @@
  * drawer over it (plus a thin pointer-drag layer for row reordering). Read-only — never touches the sim.
  */
 import { type OrganismStore } from '../../core/store';
+import { type Config } from '../../core/config';
 import { ScalarGene, SCALAR_GENE_COUNT, SCALAR_GENE_SPECS } from '../../core/genome';
 import { dietColor, dietShape, fieldColor, rgbCss } from '../../render/palette';
+
+/** Clamp a 0..1 fraction (marker x-positions off the visible axis land on the nearest edge). */
+const clampFrac = (t: number): number => (t < 0 ? 0 : t > 1 ? 1 : t);
 
 /** Bucket the live population by `accessor` into `bins` equal bins over [min,max] (clamped). */
 export function histogram(
@@ -235,7 +239,7 @@ export class Distributions {
     }
   }
 
-  render(store: OrganismStore | null): void {
+  render(store: OrganismStore | null, cfg?: Config): void {
     const dpr = globalThis.devicePixelRatio || 1;
     const w = Math.max(1, Math.floor(this.canvas.clientWidth * dpr));
     const h = Math.max(1, Math.floor(this.canvas.clientHeight * dpr));
@@ -311,6 +315,30 @@ export class Distributions {
       const barAreaTop = y0 + barTop;
       const barAreaH = rowH - barTop - 3 * dpr;
       const solid = Distributions.fieldCss(spec);
+      // Energy field: shade the "expected" reproductive band [reproThreshold, satiatedThreshold] (founder
+      // centers) UNDER the bars, so a histogram piled to the RIGHT of it reads as an energy hoard / stall
+      // (full but not breeding), not health, and one piled LEFT reads as starving.
+      const energyBand =
+        cfg && spec.key === 'energy'
+          ? {
+              xr:
+                bx0 +
+                clampFrac((cfg.reproThreshold - spec.min) / (max - spec.min)) * (w - padL - padR),
+              xs:
+                bx0 +
+                clampFrac((cfg.satiatedThreshold - spec.min) / (max - spec.min)) *
+                  (w - padL - padR),
+            }
+          : null;
+      if (energyBand) {
+        ctx.fillStyle = 'rgba(230,210,120,0.13)';
+        ctx.fillRect(
+          energyBand.xr,
+          barAreaTop,
+          Math.max(1, energyBand.xs - energyBand.xr),
+          barAreaH,
+        );
+      }
       for (let b = 0; b < spec.bins; b++) {
         const bh = (counts[b]! / peak) * barAreaH;
         if (spec.dietColored) {
@@ -320,6 +348,13 @@ export class Distributions {
           ctx.fillStyle = solid;
         }
         ctx.fillRect(bx0 + b * bw, barAreaTop + (barAreaH - bh), Math.max(1, bw - dpr), bh);
+      }
+      // Band edges over the bars: amber = reproThreshold (breed floor), green = satiatedThreshold (full bar).
+      if (energyBand) {
+        ctx.fillStyle = 'rgba(230,210,120,0.65)';
+        ctx.fillRect(energyBand.xr, barAreaTop, Math.max(1, dpr), barAreaH);
+        ctx.fillStyle = 'rgba(130,220,150,0.75)';
+        ctx.fillRect(energyBand.xs, barAreaTop, Math.max(1, dpr), barAreaH);
       }
     }
 
