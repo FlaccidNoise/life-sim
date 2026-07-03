@@ -118,13 +118,18 @@ export const livingWorldOverrides: Partial<Config> = {
   herbivoryExp: 0.7, // predators lean on hunting but keep a plant fallback to survive the bootstrap valley
   predationGain: 3, // meat pays enough to sustain hunters through sparse stretches (lower = predators starve)
   predatorSeedClusters: 8, // found the hunter guild into the 8 deepest pockets so it doesn't die in the gaps
-  dietGeneralistFloor: 0.6, // DIET-AXIS DISRUPTIVE SELECTION: graze + hunt income ×= 0.6 + 0.4·2·|diet−0.5|,
-  // so the omnivore (diet 0.5) earns 60% while committed grazers (diet 0) and hunters (diet 1) earn 100%.
-  // Without this the diet axis has no penalty for the jack-of-all-trades, so the grazer/predator split erodes
-  // to a uniform-omnivore monoculture (omniv 90%, σ→0.10) by ~20k. 0.6 is the measured sweet spot: across 4
-  // seeds at t20k the split PERSISTS (omniv suppressed to 4-20%, predators 14-25%, σ 0.27-0.34) — robust, not
-  // seed-lucky. 0.5 was seed-fragile (tipped to grazer-mono on some seeds), 0.65 let omnivores creep back / taxed
-  // predators out. See diet-bimodal-probe sweeps in .superpowers/sdd/.
+  dietGeneralistFloor: 0.7, // DIET-AXIS DISRUPTIVE SELECTION: graze + hunt income ×= floor + (1−floor)·2·|diet−0.5|,
+  // penalising the omnivore (diet 0.5 earns 70% at floor 0.7) so the grazer/hunter split doesn't erode to a
+  // uniform-omnivore monoculture. B2 (root-cause pass): RELAXED 0.6→0.7, toward 1 (= no penalty). The sweep
+  // measured the split was COEFFICIENT-held, not ecology-held — hunting economically dominated grazing (uncapped
+  // predationGain hoard), so relaxing the coefficient collapsed the grazer niche (pre-B4: floor 0.8 held 2/3
+  // seeds at 12k, 1.0 held 0/3). B4's satiation cap fixed the root cause — capped hunters no longer hoard/out-
+  // compete grazers — so the ECONOMY now carries most of the split. The relaxation TARGET is set by 20k
+  // robustness (evolve-probe 20k, seeds 1-4, WITH B4): 0.6 → 4/4 bimodal (σ 0.31-0.36, strongest but least
+  // relaxed), 0.7 → 4/4 (σ 0.24-0.33), 0.8 → only 1/4 (holds at 12k but decays to omnivore creep by 20k). So
+  // 0.7 is the relaxed-yet-20k-robust point: a lighter thumb than 0.6, without 0.8's late decay.
+  // NB predEncounter can't be pushed >0.1 sustained by geometry — biteRange 32 hits it but over-predates and
+  // crashes the guild (seed 1 1315→173 preds); predators thrive at enc~0.04 on payoff + herbivory fallback.
   huntDietGap: 0.1, // a predator needs a MEANINGFUL diet advantage to eat its target (prey diet ≤ attacker
   // diet − 0.1), so a 0.78 hunter won't drain a 0.77 near-peer but a 0.8/0.99 hunter still eats a ≤0.5 omnivore.
   // Stops the unrealistic near-peer cannibalism the strict-lower rule allowed. Size refuge (huntSizeRatio) still

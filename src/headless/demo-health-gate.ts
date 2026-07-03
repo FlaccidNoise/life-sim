@@ -21,11 +21,11 @@ import { ScalarGene, SCALAR_GENE_COUNT } from '../core/genome';
 import { livingWorldOverrides } from '../app/living-world-config';
 
 // ── Health thresholds ────────────────────────────────────────────────────────────────────────────────────
-// Grounded in the shipped-demo B1 validation (this gate, 12k/warmup6k, seeds 1-3): pred% 42.5-47.7,
-// σDIET 0.296-0.377, births>warmup 26024-36321, pop 2438-4545. Each floor sits well above the BROKEN state
-// (predators ~0%, monoculture σ≤0.19, turnover-stalled ~0 births) and well below the measured healthy min,
-// so the gate catches a real ecological regression without failing on ordinary seed-to-seed variance.
-const PRED_FLOOR = 0.1; // a hunter layer persists (DIET>0.5); broken=~0%, shipped=0.42-0.48
+// Grounded in the shipped-demo validation (this gate, 12k/warmup6k, seeds 1-3, floor 0.7 + B4 cap): pred%
+// 48.5-61.1, σDIET 0.309-0.369, births>warmup 34591-43756, pop 3997-4612. Each floor sits well above the
+// BROKEN state (predators ~0%, monoculture σ≤0.19, turnover-stalled ~0 births) and well below the measured
+// healthy min, so the gate catches a real ecological regression without failing on ordinary seed variance.
+const PRED_FLOOR = 0.1; // a hunter layer persists (DIET>0.5); broken=~0%, shipped=0.48-0.61
 const SIGMA_FLOOR = 0.2; // σ(DIET) above the grazer-monoculture band (mate=12 baseline collapsed to 0.07-0.19)
 const MIN_POST_WARMUP_BIRTHS = 1000; // real turnover after the bootstrap valley, not a frozen founder pool
 
