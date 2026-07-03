@@ -1521,6 +1521,45 @@ describe('sexual reproduction (crossover + compatibility + seeking)', () => {
     expect(births).toBeGreaterThan(0); // mate on a seeking tick
   });
 
+  it('compatible adults beyond one hash cell still mate (mateContactRange is a real lever)', () => {
+    // Regression: findMate scanned a fixed 3×3 hash neighbourhood (±1 cell ≈ ±12u at cellRadius 6), so any
+    // mateContactRange beyond one cell was silently ignored — the demo's #1 documented repro lever did
+    // nothing when raised. Place two compatible adults 30u apart (inside mateContactRange 50 but ~2 cells
+    // away) and require they breed once findMate scans a range-derived neighbourhood like hunt() does.
+    const cfg = defaultConfig({
+      sexualReproduction: true,
+      ageStages: false,
+      breedCooldown: 0,
+      satiatedThreshold: 100,
+      reproThreshold: 40,
+      mateContactRange: 50,
+      mateSeekWindow: 8,
+    });
+    const s = new OrganismStore(8);
+    const N = SCALAR_GENE_COUNT;
+    for (let i = 0; i < 2; i++) {
+      const slot = s.alloc();
+      s.x[slot] = 100;
+      s.y[slot] = 100 + i * 30; // 30u apart → outside the old ±1-cell (12u) scan, inside mateContactRange 50
+      s.energy[slot] = 200;
+      for (let g = 0; g < N; g++)
+        s.scalarGenes[slot * N + g] = defaultConfig({})[SCALAR_GENE_SPECS[g]!.centerKey] as number;
+      s.scalarGenes[slot * N + ScalarGene.DIET] = 0; // identical diet → compatible
+      s.scalarGenes[slot * N + ScalarGene.SATIATED_THRESHOLD] = 100;
+      s.scalarGenes[slot * N + ScalarGene.REPRO_THRESHOLD] = 40;
+      s.scalarGenes[slot * N + ScalarGene.BIRTH_ENERGY] = 30;
+    }
+    s.rebuildLive();
+    const hash = new SpatialHash(cfg.worldWidth, cfg.worldHeight, 2 * cfg.cellRadius, s.capacity);
+    let births = 0;
+    for (let t = 0; t < 8; t++) {
+      hash.build(s);
+      births += reproduce(s, new Rng(1), cfg, false, false, null, hash);
+      s.rebuildLive();
+    }
+    expect(births).toBeGreaterThan(0);
+  });
+
   it('predator × prey never breed (compatibility gate)', () => {
     const { tick } = twoAdults(0, 1); // grazer + predator → incompatible (DIET-dominated distance)
     let births = 0;
