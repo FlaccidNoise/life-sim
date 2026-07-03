@@ -75,7 +75,7 @@ function runSeed(seed: number): void {
   const ov = Object.keys(OVERRIDES).length ? ` · ${JSON.stringify(OVERRIDES)}` : '';
   console.log(`\n=== seed ${seed} · ${TICKS} ticks · demo config${ov} ===`);
   console.log(
-    'tick     pop    found%  genμ  genMax | diet[g..h histo]        dietσ forageσ sizeσ  visμ  |bimodal',
+    'tick     pop    found%  genμ  genMax | diet[g..h histo]        dietσ forageσ sizeσ  visμ  spdμ  |bimodal',
   );
 
   const geneCol = (g: number): number[] => {
@@ -109,7 +109,7 @@ function runSeed(seed: number): void {
         `${mean(gens).toFixed(1).padEnd(6)}${String(Math.max(0, ...gens)).padEnd(8)}| ` +
         `${histo.map((h) => String(h).padStart(3)).join(' ')}   ` +
         `${sd(diet).toFixed(2)}  ${sd(geneCol(ScalarGene.FORAGE_PREF)).toFixed(2)}    ` +
-        `${sd(geneCol(ScalarGene.SIZE)).toFixed(1).padEnd(5)}  ${mean(geneCol(ScalarGene.VISION_RANGE)).toFixed(0).padEnd(5)} |${bimodal ? ' YES' : ' no'}`;
+        `${sd(geneCol(ScalarGene.SIZE)).toFixed(1).padEnd(5)}  ${mean(geneCol(ScalarGene.VISION_RANGE)).toFixed(0).padEnd(5)} ${mean(geneCol(ScalarGene.MAX_SPEED)).toFixed(2).padEnd(5)} |${bimodal ? ' YES' : ' no'}`;
       console.log(line);
     }
   }
