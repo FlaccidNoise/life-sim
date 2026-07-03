@@ -114,7 +114,9 @@ let showWalls = true; // wall slate layer (toggle with 'w')
 let showOverlay = true; // per-creature debug overlay on the selection (toggle with 'o')
 let showFlow = false; // flow-field current arrows (toggle with 'v') — OFF by default; the current's effect reads in the drifting food, the arrow overlay is opt-in
 let showCone = false; // vision cones on the detail overlay (toggle with 'e')
-let colorMode: ColorMode = ColorMode.LINEAGE; // dot hue source (cycle with 'c'): lineage → diet → energy → forage
+// Default = DIET so the trophic story (green grazers ↔ red predators) reads on load without touching a
+// knob; LINEAGE is one 'c'-press away (cycle order: diet → lineage → energy → forage).
+let colorMode: ColorMode = ColorMode.DIET;
 let selected: { slot: number; gen: number } | null = null;
 
 // ── Food-layer + color-mode HUD labels and the 'f' cycle ───────────────────────────────────────────
@@ -304,8 +306,16 @@ function actFood(dir = 1): void {
   cycleFoodLayer(dir);
   syncView();
 }
+// 'c' cycle order — DIET first (default), LINEAGE next so it's one press from the default view.
+const COLOR_CYCLE: ColorMode[] = [
+  ColorMode.DIET,
+  ColorMode.LINEAGE,
+  ColorMode.ENERGY,
+  ColorMode.FORAGE,
+];
 function actColor(): void {
-  colorMode = ((colorMode + 1) % 4) as ColorMode;
+  const idx = COLOR_CYCLE.indexOf(colorMode);
+  colorMode = COLOR_CYCLE[(idx + 1) % COLOR_CYCLE.length]!;
   legend.setColorMode(colorMode);
   syncView();
 }
@@ -345,6 +355,7 @@ function syncView(): void {
     glow: renderer.glow.enabled,
   });
 }
+legend.setColorMode(colorMode); // match the legend to the DIET default (its constructor assumes LINEAGE)
 syncView();
 
 // ── Manual mobile / desktop UI mode (no auto-detect) + the mobile action bar ─────────────────────────
