@@ -18,7 +18,8 @@ import { Controls } from './observability/controls';
 import { SettingsModal } from './observability/settings-modal';
 import { GuideModal } from './observability/guide-modal';
 import { ViewChips } from './observability/view-chips';
-import { WorldStats } from './observability/world-stats';
+import { WorldStats, summarizePopulation } from './observability/world-stats';
+import { dietColor, rgbCss } from '../render/palette';
 import { Inspector } from './observability/inspector';
 import { BrainView } from './observability/brain-view';
 import { RadarView, LENSES, DEFAULT_LENS } from './observability/radar-view';
@@ -76,12 +77,23 @@ const overlay = new DetailOverlay(canvas, config.worldWidth, config.worldHeight)
 let detailOn = false;
 overlay.setEnabled(detailOn);
 
-const graph = new TimeSeriesGraph(el<HTMLCanvasElement>('graph'), [
-  { label: 'pop', color: '#8ad9f2' }, // cyan
-  { label: 'food', color: '#7fe0a0' }, // green
-  { label: 'avg births/t', color: '#e8d36b' }, // yellow — 100-tick trailing rate
-  { label: 'avg deaths/t', color: '#e08a8a' }, // red — 100-tick trailing rate
-]);
+// Population graph: a stacked trophic band (grazer/omnivore/predator — its envelope IS the population,
+// its red slice IS the predator layer crashing/recovering) under self-normalized lines for food, the
+// vital rates, and diet-σ (the diversity/bimodality signal). Band colors match the diet dot ramp so the
+// graph and the world read as one story. Legend renders into the sibling #graph-legend div.
+const graph = new TimeSeriesGraph(
+  el<HTMLCanvasElement>('graph'),
+  [
+    { label: 'grazers', color: rgbCss(dietColor(0)), band: true },
+    { label: 'omnivores', color: rgbCss(dietColor(0.5)), band: true },
+    { label: 'predators', color: rgbCss(dietColor(1)), band: true },
+    { label: 'food', color: '#8ad9f2' }, // cyan
+    { label: 'births/t', color: '#e8d36b' }, // yellow — 100-tick trailing rate
+    { label: 'deaths/t', color: '#e0a06b' }, // orange — 100-tick trailing rate
+    { label: 'diet σ', color: '#c98af2' }, // violet — trophic diversity (bimodality)
+  ],
+  el('graph-legend'),
+);
 const inspector = new Inspector(el('inspector'));
 const brainView = new BrainView(el<HTMLCanvasElement>('brain'));
 const radar = new RadarView(el<HTMLCanvasElement>('radar'));
@@ -752,10 +764,19 @@ function frame(): void {
   const span = Math.max(1, world.tick - head.tick);
   const avgB = (world.totalBirths - head.b) / span;
   const avgD = (world.totalDeaths - head.d) / span;
-  graph.push(world.tick, [world.population, world.food.total(), avgB, avgD]);
+  const summary = summarizePopulation(world.store); // one pass, shared by the graph + world stats
+  graph.push(world.tick, [
+    summary.herb,
+    summary.omni,
+    summary.pred,
+    world.food.total(),
+    avgB,
+    avgD,
+    summary.dietSigma,
+  ]);
   graph.render();
   distributions.render(world.store);
-  worldStats.render(world.store, avgB, avgD);
+  worldStats.render(summary, avgB, avgD);
   controls.setStatus(world.tick, tps, world.population, lastHash);
   // keep the selection panel honest if the dot was recycled
   if (selected && !world.store.isAlive(selected.slot, selected.gen)) {
