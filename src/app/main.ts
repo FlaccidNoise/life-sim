@@ -72,10 +72,27 @@ try {
 renderer.setGlow(true, 1);
 
 const overlay = new DetailOverlay(canvas, config.worldWidth, config.worldHeight);
-// Per-creature Canvas2D sprite/detail pass (the zoomed-in detailed bodies) — DISABLED for now: it's
-// O(visible creatures) on the CPU each frame and tanks the frame rate in a dense pocket. Toggle live with 'd'.
+// Per-creature Canvas2D sprite/detail pass (the zoomed-in detailed bodies). It's O(visible creatures)
+// on the CPU and tanks the frame rate in a dense pocket at world zoom, so it's AUTO-managed: on once
+// you zoom past ZOOM_DETAIL_MIN AND few enough creatures are in view to stay smooth, off otherwise —
+// so "zoom in → animals, zoom out → dots" just works. 'd' takes manual control (auto off) either way.
 let detailOn = false;
+let detailAuto = true; // auto governs until the user presses 'd'
+const ZOOM_DETAIL_MIN = 6; // world fits at zoom 1; bodies only read as animals past ~6× in
+const DETAIL_MAX_VISIBLE = 1200; // perf bound: est. in-view creatures (liveCount / zoom²) below this
 overlay.setEnabled(detailOn);
+// Auto policy: enable detail only when zoomed in enough AND the view holds few enough creatures to stay
+// smooth. The visible estimate is liveCount/zoom² (zoom 1 = whole world); high zoom shrinks the view, so
+// even a dense pocket stays bounded. A no-op when the state is unchanged (setEnabled is cheap/idempotent).
+function updateDetail(): void {
+  if (!detailAuto) return;
+  const estVisible = world.store.liveCount / (zoom * zoom);
+  const want = zoom >= ZOOM_DETAIL_MIN && estVisible <= DETAIL_MAX_VISIBLE;
+  if (want !== detailOn) {
+    detailOn = want;
+    overlay.setEnabled(detailOn);
+  }
+}
 
 // Population graph: a stacked trophic band (grazer/omnivore/predator — its envelope IS the population,
 // its red slice IS the predator layer crashing/recovering) under self-normalized lines for food, the
@@ -532,8 +549,9 @@ globalThis.addEventListener('keydown', (e) => {
   if (e.key === 'l' || e.key === 'L') toggleFollow();
   if (e.key === 't' || e.key === 'T') lineageModal.toggle(); // family tree of the selection
   if (e.key === 'd' || e.key === 'D') {
+    detailAuto = false; // manual takeover — 'd' owns the overlay from here (no more auto zoom-flipping)
     detailOn = !detailOn;
-    overlay.setEnabled(detailOn); // toggle the zoomed-in sprite/detail rendering (off by default for perf)
+    overlay.setEnabled(detailOn); // toggle the zoomed-in sprite/detail rendering
   }
 });
 
@@ -655,6 +673,7 @@ function frame(): void {
     }
     if (v >= 2) renderer.drawLines(parcelScratch, v);
   }
+  updateDetail(); // auto-enable bodies once zoomed in (bounded by visible count for perf)
   overlay.setCamera(camX, camY, zoom);
   overlay.draw(world.store);
   // Path trail of the followed creature (fading old→new; seam-crossing segments skipped so toroidal
