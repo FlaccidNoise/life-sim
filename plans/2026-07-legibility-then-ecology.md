@@ -132,3 +132,39 @@ diet coefficient relaxed; predEncEncounter > 0.1; the demo gate is green in CI.
 - B0 is done. B1 is a one-line validated change but should land WITH the B-gate so it's protected.
 - B2 is the real root-cause work; B1 is the down-payment. B3/B4/B5 are additive depth.
 - Each task is one reviewable increment (Josh's preference); commit per task as a rewind point.
+
+---
+
+## Arc B — outcomes (2026-07-03)
+
+Landed B0→B4 as reviewable commits; each validated headlessly (probes, not the browser). Determinism held
+(same config+seed → same hash) throughout; 458 tests green. The demo-health gate now guards the shipped demo
+in `nightly.yml`.
+
+- **B0** — findMate range-scan fix (mateContactRange is a real knob). Landed.
+- **B1** — `mateContactRange 12→36` + `demo-health-gate.ts` CI gate. Mate-encounter was the #1 repro
+  bottleneck; 36 opens the demo out of the bootstrap valley. evolve-probe 20k seeds 1-4: bimodal on all.
+- **B4** — cap `hunt()` absorption at `satiatedBar` (mirror metabolize's graze-stop). A fed predator stops
+  hunting → the hoard can't exceed the breed bar (hunting success → offspring, not a dead sink) and prey get
+  respite (negative frequency dependence). Strictly improved the shipped demo (pop +17-67%, σDIET up). This is
+  the true root-cause lever behind B2.
+- **B2** — `dietGeneralistFloor 0.6→0.7`. The B2 sweep FALSIFIED the plan's geometry hypothesis: predators are
+  NOT coefficient-propped (persist at every floor incl. 1.0 thanks to B1 density), and predEncounter can't be
+  pushed >0.1 safely (biteRange 32 hits it but over-predates → predator crash; predators thrive at enc~0.04 on
+  kill payoff + herbivory fallback). The split was COEFFICIENT-held because hunting economically dominated
+  grazing — which B4 fixes. With B4, the split holds at a relaxed floor: 20k robustness sets the target
+  (0.6→4/4, 0.7→8/8 seeds 1-8, 0.8→1/4 decays by 20k). 0.7 = relaxed-yet-robust.
+- **B3** — NOT SHIPPED (kept `fertilityDriftRate 0`). Measured negative: re-enabling pocket drift (rates
+  0.1/0.3/0.5) does NOT give vision/speed directional movement past t10k — both stay in noisy non-directional
+  bands identical to rate 0 (vision is scale-walled per perception-scale-mismatch, not drift-frozen). The
+  premise "selection stalls" is false post-B1/B4: DIET (the split) and SIZE (σ 4.8→11) evolve strongly and
+  lineage generation climbs to 30-40. Drift would also undo the deliberate demes design. evolve-probe gained a
+  `spdμ` (MAX_SPEED) column for this measurement.
+- **B5** — NOT IMPLEMENTED (stretch). The split is robustly CREATED (disruptive diet-income selection + B4) and
+  MAINTAINED — it persists to 20k on 8/8 seeds, so cross-diet mating is already effectively limited by the
+  existing compatibility gate (`mateDietWeight 5`). Assortative mate-CHOICE on diet is redundant for the
+  achieved goal; adding it would be speculative. Left as an available follow-up if sharper isolation is wanted.
+
+**Exit criteria:** evolve-probe 20k seeds 1-8 → 8/8 bimodal + healthy turnover WITH the coefficient relaxed
+(0.6→0.7) ✓; demo gate green in CI ✓; predEncounter>0.1 NOT met and documented as the wrong target (predation
+is payoff-driven, not encounter-geometry-driven, at this world scale).
