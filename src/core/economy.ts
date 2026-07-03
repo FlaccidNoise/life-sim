@@ -77,6 +77,14 @@ export function hunt(store: OrganismStore, hash: SpatialHash, cfg: Config): void
     const sg = i * SCALAR_GENE_COUNT;
     const diet = scalarGenes[sg + ScalarGene.DIET]!;
     if (diet <= 0) continue; // pure grazer — never hunts
+    // SATIATION (B4): a predator already at its own size-scaled satiated bar stops hunting — metabolize's
+    // graze-stop (a full grazer stops eating) mirrored onto predation. Without it hunt() absorbs energy
+    // uncapped (predationGain>1 mints energy) into a hoard far above the breed bar that reproduce never
+    // spends, so hunting success leaks into a dead sink instead of offspring. Capping at satiatedBar makes a
+    // run of kills convert into breeding (breed-at-the-top fires at the bar) and gives prey respite when
+    // predators are fed (predator/prey negative frequency dependence). Before the O(range²) neighbour scan so
+    // full predators are also cheaper. Deterministic (energy + genes, no RNG).
+    if (energy[i]! >= satiatedBar(scalarGenes, i, cfg)) continue;
     // Holling Type-II handling-time refractory: a predator still digesting its last kill can't feed again.
     // Gated on huntHandlingTime>0 so the OFF path never reads the counter → byte-identical. RNG-free.
     if (huntHandlingTime > 0 && huntCooldownLeft[i]! > 0) continue; // busy handling its last kill

@@ -655,6 +655,34 @@ describe('hunt (predation)', () => {
     expect(s.energy[pred]).toBeCloseTo(20 + 5 * cfg.predationGain);
   });
 
+  it('a satiated predator (energy ≥ its satiated bar) stops hunting — B4 graze-stop mirror', () => {
+    // satiatedBar = SATIATED_THRESHOLD gene (100) × (SIZE 10 / cellRadius 6)^sizeStoreExp(1) ≈ 167. A predator
+    // at/above the bar skips hunting entirely (the rule metabolize already applies to grazing), so hunting
+    // success converts to breeding instead of an uncapped hoard the breed gate never spends.
+    const s = new OrganismStore(4);
+    const pred = s.alloc();
+    const prey = s.alloc();
+    s.x[pred] = 50;
+    s.y[pred] = 50;
+    s.x[prey] = 54;
+    s.y[prey] = 50; // 4u away, within biteRange 12
+    genes(s, pred, cfg, { [ScalarGene.DIET]: 1, [ScalarGene.DAMAGE]: 5, [ScalarGene.SIZE]: 10 });
+    genes(s, prey, cfg, { [ScalarGene.DIET]: 0, [ScalarGene.SIZE]: 5 });
+    s.rebuildLive();
+
+    s.energy[pred] = 200; // ≥ satiatedBar (~167) → full → does not hunt
+    s.energy[prey] = 30;
+    hunt(s, mkHash(s), cfg);
+    expect(s.energy[prey]).toBe(30); // untouched — the satiated predator left the prey alone
+    expect(s.energy[pred]).toBe(200); // absorbed nothing
+
+    s.energy[pred] = 20; // control: hungry (< bar) → it bites, so the skip above wasn't a false positive
+    s.energy[prey] = 30;
+    hunt(s, mkHash(s), cfg);
+    expect(s.energy[prey]).toBeCloseTo(25);
+    expect(s.energy[pred]).toBeCloseTo(20 + 5 * cfg.predationGain);
+  });
+
   it('a pure grazer (diet 0) does not hunt', () => {
     const s = new OrganismStore(4);
     const a = s.alloc();
