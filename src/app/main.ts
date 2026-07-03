@@ -10,7 +10,7 @@
 import { World } from '../core/world';
 import { defaultConfig, type Config } from '../core/config';
 import { livingWorldOverrides } from './living-world-config';
-import { scanHealth } from '../core/health';
+import { scanHealth, type HealthReport } from '../core/health';
 import { Renderer, ColorMode, FoodLayer } from '../render/renderer';
 import { buildOverlaySegments } from '../render/overlay';
 import { DetailOverlay } from '../render/detail-overlay';
@@ -38,6 +38,30 @@ function el<T extends HTMLElement>(id: string): T {
 
 const canvas = el<HTMLCanvasElement>('view');
 const fatal = el('fatal'); // boot-fatal banner (renderer init failure)
+
+// Non-fatal runtime-health banner. A mid-run invariant break (NaN/oob/energy/gene) used to be
+// console-only — a silent failure. `scanHealth` runs on the status cadence (below) and surfaces it here;
+// the sim keeps running. `lastHealthCount` is the latest violation total, `healthAck` the count the user
+// dismissed — re-show when the count changes so a NEW break isn't hidden behind an old dismiss.
+const healthWarn = el('health-warn');
+let lastHealthCount = 0;
+let healthAck = -1;
+healthWarn.addEventListener('click', (e) => {
+  if ((e.target as HTMLElement).dataset.act === 'dismiss') {
+    healthAck = lastHealthCount;
+    healthWarn.hidden = true;
+  }
+});
+function showHealthWarn(r: HealthReport): void {
+  const v = r.violations[0];
+  const detail = v ? ` — ${v.kind} · slot ${v.slot} · ${v.field}=${v.value}` : '';
+  const plural = r.violationCount === 1 ? '' : 's';
+  healthWarn.innerHTML =
+    `<strong>⚠ ${r.violationCount} runtime invariant violation${plural}</strong> at tick ${r.tick}${detail}.` +
+    ` Sim continues — inspect with <code>sim.health()</code> in the console.` +
+    ` <button data-act="dismiss" style="margin-left:8px;cursor:pointer">dismiss</button>`;
+  healthWarn.hidden = false;
+}
 
 // Live demo = the FULL LIVING-WORLD PACKAGE. defaultConfig keeps every feature OFF so headless/tests stay
 // byte-identical to the pre-feature engine; the demo opts in here. Every knob is live-tunable in the panel:
@@ -768,6 +792,15 @@ function frame(): void {
     controls.setPerf(stepMsEma, lastStepsPerFrame, world.hash.stats());
     lastHash = world.stateHash();
     meanGen = lineage.liveMeanGeneration(world.store);
+    // Runtime-health sweep (same O(pop) cadence as the hash): surface any invariant break, don't swallow it.
+    const health = scanHealth(world, 5);
+    lastHealthCount = health.violationCount;
+    if (!health.ok) {
+      if (health.violationCount !== healthAck) showHealthWarn(health);
+    } else {
+      healthWarn.hidden = true;
+      healthAck = -1;
+    }
     setFollowStatus(
       recorder.following ? recorder.followedSlot : -1,
       recorder.count,

@@ -973,6 +973,23 @@
       style="top: 14px; left: 14px; max-width: 480px; z-index: 50"
     ></div>
 
+    <!-- Non-fatal runtime-health banner: a mid-run invariant violation (NaN/oob/energy/gene) surfaces
+         here instead of only in the console — the sim keeps running, but no failure stays silent. -->
+    <div
+      id="health-warn"
+      class="panel"
+      hidden
+      role="status"
+      style="
+        top: 58px;
+        left: 14px;
+        max-width: 480px;
+        z-index: 49;
+        border-color: rgba(224, 160, 107, 0.65);
+        color: #e0a06b;
+      "
+    ></div>
+
     <!-- TOP: transport / time controls (Controls renders into #controls) -->
     <header id="topbar" aria-label="Time controls">
       <div id="controls" class="tb-row"></div>
