@@ -20,6 +20,10 @@ import { dietShape } from '../../render/palette';
 const STALL_WARMUP_TICKS = 2000;
 const STALL_BIRTHS_PER_TICK = 0.2;
 
+// Reused ages buffer for the median sort — grows to the live high-water mark so summarizePopulation (called
+// every frame) allocates nothing per call. UI-only scratch; never read by the sim.
+let ageScratch = new Uint32Array(0);
+
 export interface PopSummary {
   n: number;
   herb: number;
@@ -50,6 +54,7 @@ export function summarizePopulation(store: OrganismStore, tick: number, cfg: Con
       meanEnergy: 0,
     };
   }
+  let ageSum = 0;
   let eSum = 0;
   let dSum = 0;
   let dSqSum = 0;
@@ -58,11 +63,12 @@ export function summarizePopulation(store: OrganismStore, tick: number, cfg: Con
   let pred = 0;
   let founders = 0;
   let satiated = 0;
-  const ages = new Uint32Array(n); // sorted below for the median (cheaper + steadier than a mean)
+  if (ageScratch.length < n) ageScratch = new Uint32Array(n); // grows once to the high-water mark
   for (let k = 0; k < n; k++) {
     const i = store.liveIndices[k]!;
     const age = store.age[i]!;
-    ages[k] = age;
+    ageScratch[k] = age;
+    ageSum += age;
     if (age >= tick) founders++; // born at tick 0 → age tracks tick
     eSum += store.energy[i]!;
     if (store.energy[i]! >= satiatedBar(store.scalarGenes, i, cfg)) satiated++;
@@ -74,11 +80,9 @@ export function summarizePopulation(store: OrganismStore, tick: number, cfg: Con
     else if (shape === 1) omni++;
     else herb++;
   }
-  ages.sort();
+  ageScratch.subarray(0, n).sort(); // sort only the live prefix (in place, no allocation)
   const mean = dSum / n;
   const variance = Math.max(0, dSqSum / n - mean * mean); // clamp float noise so σ can't go NaN
-  let ageSum = 0;
-  for (let k = 0; k < n; k++) ageSum += ages[k]!;
   return {
     n,
     herb,
@@ -86,7 +90,7 @@ export function summarizePopulation(store: OrganismStore, tick: number, cfg: Con
     pred,
     dietSigma: Math.sqrt(variance),
     meanAge: ageSum / n,
-    medianAge: ages[n >> 1]!,
+    medianAge: ageScratch[n >> 1]!,
     founders,
     satiated,
     meanEnergy: eSum / n,

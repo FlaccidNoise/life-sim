@@ -20,6 +20,7 @@ export class TimeSeriesGraph {
   private readonly history: number[][] = []; // history[seriesIdx] = ring of values
   private readonly maxPoints = 600;
   private ticks: number[] = [];
+  private readonly bandIdx: number[]; // series indices drawn as stacked bands (fixed at construction)
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -30,6 +31,7 @@ export class TimeSeriesGraph {
     if (!ctx) throw new Error('2D canvas context unavailable for the graph');
     this.ctx = ctx;
     for (let i = 0; i < series.length; i++) this.history.push([]);
+    this.bandIdx = series.map((s, i) => (s.band ? i : -1)).filter((i) => i >= 0);
   }
 
   push(tick: number, values: number[]): void {
@@ -66,7 +68,7 @@ export class TimeSeriesGraph {
 
   /** Stacked filled areas for the `band` series, sharing one normalization (running max stack total). */
   private drawBands(w: number, h: number, n: number, xOf: (i: number) => number): void {
-    const bandIdx = this.series.map((s, i) => (s.band ? i : -1)).filter((i) => i >= 0);
+    const bandIdx = this.bandIdx;
     if (bandIdx.length === 0) return;
     let bandMax = 1;
     for (let i = 0; i < n; i++) {
