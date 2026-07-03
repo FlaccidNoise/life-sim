@@ -96,7 +96,13 @@ void main() {
   float sat = 0.25 + 0.70 * clamp(a_vis, 0.0, 1.0);        // low vision → greyish, sharp eyes → vivid
   float val = 0.50 + 0.50 * clamp(a_spd, 0.0, 1.0);        // idle → dim, fast → bright
   if (u_colorMode == 1) {
-    v_color = hsv2rgb(dietHue(a_diet), sat, val);          // diet: green herbivore → red predator
+    // diet: trophic hue must dominate at world zoom, so keep saturation/value HIGH rather than tying
+    // them to vision/speed (vision evolves toward 0, which washed grazers+predators into identical pale
+    // dots). Floors keep even a blind, idle creature unmistakably green (grazer) or red (predator);
+    // vision/speed still add a subtle vivid/bright shimmer on top.
+    float dsat = 0.80 + 0.20 * clamp(a_vis, 0.0, 1.0);
+    float dval = 0.82 + 0.18 * clamp(a_spd, 0.0, 1.0);
+    v_color = hsv2rgb(dietHue(a_diet), dsat, dval);        // diet: green herbivore → red predator
   } else if (u_colorMode == 2) {
     v_color = hsv2rgb(energyHue(a_efrac), 0.80, 0.95);     // energy: starving red → satiated green
   } else if (u_colorMode == 3) {
