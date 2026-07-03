@@ -217,4 +217,21 @@ export class Lineage {
   get size(): number {
     return this.nodes.size;
   }
+
+  /** Mean generation (family-tree depth) over the live population — the "generations elapsed" turnover
+   *  readout. O(live) map lookups, so call it on the status cadence, not every frame. Live creatures
+   *  not in the forest (e.g. pruned dead-leaf ancestors can't be live) are skipped. */
+  liveMeanGeneration(store: LineageStore): number {
+    let sum = 0;
+    let counted = 0;
+    for (let k = 0; k < store.liveCount; k++) {
+      const slot = store.liveIndices[k]!;
+      const node = this.nodes.get(keyOf(slot, store.genId[slot]!));
+      if (node) {
+        sum += node.generation;
+        counted++;
+      }
+    }
+    return counted ? sum / counted : 0;
+  }
 }

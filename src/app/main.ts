@@ -547,6 +547,9 @@ let lastStepsPerFrame = 0;
 // Status-line determinism digest. stateHash() is O(pop) and walks every heritable gene, so recompute it
 // on the 500ms status cadence (not every frame) and reuse the cached value for the per-frame setStatus.
 let lastHash = '';
+// Mean lineage generation over the live set — the "generations elapsed" turnover readout. O(live) map
+// lookups, so (like the hash) it's recomputed on the 500ms status cadence and reused each frame.
+let meanGen = 0;
 // Trailing 100-tick vital window: samples of cumulative {tick, totalBirths, totalDeaths}. The trailing
 // per-tick rate = Δcumulative / Δticks against the oldest sample still spanning ≥100 ticks.
 const VITAL_WINDOW_TICKS = 100;
@@ -745,6 +748,7 @@ function frame(): void {
     // costly per frame).
     controls.setPerf(stepMsEma, lastStepsPerFrame, world.hash.stats());
     lastHash = world.stateHash();
+    meanGen = lineage.liveMeanGeneration(world.store);
     setFollowStatus(
       recorder.following ? recorder.followedSlot : -1,
       recorder.count,
@@ -764,7 +768,7 @@ function frame(): void {
   const span = Math.max(1, world.tick - head.tick);
   const avgB = (world.totalBirths - head.b) / span;
   const avgD = (world.totalDeaths - head.d) / span;
-  const summary = summarizePopulation(world.store); // one pass, shared by the graph + world stats
+  const summary = summarizePopulation(world.store, world.tick, config); // one pass, shared by graph + stats
   graph.push(world.tick, [
     summary.herb,
     summary.omni,
@@ -775,8 +779,8 @@ function frame(): void {
     summary.dietSigma,
   ]);
   graph.render();
-  distributions.render(world.store);
-  worldStats.render(summary, avgB, avgD);
+  distributions.render(world.store, config);
+  worldStats.render(summary, avgB, avgD, world.tick, meanGen);
   controls.setStatus(world.tick, tps, world.population, lastHash);
   // keep the selection panel honest if the dot was recycled
   if (selected && !world.store.isAlive(selected.slot, selected.gen)) {
