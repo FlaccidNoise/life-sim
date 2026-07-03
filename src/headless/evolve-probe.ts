@@ -22,18 +22,18 @@ const POS = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 const FLAGS = process.argv.slice(2).filter((a) => a.startsWith('--'));
 const TICKS = Number(POS[0] ?? 20000);
 const STRIDE = Number(POS[2] ?? 5000);
-// Optional lever overrides for experiments, e.g. --mate=36 --initPop=2000. Applied on top of the demo.
+// Optional lever overrides for experiments, e.g. --mate=36 --initPop=2000 --dietGeneralistFloor=0.85.
+// Three short aliases; any other --key=num is applied as the raw Config key (unknown keys are ignored by
+// defaultConfig), so the B2 coefficient-relaxation sweep can drive any numeric knob straight from the CLI.
+const ALIAS: Record<string, string> = {
+  mate: 'mateContactRange',
+  initPop: 'initialPopulation',
+  compat: 'mateCompatThreshold',
+};
 const OVERRIDES: Record<string, number> = {};
 for (const f of FLAGS) {
   const m = /^--(\w+)=(-?\d+(?:\.\d+)?)$/.exec(f);
-  if (m) {
-    const key = {
-      mate: 'mateContactRange',
-      initPop: 'initialPopulation',
-      compat: 'mateCompatThreshold',
-    }[m[1]!];
-    if (key) OVERRIDES[key] = Number(m[2]);
-  }
+  if (m) OVERRIDES[ALIAS[m[1]!] ?? m[1]!] = Number(m[2]);
 }
 
 function parseSeeds(s: string | undefined): number[] {
