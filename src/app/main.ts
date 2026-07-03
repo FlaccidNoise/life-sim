@@ -831,7 +831,7 @@ function frame(): void {
     summary.dietSigma,
   ]);
   graph.render();
-  distributions.render(world.store, config);
+  distributions.render(world.store, summary, config);
   worldStats.render(summary, avgB, avgD, world.tick, meanGen);
   controls.setStatus(world.tick, tps, world.population, lastHash);
   // keep the selection panel honest if the dot was recycled

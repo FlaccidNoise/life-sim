@@ -13,8 +13,9 @@
  */
 import { type OrganismStore } from '../../core/store';
 import { type Config } from '../../core/config';
+import { type PopSummary } from './world-stats';
 import { ScalarGene, SCALAR_GENE_COUNT, SCALAR_GENE_SPECS } from '../../core/genome';
-import { dietColor, dietShape, fieldColor, rgbCss } from '../../render/palette';
+import { dietColor, fieldColor, rgbCss } from '../../render/palette';
 
 /** Clamp a 0..1 fraction (marker x-positions off the visible axis land on the nearest edge). */
 const clampFrac = (t: number): number => (t < 0 ? 0 : t > 1 ? 1 : t);
@@ -239,7 +240,7 @@ export class Distributions {
     }
   }
 
-  render(store: OrganismStore | null, cfg?: Config): void {
+  render(store: OrganismStore | null, summary: PopSummary, cfg: Config): void {
     const dpr = globalThis.devicePixelRatio || 1;
     const w = Math.max(1, Math.floor(this.canvas.clientWidth * dpr));
     const h = Math.max(1, Math.floor(this.canvas.clientHeight * dpr));
@@ -261,22 +262,15 @@ export class Distributions {
       return;
     }
 
-    // Header: the trophic headcount the diet-mean hides — bucketed by the SAME dietShape() the dots
-    // use (○ herbivore / ◇ omnivore / △ predator), so the count and the on-canvas glyphs agree.
-    let herb = 0;
-    let omni = 0;
-    let pred = 0;
-    for (let k = 0; k < store.liveCount; k++) {
-      const shape = dietShape(
-        store.scalarGenes[store.liveIndices[k]! * SCALAR_GENE_COUNT + ScalarGene.DIET]!,
-      );
-      if (shape === 2) pred++;
-      else if (shape === 1) omni++;
-      else herb++;
-    }
+    // Header: the trophic headcount the diet-mean hides (○ herbivore / ◇ omnivore / △ predator). Reuses the
+    // per-frame summary (same dietShape() bucketing) instead of re-scanning the live set a second time.
     ctx.font = `${Math.round(10 * dpr)}px ui-monospace, monospace`;
     ctx.fillStyle = 'rgba(150,170,190,0.85)';
-    ctx.fillText(`pop ${store.liveCount}   ○${herb} ◇${omni} △${pred}`, 6 * dpr, 4 * dpr);
+    ctx.fillText(
+      `pop ${summary.n}   ○${summary.herb} ◇${summary.omni} △${summary.pred}`,
+      6 * dpr,
+      4 * dpr,
+    );
 
     if (this.fields.length === 0) {
       ctx.fillStyle = 'rgba(140,160,180,0.6)';
@@ -319,7 +313,7 @@ export class Distributions {
       // centers) UNDER the bars, so a histogram piled to the RIGHT of it reads as an energy hoard / stall
       // (full but not breeding), not health, and one piled LEFT reads as starving.
       const energyBand =
-        cfg && spec.key === 'energy'
+        spec.key === 'energy'
           ? {
               xr:
                 bx0 +
