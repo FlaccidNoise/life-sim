@@ -76,13 +76,6 @@ export class World {
       2 * config.cellRadius,
       config.maxOrganisms,
     );
-    if (config.sexualReproduction && config.mateContactRange > 2 * config.cellRadius) {
-      console.warn(
-        `[life-sim] mateContactRange (${config.mateContactRange}) exceeds the mate-scan reach ` +
-          `2*cellRadius (${2 * config.cellRadius}); findMate's 3×3 hash scan can't see past one cell, ` +
-          `so the extra range is ignored. Lower mateContactRange or widen the scan (see findMate).`,
-      );
-    }
     this.food = new FoodField(
       config.worldWidth,
       config.worldHeight,

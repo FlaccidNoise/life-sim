@@ -404,9 +404,12 @@ export function cullDead(store: OrganismStore): number {
 }
 
 /** Find the best compatible mate for mother `p` within mateContactRange (RNG-free, deterministic). Scans
- *  the post-MOVE hash 3×3 neighbourhood (cell ≥ contact range). A candidate is alive, mature, within range,
- *  and genetically compatible (distance < threshold). Among candidates, picks the one best matching the
- *  mother's PREFERENCE (min |display − preference|), tie-broken by lowest slot. Returns the slot or -1. */
+ *  a hash neighbourhood sized to mateContactRange (like hunt(): ceil(range/cellSize) cells, capped at half
+ *  the grid) — previously a fixed 3×3 (±1 cell), which silently capped the reach at one cell (~2·cellRadius)
+ *  and made any larger mateContactRange a no-op. At range ≤ one cell this is byte-identical to the old 3×3
+ *  (radius 1, same ascending bucket/slot order). A candidate is alive, mature, within range, and genetically
+ *  compatible (distance < threshold); among them, picks the one best matching the mother's PREFERENCE (min
+ *  |display − preference|), tie-broken by lowest slot. Returns the slot or -1. */
 function findMate(store: OrganismStore, p: number, cfg: Config, hash: SpatialHash): number {
   const { x, y, scalarGenes, age } = store;
   const N = SCALAR_GENE_COUNT;
@@ -414,21 +417,36 @@ function findMate(store: OrganismStore, p: number, cfg: Config, hash: SpatialHas
   const pref = scalarGenes[p * N + ScalarGene.PREFERENCE]!;
   const ww = cfg.worldWidth;
   const wh = cfg.worldHeight;
+  const { cols, rows, bucketStart, sorted } = hash;
+  const cellSize = Math.min(ww / cols, wh / rows);
+  const halfGrid = Math.floor((Math.min(cols, rows) - 1) / 2);
+  const mr = Math.min(halfGrid, Math.max(1, Math.ceil(cfg.mateContactRange / cellSize)));
+  const cx = hash.colOf(x[p]!);
+  const cy = hash.rowOf(y[p]!);
   let best = -1;
   let bestScore = Infinity;
-  hash.forEachNeighbor(x[p]!, y[p]!, (j) => {
-    if (j === p || !store.isAlive(j)) return;
-    if (cfg.ageStages && age[j]! < scalarGenes[j * N + ScalarGene.MATURITY_AGE]!) return; // juvenile
-    const dx = wrapDelta(x[j]! - x[p]!, ww);
-    const dy = wrapDelta(y[j]! - y[p]!, wh);
-    if (dx * dx + dy * dy > range2) return; // out of contact range
-    if (geneticDistance(scalarGenes, p, j, cfg) >= cfg.mateCompatThreshold) return; // incompatible
-    const score = Math.abs(scalarGenes[j * N + ScalarGene.DISPLAY]! - pref);
-    if (score < bestScore || (score === bestScore && j < best)) {
-      bestScore = score;
-      best = j;
+  for (let dy = -mr; dy <= mr; dy++) {
+    const by = (cy + dy + rows) % rows;
+    for (let dx = -mr; dx <= mr; dx++) {
+      const bx = (cx + dx + cols) % cols;
+      const b = by * cols + bx;
+      const end = bucketStart[b + 1]!;
+      for (let idx = bucketStart[b]!; idx < end; idx++) {
+        const j = sorted[idx]!;
+        if (j === p || !store.isAlive(j)) continue;
+        if (cfg.ageStages && age[j]! < scalarGenes[j * N + ScalarGene.MATURITY_AGE]!) continue; // juvenile
+        const dxp = wrapDelta(x[j]! - x[p]!, ww);
+        const dyp = wrapDelta(y[j]! - y[p]!, wh);
+        if (dxp * dxp + dyp * dyp > range2) continue; // out of contact range
+        if (geneticDistance(scalarGenes, p, j, cfg) >= cfg.mateCompatThreshold) continue; // incompatible
+        const score = Math.abs(scalarGenes[j * N + ScalarGene.DISPLAY]! - pref);
+        if (score < bestScore || (score === bestScore && j < best)) {
+          bestScore = score;
+          best = j;
+        }
+      }
     }
-  });
+  }
   return best;
 }
 
