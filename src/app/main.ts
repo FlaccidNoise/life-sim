@@ -282,16 +282,21 @@ const controls = new Controls(el('controls'), {
   },
 });
 
-// Save the followed creature's per-tick recording as a CSV file (user-initiated via the ⤓ csv button).
-function downloadFollowCsv(): void {
-  if (recorder.count === 0) return;
-  const blob = new Blob([recorder.toCsv()], { type: 'text/csv' });
+// Trigger a browser download of `csv` text as `filename` (shared by the follow-recording + run-history exports).
+function saveCsv(filename: string, csv: string): void {
+  const blob = new Blob([csv], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `follow-${recorder.followedSlot}-${world.tick}.csv`;
+  a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+// Save the followed creature's per-tick recording as a CSV file (user-initiated via the ⤓ csv button).
+function downloadFollowCsv(): void {
+  if (recorder.count === 0) return;
+  saveCsv(`follow-${recorder.followedSlot}-${world.tick}.csv`, recorder.toCsv());
 }
 
 // Persistent whole-run history (population + gene trajectory), snapshotted every ~200 ticks — the graph
@@ -301,13 +306,7 @@ const history = new HistoryRecorder();
 // Save the whole-run history as CSV (console: `sim.downloadHistory()`). Analyze evolution over time.
 function downloadHistoryCsv(): void {
   if (history.count === 0) return;
-  const blob = new Blob([history.toCsv()], { type: 'text/csv' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `history-${world.tick}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
+  saveCsv(`history-${world.tick}.csv`, history.toCsv());
 }
 
 // Between-snapshot vital-rate tracker for the history CSV (independent of the UI's 100-tick window, so the
@@ -541,6 +540,14 @@ function rebuild(): void {
   setFollowStatus(-1, 0, false);
   syncFollowUi();
   vitalSamples = [];
+  // Reset the run-history log + its between-snapshot rate trackers on a fresh world. Without this the
+  // recorder's cadence gate keeps the OLD world's tick high-water mark (recording stalls until the new run
+  // catches back up) and avgBirths/avgDeaths subtract the old world's large cumulative totals from the new
+  // world's small ones → large negative rates baked into the CSV.
+  history.clear();
+  histPrevTick = 0;
+  histPrevBirths = 0;
+  histPrevDeaths = 0;
 }
 
 // Inspect: pick the nearest live organism to a screen point.

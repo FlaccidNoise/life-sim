@@ -123,6 +123,7 @@ function runOne(variant: Variant, seed: number): Result {
     if (world.population <= 0) extinct = true;
     if (t % SAMPLE === 0 || t === TICKS) traj.push(snapshot(world, t));
   }
+  if (traj.length === 0) traj.push(snapshot(world, world.tick)); // ticks<1 → never sampled; keep traj non-empty
   let peak = traj[0]!;
   for (const s of traj) if (s.predFrac > peak.predFrac) peak = s;
   const afterPeak = traj.filter((s) => s.tick >= peak.tick);
