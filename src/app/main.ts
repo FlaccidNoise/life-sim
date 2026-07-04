@@ -29,6 +29,7 @@ import { FollowRecorder } from './observability/follow-recorder';
 import { Lineage } from './observability/lineage';
 import { LineageModal } from './observability/lineage-modal';
 import { TimeSeriesGraph } from './observability/graph';
+import { HistoryRecorder, sampleGeneStats, type HistorySample } from './observability/history';
 
 function el<T extends HTMLElement>(id: string): T {
   const e = document.getElementById(id);
@@ -249,6 +250,14 @@ function followTick(): void {
   if (recorder.isFollowedAlive(world.store))
     pushTrail(world.store.x[recorder.followedSlot]!, world.store.y[recorder.followedSlot]!);
 }
+
+// The single sim-stepping unit shared by the visible rAF loop AND the hidden-tab pump. followTick() drains
+// the lineage forest every step, so routing BOTH drivers through here makes it impossible to advance the
+// world without keeping the family-tree current — the divergence that made meanGen read 0 while hidden.
+function stepSim(): void {
+  world.step();
+  followTick();
+}
 // Camera: centre in world units + zoom (1 = whole world fits). Scroll to zoom, drag to pan.
 let camX = config.worldWidth / 2;
 let camY = config.worldHeight / 2;
@@ -283,6 +292,62 @@ function downloadFollowCsv(): void {
   a.download = `follow-${recorder.followedSlot}-${world.tick}.csv`;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+// Persistent whole-run history (population + gene trajectory), snapshotted every ~200 ticks — the graph
+// only keeps a 600-point scrolling window, so this is the log a long run can be analyzed from afterward.
+const history = new HistoryRecorder();
+
+// Save the whole-run history as CSV (console: `sim.downloadHistory()`). Analyze evolution over time.
+function downloadHistoryCsv(): void {
+  if (history.count === 0) return;
+  const blob = new Blob([history.toCsv()], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `history-${world.tick}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// Between-snapshot vital-rate tracker for the history CSV (independent of the UI's 100-tick window, so the
+// same builder works from the rAF frame AND the hidden-tab pump). Updated only when a snapshot is taken.
+let histPrevTick = 0;
+let histPrevBirths = 0;
+let histPrevDeaths = 0;
+
+// One full history snapshot from current world state — everything computed fresh (no reliance on the
+// frame's cadence caches), so it's correct whether called from the visible frame or the hidden pump.
+function buildHistorySample(): HistorySample {
+  const summary = summarizePopulation(world.store, world.tick, config);
+  const genes = sampleGeneStats(world.store);
+  const dTick = Math.max(1, world.tick - histPrevTick);
+  const avgBirths = (world.totalBirths - histPrevBirths) / dTick;
+  const avgDeaths = (world.totalDeaths - histPrevDeaths) / dTick;
+  histPrevTick = world.tick;
+  histPrevBirths = world.totalBirths;
+  histPrevDeaths = world.totalDeaths;
+  return {
+    tick: world.tick,
+    pop: summary.n,
+    herb: summary.herb,
+    omni: summary.omni,
+    pred: summary.pred,
+    meanAge: summary.meanAge,
+    medianAge: summary.medianAge,
+    founders: summary.founders,
+    satiated: summary.satiated,
+    meanEnergy: summary.meanEnergy,
+    births: world.totalBirths,
+    deaths: world.totalDeaths,
+    avgBirths,
+    avgDeaths,
+    food: world.food.total(),
+    meanGen: lineage.liveMeanGeneration(world.store),
+    health: scanHealth(world, 5).violationCount,
+    geneMean: genes.mean,
+    geneStd: genes.std,
+  };
 }
 
 // Settings modal — the organized tuning surface (categorized knobs + seed + launch-new-world). Same
@@ -631,8 +696,7 @@ function frame(): void {
       acc += speed;
       if (acc >= 1) {
         snapshotPrev();
-        world.step();
-        followTick();
+        stepSim();
         stepped = 1;
         acc -= 1;
       }
@@ -640,8 +704,7 @@ function frame(): void {
     } else {
       const steps = Math.min(STEP_CAP, Math.round(speed));
       for (let i = 0; i < steps; i++) {
-        world.step();
-        followTick(); // per-TICK dump + trail, even at high speed
+        stepSim(); // step + per-TICK dump/trail + lineage drain, even at high speed
       }
       stepped = steps;
       acc = 0;
@@ -833,6 +896,9 @@ function frame(): void {
   graph.render();
   distributions.render(world.store, summary, config);
   worldStats.render(summary, avgB, avgD, world.tick, meanGen);
+  // Append to the persistent run history (gated to every ~200 ticks; the gene pass runs only when it fires).
+  // Same builder feeds the hidden-tab pump, so the log has no gap when the sim is driven off-screen.
+  history.maybeRecord(world.tick, buildHistorySample);
   controls.setStatus(world.tick, tps, world.population, lastHash);
   // keep the selection panel honest if the dot was recycled
   if (selected && !world.store.isAlive(selected.slot, selected.gen)) {
@@ -851,6 +917,28 @@ function frame(): void {
 }
 requestAnimationFrame(frame);
 
+// Hidden-tab pump: Chrome suspends requestAnimationFrame when the tab isn't visible, freezing the rAF-driven
+// sim. For a long unattended run we instead advance the sim from a timer while hidden + running, recording
+// history on the same 200-tick cadence (buildHistorySample) so the log has NO gap off-screen. When visible,
+// rAF drives and this no-ops (no double-step). Pair with `caffeinate` — OS sleep halts timers too. Determinism
+// is per-tick, so driving via timer vs rAF doesn't change the state at any given tick.
+//
+// Fixed, conservative batch per fire. NOT a time budget: a hidden tab coarsens performance.now()/Date.now()
+// (Chrome buckets them to ~100ms–1s for anti-fingerprinting) and clamps setInterval to ~1s, so a
+// `while (performance.now() < deadline)` loop can't measure its own runtime — the clock jumps in coarse steps
+// and the loop overruns by orders of magnitude, pinning the main thread (the sim, repaints, and devtools all
+// starve). A fixed iteration count is bounded no matter what the clock does. 400 steps is well under the
+// interval even at a large population; with the hidden-tab ~1s clamp that's a few hundred ticks/sec — ample
+// for an overnight run, and it leaves the thread idle time to stay responsive.
+const PUMP_BATCH = 400;
+setInterval(() => {
+  if (!running || !document.hidden) return;
+  for (let i = 0; i < PUMP_BATCH; i++) {
+    stepSim(); // same per-step contract as the visible frame (incl. lineage.commit) → meanGen stays correct
+    history.maybeRecord(world.tick, buildHistorySample); // O(1) no-op until the 200-tick gate fires
+  }
+}, 250);
+
 // Console handle for poking the sim (matches the old engine's affordance).
 (globalThis as unknown as { sim: unknown }).sim = {
   get world() {
@@ -863,4 +951,9 @@ requestAnimationFrame(frame);
   health: (maxViolations?: number) => scanHealth(world, maxViolations),
   // The followed creature's recording as CSV text (for the console; the ⤓ csv button downloads it).
   followCsv: () => recorder.toCsv(),
+  // Whole-run history: `sim.history()` snapshots, `sim.historyCsv()` the CSV, `sim.downloadHistory()` saves it.
+  history: () => history.all(),
+  historyCsv: () => history.toCsv(),
+  historyCount: () => history.count,
+  downloadHistory: () => downloadHistoryCsv(),
 };

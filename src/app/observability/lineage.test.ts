@@ -173,4 +173,37 @@ describe('Lineage recorder', () => {
     expect(v.founderKey).toBe('5:1');
     expect(v.orphanBirths).toBe(1); // surfaced, not silently misattributed
   });
+
+  // Guards the invariant behind the meanGen telemetry fix: a step-driver MUST commit births every step, or
+  // once the gen-0 founders die the live population isn't in the forest and liveMeanGeneration collapses to 0
+  // (the hidden-tab pump used to skip commit → meanGen logged 0 for thousands of ticks, then jumped on catch-up).
+  it('liveMeanGeneration tracks descendant depth after founders die — when births are committed per step', () => {
+    const { store, put, kill, setLive } = makeStore();
+    put(0, 1, 0.2, 0.1); // founder (gen 0)
+    setLive([0]);
+    const lin = new Lineage();
+    lin.reset(store);
+
+    // Founder 0:1 → child 2:1 (gen 1) → grandchild 3:1 (gen 2), each committed as its "step" runs.
+    put(2, 1, 0.2, 0.1);
+    lin.onBirth(0, 1, 2, 1);
+    lin.commit(store, 100);
+    put(3, 1, 0.2, 0.1);
+    lin.onBirth(2, 1, 3, 1);
+    lin.commit(store, 200);
+
+    // Founder and child die; only the gen-2 grandchild remains alive.
+    kill(0, 1);
+    kill(2, 1);
+    setLive([3]);
+    expect(lin.liveMeanGeneration(store)).toBe(2); // NOT 0 — the forest was kept current through turnover
+
+    // Contrast (the bug): a birth left uncommitted is absent from the forest, so once its founder dies the
+    // live descendant is uncounted → mean collapses to 0. This is exactly what the un-drained pump produced.
+    put(4, 1, 0.2, 0.1);
+    lin.onBirth(3, 1, 4, 1); // buffered via onBirth, never committed
+    kill(3, 1);
+    setLive([4]);
+    expect(lin.liveMeanGeneration(store)).toBe(0);
+  });
 });
