@@ -494,7 +494,13 @@ function spawnChildSlot(
  *  (capped by the mother's spare energy above her reserved REPRO_THRESHOLD survival floor — energy-conserving),
  *  debit the mother (provisioning + reproOverhead), start the mother's breed cooldown, and fire the onBirth
  *  hook. RNG-free. Called once the genome (mutate or crossover) has set the child's genes. */
-function provisionAndFinalize(store: OrganismStore, mom: number, child: number, cfg: Config): void {
+function provisionAndFinalize(
+  store: OrganismStore,
+  mom: number,
+  child: number,
+  cfg: Config,
+  dad = -1,
+): void {
   store.resetLearned(child);
   const { energy, scalarGenes } = store;
   const childBirth = scalarGenes[child * SCALAR_GENE_COUNT + ScalarGene.BIRTH_ENERGY]!;
@@ -507,7 +513,7 @@ function provisionAndFinalize(store: OrganismStore, mom: number, child: number, 
   store.prevEnergy[child] = childEnergy;
   energy[mom] = energy[mom]! - childEnergy - cfg.reproOverhead;
   if (cfg.breedCooldown > 0) store.breedCooldownLeft[mom] = cfg.breedCooldown;
-  cfg.onBirth?.(mom, store.genId[mom]!, child, store.genId[child]!);
+  cfg.onBirth?.(mom, store.genId[mom]!, child, store.genId[child]!, dad);
 }
 
 /**
@@ -630,7 +636,7 @@ export function reproduce(
         cfg.pheromoneEnabled,
       );
       crossoverScalarGenes(store.scalarGenes, child, p, mate, rng, cfg);
-      provisionAndFinalize(store, p, child, cfg);
+      provisionAndFinalize(store, p, child, cfg, mate);
       births++;
       store.seeking[p] = 0;
       // The father is consumed by this pairing too: clear its search so it doesn't independently spawn a
