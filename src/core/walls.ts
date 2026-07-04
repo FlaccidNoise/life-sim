@@ -89,6 +89,14 @@ export class Walls {
     return this.solid[this.cellIdx(this.colOf(x), this.rowOf(y))] === 1;
   }
 
+  /** PUBLIC read-only accessor: the Voronoi biome index at world position (x,y), or -1 when walls are
+   *  inactive. Pure read — no state change, no RNG — so it is determinism-safe (used by region-probe to
+   *  partition the world by wall-biome). Mirrors isSolidAt. */
+  regionAt(x: number, y: number): number {
+    if (!this._active) return -1;
+    return this.region[this.cellIdx(this.colOf(x), this.rowOf(y))]!;
+  }
+
   isFoodCellBlocked(foodCol: number, foodRow: number): boolean {
     if (!this._active) return false;
     return this.foodBlocked[foodRow * this.foodCols + foodCol] === 1;

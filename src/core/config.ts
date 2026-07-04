@@ -645,8 +645,16 @@ export interface Config {
   /** Fired once per successful birth inside reproduce(), in ascending parent-slot order, BEFORE the
    *  tick counter advances. Read-only by contract: it must not touch the store, RNG, or iteration —
    *  it exists so a harness can attribute child→parent lineage without an energy-trace heuristic.
+   *  fatherSlot is the second parent in a sexual (crossover) birth, or -1 for an asexual clone —
+   *  region-probe reads both parents' positions to measure cross-region gene flow (the isolation metric).
    *  Undefined in defaultConfig, so production runs and the determinism hash are unaffected. */
-  onBirth?: (parentSlot: number, parentGen: number, childSlot: number, childGen: number) => void;
+  onBirth?: (
+    parentSlot: number,
+    parentGen: number,
+    childSlot: number,
+    childGen: number,
+    fatherSlot?: number,
+  ) => void;
 }
 
 export function defaultConfig(overrides: Partial<Config> = {}): Config {
