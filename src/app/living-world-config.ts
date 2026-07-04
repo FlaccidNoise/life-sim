@@ -41,7 +41,15 @@ export const livingWorldOverrides: Partial<Config> = {
   // out"), so raising it to 5 lets the depth variation actually express (only the rare >5 peak clips).
   foodPatchRichnessVar: 0.8, // per-pocket depth variation 0.5→0.8 → wider shallow-grazer-refuge ↔ deep-
   // predator-haven spread across all three channels (peaks now genuinely range, not pinned at the clamp)
-  deadWaterCost: 0.02, // dead-water tax between pockets → real isolation (residents stay home → demes diverge)
+  deadWaterCost: 0.05, // dead-water tax between pockets → real isolation (residents stay home → demes diverge).
+  // ARC-C C1 (isolation down-payment): raised 0.02→0.05 to firm up residency so C2/C3 regional selection has
+  // less gene flow to fight. This is the ONE conservative isolation lever with safe headroom — region-probe
+  // (seeds 1-8, 20k) confirms pop stays bounded + ecology alive; 0.08+ adds gap-mortality that crashes seeds.
+  // NB the other "proven demes" levers are ALREADY active here (foodPatchRichnessVar 0.8, deep reservoirs
+  // richness 3 / maxFert 5, foodPocketChannelMode 1). pocketCapVariance stays OFF: turning it on REPLACES the
+  // deep-reservoir clamp (cap·maxFert=200) with cap·(1+var)≈64, flattening pockets + killing predators.
+  // Gene flow is geometry-limited to ~1.4% (mate reach 36 ≪ pocket spacing) so diet F_ST is coexistence-
+  // capped at ~1 on the demo; the clean ≥2× regional trait comes from C3's abiotic gradient.
   // THREE differentiated resources (diversity pass: 2→3 → a third diet niche). Channels are assigned to
   // pockets round-robin (p % 3) via pocketChannelMode 1. NB foodChannelAWallTied MUST be false here: the
   // wall-tie split is binary (near-wall→A / open-water→B, food-field.ts), so it would starve channel C of
