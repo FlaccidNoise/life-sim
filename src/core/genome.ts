@@ -92,8 +92,16 @@ export const ScalarGene = {
   // low = velocity dies fast (darter). Always drawn (ungated) and appended at the TAIL so genes 0–25's
   // RNG draws are unchanged → every prior tail-gated gene's draw-skip stream is preserved.
   DAMPING: 26,
+  // Abiotic thermal-preference gene (Arc C3, gated cfg.temperatureMetabCost>0): the temperature this
+  // creature is adapted to, in [0,1] matching the seeded temperature field. Its ONLY role is the
+  // temperature-mismatch metabolic tax in metabolize (basalCost·tmc·(THERMAL_PREF−temp)²), so it is under
+  // PURE regional stabilizing selection with no diversity-maintaining counter-force → each region drives it
+  // to the LOCAL temperature (monomorphic per region), which is what makes between-region σ ≫ within-region
+  // (the F_ST target diet/metabEff can't reach because their tradeoffs maintain within-region spread).
+  // Tail-gated at the very end so the OFF stream is byte-identical (no RNG draw when the tax is off).
+  THERMAL_PREF: 27,
 } as const;
-export const SCALAR_GENE_COUNT = 27;
+export const SCALAR_GENE_COUNT = 28;
 
 /** Minimum reproductive-band width: satiated is read as max(satiatedGene, reproGene + this) so the two
  *  life-history bars can mutate independently without inverting (which would break the learn gate). */
@@ -126,7 +134,8 @@ interface ScalarGeneSpec {
     | 'senescenceAge'
     | 'display'
     | 'preference'
-    | 'damping';
+    | 'damping'
+    | 'thermalPref';
   /** Config key for the per-unit-above-center basal cost coeff, or null for a non-upkeep gene. */
   costKey:
     | 'maxSpeedCost'
@@ -217,6 +226,10 @@ export const SCALAR_GENE_SPECS: readonly ScalarGeneSpec[] = [
   // thrust-energy but overshoots food/walls), not an upkeep tax. Center reuses cfg.damping (0.9); range
   // gives a ~20× coast-distance spread (1/(1−d): 0.6→~2.5 ticks, 0.98→~50). Upper bound < 1 for stability.
   { centerKey: 'damping', costKey: null, min: 0.6, max: 0.98 },
+  // THERMAL_PREF (Arc C3) — the temperature this creature is adapted to, [0,1]. costKey null: no upkeep,
+  // its "cost" is the temperature-mismatch tax in metabolize (pure regional stabilizing selection). Center
+  // 0.5 (mid-temperature); tail-gated on temperatureMetabCost>0 so the OFF stream is byte-identical.
+  { centerKey: 'thermalPref', costKey: null, min: 0, max: 1 },
 ];
 
 /** Tail-gated scalar genes: each takes its founder CENTER (seed) / parent value (mutate) WITHOUT drawing
@@ -234,6 +247,7 @@ export function scalarGeneGatedOff(g: number, cfg: Config): boolean {
     return cfg.foodChannels < 3;
   if (g === ScalarGene.PHERO_DEPOSIT) return !cfg.pheromoneEnabled;
   if (g === ScalarGene.MATURITY_AGE || g === ScalarGene.SENESCENCE_AGE) return !cfg.ageStages;
+  if (g === ScalarGene.THERMAL_PREF) return cfg.temperatureMetabCost <= 0;
   return false;
 }
 
@@ -256,12 +270,13 @@ export function seedScalarGenes(genes: Float32Array, slot: number, rng: Rng, cfg
       genes[base + g] = center;
       continue;
     }
-    // FORAGE_PREF seeds UNIFORM over [0,1] (not clustered at the 0.5 center) so the founding pool already
-    // holds committed A- and B-specialists, not just generalists. With the generalist penalty on, those
-    // specialists thrive from t=0 and carry the population while it sorts into niches — without the spread an
-    // all-generalist founding pool eats the penalty en masse and crashes before specialists emerge. One RNG
-    // draw (rng.float()), like the gaussian path it replaces, so it stays at the tail-safe draw position.
-    if (g === ScalarGene.FORAGE_PREF) {
+    // FORAGE_PREF and THERMAL_PREF seed UNIFORM over [0,1] (not clustered at the 0.5 center) so the founding
+    // pool already holds committed specialists across the whole axis, not just generalists — selection then
+    // SORTS them into their matching niche (FORAGE_PREF → its channel's islands; THERMAL_PREF → its
+    // temperature band) from t=0. Without the spread an all-0.5 pool has no raw material and must build the
+    // range by slow mutation, so regional differentiation never gets going. One RNG draw (rng.float()), like
+    // the gaussian path it replaces, so it stays at the tail-safe draw position.
+    if (g === ScalarGene.FORAGE_PREF || g === ScalarGene.THERMAL_PREF) {
       genes[base + g] = rng.float();
       continue;
     }
@@ -387,7 +402,10 @@ export function geneticDistance(genes: Float32Array, a: number, b: number, cfg: 
   const bb = b * SCALAR_GENE_COUNT;
   let sum = 0;
   for (let g = 0; g < SCALAR_GENE_COUNT; g++) {
-    if (g === ScalarGene.DISPLAY || g === ScalarGene.PREFERENCE) continue; // sexual axes ≠ species axes
+    // sexual axes ≠ species axes; THERMAL_PREF is a regional-adaptation axis, kept OUT of the mate metric for
+    // now so C3 is a pure differentiation lever (coupling it to isolation is a deliberate C2 speciation choice).
+    if (g === ScalarGene.DISPLAY || g === ScalarGene.PREFERENCE || g === ScalarGene.THERMAL_PREF)
+      continue;
     const spec = SCALAR_GENE_SPECS[g]!;
     const range = spec.max - spec.min || 1;
     const d = (genes[ab + g]! - genes[bb + g]!) / range;
