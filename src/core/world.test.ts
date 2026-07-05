@@ -76,6 +76,31 @@ describe('World — Phase 0 determinism contract', () => {
     expect(a.stateHash()).toBe(b.stateHash());
   });
 
+  it('temperatureMetabCost 0 (OFF/default) is byte-identical to default; >0 perturbs (Arc C3 abiotic tax + THERMAL_PREF wired + ablatable)', () => {
+    const baseline = new World(defaultConfig({ seed: 1 }));
+    const off = new World(defaultConfig({ seed: 1, temperatureMetabCost: 0 }));
+    const on = new World(defaultConfig({ seed: 1, temperatureMetabCost: 2, temperatureScale: 1 }));
+    for (let t = 0; t < 1000; t++) {
+      baseline.step();
+      off.step();
+      on.step();
+    }
+    // OFF == default → THERMAL_PREF is tail-gated (no RNG draw) and the tax block is skipped (safeguard #1)
+    expect(off.stateHash()).toBe(baseline.stateHash());
+    // ON diverges → the temperature tax is actually read by metabolize + THERMAL_PREF draws/mutates
+    expect(on.stateHash()).not.toBe(baseline.stateHash());
+  });
+
+  it('temperatureMetabCost > 0 stays deterministic: same (config, seed) → byte-identical hash', () => {
+    const a = new World(defaultConfig({ seed: 3, temperatureMetabCost: 2, temperatureScale: 1 }));
+    const b = new World(defaultConfig({ seed: 3, temperatureMetabCost: 2, temperatureScale: 1 }));
+    for (let t = 0; t < 1000; t++) {
+      a.step();
+      b.step();
+    }
+    expect(a.stateHash()).toBe(b.stateHash());
+  });
+
   it('huntHandlingTime 0 (OFF) is byte-identical to default and never touches huntCooldownLeft (Type-II refractory)', () => {
     // The feature's only behavioral gate: every read/write of huntCooldownLeft is guarded by
     // huntHandlingTime>0, so the OFF path is byte-identical to today and the aux counter stays all-zero.
