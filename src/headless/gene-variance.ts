@@ -65,6 +65,7 @@ const GENE_LABELS: readonly string[] = [
   'display',
   'preference',
   'damping',
+  'thermalPref',
 ];
 if (GENE_LABELS.length !== SCALAR_GENE_COUNT) {
   throw new Error(

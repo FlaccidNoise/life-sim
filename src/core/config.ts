@@ -546,8 +546,8 @@ export interface Config {
   // ── Abiotic gradient (env pass 2 — Arc C3: SPACE as a selective-optimum axis) ────────────────────────
   /** Temperature-mismatch metabolic tax (Arc C3, the regional-differentiation engine): a SEEDED spatially-
    *  varying temperature field (abiotic.ts, in [0,1]) and a dedicated THERMAL_PREF gene (also [0,1]); a
-   *  creature pays extra basal cost = this · (THERMAL_PREF − temp)² for being adapted to the wrong local
-   *  temperature. THERMAL_PREF has no other role, so this is PURE regional stabilizing selection with no
+   *  creature pays extra basal cost = basalCost · this · (THERMAL_PREF − temp)² for being adapted to the
+   *  wrong local temperature. THERMAL_PREF has no other role, so this is PURE regional stabilizing selection with no
    *  diversity-maintaining counter-force → each region drives THERMAL_PREF to its LOCAL temperature
    *  (monomorphic per region) → between-region σ ≫ within-region (the F_ST target that diet/metabEff can't
    *  reach, because their tradeoffs keep a within-region spread). The field is a pure function of (position,
