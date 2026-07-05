@@ -50,9 +50,18 @@ interface Rec {
   backHalfSigmaOfPredFrac: number;
 }
 
-/** Spawn one child = one (variant, seed) run; resolve with its parsed RESULT_JSON record. */
-function runChild(variant: string, seed: number): Promise<Rec> {
-  return new Promise((resolve, reject) => {
+/**
+ * Spawn one child = one (variant, seed) run; resolve with its parsed RESULT_JSON record, or null on
+ * failure (logged). A failure must NOT reject: a rejected promise would abort Promise.all, discard every
+ * sibling's already-completed record, and orphan the in-flight children — losing a multi-hour sweep to
+ * one flaky run. Each child is independent, so a lost run is a lost cell, not a lost sweep.
+ */
+function runChild(variant: string, seed: number): Promise<Rec | null> {
+  return new Promise((resolve) => {
+    const fail = (msg: string): void => {
+      console.error(`  ✗ [${variant} seed ${seed}] FAILED: ${msg}`);
+      resolve(null);
+    };
     const child = spawn(
       'npx',
       ['tsx', 'src/headless/predator-damping.ts', String(TICKS), String(seed), variant],
@@ -62,15 +71,11 @@ function runChild(variant: string, seed: number): Promise<Rec> {
     let err = '';
     child.stdout.on('data', (d) => (out += d));
     child.stderr.on('data', (d) => (err += d));
-    child.on('error', reject);
+    child.on('error', (e) => fail(e.message));
     child.on('close', (code) => {
       const line = out.split('\n').find((l) => l.startsWith('RESULT_JSON '));
       if (!line) {
-        reject(
-          new Error(
-            `[${variant} seed ${seed}] no RESULT_JSON (exit ${code})\n${err.slice(-400) || out.slice(-400)}`,
-          ),
-        );
+        fail(`no RESULT_JSON (exit ${code})\n${err.slice(-400) || out.slice(-400)}`);
         return;
       }
       resolve(JSON.parse(line.slice('RESULT_JSON '.length)) as Rec);
@@ -89,8 +94,9 @@ async function runPool(jobs: Array<[string, number]>, size: number): Promise<Rec
       const i = next++;
       const [v, s] = jobs[i]!;
       const rec = await runChild(v, s);
-      out.push(rec);
       done++;
+      if (!rec) continue; // failure already logged by runChild; keep the pool going
+      out.push(rec);
       console.log(
         `  [${done}/${total}] ${v} seed ${s}: peak ${(100 * rec.peakPredFrac).toFixed(0)}% → ` +
           `trough ${(100 * rec.troughPredFrac).toFixed(0)}% → final ${(100 * rec.finalPredFrac).toFixed(0)}% ` +
@@ -102,8 +108,13 @@ async function runPool(jobs: Array<[string, number]>, size: number): Promise<Rec
   return out;
 }
 
+if (!Number.isFinite(JOBS) || JOBS < 1) throw new Error(`--jobs must be >= 1, got ${JOBS}`);
+if (!Number.isFinite(TICKS) || TICKS < 1) throw new Error(`ticks must be >= 1, got ${TICKS}`);
+if (SEEDS.some((s) => !Number.isFinite(s))) throw new Error(`bad seeds: [${SEEDS.join(',')}]`);
+
 const grid: Array<[string, number]> = [];
 for (const v of VARIANTS) for (const s of SEEDS) grid.push([v, s]);
+if (grid.length === 0) throw new Error('no (variant, seed) jobs — check seed/variant args');
 
 console.log(
   `\n=== predationGain sweep · ${TICKS} ticks · seeds [${SEEDS.join(',')}] · ` +
@@ -114,6 +125,13 @@ const t0 = process.hrtime.bigint();
 const recs = await runPool(grid, JOBS);
 const wallSec = Number(process.hrtime.bigint() - t0) / 1e9;
 
+const failed = grid.length - recs.length;
+if (failed > 0)
+  console.warn(
+    `\n⚠ ${failed}/${grid.length} runs FAILED — means below are over surviving runs only.`,
+  );
+if (recs.length === 0) throw new Error('all runs failed — nothing to aggregate (see errors above)');
+
 const mean = (xs: number[]): number => xs.reduce((a, b) => a + b, 0) / Math.max(1, xs.length);
 const pct = (x: number): string => `${(100 * x).toFixed(0)}%`;
 
@@ -123,7 +141,8 @@ interface Agg {
   meanTrough: number;
   meanFinal: number;
   meanDietSigma: number;
-  predExtinctCount: number; // seeds where predators reached 0 by the end
+  predExtinctCount: number; // seeds where predators reached 0 by the end (may be a diet monoculture)
+  collapseCount: number; // seeds where the WHOLE population hit 0 at some point (total collapse)
   n: number;
   finals: string; // per-seed final predator% (survival spread)
 }
@@ -136,18 +155,19 @@ const aggs: Agg[] = VARIANTS.map((v) => {
     meanFinal: mean(rs.map((r) => r.finalPredFrac)),
     meanDietSigma: mean(rs.map((r) => r.finalDietSigma)),
     predExtinctCount: rs.filter((r) => r.finalPredFrac === 0).length,
+    collapseCount: rs.filter((r) => r.extinct).length,
     n: rs.length,
     finals: rs.map((r) => pct(r.finalPredFrac)).join('/'),
   };
 });
 
 console.log(`\n=== SUMMARY (mean across ${SEEDS.length} seeds, ${wallSec.toFixed(0)}s wall) ===`);
-console.log('variant        peak%  trough%  final%  dietσ  predExtinct  per-seed final%');
+console.log('variant        peak%  trough%  final%  dietσ  predExtinct  collapse  per-seed final%');
 for (const a of aggs) {
   console.log(
     `${a.variant.padEnd(14)} ${pct(a.meanPeak).padStart(4)}  ${pct(a.meanTrough).padStart(6)}  ` +
       `${pct(a.meanFinal).padStart(5)}  ${a.meanDietSigma.toFixed(2).padStart(5)}  ` +
-      `${`${a.predExtinctCount}/${a.n}`.padStart(10)}  ${a.finals}`,
+      `${`${a.predExtinctCount}/${a.n}`.padStart(10)}  ${`${a.collapseCount}/${a.n}`.padStart(7)}  ${a.finals}`,
   );
 }
 
