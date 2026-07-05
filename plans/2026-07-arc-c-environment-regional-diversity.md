@@ -11,6 +11,25 @@ Acceptance = the full biogeographic story on the SHIPPED demo across seeds 1–8
 within-region, region-distinct diet/forage niches, and reproductively-isolated lineage/hue clusters per region
 that persist.
 
+## Status (2026-07-04)
+- **C0a LANDED** (a63c465): `src/headless/region-probe.ts` instrument + `onBirth` father-slot param +
+  `walls.regionAt`. Determinism green.
+- **C1 LANDED** (ee09268): `deadWaterCost` 0.02→0.05; demo-health-gate 8/8. Isolation is geometry-maxed
+  (gene flow ~1.4%), so this is a marginal down-payment.
+- **C3 mechanism LANDED OFF / WIP** (7727408): `abiotic.ts` temperature field + `THERMAL_PREF` gene +
+  metabolize tax. OFF by default (demo byte-identical). NOT yet clearing the target.
+- **⭐ CORE FINDING:** the exit's `between-region σ ≥ 2× within` (F_ST≥2) is **structurally impossible for
+  existing traits** — diet/metabEff/size maintain within-region diversity (coexistence/tradeoffs) so a
+  regional optimum shifts the region MEAN, not the within-region spread → F_ST~1. That is why C3 adds a
+  DEDICATED THERMAL_PREF gene under pure regional selection. It partially works (temp↔pref r up to 0.76)
+  but doesn't clear F_ST≥2 at 12k — the smooth gradient over 20 pockets + gene-flow re-mixing dilute it.
+  TO TURN ON: assign temperature PER-POCKET (uniform per region), validate at 20k, raise tmc; then
+  demo-health-gate for ecology safety before shipping.
+- **Rejected:** `pocketCapVariance` (clamp conflict flattens pockets, kills predators); richnessVar 1.0 /
+  forageGeneralistFloor 0.6 (seed-variable); metabEff temperature-optimum penalty (inert, r=0.09).
+- **Remaining:** C3 tune-on → C2 (walls block movement already via sweptCollide; POROUS part = Voronoi
+  biome borders — seal them + findMate biome-gate + flowPush down) → C4 → C5 → C-gate → C0b overlay.
+
 ## Context a fresh session needs
 - Demo config = `defaultConfig({...livingWorldOverrides})`; `src/app/living-world-config.ts` is the single
   source (browser `main.ts`, headless probes, tests all read it). `defaultConfig()` alone is the bare baseline.
