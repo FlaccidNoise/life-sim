@@ -64,7 +64,26 @@ const ALL_VARIANTS: Variant[] = [
     note: 'Holling Type-II throttle: 15-tick refractory after a kill',
     delta: { huntHandlingTime: 15 },
   },
-  { name: 'gain-2', note: 'lower hunting payoff (predationGain 3→2)', delta: { predationGain: 2 } },
+  {
+    name: 'gain-2',
+    note: 'lower hunting payoff (predationGain 3→2.0)',
+    delta: { predationGain: 2 },
+  },
+  {
+    name: 'gain-2.25',
+    note: 'lower hunting payoff (predationGain 3→2.25)',
+    delta: { predationGain: 2.25 },
+  },
+  {
+    name: 'gain-2.5',
+    note: 'lower hunting payoff (predationGain 3→2.5)',
+    delta: { predationGain: 2.5 },
+  },
+  {
+    name: 'gain-2.25-h4',
+    note: 'combo: predationGain 2.25 + 4-tick handling refractory',
+    delta: { predationGain: 2.25, huntHandlingTime: 4 },
+  },
 ];
 const wanted = POS[2]?.split(',');
 const VARIANTS = wanted ? ALL_VARIANTS.filter((v) => wanted.includes(v.name)) : ALL_VARIANTS;
@@ -173,6 +192,9 @@ for (const v of VARIANTS) {
         `back-half σ ${(100 * r.backHalfSigmaOfPredFrac).toFixed(1)}pp)`,
     );
     console.log(`   pred% @10k steps: ${shape}`);
+    // Machine-readable line for the parallel sweep aggregator (exact, unrounded).
+    const { traj: _omit, ...rec } = r;
+    console.log(`RESULT_JSON ${JSON.stringify(rec)}`);
   }
 }
 
