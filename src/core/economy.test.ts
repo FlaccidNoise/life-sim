@@ -7,6 +7,7 @@ import { Rng } from './rng';
 import { defaultConfig, type Config } from './config';
 import { metabolize, hunt, cullDead, reproduce, satiatedBar, depositScent } from './economy';
 import { ScalarGene, SCALAR_GENE_COUNT, SCALAR_GENE_SPECS, MIN_BAND } from './genome';
+import { temperatureAt } from './abiotic';
 
 const W = 128;
 const H = 128;
@@ -179,6 +180,43 @@ describe('metabolize', () => {
     };
     expect(lossAt(0)).toBeCloseTo(0.4); // OFF: just basal (no food in dead water → no graze income)
     expect(lossAt(2)).toBeCloseTo(0.4 + 2); // basal + deadWaterCost·(1−fertility=0)
+  });
+
+  it('temperatureMetabCost taxes THERMAL_PREF↔local-temp mismatch, OFF at 0 (Arc C3)', () => {
+    // Dead-water cell (fertility 0 → no graze income) with deadWaterCost 0, so the ONLY extra drain beyond
+    // basal is the temperature tax = basalCost·tmc·(THERMAL_PREF − localTemp)².
+    const food = new FoodField(W, H, 16, 16, 10, 1);
+    food.seedPatches(1, 2, 0, new Rng(2));
+    let dx = -1;
+    let dy = -1;
+    for (let yy = 4; yy < H && dx < 0; yy += 8)
+      for (let xx = 4; xx < W; xx += 8)
+        if (food.fertilityAt(xx, yy) < 1e-6) {
+          dx = xx;
+          dy = yy;
+          break;
+        }
+    expect(dx).toBeGreaterThanOrEqual(0);
+
+    const opts = { basalCost: 0.4, moveCost: 0, deadWaterCost: 0, temperatureScale: 3 };
+    const temp = temperatureAt(dx, dy, defaultConfig(opts)); // the local optimum THERMAL_PREF is taxed against
+    const PREF = 0.2; // a deliberately-mismatched thermal preference
+
+    const lossAt = (temperatureMetabCost: number): number => {
+      const s = new OrganismStore(4);
+      const i = s.alloc();
+      s.x[i] = dx;
+      s.y[i] = dy;
+      s.energy[i] = 50;
+      const cfg = defaultConfig({ ...opts, temperatureMetabCost });
+      genes(s, i, cfg, { [ScalarGene.THERMAL_PREF]: PREF }); // herbivore, centred genes, efficiency 1
+      s.rebuildLive();
+      metabolize(s, food, hashOf(s), cfg);
+      return 50 - s.energy[i]!;
+    };
+    const d = PREF - temp;
+    expect(lossAt(0)).toBeCloseTo(0.4); // OFF: just basal·eff(1), no temp tax → byte-identical
+    expect(lossAt(2)).toBeCloseTo(0.4 + 0.4 * 2 * d * d); // basal + basalCost·tmc·(pref−temp)²
   });
 });
 

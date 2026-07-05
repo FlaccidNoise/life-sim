@@ -55,9 +55,10 @@ describe('unified brain layout (consolidation)', () => {
 
 describe('genome', () => {
   it('DISPLAY and PREFERENCE are seeded in range and counted', () => {
-    expect(SCALAR_GENE_COUNT).toBe(27);
+    expect(SCALAR_GENE_COUNT).toBe(28);
     expect(ScalarGene.DISPLAY).toBe(24);
     expect(ScalarGene.PREFERENCE).toBe(25);
+    expect(ScalarGene.THERMAL_PREF).toBe(27);
     const cfg = defaultConfig({ seed: 1 });
     const genes = new Float32Array(8 * SCALAR_GENE_COUNT);
     const rng = new Rng(1);
@@ -389,9 +390,10 @@ describe('FORAGE_PREF gene (lever B — two-channel niche axis, RNG-gated)', () 
 });
 
 describe('DAMPING gene', () => {
-  it('is the 27th scalar gene at the tail', () => {
-    expect(SCALAR_GENE_COUNT).toBe(27);
+  it('is the 27th scalar gene (idx 26); THERMAL_PREF (Arc C3) is now the tail at idx 27', () => {
+    expect(SCALAR_GENE_COUNT).toBe(28);
     expect(ScalarGene.DAMPING).toBe(26);
+    expect(ScalarGene.THERMAL_PREF).toBe(27);
   });
 
   it('is an uncosted physics gene clamped to [0.6, 0.98]', () => {

@@ -15,6 +15,7 @@ import { type Parcels } from './parcels';
 import { type Rng } from './rng';
 import { type Config } from './config';
 import { type Walls } from './walls';
+import { temperatureAxis, temperatureAtAxis } from './abiotic';
 import {
   mutateGenome,
   mutateScalarGenes,
@@ -217,6 +218,10 @@ export function metabolize(
     const halfGrid = Math.floor((Math.min(cols, rows) - 1) / 2);
     crowdR = Math.min(halfGrid, Math.max(1, Math.ceil(crowdRadius / cellSize)));
   }
+  // Abiotic temperature gradient (Arc C3): precompute the seed-derived gradient axis ONCE (loop-invariant;
+  // pure seed arithmetic, no RNG). The per-creature mismatch tax below is skipped when the cost is 0.
+  const tempMetabCost = cfg.temperatureMetabCost;
+  const tempAxis = tempMetabCost > 0 ? temperatureAxis(cfg) : null;
   for (let k = 0; k < liveCount; k++) {
     const i = liveIndices[k]!;
     const sg = i * SCALAR_GENE_COUNT;
@@ -339,6 +344,16 @@ export function metabolize(
     if (deadWaterCost > 0) {
       const fert = food.fertilityAt(x[i]!, y[i]!);
       if (fert < 1) energy[i] = energy[i] - deadWaterCost * (1 - fert);
+    }
+    // Abiotic temperature tax (Arc C3): extra basal drain = tmc·(THERMAL_PREF − localTemp)² for being adapted
+    // to the wrong local temperature. THERMAL_PREF has no other role → PURE regional stabilizing selection →
+    // each region drives it to its local temp (monomorphic per region) → between-region σ ≫ within (the F_ST
+    // target). Quadratic = a sharp optimum. Gated so OFF (0) skips the field lookup → byte-identical; the
+    // field is RNG-free (pure seed+position) and THERMAL_PREF is tail-gated → never perturbs the organism stream.
+    if (tempAxis !== null) {
+      const d =
+        scalarGenes[sg + ScalarGene.THERMAL_PREF]! - temperatureAtAxis(x[i]!, y[i]!, tempAxis);
+      energy[i] = energy[i]! - basalCost * tempMetabCost * d * d;
     }
     // Lever D: pay the local-crowding drain ON TOP (skipped entirely when OFF → byte-identical). Count
     // live neighbors within crowdRadius via the post-MOVE hash, then drain crowdingMortality per neighbor

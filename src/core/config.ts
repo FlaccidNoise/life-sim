@@ -543,6 +543,24 @@ export interface Config {
   /** Susceptibility exponent: push ×= (cellRadius/size)^this (big bodies resist). */
   flowPushSizeExp: number;
 
+  // ── Abiotic gradient (env pass 2 — Arc C3: SPACE as a selective-optimum axis) ────────────────────────
+  /** Temperature-mismatch metabolic tax (Arc C3, the regional-differentiation engine): a SEEDED spatially-
+   *  varying temperature field (abiotic.ts, in [0,1]) and a dedicated THERMAL_PREF gene (also [0,1]); a
+   *  creature pays extra basal cost = this · (THERMAL_PREF − temp)² for being adapted to the wrong local
+   *  temperature. THERMAL_PREF has no other role, so this is PURE regional stabilizing selection with no
+   *  diversity-maintaining counter-force → each region drives THERMAL_PREF to its LOCAL temperature
+   *  (monomorphic per region) → between-region σ ≫ within-region (the F_ST target that diet/metabEff can't
+   *  reach, because their tradeoffs keep a within-region spread). The field is a pure function of (position,
+   *  seed) — NO RNG draw — and THERMAL_PREF is tail-gated, so 0 = OFF is byte-identical to pre-feature. */
+  temperatureMetabCost: number;
+  /** Number of temperature bands across the world (the gradient's spatial frequency). 1 = a single
+   *  warm→cold sweep; higher packs more bands (more distinct regional optima per unit distance). Only read
+   *  when temperatureMetabCost>0 (and by observers querying temperatureAt). */
+  temperatureScale: number;
+  /** THERMAL_PREF founder CENTER (0.5 = mid-temperature). Only drawn from RNG when temperatureMetabCost>0
+   *  (tail-gated); otherwise pinned here with no draw → byte-identical. */
+  thermalPref: number;
+
   // ── Drifting SIGHT-ONLY food parcels (gives the VISION genes a reason to exist) ─────────────────────
   /** Master switch for drifting sight-only food parcels: discrete, high-value, perishable food motes that
    *  emit NO smell (not in the FoodField gradient) and are perceived ONLY by the sight system, so a
@@ -889,6 +907,11 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     flowScale: 18,
     flowPushStrength: 0,
     flowPushSizeExp: 1,
+    // Abiotic temperature gradient (Arc C3): OFF by default (temperatureMetabCost 0 → penalty block skipped
+    // → byte-identical). The demo opts in to make METAB_EFF differentiate regionally along the gradient.
+    temperatureMetabCost: 0,
+    temperatureScale: 1.5,
+    thermalPref: 0.5,
     // Drifting sight-only food parcels: OFF by default (pool never allocated, spawn RNG never advances,
     // sense/eat skip the parcel block) → byte-identical. Flip on to give the VISION genes a payoff: discrete,
     // high-value, perishable, smell-less motes that only eyes can find + intercept. All randomness is on a

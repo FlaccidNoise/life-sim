@@ -5,7 +5,7 @@
  * differences to HARDEN into isolated lineage clusters (allopatric speciation)?
  *
  * Runs the EXACT live-demo config (living-world-config.ts) and, at each sample, reports per trait
- * (diet, forage, metabEff, vision, size, hue) the F_ST-like DIFFERENTIATION RATIO = between-region σ /
+ * (diet, forage, metabEff, vision, size, hue, thermalPref) the F_ST-like DIFFERENTIATION RATIO = between-region σ /
  * within-region σ (an ANOVA sum-of-squares split: total SS = between SS + within SS; ratio = √(SSb/SSw)).
  *   ratio ≫ 1  → regions hold different phenotypes (the target).  ratio ≈ 0 → one global phenotype.
  * Plus per-region diet/forage niche histograms and CROSS-REGION GENE FLOW — the share of two-parent births
@@ -22,6 +22,7 @@ import { World } from '../core/world';
 import { defaultConfig } from '../core/config';
 import { ScalarGene, SCALAR_GENE_COUNT } from '../core/genome';
 import { livingWorldOverrides } from '../app/living-world-config';
+import { temperatureAt } from '../core/abiotic';
 
 const POS = process.argv.slice(2).filter((a) => !a.startsWith('--'));
 const FLAGS = process.argv.slice(2).filter((a) => a.startsWith('--'));
@@ -83,6 +84,10 @@ const TRAITS: Trait[] = [
   },
   { key: 'size', get: (w, i) => w.store.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.SIZE]! },
   { key: 'hue', get: (w, i) => w.store.hue[i]! },
+  {
+    key: 'thermal',
+    get: (w, i) => w.store.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.THERMAL_PREF]!,
+  },
 ];
 
 /** Region index of a world position: nearest pocket (toroidal argmin) or Voronoi wall biome. */
@@ -229,12 +234,32 @@ function runSeed(seed: number): void {
   );
 }
 
+function pearson(xs: number[], ys: number[]): number {
+  const n = xs.length;
+  if (n < 2) return NaN;
+  const mx = xs.reduce((a, b) => a + b, 0) / n;
+  const my = ys.reduce((a, b) => a + b, 0) / n;
+  let sxy = 0;
+  let sxx = 0;
+  let syy = 0;
+  for (let i = 0; i < n; i++) {
+    const dx = xs[i]! - mx;
+    const dy = ys[i]! - my;
+    sxy += dx * dy;
+    sxx += dx * dx;
+    syy += dy * dy;
+  }
+  const d = Math.sqrt(sxx * syy);
+  return d > 1e-12 ? sxy / d : NaN;
+}
+
 function reportNiches(world: World, s: World['store'], nRegions: number): void {
   const { liveIndices, liveCount } = s;
   const pop = new Int32Array(nRegions);
   const dietBins: number[][] = Array.from({ length: nRegions }, () => [0, 0, 0, 0, 0]);
   const dietSum = new Float64Array(nRegions);
   const forageSum = new Float64Array(nRegions);
+  const thermalSum = new Float64Array(nRegions);
   for (let k = 0; k < liveCount; k++) {
     const i = liveIndices[k]!;
     const r = regionOf(world, s.x[i]!, s.y[i]!);
@@ -244,20 +269,44 @@ function reportNiches(world: World, s: World['store'], nRegions: number): void {
     dietBins[r]![Math.min(4, Math.floor(d * 5))]!++;
     dietSum[r]! += d;
     forageSum[r]! += s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.FORAGE_PREF]!;
+    thermalSum[r]! += s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.THERMAL_PREF]!;
   }
   const order = [...Array(nRegions).keys()]
     .filter((r) => pop[r]! > 0)
     .sort((a, b) => pop[b]! - pop[a]!);
-  console.log(`  region niches (by pop): reg  pop   K     diet[g….h]        mDiet mForage`);
   const centres = world.food.pocketCentres();
+  // Region temperature (pocket mode only): the seeded abiotic optimum axis at each pocket centre.
+  const tempOf = (r: number): number =>
+    BY === 'pocket' && centres[r] ? temperatureAt(centres[r]!.x, centres[r]!.y, world.config) : NaN;
+  console.log(
+    `  region niches (by pop): reg  pop   K    temp  diet[g….h]        mDiet mForage mThermal`,
+  );
   for (const r of order.slice(0, 6)) {
     const c = pop[r]!;
     const K =
       BY === 'pocket' && centres[r] ? world.food.capacityAt(centres[r]!.x, centres[r]!.y) : 0;
     const histo = dietBins[r]!.map((b) => String(Math.round((100 * b) / c)).padStart(3)).join(' ');
+    const t = tempOf(r);
     console.log(
-      `    ${String(r).padEnd(4)}${String(c).padEnd(6)}${String(Math.round(K)).padEnd(6)}[${histo}]   ` +
-        `${(dietSum[r]! / c).toFixed(2)}  ${(forageSum[r]! / c).toFixed(2)}`,
+      `    ${String(r).padEnd(4)}${String(c).padEnd(6)}${String(Math.round(K)).padEnd(5)}${(Number.isNaN(t) ? 0 : t).toFixed(2)}  [${histo}]   ` +
+        `${(dietSum[r]! / c).toFixed(2)}  ${(forageSum[r]! / c).toFixed(2)}    ${(thermalSum[r]! / c).toFixed(2)}`,
+    );
+  }
+  // C3 differentiation-along-the-gradient signal: Pearson r between each inhabited region's temperature and
+  // its mean THERMAL_PREF. THERMAL_PREF is under pure regional stabilizing selection toward the local temp, so
+  // r → 1 confirms C3 is biting (region means track the gradient) — the companion to its high F_ST ratio.
+  if (BY === 'pocket') {
+    const temps: number[] = [];
+    const thermals: number[] = [];
+    for (const r of order) {
+      const t = tempOf(r);
+      if (!Number.isNaN(t)) {
+        temps.push(t);
+        thermals.push(thermalSum[r]! / pop[r]!);
+      }
+    }
+    console.log(
+      `  temp↔thermalPref region-mean correlation: r = ${pearson(temps, thermals).toFixed(2)}`,
     );
   }
 }
