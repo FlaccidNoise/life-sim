@@ -561,6 +561,76 @@ export interface Config {
    *  (tail-gated); otherwise pinned here with no draw → byte-identical. */
   thermalPref: number;
 
+  // ── PHOTOSYNTHESIS (autotroph morph) ───────────────────────────────────────────────────────────────
+  /** Master switch for the photosynthesizer morph: a new scalar gene PHOTOSYNTH ([0,1]) grants passive
+   *  energy income from a seeded LIGHT field (abiotic.ts, independent of food/temperature). Income scales
+   *  with photosynth · lightAt(x,y) · photosynthGain · stillnessFactor, where stillnessFactor =
+   *  1/(1 + photosynthStillnessK · speed²) — SLOW/STILL creatures photosynthesise best, selecting for a
+   *  sedentary drifting autotroph lifestyle (a genuinely different body plan from grazers/predators). The
+   *  gene is upkeep-costed (photosynthCost per unit above center) so maintaining photosynthetic machinery
+   *  is a real tradeoff. false (default) = the gene never draws, the income block is skipped → byte-identical.
+   *  The light field is RNG-free (pure seed+position) and the gene is tail-gated → never perturbs the
+   *  organism RNG stream. */
+  photosynthEnabled: boolean;
+  /** Light gradient spatial frequency (bands across the world). 1 = single sweep; higher = more bands. */
+  photosynthLightScale: number;
+  /** Energy gained per tick at full photosynth · full light · still. The core tuning knob for the niche's
+   *  payoff vs grazing/hunting. */
+  photosynthGain: number;
+  /** Stillness penalty coefficient: higher = speed kills photosynthesis faster (sharper sedentary pressure). */
+  photosynthStillnessK: number;
+  /** Basal upkeep per unit PHOTOSYNTH above the founder center (chloroplast maintenance cost). */
+  photosynthCost: number;
+  /** PHOTOSYNTH founder CENTER. Drawn UNIFORM over [0,1] when enabled (committed autotrophs in the founding
+   *  pool from t=0, like THERMAL_PREF); pinned here with no draw when off. */
+  photosynth: number;
+
+  // ── PARASITISM (parasite morph) ──────────────────────────────────────────────────────────────────────
+  /** Master switch for the parasite morph: a new scalar gene PARASITISM ([0,1]) lets a creature ATTACH to a
+   *  larger host and siphon energy over time (a chronic drain, not a lethal bite — unlike hunt). A parasite
+   *  below parasiteAttachRange of a larger host (host size / parasiteSizeRatio) attaches; while attached it
+   *  moves WITH the host (no own locomotion) and drains parasiteDrain·parasitism energy/tick, absorbing
+   *  drain·parasiteGain. The gene is upkeep-costed (parasiteCost) so maintaining the attachment apparatus is
+   *  a real tradeoff. false (default) = the gene never draws, the attach/drain block is skipped, hostSlot
+   *  stays -1 → byte-identical. The parasite scan is RNG-free (nearest compatible host) so the organism stream
+   *  is never perturbed. */
+  parasiteEnabled: boolean;
+  /** Energy drained from the host per tick (× parasitism gene) while attached. */
+  parasiteDrain: number;
+  /** Energy the parasite absorbs per unit drained (gain > 1 = parasitism mints energy, like predationGain). */
+  parasiteGain: number;
+  /** Max distance to scan for + attach to a host. */
+  parasiteAttachRange: number;
+  /** A parasite must be this much SMALLER than its host (host.size / parasite.size ≥ this). Size refuge
+   *  inverted: big creatures are vulnerable to small parasites (opposite of predation's big-eats-small). */
+  parasiteSizeRatio: number;
+  /** Basal upkeep per unit PARASITISM above the founder center (attachment apparatus maintenance). */
+  parasiteCost: number;
+  /** PARASITISM founder CENTER. Drawn UNIFORM over [0,1] when enabled; pinned here with no draw when off. */
+  parasite: number;
+  /** Host-seeking sight gain: scales the PARASITISM gene's pull toward LARGER creatures in the sight vector
+   *  (sense.ts) so a parasite's neural net actively steers it toward hosts instead of random wandering.
+   *  0 = no host-seeking (parasites wander blindly). */
+  parasiteHostSeekGain: number;
+
+  // ── SCAVENGER (scavenger morph) ───────────────────────────────────────────────────────────────────────
+  /** Master switch for the scavenger morph: a new scalar gene SCAVENGER ([0,1]) lets a creature absorb
+   *  energy from nearby DEATH EVENTS — a transient biomass pulse (corpseEnergy) deposited at a dying
+   *  creature's position. Scavengers within scavengeRange absorb corpseEnergy × scavengerGene per death,
+   *  so a creature that FOLLOWS death events (where creatures are dying) gets free energy. This is a
+   *  genuinely different niche from grazing (eating plants), predation (killing prey), parasitism (draining
+   *  hosts), and photosynthesis (harvesting light) — the scavenger eats the DEAD. false (default) = the gene
+   *  never draws, the scavenge step is skipped → byte-identical. */
+  scavengerEnabled: boolean;
+  /** Energy deposited at a creature's position when it dies (the corpse biomass). */
+  corpseEnergy: number;
+  /** Range a scavenger scans for nearby death events (world units). */
+  scavengeRange: number;
+  /** Basal upkeep per unit SCAVENGER above the founder center (scavenging apparatus maintenance). */
+  scavengerCost: number;
+  /** SCAVENGER founder CENTER. Drawn UNIFORM over [0,1] when enabled; pinned here with no draw when off. */
+  scavenger: number;
+
   // ── Drifting SIGHT-ONLY food parcels (gives the VISION genes a reason to exist) ─────────────────────
   /** Master switch for drifting sight-only food parcels: discrete, high-value, perishable food motes that
    *  emit NO smell (not in the FoodField gradient) and are perceived ONLY by the sight system, so a
@@ -912,6 +982,31 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     temperatureMetabCost: 0,
     temperatureScale: 1.5,
     thermalPref: 0.5,
+    // Photosynthesis (autotroph morph): OFF by default (gene never draws, income block skipped → byte-
+    // identical). Flip on to add a producer niche that lives off the light field, not food patches.
+    photosynthEnabled: false,
+    photosynthLightScale: 1.2,
+    photosynthGain: 0.5, // ~the basal cost at full light+still — a committed autotroph breaks even slowly
+    photosynthStillnessK: 2.0, // speed² kills photosynthesis fast (sharp sedentary pressure)
+    photosynthCost: 0.02, // chloroplast upkeep per unit above center
+    photosynth: 0.3,
+    // Parasitism (parasite morph): OFF by default (gene never draws, attach/drain block skipped, hostSlot
+    // stays -1 → byte-identical). Flip on to add a host-riding siphon niche.
+    parasiteEnabled: false,
+    parasiteDrain: 0.3, // chronic drain (× parasitism gene) — slower than a bite but steady
+    parasiteGain: 1.5, // parasites convert drained energy efficiently (gain > 1 = profitable)
+    parasiteAttachRange: 20, // must be within this to latch on
+    parasiteSizeRatio: 1.5, // host must be ≥1.5× the parasite's size (small parasites, big hosts)
+    parasiteCost: 0.02, // attachment apparatus upkeep per unit above center
+    parasite: 0.3,
+    parasiteHostSeekGain: 0, // OFF default — no host-seeking sight pull (the ablation). Demo opts in.
+    // Scavenger (scavenger morph): OFF by default (gene never draws, scavenge step skipped → byte-identical).
+    // Flip on to add a death-following niche.
+    scavengerEnabled: false,
+    corpseEnergy: 40, // biomass deposited at a death (≈ half a birth provisioning)
+    scavengeRange: 30, // range a scavenger senses death events
+    scavengerCost: 0.02, // scavenging apparatus upkeep per unit above center
+    scavenger: 0.3,
     // Drifting sight-only food parcels: OFF by default (pool never allocated, spawn RNG never advances,
     // sense/eat skip the parcel block) → byte-identical. Flip on to give the VISION genes a payoff: discrete,
     // high-value, perishable, smell-less motes that only eyes can find + intercept. All randomness is on a

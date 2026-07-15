@@ -73,6 +73,7 @@ export const METABOLISM_AXES: readonly RadarAxisDef[] = [
   { gene: ScalarGene.BIRTH_ENERGY, label: 'prov', color: '#e8cf7a' },
   { gene: ScalarGene.MATURITY_AGE, label: 'mature', color: '#c0a0e0' },
   { gene: ScalarGene.SENESCENCE_AGE, label: 'lifespan', color: '#b08fd0' },
+  { gene: ScalarGene.PHOTOSYNTH, label: 'photo', color: '#9ad07a' }, // autotroph morph — light harvest
 ];
 
 /** FORAGING & DIET — the trophic niche: where it sits on the herbivore→predator axis + resource prefs. */
@@ -82,6 +83,9 @@ export const FORAGING_AXES: readonly RadarAxisDef[] = [
   { gene: ScalarGene.FORAGE_PREF, label: 'forage AB', color: '#d0c060' },
   { gene: ScalarGene.FORAGE_PREF_C, label: 'forage C', color: '#c8d080' },
   { gene: ScalarGene.DAMAGE, label: 'bite', color: '#e0566a' },
+  { gene: ScalarGene.THERMAL_PREF, label: 'thermal', color: '#7fb8d8' }, // abiotic temp niche (Arc C3)
+  { gene: ScalarGene.PARASITISM, label: 'parasite', color: '#b08fd0' }, // parasite morph — host-drain
+  { gene: ScalarGene.SCAVENGER, label: 'scavenger', color: '#c0a070' }, // scavenger morph — death-feeder
 ];
 
 /** SOCIAL & MATING — schooling/sheltering, scent broadcasting, and the sexual display/preference pair. */

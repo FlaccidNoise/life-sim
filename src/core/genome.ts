@@ -100,8 +100,19 @@ export const ScalarGene = {
   // (the F_ST target diet/metabEff can't reach because their tradeoffs maintain within-region spread).
   // Tail-gated at the very end so the OFF stream is byte-identical (no RNG draw when the tax is off).
   THERMAL_PREF: 27,
+  // Photosynthesis (autotroph morph, gated cfg.photosynthEnabled): how strongly this creature harvests
+  // the seeded LIGHT field for passive energy (see metabolize). [0,1]. Tail-gated + uniform-seeded like
+  // THERMAL_PREF so committed autotrophs exist in the founding pool from t=0; OFF → never draws → byte-identical.
+  PHOTOSYNTH: 28,
+  // Parasitism (parasite morph, gated cfg.parasiteEnabled): how strongly this creature attaches to +
+  // drains a larger host (see economy). [0,1]. Tail-gated + uniform-seeded like PHOTOSYNTH/THERMAL_PREF.
+  PARASITISM: 29,
+  // Scavenger (morph, gated cfg.scavengerEnabled): how strongly this creature absorbs energy from
+  // nearby DEATH EVENTS (a transient biomass pulse when a creature dies). [0,1]. Tail-gated + uniform-
+  // seeded like the other morph genes; OFF → never draws → byte-identical.
+  SCAVENGER: 30,
 } as const;
-export const SCALAR_GENE_COUNT = 28;
+export const SCALAR_GENE_COUNT = 31;
 
 /** Minimum reproductive-band width: satiated is read as max(satiatedGene, reproGene + this) so the two
  *  life-history bars can mutate independently without inverting (which would break the learn gate). */
@@ -135,7 +146,10 @@ interface ScalarGeneSpec {
     | 'display'
     | 'preference'
     | 'damping'
-    | 'thermalPref';
+    | 'thermalPref'
+    | 'photosynth'
+    | 'parasite'
+    | 'scavenger';
   /** Config key for the per-unit-above-center basal cost coeff, or null for a non-upkeep gene. */
   costKey:
     | 'maxSpeedCost'
@@ -152,6 +166,9 @@ interface ScalarGeneSpec {
     | 'cohesionDriveCost'
     | 'pheroDepositCost'
     | 'senescenceAgeCost'
+    | 'photosynthCost'
+    | 'parasiteCost'
+    | 'scavengerCost'
     | null;
   /** Hard clamp range the gene value is kept within (at seed and at every mutation). */
   min: number;
@@ -230,6 +247,18 @@ export const SCALAR_GENE_SPECS: readonly ScalarGeneSpec[] = [
   // its "cost" is the temperature-mismatch tax in metabolize (pure regional stabilizing selection). Center
   // 0.5 (mid-temperature); tail-gated on temperatureMetabCost>0 so the OFF stream is byte-identical.
   { centerKey: 'thermalPref', costKey: null, min: 0, max: 1 },
+  // PHOTOSYNTH (autotroph morph) — how strongly this creature harvests the light field, [0,1]. costed
+  // (photosynthCost) so maintaining photosynthetic machinery is a real tradeoff; the payoff is passive
+  // light income in metabolize. Tail-gated on photosynthEnabled; uniform-seeded like THERMAL_PREF.
+  { centerKey: 'photosynth', costKey: 'photosynthCost', min: 0, max: 1 },
+  // PARASITISM (parasite morph) — how strongly this creature attaches to + drains a larger host, [0,1].
+  // costed (parasiteCost) so maintaining the attachment apparatus is a real tradeoff; the payoff is the
+  // chronic host-drain in metabolize. Tail-gated on parasiteEnabled; uniform-seeded like PHOTOSYNTH.
+  { centerKey: 'parasite', costKey: 'parasiteCost', min: 0, max: 1 },
+  // SCAVENGER (scavenger morph) — how strongly this creature absorbs energy from nearby death events,
+  // [0,1]. costed (scavengerCost) so maintaining the scavenging apparatus is a real tradeoff; the payoff
+  // is the death-event energy absorption in the scavenge step. Tail-gated on scavengerEnabled; uniform-seeded.
+  { centerKey: 'scavenger', costKey: 'scavengerCost', min: 0, max: 1 },
 ];
 
 /** Tail-gated scalar genes: each takes its founder CENTER (seed) / parent value (mutate) WITHOUT drawing
@@ -248,6 +277,9 @@ export function scalarGeneGatedOff(g: number, cfg: Config): boolean {
   if (g === ScalarGene.PHERO_DEPOSIT) return !cfg.pheromoneEnabled;
   if (g === ScalarGene.MATURITY_AGE || g === ScalarGene.SENESCENCE_AGE) return !cfg.ageStages;
   if (g === ScalarGene.THERMAL_PREF) return cfg.temperatureMetabCost <= 0;
+  if (g === ScalarGene.PHOTOSYNTH) return !cfg.photosynthEnabled;
+  if (g === ScalarGene.PARASITISM) return !cfg.parasiteEnabled;
+  if (g === ScalarGene.SCAVENGER) return !cfg.scavengerEnabled;
   return false;
 }
 
@@ -276,7 +308,7 @@ export function seedScalarGenes(genes: Float32Array, slot: number, rng: Rng, cfg
     // temperature band) from t=0. Without the spread an all-0.5 pool has no raw material and must build the
     // range by slow mutation, so regional differentiation never gets going. One RNG draw (rng.float()), like
     // the gaussian path it replaces, so it stays at the tail-safe draw position.
-    if (g === ScalarGene.FORAGE_PREF || g === ScalarGene.THERMAL_PREF) {
+    if (g === ScalarGene.FORAGE_PREF || g === ScalarGene.THERMAL_PREF || g === ScalarGene.PHOTOSYNTH || g === ScalarGene.PARASITISM || g === ScalarGene.SCAVENGER) {
       genes[base + g] = rng.float();
       continue;
     }

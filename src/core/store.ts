@@ -122,6 +122,10 @@ export class OrganismStore {
   readonly seeking: Uint8Array;
   readonly seekTicksLeft: Uint32Array;
 
+  /** Parasite attachment state (parasite morph): the slot a parasite is attached to, or -1 if free-living.
+   *  Auxiliary runtime state — NOT hashed (gated on parasiteEnabled; stays -1 when off → byte-identical). */
+  readonly hostSlot: Int32Array;
+
   /** Free slots available for allocation (LIFO). Reuse is genId-guarded. */
   private readonly freeStack: number[] = [];
 
@@ -175,6 +179,7 @@ export class OrganismStore {
     this.huntCooldownLeft = new Uint32Array(capacity);
     this.seeking = new Uint8Array(capacity);
     this.seekTicksLeft = new Uint32Array(capacity);
+    this.hostSlot = new Int32Array(capacity);
     this.liveIndices = new Uint32Array(capacity);
     this.liveGen = new Uint32Array(capacity);
     this.clear();
@@ -194,6 +199,7 @@ export class OrganismStore {
     this.huntCooldownLeft.fill(0);
     this.seeking.fill(0);
     this.seekTicksLeft.fill(0);
+    this.hostSlot.fill(-1);
     this.freeStack.length = 0;
     for (let i = this.capacity - 1; i >= 0; i--) this.freeStack.push(i);
     this.liveCount = 0;
@@ -210,6 +216,7 @@ export class OrganismStore {
     this.huntCooldownLeft[slot] = 0; // a newborn predator is hunt-ready (no inherited handling-time refractory)
     this.seeking[slot] = 0;
     this.seekTicksLeft[slot] = 0;
+    this.hostSlot[slot] = -1; // a newborn is free-living (no inherited attachment)
     this.eatGate[slot] = 1; // default full eating until steer() recomputes (avoids a stale pre-steer read)
     this.biteGate[slot] = 1; // default bite-open until steer() recomputes (A2a; avoids a stale pre-steer read)
     this.scentGate[slot] = 1; // default broadcast-open until steer() recomputes (A2b; avoids a stale pre-steer read)

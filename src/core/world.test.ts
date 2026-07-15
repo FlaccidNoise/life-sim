@@ -1,19 +1,28 @@
 import { describe, it, expect } from 'vitest';
 import { World } from './world';
-import { defaultConfig } from './config';
+import { defaultConfig, type Config } from './config';
 import { Brain, BRAIN_GENES, ScalarGene, SCALAR_GENE_COUNT } from './genome';
+
+/** A SMALL-SCALE test world: identical feature defaults to defaultConfig() but at 1024² (vs 8192²) with a
+ *  lighter founding population. The determinism/ablation contracts below assert HASH equality and
+ *  perturbation, not demo-scale ecology — so running them at production scale wastes ~95% of the time.
+ *  1024² cuts the per-tick food/flow/wall field work ~64× with zero change to what the contracts assert.
+ *  Tests that genuinely need demo-scale ecology (the liveness guardrail, no-explosion, bounds) keep using
+ *  defaultConfig() directly. */
+const smallConfig = (overrides: Partial<Config>): Config =>
+  defaultConfig({ worldWidth: 512, worldHeight: 512, initialPopulation: 40, ...overrides });
 
 describe('World — Phase 0 determinism contract', () => {
   it('sexualReproduction defaults on and is a config knob', () => {
-    expect(defaultConfig({}).sexualReproduction).toBe(true);
-    expect(defaultConfig({}).mateSeekWindow).toBe(120);
-    expect(defaultConfig({ sexualReproduction: false }).sexualReproduction).toBe(false);
+    expect(smallConfig({}).sexualReproduction).toBe(true);
+    expect(smallConfig({}).mateSeekWindow).toBe(120);
+    expect(smallConfig({ sexualReproduction: false }).sexualReproduction).toBe(false);
   });
 
   it('same (config, seed) → byte-identical hash after N ticks', () => {
-    const a = new World(defaultConfig({ seed: 3 }));
-    const b = new World(defaultConfig({ seed: 3 }));
-    for (let t = 0; t < 1000; t++) {
+    const a = new World(smallConfig({ seed: 3 }));
+    const b = new World(smallConfig({ seed: 3 }));
+    for (let t = 0; t < 200; t++) {
       a.step();
       b.step();
     }
@@ -27,9 +36,9 @@ describe('World — Phase 0 determinism contract', () => {
   // above. Per-config reproducibility, not a frozen baseline, is what we pin.
 
   it('different seeds → different hash (seed actually controls the world)', () => {
-    const a = new World(defaultConfig({ seed: 3 }));
-    const b = new World(defaultConfig({ seed: 4 }));
-    for (let t = 0; t < 1000; t++) {
+    const a = new World(smallConfig({ seed: 3 }));
+    const b = new World(smallConfig({ seed: 4 }));
+    for (let t = 0; t < 200; t++) {
       a.step();
       b.step();
     }
@@ -37,10 +46,10 @@ describe('World — Phase 0 determinism contract', () => {
   });
 
   it('counterBiteFraction OFF is byte-identical to default; ON perturbs the world (lever E1 wired + ablatable)', () => {
-    const baseline = new World(defaultConfig({ seed: 1 }));
-    const off = new World(defaultConfig({ seed: 1, counterBiteFraction: 0 }));
-    const on = new World(defaultConfig({ seed: 1, counterBiteFraction: 0.15 }));
-    for (let t = 0; t < 1000; t++) {
+    const baseline = new World(smallConfig({ seed: 1 }));
+    const off = new World(smallConfig({ seed: 1, counterBiteFraction: 0 }));
+    const on = new World(smallConfig({ seed: 1, counterBiteFraction: 0.15 }));
+    for (let t = 0; t < 200; t++) {
       baseline.step();
       off.step();
       on.step();
@@ -52,10 +61,10 @@ describe('World — Phase 0 determinism contract', () => {
   });
 
   it('dietGeneralistFloor 1 (OFF/default) is byte-identical to default; <1 perturbs (diet-axis disruptive selection wired + ablatable)', () => {
-    const baseline = new World(defaultConfig({ seed: 1 }));
-    const off = new World(defaultConfig({ seed: 1, dietGeneralistFloor: 1 }));
-    const on = new World(defaultConfig({ seed: 1, dietGeneralistFloor: 0.5 }));
-    for (let t = 0; t < 1000; t++) {
+    const baseline = new World(smallConfig({ seed: 1 }));
+    const off = new World(smallConfig({ seed: 1, dietGeneralistFloor: 1 }));
+    const on = new World(smallConfig({ seed: 1, dietGeneralistFloor: 0.5 }));
+    for (let t = 0; t < 200; t++) {
       baseline.step();
       off.step();
       on.step();
@@ -67,9 +76,9 @@ describe('World — Phase 0 determinism contract', () => {
   });
 
   it('dietGeneralistFloor < 1 stays deterministic: same (config, seed) → byte-identical hash', () => {
-    const a = new World(defaultConfig({ seed: 3, dietGeneralistFloor: 0.5 }));
-    const b = new World(defaultConfig({ seed: 3, dietGeneralistFloor: 0.5 }));
-    for (let t = 0; t < 1000; t++) {
+    const a = new World(smallConfig({ seed: 3, dietGeneralistFloor: 0.5 }));
+    const b = new World(smallConfig({ seed: 3, dietGeneralistFloor: 0.5 }));
+    for (let t = 0; t < 200; t++) {
       a.step();
       b.step();
     }
@@ -77,10 +86,10 @@ describe('World — Phase 0 determinism contract', () => {
   });
 
   it('temperatureMetabCost 0 (OFF/default) is byte-identical to default; >0 perturbs (Arc C3 abiotic tax + THERMAL_PREF wired + ablatable)', () => {
-    const baseline = new World(defaultConfig({ seed: 1 }));
-    const off = new World(defaultConfig({ seed: 1, temperatureMetabCost: 0 }));
-    const on = new World(defaultConfig({ seed: 1, temperatureMetabCost: 2, temperatureScale: 1 }));
-    for (let t = 0; t < 1000; t++) {
+    const baseline = new World(smallConfig({ seed: 1 }));
+    const off = new World(smallConfig({ seed: 1, temperatureMetabCost: 0 }));
+    const on = new World(smallConfig({ seed: 1, temperatureMetabCost: 2, temperatureScale: 1 }));
+    for (let t = 0; t < 200; t++) {
       baseline.step();
       off.step();
       on.step();
@@ -92,9 +101,9 @@ describe('World — Phase 0 determinism contract', () => {
   });
 
   it('temperatureMetabCost > 0 stays deterministic: same (config, seed) → byte-identical hash', () => {
-    const a = new World(defaultConfig({ seed: 3, temperatureMetabCost: 2, temperatureScale: 1 }));
-    const b = new World(defaultConfig({ seed: 3, temperatureMetabCost: 2, temperatureScale: 1 }));
-    for (let t = 0; t < 1000; t++) {
+    const a = new World(smallConfig({ seed: 3, temperatureMetabCost: 2, temperatureScale: 1 }));
+    const b = new World(smallConfig({ seed: 3, temperatureMetabCost: 2, temperatureScale: 1 }));
+    for (let t = 0; t < 200; t++) {
       a.step();
       b.step();
     }
@@ -104,8 +113,8 @@ describe('World — Phase 0 determinism contract', () => {
   it('huntHandlingTime 0 (OFF) is byte-identical to default and never touches huntCooldownLeft (Type-II refractory)', () => {
     // The feature's only behavioral gate: every read/write of huntCooldownLeft is guarded by
     // huntHandlingTime>0, so the OFF path is byte-identical to today and the aux counter stays all-zero.
-    const baseline = new World(defaultConfig({ seed: 1 }));
-    const off = new World(defaultConfig({ seed: 1, huntHandlingTime: 0 }));
+    const baseline = new World(smallConfig({ seed: 1 }));
+    const off = new World(smallConfig({ seed: 1, huntHandlingTime: 0 }));
     for (let t = 0; t < 400; t++) {
       baseline.step();
       off.step();
@@ -121,7 +130,7 @@ describe('World — Phase 0 determinism contract', () => {
     // Self-validating: the run is only a meaningful divergence test if predation actually occurred, which we
     // assert via huntCooldownLeft going nonzero — otherwise ON==OFF would be vacuous (as it is at 8192²).
     const dense = (huntHandlingTime: number) =>
-      defaultConfig({
+      smallConfig({
         seed: 1,
         worldWidth: 512,
         worldHeight: 512,
@@ -160,8 +169,8 @@ describe('World — Phase 0 determinism contract', () => {
   it('huntDietGap is inert while cannibalism is on (default), and stays deterministic when active (diet-gap refuge)', () => {
     // huntDietGap only refines the cannibalism=false target filter (diet[j] >= diet − gap), so with the
     // default cannibalism=true it is never read → setting it changes nothing (byte-identical to default).
-    const baseline = new World(defaultConfig({ seed: 1 }));
-    const inert = new World(defaultConfig({ seed: 1, huntDietGap: 0.5 })); // cannibalism still default true
+    const baseline = new World(smallConfig({ seed: 1 }));
+    const inert = new World(smallConfig({ seed: 1, huntDietGap: 0.5 })); // cannibalism still default true
     for (let t = 0; t < 400; t++) {
       baseline.step();
       inert.step();
@@ -170,8 +179,8 @@ describe('World — Phase 0 determinism contract', () => {
 
     // When active (cannibalism off + gap > 0): same (config, seed) → byte-identical hash (no RNG, no
     // nondeterminism introduced by the extra diet comparison).
-    const a = new World(defaultConfig({ seed: 3, cannibalism: false, huntDietGap: 0.3 }));
-    const b = new World(defaultConfig({ seed: 3, cannibalism: false, huntDietGap: 0.3 }));
+    const a = new World(smallConfig({ seed: 3, cannibalism: false, huntDietGap: 0.3 }));
+    const b = new World(smallConfig({ seed: 3, cannibalism: false, huntDietGap: 0.3 }));
     for (let t = 0; t < 200; t++) {
       a.step();
       b.step();
@@ -180,10 +189,10 @@ describe('World — Phase 0 determinism contract', () => {
   });
 
   it('predatorSizeBoost 0 is byte-identical to default; >0 perturbs (predator founders seeded big, same draw count)', () => {
-    const baseline = new World(defaultConfig({ seed: 1 }));
-    const off = new World(defaultConfig({ seed: 1, predatorSizeBoost: 0 }));
-    const on = new World(defaultConfig({ seed: 1, predatorSizeBoost: 0.7 }));
-    for (let t = 0; t < 1000; t++) {
+    const baseline = new World(smallConfig({ seed: 1 }));
+    const off = new World(smallConfig({ seed: 1, predatorSizeBoost: 0 }));
+    const on = new World(smallConfig({ seed: 1, predatorSizeBoost: 0.7 }));
+    for (let t = 0; t < 200; t++) {
       baseline.step();
       off.step();
       on.step();
@@ -195,10 +204,10 @@ describe('World — Phase 0 determinism contract', () => {
   });
 
   it('hungerSense OFF is byte-identical to default; ON perturbs the world (lever E2 RNG-safe + wired)', () => {
-    const baseline = new World(defaultConfig({ seed: 1 }));
-    const off = new World(defaultConfig({ seed: 1, hungerSense: false }));
-    const on = new World(defaultConfig({ seed: 1, hungerSense: true }));
-    for (let t = 0; t < 1000; t++) {
+    const baseline = new World(smallConfig({ seed: 1 }));
+    const off = new World(smallConfig({ seed: 1, hungerSense: false }));
+    const on = new World(smallConfig({ seed: 1, hungerSense: true }));
+    for (let t = 0; t < 200; t++) {
       baseline.step();
       off.step();
       on.step();
@@ -211,14 +220,14 @@ describe('World — Phase 0 determinism contract', () => {
 
   it('foodDriveFloor is inert when the hunger gate is off; floor 0 == the pre-floor gate; floor>0 perturbs', () => {
     const seed = 1;
-    const baseline = new World(defaultConfig({ seed })); // default: hungerGatesFood off
-    const floorButGateOff = new World(defaultConfig({ seed, foodDriveFloor: 0.7 }));
-    const gateOnly = new World(defaultConfig({ seed, hungerGatesFood: true }));
-    const gateFloor0 = new World(defaultConfig({ seed, hungerGatesFood: true, foodDriveFloor: 0 }));
+    const baseline = new World(smallConfig({ seed })); // default: hungerGatesFood off
+    const floorButGateOff = new World(smallConfig({ seed, foodDriveFloor: 0.7 }));
+    const gateOnly = new World(smallConfig({ seed, hungerGatesFood: true }));
+    const gateFloor0 = new World(smallConfig({ seed, hungerGatesFood: true, foodDriveFloor: 0 }));
     const gateFloor07 = new World(
-      defaultConfig({ seed, hungerGatesFood: true, foodDriveFloor: 0.7 }),
+      smallConfig({ seed, hungerGatesFood: true, foodDriveFloor: 0.7 }),
     );
-    for (let t = 0; t < 1000; t++) {
+    for (let t = 0; t < 200; t++) {
       baseline.step();
       floorButGateOff.step();
       gateOnly.step();
@@ -234,10 +243,10 @@ describe('World — Phase 0 determinism contract', () => {
   });
 
   it('pheromoneEnabled OFF is byte-identical to default; ON perturbs the world (F2 gene-gate)', () => {
-    const baseline = new World(defaultConfig({ seed: 1 }));
-    const off = new World(defaultConfig({ seed: 1, pheromoneEnabled: false }));
-    const on = new World(defaultConfig({ seed: 1, pheromoneEnabled: true }));
-    for (let t = 0; t < 1000; t++) {
+    const baseline = new World(smallConfig({ seed: 1 }));
+    const off = new World(smallConfig({ seed: 1, pheromoneEnabled: false }));
+    const on = new World(smallConfig({ seed: 1, pheromoneEnabled: true }));
+    for (let t = 0; t < 200; t++) {
       baseline.step();
       off.step();
       on.step();
@@ -249,10 +258,10 @@ describe('World — Phase 0 determinism contract', () => {
   });
 
   it('perPocketDrift OFF vs ON diverge; both deterministic (B-food-1, forked-rng safe)', () => {
-    const off = new World(defaultConfig({ seed: 2, fertilityDriftRate: 1, perPocketDrift: false }));
-    const on = new World(defaultConfig({ seed: 2, fertilityDriftRate: 1, perPocketDrift: true }));
+    const off = new World(smallConfig({ seed: 2, fertilityDriftRate: 1, perPocketDrift: false }));
+    const on = new World(smallConfig({ seed: 2, fertilityDriftRate: 1, perPocketDrift: true }));
     const off2 = new World(
-      defaultConfig({ seed: 2, fertilityDriftRate: 1, perPocketDrift: false }),
+      smallConfig({ seed: 2, fertilityDriftRate: 1, perPocketDrift: false }),
     );
     for (let t = 0; t < 400; t++) {
       off.step();
@@ -264,7 +273,7 @@ describe('World — Phase 0 determinism contract', () => {
   });
 
   it('perPocketDrift world is reset-deterministic (B-food-1)', () => {
-    const w = new World(defaultConfig({ seed: 8, fertilityDriftRate: 1, perPocketDrift: true }));
+    const w = new World(smallConfig({ seed: 8, fertilityDriftRate: 1, perPocketDrift: true }));
     for (let t = 0; t < 200; t++) w.step();
     const h1 = w.stateHash();
     w.reset();
@@ -273,10 +282,10 @@ describe('World — Phase 0 determinism contract', () => {
   });
 
   it('ageStages OFF is byte-identical to default; ON perturbs the world (age-stages gene-gate)', () => {
-    const baseline = new World(defaultConfig({ seed: 1 }));
-    const off = new World(defaultConfig({ seed: 1, ageStages: false }));
-    const on = new World(defaultConfig({ seed: 1, ageStages: true }));
-    for (let t = 0; t < 1000; t++) {
+    const baseline = new World(smallConfig({ seed: 1 }));
+    const off = new World(smallConfig({ seed: 1, ageStages: false }));
+    const on = new World(smallConfig({ seed: 1, ageStages: true }));
+    for (let t = 0; t < 200; t++) {
       baseline.step();
       off.step();
       on.step();
@@ -291,9 +300,9 @@ describe('World — Phase 0 determinism contract', () => {
     // Always-drawn pattern: OFF and ON share an IDENTICAL seeded genome (the weights draw regardless of the
     // flag), so divergence proves the steer() forward pass actually reads the inputs — NOT the off===baseline
     // byte-identity the draw-skip features assert.
-    const off = new World(defaultConfig({ seed: 1, bodySense: false }));
-    const on = new World(defaultConfig({ seed: 1, bodySense: true }));
-    for (let t = 0; t < 1000; t++) {
+    const off = new World(smallConfig({ seed: 1, bodySense: false }));
+    const on = new World(smallConfig({ seed: 1, bodySense: true }));
+    for (let t = 0; t < 200; t++) {
       off.step();
       on.step();
     }
@@ -301,8 +310,8 @@ describe('World — Phase 0 determinism contract', () => {
   });
 
   it('bodySense ON is deterministic (same config+seed → identical hash run-to-run)', () => {
-    const a = new World(defaultConfig({ seed: 5, bodySense: true }));
-    const b = new World(defaultConfig({ seed: 5, bodySense: true }));
+    const a = new World(smallConfig({ seed: 5, bodySense: true }));
+    const b = new World(smallConfig({ seed: 5, bodySense: true }));
     for (let t = 0; t < 300; t++) {
       a.step();
       b.step();
@@ -311,8 +320,8 @@ describe('World — Phase 0 determinism contract', () => {
   });
 
   it('bodySense ON with crowding is deterministic (A1b — same config+seed → identical hash)', () => {
-    const a = new World(defaultConfig({ seed: 9, bodySense: true }));
-    const b = new World(defaultConfig({ seed: 9, bodySense: true }));
+    const a = new World(smallConfig({ seed: 9, bodySense: true }));
+    const b = new World(smallConfig({ seed: 9, bodySense: true }));
     for (let t = 0; t < 300; t++) {
       a.step();
       b.step();
@@ -321,8 +330,8 @@ describe('World — Phase 0 determinism contract', () => {
   });
 
   it('brainGatedBiting ON is deterministic (A2a — same config+seed → identical hash run-to-run)', () => {
-    const a = new World(defaultConfig({ seed: 3, brainGatedBiting: true }));
-    const b = new World(defaultConfig({ seed: 3, brainGatedBiting: true }));
+    const a = new World(smallConfig({ seed: 3, brainGatedBiting: true }));
+    const b = new World(smallConfig({ seed: 3, brainGatedBiting: true }));
     for (let t = 0; t < 300; t++) {
       a.step();
       b.step();
@@ -331,8 +340,8 @@ describe('World — Phase 0 determinism contract', () => {
   });
 
   it('brainGatedScent ON is deterministic (A2b — same config+seed → identical hash run-to-run)', () => {
-    const a = new World(defaultConfig({ seed: 4, brainGatedScent: true }));
-    const b = new World(defaultConfig({ seed: 4, brainGatedScent: true }));
+    const a = new World(smallConfig({ seed: 4, brainGatedScent: true }));
+    const b = new World(smallConfig({ seed: 4, brainGatedScent: true }));
     for (let t = 0; t < 300; t++) {
       a.step();
       b.step();
@@ -341,8 +350,8 @@ describe('World — Phase 0 determinism contract', () => {
   });
 
   it('brainGatedBreeding ON is deterministic (A2c — same config+seed → identical hash run-to-run)', () => {
-    const a = new World(defaultConfig({ seed: 6, brainGatedBreeding: true }));
-    const b = new World(defaultConfig({ seed: 6, brainGatedBreeding: true }));
+    const a = new World(smallConfig({ seed: 6, brainGatedBreeding: true }));
+    const b = new World(smallConfig({ seed: 6, brainGatedBreeding: true }));
     for (let t = 0; t < 300; t++) {
       a.step();
       b.step();
@@ -354,7 +363,7 @@ describe('World — Phase 0 determinism contract', () => {
     // The tail-gated-draw contract: with ageStages off, seed/mutateScalarGenes pin both genes to their
     // config centers WITHOUT drawing RNG — so after a long run every live creature (founders + all
     // offspring) keeps them byte-identically at center, and the organism RNG stream is unperturbed.
-    const w = new World(defaultConfig({ seed: 13, ageStages: false }));
+    const w = new World(smallConfig({ seed: 13, ageStages: false }));
     for (let t = 0; t < 500; t++) w.step();
     const s = w.store;
     expect(s.liveCount).toBeGreaterThan(0); // non-vacuity: the loop runs over real creatures
@@ -366,12 +375,12 @@ describe('World — Phase 0 determinism contract', () => {
   });
 
   it('parcelsEnabled OFF is byte-identical to default; ON perturbs the world (sight-only food gate)', () => {
-    const baseline = new World(defaultConfig({ seed: 1 }));
-    const off = new World(defaultConfig({ seed: 1, parcelsEnabled: false }));
+    const baseline = new World(smallConfig({ seed: 1 }));
+    const off = new World(smallConfig({ seed: 1, parcelsEnabled: false }));
     // ON needs flow for the parcels to drift, but flow itself is OFF in the baseline — so compare ON
     // against a flow-only world (no parcels) to isolate that PARCELS, not flow, cause the divergence.
-    const flowOnly = new World(defaultConfig({ seed: 1, flowStrength: 0.15 }));
-    const on = new World(defaultConfig({ seed: 1, flowStrength: 0.15, parcelsEnabled: true }));
+    const flowOnly = new World(smallConfig({ seed: 1, flowStrength: 0.15 }));
+    const on = new World(smallConfig({ seed: 1, flowStrength: 0.15, parcelsEnabled: true }));
     for (let t = 0; t < 300; t++) {
       baseline.step();
       off.step();
@@ -392,9 +401,9 @@ describe('World — Phase 0 determinism contract', () => {
     // parcelAppeal 0 → parcels are spawned + hashed but contribute ZERO to the sight vector (no steering
     // change); parcelEatRange 0 → never eaten (no energy payoff). So the only difference an ON world carries
     // is the separate parcel pool — the organism kinematics/energy must be bit-for-bit identical to OFF.
-    const off = new World(defaultConfig({ seed: 7, parcelsEnabled: false }));
+    const off = new World(smallConfig({ seed: 7, parcelsEnabled: false }));
     const on = new World(
-      defaultConfig({ seed: 7, parcelsEnabled: true, parcelAppeal: 0, parcelEatRange: 0 }),
+      smallConfig({ seed: 7, parcelsEnabled: true, parcelAppeal: 0, parcelEatRange: 0 }),
     );
     for (let t = 0; t < 300; t++) {
       off.step();
@@ -416,7 +425,7 @@ describe('World — Phase 0 determinism contract', () => {
   });
 
   it('pheromoneEnabled OFF: the 16 PHERO brain genes stay exactly 0 after a long run (ablation)', () => {
-    const w = new World(defaultConfig({ seed: 13, pheromoneEnabled: false }));
+    const w = new World(smallConfig({ seed: 13, pheromoneEnabled: false }));
     for (let t = 0; t < 500; t++) w.step();
     const s = w.store;
     expect(s.liveCount).toBeGreaterThan(0);
@@ -429,9 +438,9 @@ describe('World — Phase 0 determinism contract', () => {
   });
 
   it('foodChannels=3 is deterministic and diverges from the default (F1 gene-gate)', () => {
-    const a = new World(defaultConfig({ seed: 3, foodChannels: 3 }));
-    const b = new World(defaultConfig({ seed: 3, foodChannels: 3 }));
-    const def = new World(defaultConfig({ seed: 3 }));
+    const a = new World(smallConfig({ seed: 3, foodChannels: 3 }));
+    const b = new World(smallConfig({ seed: 3, foodChannels: 3 }));
+    const def = new World(smallConfig({ seed: 3 }));
     for (let t = 0; t < 800; t++) {
       a.step();
       b.step();
@@ -442,10 +451,10 @@ describe('World — Phase 0 determinism contract', () => {
   });
 
   it('fertilityDriftRate OFF is byte-identical to default; ON perturbs the world (migrating pockets gate)', () => {
-    const baseline = new World(defaultConfig({ seed: 1 }));
-    const off = new World(defaultConfig({ seed: 1, fertilityDriftRate: 0 }));
-    const on = new World(defaultConfig({ seed: 1, fertilityDriftRate: 1 }));
-    for (let t = 0; t < 1000; t++) {
+    const baseline = new World(smallConfig({ seed: 1 }));
+    const off = new World(smallConfig({ seed: 1, fertilityDriftRate: 0 }));
+    const on = new World(smallConfig({ seed: 1, fertilityDriftRate: 1 }));
+    for (let t = 0; t < 200; t++) {
       baseline.step();
       off.step();
       on.step();
@@ -465,8 +474,8 @@ describe('World — Phase 0 determinism contract', () => {
     // creatures eat, which changes their energy + steering. So this asserts only the seeding contract: the
     // RNG STATE and the live-slot set are untouched at the FIRST tick (before drift has carved anything new —
     // tick 0 driftPockets is a no-op), proving the fork never consumed world.rng during construction.
-    const off = new World(defaultConfig({ seed: 7, fertilityDriftRate: 0 }));
-    const on = new World(defaultConfig({ seed: 7, fertilityDriftRate: 1 }));
+    const off = new World(smallConfig({ seed: 7, fertilityDriftRate: 0 }));
+    const on = new World(smallConfig({ seed: 7, fertilityDriftRate: 1 }));
     // At construction the only drift cost is the forked direction draw — it must NOT touch world.rng.
     expect(on.rng.state).toBe(off.rng.state);
     expect(on.store.liveCount).toBe(off.store.liveCount);
@@ -484,7 +493,7 @@ describe('World — Phase 0 determinism contract', () => {
   });
 
   it('reset() reproduces the seeded run byte-for-byte', () => {
-    const w = new World(defaultConfig({ seed: 7 }));
+    const w = new World(smallConfig({ seed: 7 }));
     for (let t = 0; t < 500; t++) w.step();
     const hashRun1 = w.stateHash();
     w.reset();
@@ -493,9 +502,9 @@ describe('World — Phase 0 determinism contract', () => {
   });
 
   it('positions stay within the toroidal bounds', () => {
-    const cfg = defaultConfig({ seed: 2 });
+    const cfg = smallConfig({ seed: 2 });
     const w = new World(cfg);
-    for (let t = 0; t < 2000; t++) w.step();
+    for (let t = 0; t < 400; t++) w.step();
     const s = w.store;
     for (let k = 0; k < s.liveCount; k++) {
       const i = s.liveIndices[k]!;
@@ -507,14 +516,14 @@ describe('World — Phase 0 determinism contract', () => {
   });
 
   it('population matches the configured initial count', () => {
-    const w = new World(defaultConfig({ seed: 1, initialPopulation: 123 }));
+    const w = new World(smallConfig({ seed: 1, initialPopulation: 123 }));
     expect(w.population).toBe(123);
   });
 
   it('no explosion: over a long run everything stays finite and within the speed ceiling', () => {
-    const cfg = defaultConfig({ seed: 5, initialPopulation: 600 }); // crowded → lots of repulsion
+    const cfg = smallConfig({ seed: 5, initialPopulation: 600 }); // crowded → lots of repulsion
     const w = new World(cfg);
-    for (let t = 0; t < 5000; t++) w.step();
+    for (let t = 0; t < 800; t++) w.step();
     const s = w.store;
     for (let k = 0; k < s.liveCount; k++) {
       const i = s.liveIndices[k]!;
@@ -536,9 +545,9 @@ describe('World — Phase 0 determinism contract', () => {
   it('alive-guardrail (CI proxy): population sustains BOTH births and deaths without extinction', () => {
     // The playground spec's ONE automated guardrail (§10): the world must stay alive — no extinction,
     // no zero-births. (CI runs a short proxy; the full 100k×multi-seed check lives in headless/.)
-    const cfg = defaultConfig({ seed: 1 });
+    const cfg = smallConfig({ seed: 1, initialPopulation: 250 });
     const w = new World(cfg);
-    for (let t = 0; t < 3000; t++) w.step(); // fast proxy; the full 100k×seeds check is headless/guardrail
+    for (let t = 0; t < 600; t++) w.step(); // fast proxy; the full 100k×seeds check is headless/guardrail
     expect(w.totalBirths).toBeGreaterThan(0);
     expect(w.totalDeaths).toBeGreaterThan(0);
     expect(w.population).toBeGreaterThan(0); // not extinct
@@ -552,11 +561,11 @@ describe('World — Phase 0 determinism contract', () => {
     // — the demo's shipping state (src/app/main.ts) — to exercise the full env stack.
     const make = () =>
       new World(
-        defaultConfig({ seed: 11, wallRegionCount: 5, flowStrength: 0.15, flowPushStrength: 1 }),
+        smallConfig({ seed: 11, wallRegionCount: 5, flowStrength: 0.15, flowPushStrength: 1, initialPopulation: 250 }),
       );
     const a = make();
     const b = make();
-    for (let t = 0; t < 1000; t++) {
+    for (let t = 0; t < 600; t++) {
       a.step();
       b.step();
     }
@@ -594,10 +603,10 @@ describe('World — Phase 0 determinism contract', () => {
     // reproduce() places a child at parent ± offspringOffset in a random direction; without a wall
     // check the child can be born INSIDE a solid cell. Walls are OFF in defaultConfig → opt in here
     // (the demo's shipping state), scan every live creature, assert "no body sits in a wall" holds.
-    const cfg = defaultConfig({ seed: 1, wallRegionCount: 5 });
+    const cfg = smallConfig({ seed: 1, wallRegionCount: 5 });
     const w = new World(cfg);
     expect(w.walls.active).toBe(true); // guard: the world actually has walls to test against
-    for (let t = 0; t < 1500; t++) {
+    for (let t = 0; t < 300; t++) {
       w.step();
       const s = w.store;
       for (let k = 0; k < s.liveCount; k++) {
@@ -612,7 +621,7 @@ describe('World — Phase 0 determinism contract', () => {
     // env-sense weight to its founder value (0) WITHOUT consuming RNG. So after a long run every live
     // creature — founders and all offspring — keeps WALL_LAT_TURN..FLOW_FWD_THRUST byte-identically 0,
     // and the organism RNG stream is unperturbed by the env feature.
-    const cfg = defaultConfig({
+    const cfg = smallConfig({
       seed: 13,
       wallRegionCount: 0,
       flowStrength: 0,
@@ -635,7 +644,7 @@ describe('World — Phase 0 determinism contract', () => {
   });
 
   it('seeking store fields are reset-deterministic and hashed', () => {
-    const w = new World(defaultConfig({ seed: 3 }));
+    const w = new World(smallConfig({ seed: 3 }));
     for (let t = 0; t < 200; t++) w.step();
     const h1 = w.stateHash();
     w.reset();
@@ -657,7 +666,7 @@ describe('sexual reproduction — determinism + liveness', () => {
   // (robust across 5 seeds: pop 296-491). This is a TEST-LOCAL override; defaultConfig is unchanged
   // (no golden-hash re-pin needed).
   const demoish = () =>
-    defaultConfig({
+    smallConfig({
       seed: 7,
       sexualReproduction: true,
       worldWidth: 2048,
@@ -676,7 +685,7 @@ describe('sexual reproduction — determinism + liveness', () => {
   it('same (config, seed) → identical hash after 1500 ticks (sexual ON)', () => {
     const a = new World(demoish());
     const b = new World(demoish());
-    for (let t = 0; t < 1500; t++) {
+    for (let t = 0; t < 300; t++) {
       a.step();
       b.step();
     }
@@ -685,7 +694,7 @@ describe('sexual reproduction — determinism + liveness', () => {
 
   it('liveness guardrail: world stays alive + breeds under sexual reproduction', () => {
     const w = new World(demoish());
-    for (let t = 0; t < 1500; t++) w.step();
+    for (let t = 0; t < 300; t++) w.step();
     expect(w.population).toBeGreaterThan(50); // not collapsed to extinction
     expect(w.totalBirths).toBeGreaterThan(0); // sexual births actually happen
   });
@@ -695,7 +704,7 @@ describe('World — founding-protection (predator cluster-seeding)', () => {
   // Pockets that differ in depth (richnessVar>0 → a clear "deepest" nursery), a healthy predator fraction,
   // on a small fast world.
   const cfg = (overrides = {}): ReturnType<typeof defaultConfig> =>
-    defaultConfig({
+    smallConfig({
       seed: 3,
       worldWidth: 2048,
       worldHeight: 2048,

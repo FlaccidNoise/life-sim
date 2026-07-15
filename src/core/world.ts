@@ -18,8 +18,25 @@ import {
   SCALAR_GENE_COUNT,
   SCALAR_GENE_SPECS,
 } from './genome';
-import { metabolize, hunt, eatParcels, cullDead, reproduce, depositScent } from './economy';
+import { metabolize, hunt, eatParcels, cullDead, reproduce, depositScent, parasiteStep, scavenge } from './economy';
 import { Hasher } from './hash';
+
+/** Sync attached parasites to their host's post-move position (parasite rides the host; no own
+ *  locomotion while attached). Gated on parasiteEnabled so OFF is a no-op → byte-identical. */
+function syncParasites(store: OrganismStore, cfg: Config): void {
+  if (!cfg.parasiteEnabled) return;
+  const { liveIndices, liveCount, x, y, vx, vy, hostSlot } = store;
+  for (let k = 0; k < liveCount; k++) {
+    const i = liveIndices[k]!;
+    const host = hostSlot[i]!;
+    if (host < 0) continue;
+    if (!store.alive[host]!) { hostSlot[i] = -1; continue; } // host died → detach
+    x[i] = x[host]!; // ride the host
+    y[i] = y[host]!;
+    vx[i] = vx[host]!; // match velocity (so the renderer doesn't smear)
+    vy[i] = vy[host]!;
+  }
+}
 
 /**
  * The simulation world — owns the config, the single RNG, the organism store, and the spatial hash,
@@ -35,6 +52,9 @@ export class World {
   readonly rng: Rng;
   readonly store: OrganismStore;
   readonly hash: SpatialHash;
+  /** Transient per-tick death positions (x,y pairs) collected by cullDead for the scavenger step.
+   *  Sized to maxOrganisms × 2 (every creature could die in one tick). Reused each tick (overwritten). */
+  private readonly deathPositions: Float64Array;
   readonly food: FoodField;
   readonly walls: Walls;
   readonly flow: FlowField;
@@ -70,6 +90,7 @@ export class World {
     this.config = config;
     this.rng = new Rng(config.seed);
     this.store = new OrganismStore(config.maxOrganisms);
+    this.deathPositions = new Float64Array(config.maxOrganisms * 2);
     this.hash = new SpatialHash(
       config.worldWidth,
       config.worldHeight,
@@ -334,6 +355,10 @@ export class World {
     // bites use where creatures actually are this tick.
     this.hash.build(s);
     hunt(s, this.hash, cfg);
+    // PARASITES: attach to / drain hosts (post-MOVE positions, post-hunt so a host drained this tick is
+    // weaker). Gated (no-op when off → byte-identical). Attached parasites then ride their host's position.
+    parasiteStep(s, this.hash, cfg);
+    syncParasites(s, cfg);
     // EAT PARCELS: a creature that its sight steered onto a parcel now cashes the intercept (post-MOVE
     // positions, ascending live-slot order, RNG-free). Gated (null = OFF, byte-identical).
     if (this.parcels !== null) eatParcels(s, this.parcels, cfg);
@@ -342,7 +367,10 @@ export class World {
     metabolize(s, this.food, this.hash, cfg);
     if (cfg.learningEnabled)
       learn(s, cfg.learningRate, cfg.weightDecay, cfg.maxLearnDeviation, cfg.learnRewardClamp);
-    this.lastDeaths = cullDead(s);
+    this.lastDeaths = cullDead(s, this.deathPositions);
+    // SCAVENGE: scavengers absorb energy from this tick's death events (transient corpse biomass).
+    // Gated (no-op when off → byte-identical). Runs AFTER cull so dead creatures don't scavenge themselves.
+    if (cfg.scavengerEnabled) scavenge(s, cfg, this.deathPositions, this.lastDeaths);
     this.lastBirths = reproduce(
       s,
       this.rng,

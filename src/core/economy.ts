@@ -15,7 +15,7 @@ import { type Parcels } from './parcels';
 import { type Rng } from './rng';
 import { type Config } from './config';
 import { type Walls } from './walls';
-import { temperatureAxis, temperatureAtAxis } from './abiotic';
+import { temperatureAxis, temperatureAtAxis, lightAxis, lightAtAxis } from './abiotic';
 import {
   mutateGenome,
   mutateScalarGenes,
@@ -163,9 +163,81 @@ export function hunt(store: OrganismStore, hash: SpatialHash, cfg: Config): void
  * above-baseline "more-is-costly" genes — together the selection pressure on the traits. Ascending
  * order so depletion is deterministic when organisms share a cell. Mutates energy.
  */
+
+/**
+ * PARASITISM (parasite morph) — each creature with PARASITISM > 0 either ATTACHES to a nearby larger host
+ * (if free-living) or DRAINS energy from its current host (if attached). A parasite must be smaller than
+ * its host by `parasiteSizeRatio` (big hosts, small parasites — the inverse of predation's big-eats-small).
+ * While attached the parasite rides the host (position synced in world.ts), so it doesn't pay move cost.
+ * The drain is chronic (small/tick) rather than lethal (a bite), creating a host-parasite coevolution
+ * dynamic. Gated on cfg.parasiteEnabled so OFF skips entirely → byte-identical. RNG-free (nearest
+ * compatible host), so the organism stream is never perturbed.
+ */
+export function parasiteStep(store: OrganismStore, hash: SpatialHash, cfg: Config): void {
+  if (!cfg.parasiteEnabled) return;
+  const { liveIndices, liveCount, x, y, energy, scalarGenes, hostSlot } = store;
+  const { parasiteAttachRange, parasiteSizeRatio, parasiteDrain, parasiteGain } = cfg;
+  const { cols, rows, bucketStart, sorted } = hash;
+  const range2 = parasiteAttachRange * parasiteAttachRange;
+  const cellSize = Math.min(cfg.worldWidth / cols, cfg.worldHeight / rows);
+  const halfGrid = Math.floor((Math.min(cols, rows) - 1) / 2);
+  const pr = Math.min(halfGrid, Math.max(1, Math.ceil(parasiteAttachRange / cellSize)));
+  for (let k = 0; k < liveCount; k++) {
+    const i = liveIndices[k]!;
+    const sg = i * SCALAR_GENE_COUNT;
+    const para = scalarGenes[sg + ScalarGene.PARASITISM]!;
+    if (para <= 0) continue;
+    const host = hostSlot[i]!;
+    if (host >= 0) {
+      // Already attached: drain the host (capped by its energy). If the host is dead/gone, detach.
+      if (!store.alive[host]!) {
+        hostSlot[i] = -1;
+        continue;
+      }
+      let drain = Math.min(parasiteDrain * para, energy[host]!);
+      if (drain <= 0) continue;
+      energy[host] = energy[host]! - drain;
+      energy[i] = energy[i]! + drain * parasiteGain;
+    } else {
+      // Free-living: scan for a nearby larger host to attach to. Nearest compatible (smallest distance).
+      const sizeI = scalarGenes[sg + ScalarGene.SIZE]!;
+      const minHostSize = sizeI * parasiteSizeRatio;
+      const xi = x[i]!;
+      const yi = y[i]!;
+      const cx = hash.colOf(xi);
+      const cy = hash.rowOf(yi);
+      let best = -1;
+      let bestD = range2;
+      for (let dy = -pr; dy <= pr; dy++) {
+        const by = (cy + dy + rows) % rows;
+        for (let dx = -pr; dx <= pr; dx++) {
+          const bx = (cx + dx + cols) % cols;
+          const b = by * cols + bx;
+          const end = bucketStart[b + 1]!;
+          for (let idx = bucketStart[b]!; idx < end; idx++) {
+            const j = sorted[idx]!;
+            if (j === i) continue;
+            const jg = j * SCALAR_GENE_COUNT;
+            if (scalarGenes[jg + ScalarGene.SIZE]! < minHostSize) continue; // too small to be a host
+            if (hostSlot[j]! >= 0) continue; // don't stack on an already-parasitized host (one parasite each)
+            const ddx = wrapDelta(xi - x[j]!, cfg.worldWidth);
+            const ddy = wrapDelta(yi - y[j]!, cfg.worldHeight);
+            const d2 = ddx * ddx + ddy * ddy;
+            if (d2 < bestD) {
+              bestD = d2;
+              best = j;
+            }
+          }
+        }
+      }
+      if (best >= 0) hostSlot[i] = best; // attach (no RNG; nearest compatible host)
+    }
+  }
+}
+
 /**
  * Per-tick passive scent deposit: every live creature broadcasts its signature (a projection of its DIET
- * gene + hue) into the field, scaled by its PHERO_DEPOSIT gene × pheroDepositStrength. Ascending live-slot,
+ * gene + hue) into the field, scaled by its PHERO_DEPOSIT gene × pheroDepositStrength. days. Ascending live-slot,
  * RNG-free. The continuous trail (vs on-graze) so predators — who gain via hunt, not graze — also lay scent.
  * When cfg.scentIdentity is false the deposit is identity-blind (equal into all channels) — the ablation.
  */
@@ -222,6 +294,10 @@ export function metabolize(
   // pure seed arithmetic, no RNG). The per-creature mismatch tax below is skipped when the cost is 0.
   const tempMetabCost = cfg.temperatureMetabCost;
   const tempAxis = tempMetabCost > 0 ? temperatureAxis(cfg) : null;
+  // Photosynthesis (autotroph morph): precompute the light gradient axis ONCE (RNG-free, seed-derived).
+  // The per-creature income block below is skipped when photosynthEnabled is false → byte-identical.
+  const photoEnabled = cfg.photosynthEnabled;
+  const lightAxisPre = photoEnabled ? lightAxis(cfg) : null;
   for (let k = 0; k < liveCount; k++) {
     const i = liveIndices[k]!;
     const sg = i * SCALAR_GENE_COUNT;
@@ -355,6 +431,20 @@ export function metabolize(
         scalarGenes[sg + ScalarGene.THERMAL_PREF]! - temperatureAtAxis(x[i]!, y[i]!, tempAxis);
       energy[i] = energy[i]! - basalCost * tempMetabCost * d * d;
     }
+    // Photosynthesis (autotroph morph): passive energy income from the light field, scaled by the
+    // creature's PHOTOSYNTH gene, local light, and a STILLNESS factor (1/(1+k·speed²)) — slow/still
+    // creatures harvest best, selecting for a sedentary drifting lifestyle. The gene is upkeep-costed
+    // (geneUpkeep above already charges photosynthCost), so this is the payoff for that investment. Gated
+    // on photosynthEnabled so OFF skips the field lookup → byte-identical; light field is RNG-free and the
+    // gene is tail-gated → never perturbs the organism stream.
+    if (lightAxisPre !== null) {
+      const photo = scalarGenes[sg + ScalarGene.PHOTOSYNTH]!;
+      if (photo > 0) {
+        const light = lightAtAxis(x[i]!, y[i]!, lightAxisPre);
+        const stillness = 1 / (1 + cfg.photosynthStillnessK * speed2);
+        energy[i] = energy[i]! + photo * light * cfg.photosynthGain * stillness;
+      }
+    }
     // Lever D: pay the local-crowding drain ON TOP (skipped entirely when OFF → byte-identical). Count
     // live neighbors within crowdRadius via the post-MOVE hash, then drain crowdingMortality per neighbor
     // above the free band. Ascending order + integer count + RNG-free, so the tick stays reproducible.
@@ -412,18 +502,81 @@ export function eatParcels(store: OrganismStore, parcels: Parcels, cfg: Config):
   }
 }
 
-/** Free every organism whose energy has run out (≤ 0). Returns the death count. */
-export function cullDead(store: OrganismStore): number {
-  const { liveIndices, liveCount, energy } = store;
+/** Free every organism whose energy has run out (≤ 0). Returns the death count. When `deathPositions`
+ *  is provided, appends each dying creature's (x,y) to it (for the scavenger step — death events as a
+ *  transient energy source). The array is cleared by the caller before passing. */
+export function cullDead(store: OrganismStore, deathPositions?: Float64Array): number {
+  const { liveIndices, liveCount, energy, x, y } = store;
   let deaths = 0;
+  let dpIdx = 0;
   for (let k = 0; k < liveCount; k++) {
     const i = liveIndices[k]!;
     if (energy[i]! <= 0) {
+      if (deathPositions) {
+        deathPositions[dpIdx++] = x[i]!;
+        deathPositions[dpIdx++] = y[i]!;
+      }
       store.free(i);
       deaths++;
     }
   }
   return deaths;
+}
+
+/**
+ * SCAVENGE (scavenger morph) — creatures with SCAVENGER > 0 absorb energy from nearby DEATH EVENTS.
+ *  Each death this tick deposited corpseEnergy at its position; a scavenger within scavengeRange of a death
+ *  absorbs corpseEnergy × its SCAVENGER gene (split among scavengers sharing a corpse, so the biomass isn't
+ *  minted N×). This is a genuinely different niche: the scavenger FOLLOWS death events (where creatures are
+ *  dying) for energy, rather than grazing, hunting, parasitizing, or photosynthesizing. Gated on
+ *  scavengerEnabled so OFF skips entirely → byte-identical. RNG-free, deterministic (ascending live-slot +
+ *  ascending death order; a corpse split equally among all scavengers in reach). `deathCount` is the number
+ *  of deaths this tick (each death = 2 Float64 entries in deathPositions).
+ */
+export function scavenge(
+  store: OrganismStore,
+  cfg: Config,
+  deathPositions: Float64Array,
+  deathCount: number,
+): void {
+  if (!cfg.scavengerEnabled || deathCount === 0) return;
+  const { liveIndices, liveCount, x, y, energy, scalarGenes } = store;
+  const range = cfg.scavengeRange;
+  const range2 = range * range;
+  const corpseEnergy = cfg.corpseEnergy;
+  const ww = cfg.worldWidth;
+  const wh = cfg.worldHeight;
+  // For each death, find scavengers in range and split the corpse energy among them (× each one's gene).
+  // O(deaths × scavengers) — small at typical death rates; the death list is transient (this tick only).
+  for (let d = 0; d < deathCount; d++) {
+    const dx = deathPositions[d * 2]!;
+    const dy = deathPositions[d * 2 + 1]!;
+    // First pass: collect eligible scavengers + their gene values (to split the corpse fairly).
+    let totalScav = 0;
+    const eligible: number[] = [];
+    for (let k = 0; k < liveCount; k++) {
+      const i = liveIndices[k]!;
+      const sg = i * SCALAR_GENE_COUNT;
+      const sc = scalarGenes[sg + ScalarGene.SCAVENGER]!;
+      if (sc <= 0) continue;
+      const ddx = wrapDelta(x[i]! - dx, ww);
+      const ddy = wrapDelta(y[i]! - dy, wh);
+      if (ddx * ddx + ddy * ddy > range2) continue;
+      eligible.push(i);
+      totalScav += sc;
+    }
+    if (totalScav <= 0) continue;
+    // Split the corpse energy proportionally to each scavenger's gene (a committed scavenger gets a bigger
+    // share; a mild one gets less). The total absorbed = corpseEnergy × (avg gene of eligible) — NOT minted
+    // per-scavenger — so a swarm of scavengers shares one corpse, not N corpses' worth of energy.
+    for (let e = 0; e < eligible.length; e++) {
+      const i = eligible[e]!;
+      const sg = i * SCALAR_GENE_COUNT;
+      const sc = scalarGenes[sg + ScalarGene.SCAVENGER]!;
+      const share = (sc / totalScav) * corpseEnergy * sc; // ∝ gene² / Σgenes — rewards commitment
+      energy[i] = energy[i]! + share;
+    }
+  }
 }
 
 /** Find the best compatible mate for mother `p` within mateContactRange (RNG-free, deterministic). Scans

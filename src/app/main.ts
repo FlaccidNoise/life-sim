@@ -186,7 +186,7 @@ const FOOD_LAYER_NAMES: Record<number, string> = {
   [FoodLayer.SCENT_KIN_COS]: 'scent: kin (cos)',
   [FoodLayer.SCENT_KIN_SIN]: 'scent: kin (sin)',
 };
-const COLOR_MODE_NAMES = ['lineage', 'diet', 'energy', 'forage'];
+const COLOR_MODE_NAMES = ['lineage', 'diet', 'energy', 'forage', 'photo', 'parasite', 'scavenger'];
 
 /** The ring of layers that actually have data for the current world, in cycle order. Off is always in
  *  the ring; channels B/C only when foodChannels covers them; the 4 scent channels only when the field exists. */
@@ -429,6 +429,9 @@ const COLOR_CYCLE: ColorMode[] = [
   ColorMode.LINEAGE,
   ColorMode.ENERGY,
   ColorMode.FORAGE,
+  ColorMode.PHOTOSYNTH,
+  ColorMode.PARASITE,
+  ColorMode.SCAVENGER,
 ];
 function actColor(): void {
   const idx = COLOR_CYCLE.indexOf(colorMode);

@@ -155,9 +155,42 @@ export const livingWorldOverrides: Partial<Config> = {
   // sharper forage floor pulls FORAGE_PREF off the generalist center into committed A/B/C specialists, and a
   // lower vision cost lets the now-tripled VISION_RANGE gene actually get used (the perf throttle — raise it
   // back toward 0.002 if too much of the pop goes long-sighted and fps drops).
-  mutationSigma: 0.08, // evolutionary step 0.05→0.08: more standing variation maintained against selection
-  hueMutationSigma: 0.04, // lineage colors diverge faster (0.02→0.04) → more visible variety, no fitness effect
+  mutationSigma: 0.12, // evolutionary step 0.08→0.12: more standing variation maintained against selection
+  hueMutationSigma: 0.06, // lineage colors diverge faster (0.04→0.06) → more visible variety, no fitness effect
   forageGeneralistFloor: 0.7, // sharpen the specialist split (0.85→0.7): generalists earn less → bimodal niches
   visionRangeCost: 0.0006, // ~3× lower (0.002→0.0006) so the tripled VISION_RANGE cap is reachable, not taxed
   // away instantly. Scan cost scales as range², so this is the live throttle on how many creatures pay it.
+  // ── WAVE 1 diversity crank (emergence experiment) ────────────────────────────────────────────────────
+  // Thermal niches ON: regional thermal species (THERMAL_PREF gene wakes up, uniform-seeded → regional
+  // stabilizing selection drives each deme to its local temperature).
+  temperatureMetabCost: 0.4,
+  // Photosynthesis ON: a producer morph (PHOTOSYNTH gene) that harvests a seeded LIGHT field for passive
+  // energy, most efficient when SLOW/STILL (stillness penalty selects for a sedentary drifting lifestyle —
+  // a genuinely different body plan from grazers/predators). Uniform-seeded so committed autotrophs exist in
+  // the founding pool from t=0; the gene is upkeep-costed (chloroplast maintenance) so it's a real tradeoff.
+  photosynthEnabled: true,
+  photosynthGain: 0.6, // high enough that a still creature survives on light alone (sedentary lifestyle viable)
+  photosynthStillnessK: 4.0, // sharpened — more extreme sedentary forms (speed² kills photosynthesis)
+  photosynthCost: 0.02,
+  photosynthLightScale: 1.2,
+  photosynth: 0.3,
+  // Parasitism (parasite morph): a host-riding siphon niche. Small creatures attach to larger hosts and
+  // drain energy over time (chronic, not lethal) while riding them — a genuinely different survival
+  // strategy from grazing/hunting/photosynthesizing. Creates host-parasite coevolution pressure.
+  parasiteEnabled: true,
+  parasiteDrain: 0.05, // LOW chronic drain — hosts survive parasitism (no hyperparasite crash)
+  parasiteGain: 1.5, // high conversion — parasites profit from the small drain (free movement + steady income)
+  parasiteAttachRange: 40, // moderate — wandering parasites find hosts without swarming
+  parasiteSizeRatio: 1.2, // host must be ≥1.2× the parasite's size (loose — more creatures qualify as hosts)
+  parasiteCost: 0.02, // mild upkeep — slight pressure to drop the gene if never attaching (not lethal)
+  parasite: 0.3, // founder center — gaussian around 0.3 so a meaningful minority can attach from t=0
+  parasiteHostSeekGain: 1.0, // ON — parasites actively seek hosts via the sight channel (neural-net driven)
+  // Scavenger (scavenger morph): a death-following niche. Creatures absorb energy from nearby death
+  // events (transient corpse biomass) — a genuinely different strategy from grazing/hunting/parasitizing/
+  // photosynthesizing. Creates a niche for creatures that follow where things are dying.
+  scavengerEnabled: true,
+  corpseEnergy: 20, // biomass deposited at a death (tuned down — less free energy with 3 morphs active)
+  scavengeRange: 20, // range a scavenger senses death events
+  scavengerCost: 0.05, // scavenging apparatus upkeep — expensive enough to be a niche, not a monoculture
+  scavenger: 0.3, // founder center (drawn uniform[0,1] at seed)
 };
