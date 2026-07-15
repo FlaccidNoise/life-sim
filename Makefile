@@ -1,4 +1,4 @@
-.PHONY: help dev test check lint typecheck build headless guardrail
+.PHONY: help dev test test:slow test:all check lint typecheck build headless guardrail
 
 help: ## Show available targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -7,8 +7,14 @@ help: ## Show available targets
 dev: ## Run the Vite dev server
 	pnpm dev
 
-test: ## Run the test suite once
+test: ## Run the fast test suite once (excludes slow integration files)
 	pnpm test
+
+test:slow: ## Run only the slow integration files (world, pheromone, harness)
+	pnpm test:slow
+
+test:all: ## Run the FULL suite including slow integration tests (before push)
+	pnpm test:all
 
 typecheck: ## Type-check without emitting
 	pnpm typecheck
@@ -25,4 +31,4 @@ headless: ## Run the headless simulation entry
 guardrail: ## Liveness gate: default config stays alive + breathing (slow; the on-by-default safety net)
 	pnpm tsx src/headless/env-guardrail.ts
 
-check: typecheck lint test ## Run typecheck + lint + tests
+check: typecheck lint test ## Run typecheck + lint + fast tests

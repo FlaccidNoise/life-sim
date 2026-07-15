@@ -48,6 +48,18 @@ const COLOR_INFO: Record<ColorMode, { label: string; ramp: string }> = {
       [115, 115, 115], // generalist grey (matches the shader's vec3(0.45))
     ]),
   },
+  [ColorMode.PHOTOSYNTH]: {
+    label: 'photo · heterotroph→autotroph',
+    ramp: rampGradient((p) => hsv2rgb(0.08 + 0.22 * p, 0.4 + 0.55 * p, 0.45 + 0.55 * p)),
+  },
+  [ColorMode.PARASITE]: {
+    label: 'parasite · free-living→parasite',
+    ramp: rampGradient((p) => hsv2rgb(0.50 + 0.28 * p, 0.35 + 0.60 * p, 0.45 + 0.55 * p)),
+  },
+  [ColorMode.SCAVENGER]: {
+    label: 'scavenger · non-scavenger→scavenger',
+    ramp: rampGradient((p) => hsv2rgb(0.58 - 0.50 * p, 0.35 + 0.60 * p, 0.45 + 0.55 * p)),
+  },
 };
 
 export class Legend {

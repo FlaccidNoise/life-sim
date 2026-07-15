@@ -35,6 +35,11 @@ export interface PopSummary {
   founders: number; // alive since tick 0 (age >= tick); a high fraction late = no turnover
   satiated: number; // energy >= satiatedBar: full but (if births≈0) not breeding = mate-starved hoard
   meanEnergy: number;
+  // Morphotype counts (the new life strategies): committed autotrophs/parasites/scavengers by gene
+  // threshold. Each is 0 when its morph is disabled (the gene is pinned at center, never crosses threshold).
+  autotrophs: number; // PHOTOSYNTH > 0.6 — sedentary light-harvesters
+  parasites: number; // PARASITISM > 0.5 — host-riders (attached or seeking)
+  scavengers: number; // SCAVENGER > 0.5 — death-event followers
 }
 
 /** One read-only pass over the live set → the whole-population summary the graph + stats block share. */
@@ -52,6 +57,9 @@ export function summarizePopulation(store: OrganismStore, tick: number, cfg: Con
       founders: 0,
       satiated: 0,
       meanEnergy: 0,
+      autotrophs: 0,
+      parasites: 0,
+      scavengers: 0,
     };
   }
   let ageSum = 0;
@@ -61,6 +69,9 @@ export function summarizePopulation(store: OrganismStore, tick: number, cfg: Con
   let herb = 0;
   let omni = 0;
   let pred = 0;
+  let autotrophs = 0;
+  let parasites = 0;
+  let scavengers = 0;
   let founders = 0;
   let satiated = 0;
   if (ageScratch.length < n) ageScratch = new Uint32Array(n); // grows once to the high-water mark
@@ -79,6 +90,11 @@ export function summarizePopulation(store: OrganismStore, tick: number, cfg: Con
     if (shape === 2) pred++;
     else if (shape === 1) omni++;
     else herb++;
+    // Morphotype counts (the new life strategies). Each gene is pinned at center when its morph is off,
+    // so the count is naturally 0 for disabled morphs (center 0.3 < 0.5/0.6 thresholds).
+    if (store.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.PHOTOSYNTH]! > 0.6) autotrophs++;
+    if (store.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.PARASITISM]! > 0.5) parasites++;
+    if (store.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.SCAVENGER]! > 0.5) scavengers++;
   }
   ageScratch.subarray(0, n).sort(); // sort only the live prefix (in place, no allocation)
   const mean = dSum / n;
@@ -94,6 +110,9 @@ export function summarizePopulation(store: OrganismStore, tick: number, cfg: Con
     founders,
     satiated,
     meanEnergy: eSum / n,
+    autotrophs,
+    parasites,
+    scavengers,
   };
 }
 
@@ -123,6 +142,7 @@ export class WorldStats {
     const rows: [string, string][] = [
       ['pop', `${summary.n}`],
       ['diet ○◇△', `${summary.herb}/${summary.omni}/${summary.pred}`],
+      ['morphs ☀♗☠', `${summary.autotrophs}/${summary.parasites}/${summary.scavengers}`],
       ['births/t', avgBirths.toFixed(1)],
       ['deaths/t', avgDeaths.toFixed(1)],
       ['median age', `${summary.medianAge}`],

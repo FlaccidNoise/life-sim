@@ -224,6 +224,12 @@ export function senseCreatures(
     // into schools — hue-blind by default (all neighbors), or same-hue-only when cohesionHueBlind is off
     // (kin-clumps). 0 → no cohesion pull (the ablation). See the hue-blind branch below.
     const cohesion = scalarGenes[sg + ScalarGene.COHESION_DRIVE]! * cfg.cohesionGain;
+    // Host-seeking strength (parasite morph): the parasite's own PARASITISM gene × the global gain. Pulls
+    // toward LARGER creatures (any diet — a parasite's host can be a grazer OR a predator) so the parasite's
+    // neural net steers it toward hosts via the existing SIGHT brain weights. 0 → no host pull (the ablation).
+    const hostSeek = cfg.parasiteHostSeekGain > 0
+      ? scalarGenes[sg + ScalarGene.PARASITISM]! * cfg.parasiteHostSeekGain
+      : 0;
     const myHue = hue[i]!;
     const xi = x[i]!;
     const yi = y[i]!;
@@ -268,6 +274,15 @@ export function senseCreatures(
           if (shelter > 0 && sizeDiff > 0) {
             const dietSim = 1 - Math.abs(appeal); // |myDiet − itsDiet| ∈ [0,1]; 1 = same role
             pull += shelter * sizeDiff * dietSim;
+          }
+          // HOST-SEEKING (parasite morph): a parasite finds LARGER creatures attractive — the bigger the
+          // host, the stronger the pull — scaled by its PARASITISM gene. This drives the existing SIGHT
+          // brain weights so the parasite's neural net actively steers toward hosts (not random wandering).
+          // Gated on parasiteHostSeekGain>0 so OFF is byte-identical (pull unchanged). Unlike shelter (which
+          // is diet-gated to stay near your own guild), parasites SEEK big bodies of ANY diet — a big
+          // predator is a host too (parasites don't care what their host eats).
+          if (hostSeek > 0 && sizeDiff > 0) {
+            pull += hostSeek * sizeDiff;
           }
           // Schooling: hue-blind (default) pulls toward ALL neighbors equally so diverse-lineage prey
           // co-school; same-hue mode (cohesionHueBlind:false) scales by hue similarity ∈ [0,1] so only

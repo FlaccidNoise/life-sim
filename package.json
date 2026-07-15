@@ -9,6 +9,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "NODE_OPTIONS=--expose-gc vitest run",
+    "test:slow": "NODE_OPTIONS=--expose-gc vitest run --config vitest.config.slow.ts",
+    "test:all": "NODE_OPTIONS=--expose-gc vitest run --config vitest.config.all.ts",
     "test:watch": "NODE_OPTIONS=--expose-gc vitest",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",

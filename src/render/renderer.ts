@@ -30,7 +30,7 @@ import {
 } from './palette';
 
 /** Canvas color-by mode (cycled with 'c'): which gene/state drives dot hue. */
-export const ColorMode = { LINEAGE: 0, DIET: 1, ENERGY: 2, FORAGE: 3 } as const;
+export const ColorMode = { LINEAGE: 0, DIET: 1, ENERGY: 2, FORAGE: 3, PHOTOSYNTH: 4, PARASITE: 5, SCAVENGER: 6 } as const;
 export type ColorMode = (typeof ColorMode)[keyof typeof ColorMode];
 
 /** Food-field overlay layer (cycled with 'f'): which field the heatmap shows + its tint. The four SCENT_*
@@ -64,6 +64,9 @@ in float a_spd;                 // current speed, normalized [0,1] → BRIGHTNES
 in float a_shape;               // 0 herbivore (circle) · 1 omnivore (diamond) · 2 predator (triangle)
 in float a_efrac;               // energy band fraction [0,1] → hue in energy color-mode
 in float a_forage;              // dominant-resource hue [0,1); <0 = generalist (rendered grey)
+in float a_photo;               // photosynth gene [0,1] → PHOTOSYNTH color-mode (autotrophs glow green)
+in float a_para;               // parasitism gene [0,1] → PARASITE color-mode (parasites glow violet)
+in float a_scav;               // scavenger gene [0,1] → SCAVENGER color-mode (scavengers glow orange)
 uniform vec2 u_cam;             // camera centre in world units (pan)
 uniform vec2 u_canvas;
 uniform float u_scale;          // device px per world unit (base fit × zoom)
@@ -108,6 +111,19 @@ void main() {
   } else if (u_colorMode == 3) {
     // forage: dominant resource preference (hue matches the food-layer tints); generalist → grey
     v_color = a_forage < 0.0 ? vec3(0.45) : hsv2rgb(a_forage, 0.85, 0.95);
+  } else if (u_colorMode == 4) {
+    // photosynth: autotrophs (high gene) glow vivid green → yellow; non-photosynthetic dim brown.
+    // Makes the producer niche immediately legible against grazers/predators.
+    float p = clamp(a_photo, 0.0, 1.0);
+    v_color = hsv2rgb(mix(0.08, 0.30, p), 0.40 + 0.55 * p, 0.45 + 0.55 * p);
+  } else if (u_colorMode == 5) {
+    // parasite: parasites (high gene) glow vivid violet; free-living dim teal.
+    float p = clamp(a_para, 0.0, 1.0);
+    v_color = hsv2rgb(mix(0.50, 0.78, p), 0.35 + 0.60 * p, 0.45 + 0.55 * p);
+  } else if (u_colorMode == 6) {
+    // scavenger: scavengers (high gene) glow vivid orange; non-scavengers dim blue.
+    float p = clamp(a_scav, 0.0, 1.0);
+    v_color = hsv2rgb(mix(0.58, 0.08, p), 0.35 + 0.60 * p, 0.45 + 0.55 * p);
   } else {
     v_color = hsv2rgb(fract(a_hue), sat, val);             // lineage: hue gene over the full wheel
   }
@@ -154,6 +170,9 @@ in float a_shape;                 // 0 herbivore · 1 omnivore · 2 predator →
 in float a_efrac;                 // energy band fraction [0,1]
 in float a_mood;                  // brain glow output [0,1] → bioluminescence brightness
 in float a_forage;                // dominant-resource hue [0,1); <0 = generalist
+in float a_photo;               // photosynth gene [0,1] → PHOTOSYNTH color-mode
+in float a_para;               // parasitism gene [0,1] → PARASITE color-mode
+in float a_scav;               // scavenger gene [0,1] → SCAVENGER color-mode
 uniform vec2 u_cam;
 uniform vec2 u_canvas;
 uniform float u_scale;
@@ -189,6 +208,18 @@ void main() {
   if (u_colorMode == 1)      hue = hsv2rgb(dietHue(a_diet), 0.85, 1.0);
   else if (u_colorMode == 2) hue = hsv2rgb(energyHue(a_efrac), 0.80, 1.0);
   else if (u_colorMode == 3) hue = a_forage < 0.0 ? vec3(0.5) : hsv2rgb(a_forage, 0.85, 1.0);
+  else if (u_colorMode == 4) {
+    float p = clamp(a_photo, 0.0, 1.0);
+    hue = hsv2rgb(mix(0.08, 0.30, p), 0.40 + 0.55 * p, 0.45 + 0.55 * p);
+  }
+  else if (u_colorMode == 5) {
+    float p = clamp(a_para, 0.0, 1.0);
+    hue = hsv2rgb(mix(0.50, 0.78, p), 0.35 + 0.60 * p, 0.45 + 0.55 * p);
+  }
+  else if (u_colorMode == 6) {
+    float p = clamp(a_scav, 0.0, 1.0);
+    hue = hsv2rgb(mix(0.58, 0.08, p), 0.35 + 0.60 * p, 0.45 + 0.55 * p);
+  }
   else                       hue = hsv2rgb(fract(a_hue), 0.55 + 0.40 * clamp(a_vis, 0.0, 1.0), 1.0);
   // Bias toward the abyssal cyan floor so the whole field keeps a deep-sea cast (warm creatures
   // glow teal-tinged, not orange). 0.35 keeps the creature's own hue legible.
@@ -316,6 +347,9 @@ export class Renderer {
   private readonly efracBuffer: WebGLBuffer;
   private readonly moodBuffer: WebGLBuffer;
   private readonly forageBuffer: WebGLBuffer;
+  private readonly photoBuffer: WebGLBuffer;
+  private readonly paraBuffer: WebGLBuffer;
+  private readonly scavBuffer: WebGLBuffer;
   private readonly dotScratch: Float32Array;
   private readonly hueScratch: Float32Array;
   private readonly sizeScratch: Float32Array;
@@ -326,6 +360,9 @@ export class Renderer {
   private readonly efracScratch: Float32Array;
   private readonly moodScratch: Float32Array;
   private readonly forageScratch: Float32Array;
+  private readonly photoScratch: Float32Array;
+  private readonly paraScratch: Float32Array;
+  private readonly scavScratch: Float32Array;
   private readonly aPos: number;
   private readonly aHue: number;
   private readonly aSize: number;
@@ -335,6 +372,9 @@ export class Renderer {
   private readonly aShape: number;
   private readonly aEfrac: number;
   private readonly aForage: number;
+  private readonly aPhoto: number;
+  private readonly aPara: number;
+  private readonly aScav: number;
   // bioluminescence glow pass (additive; reuses the dot attribute buffers)
   private readonly glowProgram: WebGLProgram;
   private readonly gPos: number;
@@ -347,6 +387,9 @@ export class Renderer {
   private readonly gEfrac: number;
   private readonly gMood: number;
   private readonly gForage: number;
+  private readonly gPhoto: number;
+  private readonly gPara: number;
+  private readonly gScav: number;
   // debug overlay lines
   private readonly lineProgram: WebGLProgram;
   private readonly lineBuffer: WebGLBuffer;
@@ -402,6 +445,9 @@ export class Renderer {
     this.aShape = gl.getAttribLocation(this.dotProgram, 'a_shape');
     this.aEfrac = gl.getAttribLocation(this.dotProgram, 'a_efrac');
     this.aForage = gl.getAttribLocation(this.dotProgram, 'a_forage');
+    this.aPhoto = gl.getAttribLocation(this.dotProgram, 'a_photo');
+    this.aPara = gl.getAttribLocation(this.dotProgram, 'a_para');
+    this.aScav = gl.getAttribLocation(this.dotProgram, 'a_scav');
     this.gPos = gl.getAttribLocation(this.glowProgram, 'a_pos');
     this.gHue = gl.getAttribLocation(this.glowProgram, 'a_hue');
     this.gSize = gl.getAttribLocation(this.glowProgram, 'a_size');
@@ -412,6 +458,9 @@ export class Renderer {
     this.gEfrac = gl.getAttribLocation(this.glowProgram, 'a_efrac');
     this.gMood = gl.getAttribLocation(this.glowProgram, 'a_mood');
     this.gForage = gl.getAttribLocation(this.glowProgram, 'a_forage');
+    this.gPhoto = gl.getAttribLocation(this.glowProgram, 'a_photo');
+    this.gPara = gl.getAttribLocation(this.glowProgram, 'a_para');
+    this.gScav = gl.getAttribLocation(this.glowProgram, 'a_scav');
     this.aCorner = gl.getAttribLocation(this.foodProgram, 'a_corner');
     this.aWallCorner = gl.getAttribLocation(this.wallProgram, 'a_corner');
     this.aLinePos = gl.getAttribLocation(this.lineProgram, 'a_pos');
@@ -427,6 +476,9 @@ export class Renderer {
     const efracBuffer = gl.createBuffer();
     const moodBuffer = gl.createBuffer();
     const forageBuffer = gl.createBuffer();
+    const photoBuffer = gl.createBuffer();
+    const paraBuffer = gl.createBuffer();
+    const scavBuffer = gl.createBuffer();
     const quadBuffer = gl.createBuffer();
     const lineBuffer = gl.createBuffer();
     const foodTex = gl.createTexture();
@@ -442,6 +494,9 @@ export class Renderer {
       !efracBuffer ||
       !moodBuffer ||
       !forageBuffer ||
+      !photoBuffer ||
+      !paraBuffer ||
+      !scavBuffer ||
       !quadBuffer ||
       !lineBuffer ||
       !foodTex ||
@@ -454,6 +509,9 @@ export class Renderer {
     this.efracBuffer = efracBuffer;
     this.moodBuffer = moodBuffer;
     this.forageBuffer = forageBuffer;
+    this.photoBuffer = photoBuffer;
+    this.paraBuffer = paraBuffer;
+    this.scavBuffer = scavBuffer;
     this.dotBuffer = dotBuffer;
     this.hueBuffer = hueBuffer;
     this.sizeBuffer = sizeBuffer;
@@ -472,6 +530,9 @@ export class Renderer {
     this.efracScratch = new Float32Array(capacity);
     this.moodScratch = new Float32Array(capacity);
     this.forageScratch = new Float32Array(capacity);
+    this.photoScratch = new Float32Array(capacity);
+    this.paraScratch = new Float32Array(capacity);
+    this.scavScratch = new Float32Array(capacity);
 
     // Unit quad as a triangle strip: (0,0)(1,0)(0,1)(1,1).
     gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
@@ -727,6 +788,9 @@ export class Renderer {
       const esc = this.efracScratch;
       const msc = this.moodScratch;
       const fsc = this.forageScratch;
+      const psc_photo = this.photoScratch;
+      const psc_para = this.paraScratch;
+      const psc_scav = this.scavScratch;
       const { liveIndices, x, y, vx, vy, hue, genId, scalarGenes, energy, glow } = store;
       const useInterp = interp != null && interp.alpha < 1;
       const a = useInterp ? interp.alpha : 0;
@@ -786,6 +850,9 @@ export class Renderer {
           domW = wC;
         }
         fsc[k] = domW > 0.5 ? CHANNEL_HUE[dom]! : -1;
+        psc_photo[k] = scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.PHOTOSYNTH]!;
+        psc_para[k] = scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.PARASITISM]!;
+        psc_scav[k] = scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.SCAVENGER]!;
       }
       gl.useProgram(this.dotProgram);
       gl.bindBuffer(gl.ARRAY_BUFFER, this.dotBuffer);
@@ -824,6 +891,18 @@ export class Renderer {
       gl.bufferData(gl.ARRAY_BUFFER, fsc.subarray(0, n), gl.DYNAMIC_DRAW);
       gl.enableVertexAttribArray(this.aForage);
       gl.vertexAttribPointer(this.aForage, 1, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.photoBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, psc_photo.subarray(0, n), gl.DYNAMIC_DRAW);
+      gl.enableVertexAttribArray(this.aPhoto);
+      gl.vertexAttribPointer(this.aPhoto, 1, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.paraBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, psc_para.subarray(0, n), gl.DYNAMIC_DRAW);
+      gl.enableVertexAttribArray(this.aPara);
+      gl.vertexAttribPointer(this.aPara, 1, gl.FLOAT, false, 0, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.scavBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, psc_scav.subarray(0, n), gl.DYNAMIC_DRAW);
+      gl.enableVertexAttribArray(this.aScav);
+      gl.vertexAttribPointer(this.aScav, 1, gl.FLOAT, false, 0, 0);
       this.setCommonUniforms(this.dotProgram, sc);
       gl.uniform1i(gl.getUniformLocation(this.dotProgram, 'u_colorMode'), colorMode);
       gl.drawArrays(gl.POINTS, 0, n);
@@ -872,6 +951,15 @@ export class Renderer {
         gl.bindBuffer(gl.ARRAY_BUFFER, this.forageBuffer);
         gl.enableVertexAttribArray(this.gForage);
         gl.vertexAttribPointer(this.gForage, 1, gl.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.photoBuffer);
+        gl.enableVertexAttribArray(this.gPhoto);
+        gl.vertexAttribPointer(this.gPhoto, 1, gl.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.paraBuffer);
+        gl.enableVertexAttribArray(this.gPara);
+        gl.vertexAttribPointer(this.gPara, 1, gl.FLOAT, false, 0, 0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.scavBuffer);
+        gl.enableVertexAttribArray(this.gScav);
+        gl.vertexAttribPointer(this.gScav, 1, gl.FLOAT, false, 0, 0);
         this.setCommonUniforms(this.glowProgram, sc);
         gl.uniform1i(gl.getUniformLocation(this.glowProgram, 'u_colorMode'), colorMode);
         gl.uniform1f(gl.getUniformLocation(this.glowProgram, 'u_glow'), this.glowIntensity);

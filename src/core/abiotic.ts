@@ -47,3 +47,29 @@ export function temperatureAtAxis(x: number, y: number, a: TemperatureAxis): num
 export function temperatureAt(x: number, y: number, cfg: Config): number {
   return temperatureAtAxis(x, y, temperatureAxis(cfg));
 }
+
+// ── LIGHT field (photosynthesis) ────────────────────────────────────────────────────────────────────
+/** A SEEDED, RNG-free LIGHT intensity field in [0,1], INDEPENDENT of temperature and food. Photosynthetic
+ *  autotrophs draw passive energy from this. Pure function of (position, seed) via integer hashing — no
+ *  Rng object, no stream draw — so turning it on never perturbs the organism RNG stream. Separate seed
+ *  salts from temperature so the two gradients are uncorrelated (a hot region isn't automatically bright). */
+export interface LightAxis {
+  cx: number;
+  cy: number;
+  phase: number;
+}
+
+export function lightAxis(cfg: Config): LightAxis {
+  const theta = hash01((cfg.seed ^ 0x1a2b) >>> 0) * TAU; // distinct salt from temperature
+  const phase = hash01((cfg.seed ^ 0x3c4d) >>> 0) * TAU;
+  const k = (cfg.photosynthLightScale * TAU) / cfg.worldWidth;
+  return { cx: Math.cos(theta) * k, cy: Math.sin(theta) * k, phase };
+}
+
+export function lightAtAxis(x: number, y: number, a: LightAxis): number {
+  return 0.5 + 0.5 * Math.sin(x * a.cx + y * a.cy + a.phase);
+}
+
+export function lightAt(x: number, y: number, cfg: Config): number {
+  return lightAtAxis(x, y, lightAxis(cfg));
+}
