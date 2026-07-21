@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="data:," />
+    <title>life-sim — lenia 3d</title>
+    <style>
+      :root {
+        --text: #c9d6e2;
+        --muted: #6b7a8d;
+        --accent: #8ad9f2;
+        --panel: rgba(12, 17, 24, 0.66);
+        --border: rgba(120, 170, 210, 0.16);
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        margin: 0; height: 100%; overflow: hidden;
+        background: #05070b; color: var(--text);
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      #view { display: block; width: 100vw; height: 100vh; }
+
+      /* HUD — top-left readout */
+      #hud {
+        position: fixed; top: 12px; left: 12px;
+        padding: 10px 13px; border-radius: 7px;
+        background: var(--panel); backdrop-filter: blur(9px);
+        border: 1px solid var(--border);
+        font-size: 12px; line-height: 1.7; white-space: pre;
+        pointer-events: none; max-width: 60vw;
+      }
+
+      /* Transport — bottom-centre */
+      #transport {
+        position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%);
+        display: flex; gap: 8px; align-items: center;
+        padding: 8px 12px; border-radius: 9px;
+        background: var(--panel); backdrop-filter: blur(9px);
+        border: 1px solid var(--border);
+        font-size: 13px;
+      }
+      button, select {
+        font: inherit; color: var(--text);
+        background: rgba(138, 217, 242, 0.08);
+        border: 1px solid var(--border); border-radius: 5px;
+        padding: 4px 10px; cursor: pointer;
+      }
+      button:hover { background: rgba(138, 217, 242, 0.16); }
+      .label { color: var(--muted); }
+      kbd {
+        background: rgba(255,255,255,0.06); border: 1px solid var(--border);
+        border-radius: 3px; padding: 0 5px; font-size: 11px;
+      }
+      .help {
+        position: fixed; top: 12px; right: 12px;
+        padding: 8px 11px; border-radius: 7px;
+        background: var(--panel); backdrop-filter: blur(9px);
+        border: 1px solid var(--border);
+        font-size: 11px; line-height: 1.6; color: var(--muted);
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="view"></canvas>
+    <div id="hud"></div>
+    <div class="help">
+      drag = orbit · scroll = dolly · <kbd>space</kbd> = play/pause<br />
+      creatures = evolving particle-lenia clusters
+    </div>
+    <div id="transport">
+      <button id="play">⏸ pause</button>
+      <span class="label">speed</span>
+      <select id="speed">
+        <option value="0.5">½×</option>
+        <option value="1" selected>1×</option>
+        <option value="2">2×</option>
+        <option value="4">4×</option>
+        <option value="8">8×</option>
+      </select>
+      <button id="reseed">↻ reseed</button>
+    </div>
+    <script type="module" src="/src/lenia3d/main.ts"></script>
+  </body>
+</html>
