@@ -24,6 +24,11 @@
       "path": "src/workers",
       "mayImport": ["core"],
       "description": "Worker entry + partitioning (M8)."
+    },
+    "lenia3d": {
+      "path": "src/lenia3d",
+      "mayImport": ["core"],
+      "description": "3D creatures-as-Lenia rebuild (own world+renderer+entry). Self-contained vertical slice; imports only core/rng for determinism. Separate from the 2D core/render/app layers."
     }
   },
   "notes": "ESLint (eslint.config.js) is the CI-enforced layer for import direction and ambient DOM/Worker globals; this file documents intent for the architecture-guard skill."
