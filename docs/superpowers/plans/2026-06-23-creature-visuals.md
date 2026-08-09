@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- **Worktree:** all work in `/Users/joshtaylor/CodingProjects/life-sim/.claude/worktrees/creature-visuals` on branch `worktree-creature-visuals`.
+- **Worktree:** all work in `~/CodingProjects/life-sim/.claude/worktrees/creature-visuals` on branch `worktree-creature-visuals`.
 - **Commit messages:** NEVER include `Co-Authored-By` or `Claude-Session` trailers (a PreToolUse hook blocks them).
 - **Verification commands:** `make check` FAILS in this worktree — run `npx tsc --noEmit` and `npx vitest run` directly. Tests live in `src/**/*.test.ts` (vitest `include`).
 - **No sim/economy/genome/determinism changes.** Rendering touches no RNG and no sim arrays it doesn't already read. The existing determinism suite must stay byte-identical — run it after Task 7 (the only task touching `renderer.ts`).

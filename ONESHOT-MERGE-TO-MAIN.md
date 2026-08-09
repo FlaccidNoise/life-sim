@@ -12,7 +12,7 @@ this *done*, not a plan to rubber-stamp. The only hard rule before you touch any
 > verify*: re-run the §3 commands once before you act. If anything has moved, the branches are no
 > longer frozen — stop and reconcile before merging.
 
-Work from the **main checkout** `/Users/joshtaylor/CodingProjects/life-sim` (NOT a `.claude/worktrees/*`
+Work from the **main checkout** `~/CodingProjects/life-sim` (NOT a `.claude/worktrees/*`
 worktree — those have a `pnpm`/`node_modules` gotcha, see §10). The main checkout is currently
 on branch `feat/env-walls-flow`; switch it to `main` as your first real step (`main` is not
 checked out in any worktree, so this is safe).
