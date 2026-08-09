@@ -32,3 +32,7 @@ archived/superseded.
 
 ## Commands
 Run `make help`. Common: `make dev`, `make test`, `make check`, `make headless`.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
