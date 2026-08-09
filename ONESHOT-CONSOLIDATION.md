@@ -18,11 +18,11 @@ reaches the brain, every output is a real decision, every gene is visible, and t
 alive and produces legible emergent behavior. Measure it; don't assume it.
 
 ## Repo + policy (READ FIRST)
-- Repo: /Users/joshtaylor/CodingProjects/life-sim. Work on a FRESH branch off main, or a worktree — NEVER
+- Repo: ~/CodingProjects/life-sim. Work on a FRESH branch off main, or a worktree — NEVER
   build on main directly. `git reset --hard` is hook-blocked; use `git checkout -b <name> main`.
 - **main MOVES under you.** Multiple sessions merge in parallel. ALWAYS `git log -1 main` at start AND
   again before any merge (a planned fast-forward can become a real 3-way merge). The literal checkout dir
-  (/Users/joshtaylor/CodingProjects/life-sim) usually sits on a DIVERGENT branch (feat/living-world) — do
+  (~/CodingProjects/life-sim) usually sits on a DIVERGENT branch (feat/living-world) — do
   NOT trust it as main; verify the ref.
 - Build policy (memory feature-default-on-policy.md): new features ship ON by default. Determinism is the
   ONLY invariant — same (config,seed) → byte-identical run-to-run (world.test.ts, FIRST test). RNG is
