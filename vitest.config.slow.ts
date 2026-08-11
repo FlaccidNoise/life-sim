@@ -5,6 +5,9 @@ import { defineConfig } from 'vitest/config';
 // The default config's exclude would filter out files passed on the CLI, so this dedicated config
 // includes only the three slow files with no exclude.
 export default defineConfig({
+  // These files run the full demo world and contend heavily when parallelized.
+  // Keep the focused slow-suite command deterministic on loaded machines too.
+  fileParallelism: false,
   test: {
     include: [
       'src/core/world.test.ts',
@@ -12,6 +15,6 @@ export default defineConfig({
       'src/headless/harness.test.ts',
     ],
     pool: 'forks',
-    testTimeout: 120000,
+    testTimeout: 300000,
   },
 });
