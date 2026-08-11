@@ -16,4 +16,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm lint
-      - run: pnpm test
+      # test:all, NOT test. The default `pnpm test` excludes world.test.ts, world.phero.test.ts and
+      # harness.test.ts for fast local iteration — and those are exactly the files that assert the
+      # determinism contract (same config + seed → identical stateHash), the project's only invariant.
+      # Running `pnpm test` here left that contract unverified on every push.
+      - run: pnpm test:all
