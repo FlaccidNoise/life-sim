@@ -16,6 +16,14 @@ export const livingWorldOverrides: Partial<Config> = {
   // 8 seeds (mean end-pop 326); fs≥2 sweeps bodies off food → 1/8 seeds goes extinct. flowPush stays live.
   flowPushStrength: 0.25,
   motorSquash: true,
+  // Kinematic steering (spin fix). Turn rate used to be independent of speed, so a slow creature at the
+  // MAX_TURN rail cornered inside its own body — spin-probe (4000t, seeds 1-3): 19.9% of creature-windows
+  // were spinners at 30.7-46.9% turn saturation. Bounding |dθ| by speed/4 and widening the squash gain to
+  // 4·MAX_TURN gives 6.4% spinners at 4.5-9.5% saturation, the only candidate that also held σDIET ≥ 0.2
+  // on every seed (radius 6 and 8 cut spinners further but drifted toward monoculture).
+  minTurnRadius: 4,
+  turnFloor: 0.05,
+  turnGainRatio: 4,
   // Density (the proven lever): more + bigger pockets → dense → predators + niche partitioning return.
   // B-food-2: separate A/B patches (mode 1), blobbier (radius 8→14), drifting per-pocket → two-niche diversity.
   // count: the plan called for 40→20 but 20 STARVES the demo at the realistic 8000-tick horizon (2/3 seeds
