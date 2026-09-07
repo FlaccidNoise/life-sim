@@ -17,12 +17,14 @@ export const livingWorldOverrides: Partial<Config> = {
   flowPushStrength: 0.25,
   motorSquash: true,
   // Kinematic steering (spin fix). Turn rate used to be independent of speed, so a slow creature at the
-  // MAX_TURN rail cornered inside its own body — spin-probe (4000t, seeds 1-3): 19.9% of creature-windows
-  // were spinners at 30.7-46.9% turn saturation. Bounding |dθ| by speed/4 and widening the squash gain to
-  // 4·MAX_TURN gives 6.4% spinners at 4.5-9.5% saturation, the only candidate that also held σDIET ≥ 0.2
-  // on every seed (radius 6 and 8 cut spinners further but drifted toward monoculture).
+  // MAX_TURN rail cornered inside its own body. spin-probe seed 1, 6000t: baseline 13.5% spinner windows
+  // at 56.7% turn saturation, pop 12664, pred 62.9%, σDIET 0.193 → these values 4.6% spinners at 6.5%
+  // saturation, pop 5367, pred 45.0%, σDIET 0.256. Better than baseline on diet diversity as well as spin.
+  // turnFloor is NOT a rounding detail — it is the second lever. At 0.05 the ecology collapses (pop 660,
+  // pred 3.0%, σDIET 0.132: a creature too slow to turn can neither flee nor close a chase); 0.15 recovers
+  // (pop 5175, σDIET 0.323) but leaves twice the spinners. turnGainRatio 2 is worse than 4 on every axis.
   minTurnRadius: 4,
-  turnFloor: 0.05,
+  turnFloor: 0.1,
   turnGainRatio: 4,
   // Density (the proven lever): more + bigger pockets → dense → predators + niche partitioning return.
   // B-food-2: separate A/B patches (mode 1), blobbier (radius 8→14), drifting per-pocket → two-niche diversity.
