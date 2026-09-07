@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { OrganismStore } from './store';
 import { SpatialHash } from './spatial-hash';
 import { defaultConfig, type Config } from './config';
-import { parasiteStep, metabolize } from './economy';
+import { parasiteStep, metabolize, satiatedBar } from './economy';
 import { FoodField } from './food-field';
 import { ScalarGene, SCALAR_GENE_COUNT, SCALAR_GENE_SPECS } from './genome';
 
@@ -126,11 +126,6 @@ describe('parasiteStep host recycling (ABA)', () => {
 });
 
 /**
- * syncParasites copies the host's velocity into an attached parasite so the renderer doesn't smear it,
- * but that velocity is the HOST's locomotion. Charging metabolize's moveCost·speed² against it made the
- * rider pay ~3× what its drain earns, so the morph was selected against exactly when it worked.
- */
-/**
  * One free-living and one attached parasite, both moving at speed² = 25, both otherwise costless.
  * Only the host's SIZE decides whether it is big enough to attach to, so the two runs differ ONLY in
  * attachment (identical genes, identical velocity, identical position, identical gene upkeep).
@@ -153,6 +148,11 @@ function riderPair(cfg: Config, attach: boolean): { s: OrganismStore; host: numb
   return { s, host, para };
 }
 
+/**
+ * syncParasites copies the host's velocity into an attached parasite so the renderer doesn't smear it,
+ * but that velocity is the HOST's locomotion. Charging metabolize's moveCost·speed² against it made the
+ * rider pay ~3× what its drain earns, so the morph was selected against exactly when it worked.
+ */
 describe('metabolize rider move cost', () => {
   const cfg = defaultConfig({
     parasiteEnabled: true,
@@ -236,5 +236,58 @@ describe('metabolize rider photosynthesis stillness', () => {
     // stillness 1 vs 1/(1+4·25) = 1/101, so at this light the parked creature gains 0.494 and the
     // carried rider 0.0049 — before the fix the rider scored the parked creature's rate exactly.
     expect(parked.s.energy[parked.para]! - rider.s.energy[rider.para]!).toBeGreaterThan(0.4);
+  });
+});
+
+/**
+ * The morph satiation cap: the three morph income channels stop paying a creature that is already full,
+ * exactly as metabolize's graze-stop and hunt's B4 cap already do. Uncapped they mint past the breed bar
+ * into a hoard reproduce never spends, which is what cost the demo its attractor.
+ */
+describe('morphSatiationCap', () => {
+  const base = {
+    parasiteEnabled: true,
+    parasiteDrain: 1,
+    parasiteGain: 1,
+    parasiteAttachRange: 40,
+    parasiteSizeRatio: 1.2,
+    basalCost: 0,
+    moveCost: 0,
+    sizeMoveCostExp: 0,
+    eatRate: 0,
+    worldWidth: W,
+    worldHeight: H,
+  };
+
+  it('a full parasite stops draining its host', () => {
+    for (const cap of [false, true]) {
+      const cfg = defaultConfig({ ...base, morphSatiationCap: cap });
+      const p = riderPair(cfg, true);
+      p.s.energy[p.para] = satiatedBar(p.s.scalarGenes, p.para, cfg) + 1;
+      const hostBefore = p.s.energy[p.host]!;
+      parasiteStep(p.s, hashOf(p.s), cfg);
+      expect(hostBefore - p.s.energy[p.host]!).toBeCloseTo(cap ? 0 : 1);
+    }
+  });
+
+  it('a full autotroph stops harvesting light', () => {
+    for (const cap of [false, true]) {
+      const cfg = defaultConfig({
+        ...base,
+        parasiteDrain: 0,
+        photosynthEnabled: true,
+        photosynthGain: 1,
+        photosynthStillnessK: 0,
+        morphSatiationCap: cap,
+      });
+      const p = riderPair(cfg, false);
+      genes(p.s, p.para, cfg, { [ScalarGene.PHOTOSYNTH]: 1, [ScalarGene.SIZE]: 4 });
+      const full = satiatedBar(p.s.scalarGenes, p.para, cfg) + 1;
+      p.s.energy[p.para] = full;
+      metabolize(p.s, emptyFood(), hashOf(p.s), cfg);
+      const gained = p.s.energy[p.para]! - full;
+      if (cap) expect(gained).toBeLessThan(0.001);
+      else expect(gained).toBeGreaterThan(0.4);
+    }
   });
 });

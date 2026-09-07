@@ -201,7 +201,10 @@ export const livingWorldOverrides: Partial<Config> = {
   parasiteAttachRange: 40, // moderate — wandering parasites find hosts without swarming
   parasiteSizeRatio: 1.2, // host must be ≥1.2× the parasite's size (loose — more creatures qualify as hosts)
   parasiteCost: 0.02, // mild upkeep — slight pressure to drop the gene if never attaching (not lethal)
-  parasite: 0.3, // founder center — gaussian around 0.3 so a meaningful minority can attach from t=0
+  parasite: 0.3, // founder center. NB the pool is drawn UNIFORM over [0,1], not gaussian around this — the
+  // center only sets the upkeep-free point (see parasiteFounderUniform). Measured at 6000 ticks: switching
+  // to gaussian founding makes the morph a minority but re-opens the seed lottery the satiation cap closed
+  // (pop 1768 / 26 / 4435 on seeds 1-3, a 171× spread vs 1.5× uniform), so uniform stays.
   parasiteHostSeekGain: 0, // OFF — A/B (parasite-host-seek-probe.ts) showed the sight-pull toward big
   // bodies is maladaptive: it suppresses the parasite niche ~29× (141 vs 4106 parasites at 8k ticks) and
   // LOWERS attachment (0.27 vs 0.37) because actively swimming toward hosts fights the parasite's evolved
@@ -216,14 +219,21 @@ export const livingWorldOverrides: Partial<Config> = {
   scavengeRange: 20, // range a scavenger senses death events
   scavengerCost: 0.05, // scavenging apparatus upkeep — expensive enough to be a niche, not a monoculture
   scavenger: 0.3, // founder center (drawn uniform[0,1] at seed)
-  // ── The morph economy's restoring force ──────────────────────────────────────────────────────────────
-  // The three morphs above added income channels that, unlike grazing and hunting, kept paying a creature
-  // that was already full — so a lineage that got ahead compounded instead of saturating and the demo lost
-  // its attractor. Measured at 6000 ticks, seeds 1-4 (scratchpad/eco-retune.md): without the cap the end
-  // population spans 80 / 1448 / 908 / 2513 (a 31× spread, seed 1 declining monotonically to near-death and
-  // 0% predators); with it, 1103 / 1376 / 1639 / 1183 — a 1.5× spread, every seed turning over (births after
-  // t=3000: 3987 / 6275 / 13334 / 4631) and all three guilds present on every seed. Every further retune
-  // tried on top of it (parasite carry cost, gaussian parasite founding, higher morph upkeep, corpseEnergy,
-  // predationGain, basalCost) re-opened a 100-330× spread, so the cap is the whole tune.
+  // ── Satiation cap on the morph income channels ───────────────────────────────────────────────────────
+  // The three morphs above added income that, unlike grazing (metabolize) and hunting (hunt's B4 cap), kept
+  // paying a creature already at its satiated bar, so morph income never saturated. This applies the same
+  // cap to all three. MEASURED on this motor (minTurnRadius 0), seeds 1-4, 6000 ticks, pop / pred% / σDIET:
+  //   off  223 / 0.4 / 0.095 · 423 / 1.4 / 0.134 · 2631 / 0.2 / 0.104 · 145 / 2.8 / 0.104
+  //   on  2376 / 0.7 / 0.125 · 1284 / 0.7 / 0.118 · 1347 / 19.6 / 0.202 · 208 / 0.5 / 0.121
+  // The decision was made at 12000 ticks against demo-health-gate (seeds 1-3), three arms:
+  //   morphs on + cap   11217/89.8%/0.240 · 3147/37.0%/0.223 · 1767/40.5%/0.324   PASS 3/3
+  //   morphs on, no cap  1877/52.4%/0.228 · 1155/17.7%/0.203 · 3744/18.6%/0.179   PASS 1/3 (2,3 monoculture)
+  //   morphs OFF         2484/31.7%/0.331 · 2439/ 0.4%/0.111 · 4370/ 4.2%/0.171   PASS 1/3 (2,3 no predators)
+  // So the cap is what carries the morph economy past the gate, and turning the morphs off does NOT recover
+  // the July baseline on today's engine — seeds 2 and 3 lose the predator layer either way. The near-zero
+  // predator layer at 6000 ticks is a property of the reverted turn bound above, not of this cap.
+  // On the PREVIOUS motor the cap was decisive — 6000-tick population spread 31× → 1.5× — and every lever
+  // tried on top of it there (carry cost, gaussian parasite founding, morph upkeep, corpseEnergy,
+  // predationGain, basalCost, crowdingMortality) re-opened a 100-330× spread. See scratchpad/eco-retune.md.
   morphSatiationCap: true,
 };

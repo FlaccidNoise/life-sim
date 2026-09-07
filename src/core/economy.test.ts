@@ -1733,6 +1733,30 @@ describe('scavenge (corpse absorption)', () => {
     expect(s.energy[b]! - 50).toBeCloseTo((0.5 / 1.5) * 20 * 0.5);
   });
 
+  it('a FULL scavenger leaves the corpse when morphSatiationCap is on', () => {
+    // The cap that already stops a full grazer grazing and a full hunter biting, extended to the morphs.
+    // The hungry scavenger takes the WHOLE corpse: the full one is skipped before the share is computed.
+    const capped = defaultConfig({ ...cfg, morphSatiationCap: true });
+    const s = new OrganismStore(4);
+    const full = s.alloc();
+    const hungry = s.alloc();
+    for (const i of [full, hungry]) {
+      s.x[i] = 105;
+      s.y[i] = 100;
+      const base = i * SCALAR_GENE_COUNT;
+      for (let g = 0; g < SCALAR_GENE_COUNT; g++)
+        s.scalarGenes[base + g] = capped[SCALAR_GENE_SPECS[g]!.centerKey];
+      s.scalarGenes[base + ScalarGene.SCAVENGER] = 1;
+    }
+    s.energy[full] = satiatedBar(s.scalarGenes, full, capped) + 1;
+    s.energy[hungry] = 10;
+    s.rebuildLive();
+    const before = s.energy[full]!;
+    scavenge(s, hashOf(s), capped, deaths(), 1);
+    expect(s.energy[full]).toBe(before);
+    expect(s.energy[hungry]! - 10).toBeCloseTo(20); // the whole corpse, not half of it
+  });
+
   it('a scavenger beyond scavengeRange gets nothing', () => {
     const s = new OrganismStore(4);
     const a = s.alloc();
