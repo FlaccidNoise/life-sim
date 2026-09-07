@@ -174,4 +174,29 @@ describe('Walls', () => {
     for (let r = 0; r < 64; r += 7)
       for (let c = 0; c < 64; c += 7) expect(w.proximityAt(c * 16 + 8, r * 16 + 8)).toBe(p0);
   });
+
+  it('gives every Voronoi region its own temperature optimum, shaped by temperatureScale', () => {
+    // regionGen only takes GENERATORS.length (3) values, so keying the thermal optimum off the biome
+    // archetype gave 5 regions just 3 optima — two identical pairs contributing zero between-region
+    // signal. Sampling the seeded field at each region seed gives n distinct optima and keeps
+    // temperatureScale live (it sets how far apart they spread).
+    const w = new Walls(1024, 1024, 64, 64, cfg({ wallRegionCount: 5, temperatureScale: 1.5 }));
+    expect(w.regionTemp.length).toBe(5);
+    expect(new Set(Array.from(w.regionTemp)).size).toBe(5); // all distinct
+    for (const t of w.regionTemp) expect(t).toBeGreaterThanOrEqual(0);
+    for (const t of w.regionTemp) expect(t).toBeLessThanOrEqual(1);
+
+    // temperatureScale actually moves the field: a different band count gives different optima.
+    const dense = new Walls(1024, 1024, 64, 64, cfg({ wallRegionCount: 5, temperatureScale: 6 }));
+    expect(Array.from(dense.regionTemp)).not.toEqual(Array.from(w.regionTemp));
+  });
+
+  it('regionTempAt returns the containing region’s optimum, and NaN when walls are inactive', () => {
+    const w = new Walls(1024, 1024, 64, 64, cfg({ wallRegionCount: 5 }));
+    for (let y = 0; y < 1024; y += 128)
+      for (let x = 0; x < 1024; x += 128)
+        expect(w.regionTempAt(x, y)).toBe(w.regionTemp[w.regionAt(x, y)]);
+    const off = new Walls(1024, 1024, 64, 64, cfg({ wallRegionCount: 0 }));
+    expect(Number.isNaN(off.regionTempAt(10, 10))).toBe(true);
+  });
 });

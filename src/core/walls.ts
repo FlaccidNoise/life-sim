@@ -1,4 +1,5 @@
 import { type Config } from './config';
+import { temperatureAtAxis, temperatureAxis } from './abiotic';
 import { Rng } from './rng';
 import { FoodField } from './food-field';
 import { carveNoise } from './wall-gen/noise';
@@ -46,6 +47,7 @@ export class Walls {
   private pocketCells: number[] = []; // fine-cell index of each food-pocket centroid (cached in generate)
   private region: Int32Array = new Int32Array(0); // fine-cell → Voronoi region index (built in generate)
   regionGen: Int32Array = new Int32Array(0); // region index → genType (which generator carved it)
+  regionTemp: Float64Array = new Float64Array(0); // region index → its abiotic temperature optimum [0,1]
 
   constructor(
     private readonly worldWidth: number,
@@ -87,6 +89,17 @@ export class Walls {
   isSolidAt(x: number, y: number): boolean {
     if (!this._active) return false;
     return this.solid[this.cellIdx(this.colOf(x), this.rowOf(y))] === 1;
+  }
+
+  /** PUBLIC read-only accessor: the temperature optimum of the Voronoi region at world position (x,y).
+   *  A STEP function — every point in a region shares its region's optimum, so a region is one selective
+   *  niche rather than a gradient the population averages away. The value itself is the smooth seeded
+   *  temperature field sampled at the region's own seed point, so temperatureScale still shapes which
+   *  regions are warm and which are cold. Returns NaN when walls are inactive (callers fall back to the
+   *  smooth field). Pure read — no state change, no RNG. */
+  regionTempAt(x: number, y: number): number {
+    if (!this._active) return NaN;
+    return this.regionTemp[this.region[this.cellIdx(this.colOf(x), this.rowOf(y))]!]!;
   }
 
   /** PUBLIC read-only accessor: the Voronoi biome index at world position (x,y), or -1 when walls are
@@ -261,6 +274,15 @@ export class Walls {
     }
     this.regionGen = new Int32Array(n);
     for (let k = 0; k < n; k++) this.regionGen[k] = k % GENERATORS.length;
+    // Per-REGION temperature optimum. Sampled from the smooth seeded field at each region's own seed point,
+    // so all `n` regions get distinct optima (regionGen only has GENERATORS.length values, so keying the
+    // optimum off the biome archetype gave 5 regions just 3 optima, two pairs of which were identical and
+    // contributed zero between-region signal to F_ST). Geography is preserved — neighbouring regions sample
+    // nearby field values — and temperatureScale is live again, setting how far apart the optima spread.
+    const tAxis = temperatureAxis(cfg);
+    this.regionTemp = new Float64Array(n);
+    for (let k = 0; k < n; k++)
+      this.regionTemp[k] = temperatureAtAxis(seedC[k]! * this.cellW, seedR[k]! * this.cellH, tAxis);
     this.region = new Int32Array(cols * rows);
     for (let r = 0; r < rows; r++)
       for (let c = 0; c < cols; c++) {

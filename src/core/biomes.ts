@@ -41,8 +41,6 @@ export interface BiomeConfig {
   scalarOverrides: ScalarOverrides;
   /** Brain-weight overrides at seed time. Only specified weights are touched. */
   brainOverrides: BrainOverrides;
-  /** Target thermal preference for this biome (0=cold, 1=warm). Used by abiotic.ts if temperatureMetabCost>0. */
-  targetTemp: number;
   /** Preferred food channel for this biome (0=A, 1=B, 2=C). Used by seedPatches when biome-aware channel assignment is on. */
   preferredChannel: number;
   /** How strongly this biome's channel preference is enforced (0=not at all, 1=all pockets in this biome get the preferred channel). */
@@ -50,9 +48,9 @@ export interface BiomeConfig {
 }
 
 export const BIOME_PALETTE: Record<BiomeType, BiomePalette> = {
-  [BiomeType.OpenOcean]: { wallR: 0.25, wallG: 0.40, wallB: 0.55, bgR: 0.05, bgG: 0.12, bgB: 0.20 },
-  [BiomeType.Reef]: { wallR: 0.35, wallG: 0.55, wallB: 0.30, bgR: 0.08, bgG: 0.18, bgB: 0.10 },
-  [BiomeType.Abyss]: { wallR: 0.15, wallG: 0.10, wallB: 0.25, bgR: 0.02, bgG: 0.02, bgB: 0.06 },
+  [BiomeType.OpenOcean]: { wallR: 0.25, wallG: 0.4, wallB: 0.55, bgR: 0.05, bgG: 0.12, bgB: 0.2 },
+  [BiomeType.Reef]: { wallR: 0.35, wallG: 0.55, wallB: 0.3, bgR: 0.08, bgG: 0.18, bgB: 0.1 },
+  [BiomeType.Abyss]: { wallR: 0.15, wallG: 0.1, wallB: 0.25, bgR: 0.02, bgG: 0.02, bgB: 0.06 },
 };
 
 /**
@@ -81,7 +79,6 @@ export const BIOME_ATLAS: Record<BiomeType, BiomeConfig> = {
       // THRUST_BIAS: higher cruise
       5: 0.5,
     },
-    targetTemp: 0.7, // warm surface
     preferredChannel: 0, // channel A (stable, non-drifting)
     channelBias: 0,
   },
@@ -106,7 +103,6 @@ export const BIOME_ATLAS: Record<BiomeType, BiomeConfig> = {
       // SIGHT_FWD_THRUST: less aggressive chase
       9: 0.8,
     },
-    targetTemp: 0.5, // mid
     preferredChannel: 1, // channel B (drifting, mobile — matches the reef's dynamic corridors)
     channelBias: 0,
   },
@@ -133,7 +129,6 @@ export const BIOME_ATLAS: Record<BiomeType, BiomeConfig> = {
       // THRUST_BIAS: low cruise (lurker)
       5: 0.2,
     },
-    targetTemp: 0.2, // cold deep
     preferredChannel: 2, // channel C (the scarce, place-coupled resource)
     channelBias: 0,
   },
