@@ -13,6 +13,7 @@
  */
 import { type OrganismStore } from '../../core/store';
 import { ScalarGene, SCALAR_GENE_COUNT } from '../../core/genome';
+import { type Plants, PLANT_GENE_COUNT, PlantGene } from '../../core/plants';
 
 // Genes whose population mean+σ track the run's evolutionary trajectory. Order fixes the CSV columns.
 const TRACKED_GENES: readonly (readonly [string, number])[] = [
@@ -43,6 +44,15 @@ export interface HistorySample {
   avgBirths: number; // trailing per-tick birth rate
   avgDeaths: number;
   food: number;
+  /** Live plant count. 0 when plants are off — without these four series a long browser run would lose
+   *  all producer data once the food field's biomass channels go away. */
+  plantCount: number;
+  /** Σ plant energy — the standing crop. */
+  plantBiomass: number;
+  /** Population mean of the plant SPECIES gene (the resource axis). */
+  speciesMean: number;
+  /** Population σ of SPECIES — > 0 and growing means the axis is genuinely splitting. */
+  speciesSigma: number;
   meanGen: number;
   health: number; // invariant-violation count (0 = clean)
   geneMean: Record<string, number>;
@@ -74,6 +84,35 @@ export function sampleGeneStats(store: OrganismStore): {
     std[name] = Math.sqrt(n ? Math.max(0, sumSq[g]! / n - m * m) : 0); // clamp float noise so σ can't go NaN
   }
   return { mean, std };
+}
+
+/** Count, Σ energy, and the mean+σ of SPECIES over the live plants. Null pool (plants off) → zeroes. */
+export function samplePlantStats(plants: Plants | null): {
+  count: number;
+  biomass: number;
+  speciesMean: number;
+  speciesSigma: number;
+} {
+  if (plants === null || plants.liveCount === 0)
+    return { count: 0, biomass: 0, speciesMean: 0, speciesSigma: 0 };
+  const { liveIndices, liveCount, energy, genes } = plants;
+  let biomass = 0;
+  let sum = 0;
+  let sumSq = 0;
+  for (let k = 0; k < liveCount; k++) {
+    const i = liveIndices[k]!;
+    biomass += energy[i]!;
+    const v = genes[i * PLANT_GENE_COUNT + PlantGene.SPECIES]!;
+    sum += v;
+    sumSq += v * v;
+  }
+  const m = sum / liveCount;
+  return {
+    count: liveCount,
+    biomass,
+    speciesMean: m,
+    speciesSigma: Math.sqrt(Math.max(0, sumSq / liveCount - m * m)),
+  };
 }
 
 const round = (v: number, dp = 1): number => {
@@ -127,6 +166,10 @@ export class HistoryRecorder {
       'avgBirths',
       'avgDeaths',
       'food',
+      'plantCount',
+      'plantBiomass',
+      'speciesMean',
+      'speciesSigma',
       'meanGen',
       'health',
       ...geneCols,
@@ -148,6 +191,10 @@ export class HistoryRecorder {
         round(s.avgBirths, 3),
         round(s.avgDeaths, 3),
         round(s.food),
+        s.plantCount,
+        round(s.plantBiomass),
+        round(s.speciesMean, 4),
+        round(s.speciesSigma, 4),
         round(s.meanGen, 3),
         s.health,
         ...TRACKED_GENES.flatMap(([name]) => [

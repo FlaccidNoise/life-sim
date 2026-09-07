@@ -9,6 +9,8 @@ import { FlowField } from './flow-field';
 import { ScentField } from './scent-field';
 import { PheroField } from './phero-field';
 import { Parcels } from './parcels';
+import { Plants } from './plants';
+import { PlantScent } from './plant-scent';
 import { senseFood, senseCreatures, senseEnv, senseCrowding, senseFertility } from './sense';
 import { steer, learn } from './brain';
 import {
@@ -97,6 +99,13 @@ export class World {
    *  so the OFF path never spawns/drifts/senses/eats/hashes parcels and stays byte-identical. All parcel
    *  randomness is on the pool's own forked Rng — world.rng is never touched on the parcel path. */
   readonly parcels: Parcels | null;
+  /** The plant pool — rooted, brainless producer entities with their own evolving genome and their own
+   *  spatial hash. Allocated ONLY when cfg.plantsEnabled; null otherwise, so the OFF path never seeds /
+   *  steps / hashes / draws and stays byte-identical. All plant randomness is on the pool's own forked
+   *  Rng, so the organism stream is identical whether plants are on or off. */
+  readonly plants: Plants | null;
+  /** The 2-channel plant scent field (SPECIES-split), the smell plants emit. Allocated with the pool. */
+  readonly plantScent: PlantScent | null;
   /** Whether the env-sense brain genes are LIVE this run — captured at construction (from the presence
    *  of walls / flow), so live-tuning a strength to 0 mid-run never changes the genome draw COUNT and the
    *  determinism contract holds. With both false the organism RNG stream is byte-identical to a pre-env world. */
@@ -165,6 +174,13 @@ export class World {
     this.flowSenseGenes = config.flowStrength > 0 || config.flowPushStrength > 0;
     this.pheroSenseGenes = config.pheromoneEnabled;
     this.setup();
+    // Plants are built AFTER setup(): founder seeding rejection-samples onto soil fertility, which only
+    // exists once food.seedPatches has run. Their forked Rng means construction order relative to the
+    // organism seeding above cannot perturb the organism stream. Null when disabled → byte-identical OFF.
+    this.plants = config.plantsEnabled ? new Plants(config, this.food, this.walls) : null;
+    this.plantScent = config.plantsEnabled
+      ? new PlantScent(config.worldWidth, config.worldHeight, config.foodCols, config.foodRows)
+      : null;
   }
 
   /**
@@ -413,6 +429,10 @@ export class World {
     // HUNT: predators (diet>0) bite nearby creatures. Rebuild the hash at post-MOVE positions first so
     // bites use where creatures actually are this tick.
     this.hash.build(s);
+    // Plant hash rebuilt beside the creature one, at post-MOVE positions, so grazing (increment 2) scans
+    // current plants. Plants never move, so this only tracks births and deaths — dirty-flagging it is item
+    // 1 on the perf reserve list and deliberately not done yet.
+    if (this.plants !== null) this.plants.buildHash();
     hunt(s, this.hash, cfg);
     // PARASITES: attach to / drain hosts (post-MOVE positions, post-hunt so a host drained this tick is
     // weaker). Gated (no-op when off → byte-identical). Attached parasites then ride their host's position.
@@ -463,6 +483,19 @@ export class World {
         this.walls.active ? this.walls.foodBlockedMask() : null,
       );
     }
+    // PLANTS: grow (clamped) → upkeep → age → seed → cull, after all grazing. The order inside step() is a
+    // correctness constraint (plantUpkeep is charged outside the growth clamp and can take E negative, so
+    // the cull must follow it). The scent deposit then reads culled state ONLY — a negative E would emit a
+    // negative deposit into a diffusing field that has no floor. Null when disabled → skipped entirely.
+    if (this.plants !== null && this.plantScent !== null) {
+      this.plants.step(this.tick);
+      this.plantScent.depositAll(this.plants, cfg.plantScentStrength);
+      this.plantScent.step(
+        cfg.plantScentDiffuse,
+        cfg.plantScentDecay,
+        this.walls.active ? this.walls.foodBlockedMask() : null,
+      );
+    }
     // Glow field diffuse + decay (slice F3), after scent (this tick's glow deposits now spread + forget).
     // Null when disabled → skipped entirely.
     if (this.glowField !== null)
@@ -484,6 +517,9 @@ export class World {
     if (this.glowField !== null) this.glowField.reset();
     if (this.parcels !== null) this.parcels.reset();
     this.setup();
+    // After setup(), because plant founder seeding reads the fertility map setup() rebuilds.
+    if (this.plants !== null) this.plants.reset();
+    if (this.plantScent !== null) this.plantScent.reset();
   }
 
   get population(): number {
@@ -497,6 +533,35 @@ export class World {
    *  x/y/v transitively, and a full per-creature brain hash on every frame would be prohibitively costly. */
   stateHash(): string {
     const h = new Hasher();
+    this.hashOrganisms(h);
+    this.food.hashInto(h); // food is part of the sim state
+    // The scent field is part of sim state ONLY when active (after food, gated) → byte-identical when off.
+    if (this.scent !== null) this.scent.hashInto(h);
+    // The glow field is part of sim state ONLY when active (after scent, gated) → byte-identical when off.
+    if (this.glowField !== null) this.glowField.hashInto(h);
+    // Parcels are part of sim state ONLY when active (after the field hashes, gated) → byte-identical OFF.
+    if (this.parcels !== null) this.parcels.hashInto(h);
+    // Plants + their scent, same discipline. All six plant genes are folded in: a plant never moves, so
+    // every one of its genes is motor-inert and would otherwise be an invisible divergence — the same
+    // coverage hole the 2026-06-27 audit closed for the animal genome.
+    if (this.plants !== null) this.plants.hashInto(h);
+    if (this.plantScent !== null) this.plantScent.hashInto(h);
+    return h.hex();
+  }
+
+  /**
+   * The ORGANISM half of stateHash, with no field or entity-pool digests folded in. Test helper: with one
+   * combined digest, turning plants on moves the whole hash by construction, so "the animal population is
+   * unchanged" is not directly testable. This is the honest form of that claim — it must be IDENTICAL with
+   * plantsEnabled true and false.
+   */
+  organismHash(): string {
+    const h = new Hasher();
+    this.hashOrganisms(h);
+    return h.hex();
+  }
+
+  private hashOrganisms(h: Hasher): void {
     const s = this.store;
     h.u32(this.tick);
     h.u32(this.rng.state);
@@ -545,13 +610,5 @@ export class World {
       for (let j = 0; j < SCALAR_GENE_COUNT; j++) h.f(scalarGenes[g + j]!);
       h.f(hue[i]!);
     }
-    this.food.hashInto(h); // food is part of the sim state
-    // The scent field is part of sim state ONLY when active (after food, gated) → byte-identical when off.
-    if (this.scent !== null) this.scent.hashInto(h);
-    // The glow field is part of sim state ONLY when active (after scent, gated) → byte-identical when off.
-    if (this.glowField !== null) this.glowField.hashInto(h);
-    // Parcels are part of sim state ONLY when active (after the field hashes, gated) → byte-identical OFF.
-    if (this.parcels !== null) this.parcels.hashInto(h);
-    return h.hex();
   }
 }

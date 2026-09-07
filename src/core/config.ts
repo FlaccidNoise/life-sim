@@ -748,6 +748,137 @@ export interface Config {
   /** PREFERENCE gene founder CENTER (preferred DISPLAY value, 0..1). */
   preference: number;
 
+  // ── PLANTS AS ENTITIES (plans/2026-09-plants-as-entities.md) ─────────────────────────────────────
+  // Every value below states the measured quantity it was derived from, per §9.2 — config doc drift is a
+  // recorded recurring failure here (predatorFraction documented 0.9, actually 0.7), and 30-odd
+  // undocumented knobs would guarantee a repeat. Values with no measurement behind them say so.
+  /** Master switch. OFF → World holds null, nothing allocates/steps/hashes → byte-identical. */
+  plantsEnabled: boolean;
+  /** Plant pool capacity. Independent of maxOrganisms (a plant slot is 57 B against a creature's 2,659,
+   *  so 32,768 plants cost 1.9 MB). The pool's own free stack IS the global roof on plant count. */
+  plantCapacity: number;
+  /** Founding plants scattered by bounded rejection sampling onto ground above plantGermFertility. Not
+   *  derived: it only has to seed every pocket, after which growth + dispersal set the standing count. */
+  plantFounderCount: number;
+  /** GROWTH_RATE gene founder CENTRE (logistic r). 0.09 from §3.2a's AREAL sizing: 5.1 plants inside one
+   *  grazer's plantGrazeRange must out-produce a measured mean eat budget of 2.05/tick with ~2× headroom,
+   *  giving 55.4·r ≥ 2×2.05 → r ≥ 0.074. Matching global production instead would give 0.05 and
+   *  under-size the system 2×, because a field fed whoever stood in the cell and a plant does not. */
+  plantGrowthRate: number;
+  /** MAX_SIZE gene founder CENTRE (ceiling scale). 31 from the one sizing equation N·K_p = 700,000: the
+   *  measured Σ Kcell standing crop is ~700,000 (seeds 1/2/3 = 658,315 / 701,453 / 739,482), N = 20,000
+   *  puts food NND at 12.56 u (inside biteRange 16), so K_p = 35 and MAX_SIZE = 35 / (fert 3.28 ×
+   *  lightT 0.448 × crowdK 0.774) = 30.8. */
+  plantMaxSize: number;
+  /** SEED_RANGE gene founder CENTRE (dispersal radius, world units). Well under the ~1,800 u pocket
+   *  spacing, so dispersal is within-pocket and a cleared pocket cannot be recolonised — the extinction
+   *  risk §11 risk 1 tracks and increment 2's plantRefugeRate backstops. */
+  plantSeedRange: number;
+  /** Mutation σ at germination, as a fraction of each gene's founder centre. Matches the animal
+   *  mutationSigma default so plant and animal lineages drift at comparable rates. */
+  plantMutationSigma: number;
+  /** Founder draw σ (fraction of centre) for the three sized genes. Matches founderSigma. DEFENCE,
+   *  LIGHT_NEED and SPECIES ignore it — they seed UNIFORM over [0,1], like FORAGE_PREF and the morph
+   *  genes, because a founding pool clustered at a centre gives selection no raw material. */
+  plantFounderSigma: number;
+  /** Flat energy charged per plant per tick, OUTSIDE the growth clamp. 0.05 leaves a plant at K 35 an
+   *  equilibrium E of ~34.5 (1.4% below its ceiling) while costing a fresh seedling ~8% of its growth. */
+  plantUpkeep: number;
+  /** Extra upkeep per unit DEFENCE: upkeep · (1 + this · DEFENCE). 1 → a fully armoured plant pays 2×.
+   *  Not derived; it is the cost half of the armour tradeoff and increment 2 measures whether it bites. */
+  plantDefenceUpkeep: number;
+  /** Bite reduction per unit DEFENCE (increment 2): bite · (1 − this · DEFENCE). Armour, NOT toxin — it
+   *  is symmetric, so the plant loses less biomass AND the grazer gains less. */
+  plantDefenceBite: number;
+  /** Ceiling yield of a fully shade-tolerant plant (LIGHT_NEED 0): lightT = this + (lightEff − this) ·
+   *  LIGHT_NEED. 0.5 = half the light ceiling, indifferent to the light field and to being shaded. */
+  plantLowLightYield: number;
+  /** Seed when E ≥ this · K (and K > plantMinK). Not derived. A plant's E equilibrates just under K, so
+   *  0.6 means any plant that is not actively collapsing is reproductively mature. */
+  plantSeedThreshold: number;
+  /** Energy the parent pays per dispersal ATTEMPT — charged whether or not the site turns out legal, so
+   *  a failed dispersal still costs. 1.5× plantSeedEnergy. Not derived. */
+  plantSeedCost: number;
+  /** Energy a new seedling starts with, and the E0 in the growth term r·(E + E0)·(1 − E/K). E0 is
+   *  LOAD-BEARING, not cosmetic: plain logistic growth is multiplicative in E, so E = 0 is an absorbing
+   *  state — the producer-extinction failure the food field's diffusion existed to prevent. */
+  plantSeedEnergy: number;
+  /** Ticks a plant must wait between dispersal attempts. Not derived. */
+  plantSeedCooldown: number;
+  /** Minimum soil fertility for germination (founders and seeds alike). 2.0 is not arbitrary: it makes
+   *  the eligible area 2,904 food cells = 17.7% of the world, the 1σ-of-20-pockets footprint that every
+   *  number in §3.2 is derived over, and puts NND at 12.2 u. At the engine's own in-a-pocket threshold
+   *  (0.3 · foodCap) the eligible area is 2.6× larger and NND rises to 20.2 u, ABOVE biteRange 16 — so
+   *  the NND gate and this threshold are one decision, not two. */
+  plantGermFertility: number;
+  /** Max live plants per plant-hash cell; a germination into a full cell is rejected. MEASURED down from
+   *  the plan's derived 6 to 2 (seed 1, demo config): at 6 the pool SATURATES — 32,768/32,768 by tick 400,
+   *  Σenergy 1,196,638 — because crowding cannot bound the COUNT. crowdK shrinks a plant's ceiling K, but
+   *  the seed bar is E ≥ plantSeedThreshold · K, which is PROPORTIONAL to K, so a crowded plant sits at
+   *  ~0.98 K and stays reproductively mature however dense it gets. Density feedback bounds BIOMASS per
+   *  plant, not plant number. At 2 the same seed lands 17,069 plants and Σenergy 792,348 against the
+   *  700,000 prediction. The cost is the one the plan named: at cap 2 the realised 3×3 neighbour count is
+   *  5.0, not the predicted 14.6, so shadeL is 0.82 and crowdK 0.91 — the crowd terms are nearly inert and
+   *  this cap, not crowding, is the capacity mechanism. Making the seed bar absolute rather than
+   *  K-proportional is the fix that would restore smooth density feedback; that is a mechanism change and
+   *  belongs to increment 2, not a knob tune. */
+  plantCellCap: number;
+  /** Ticks before a plant dies of age. Not derived — with the E0 seedling term making zero non-absorbing,
+   *  age is the only mortality an ungrazed plant has. */
+  plantMaxAge: number;
+  /** Lower clamp on the K the growth term divides by. K reaches EXACTLY zero two ways — fertility 0 on
+   *  the dead water a drifting pocket can vacate under a living plant, and lightT 0 for a LIGHT_NEED-1
+   *  plant germinated in a trough of the light field — and 1 − E/0 is −Infinity, so the NaN would reach
+   *  the scent deposit, the render buffer and the state hash. */
+  plantMinK: number;
+  /** Max fraction of E a plant may lose to growth in one tick. Bounds ceiling collapse: at K 0.5 and E 35
+   *  the raw growth term is −242/tick, arithmetically correct but a large negative into a hashed Float64
+   *  in one tick. At 0.05 a collapsed plant wilts to the death threshold in ~83 ticks. */
+  plantStarveRate: number;
+  /** Death threshold: E ≤ this. A small POSITIVE number, not zero, because the bounded collapse decays
+   *  exponentially and never reaches zero exactly. Sits well below plantSeedEnergy so a fresh seedling is
+   *  never inside it. */
+  plantDeathEnergy: number;
+  /** Graze reach (world units, increment 2). 32 = the plant-hash cell, so a 3×3 neighbourhood covers it in
+   *  one pass. Raising it past the hash cell breaks that guarantee unless the cell grows with it. */
+  plantGrazeRange: number;
+  /** Root reserve as a fraction of MAX_SIZE: a grazer can never take E below this (increment 2). With the
+   *  throttle it makes plant persistence UNCONDITIONAL — the bite vanishes at the reserve while growth
+   *  there is strictly positive, so no parameter inequality is required. */
+  plantGrazeFloor: number;
+  /** Fraction of the ABOVE-RESERVE energy one bite may take (increment 2): bite = min(budget, this ·
+   *  (E − reserve)). 0.25 puts a singly-grazed plant's equilibrium at E* 7.98 against a reserve of 4.65,
+   *  where realised intake is 0.83/tick = 40% of a mean 2.05 budget — survivable, heavily outcompeted by
+   *  moving on. That is the crop-and-move signal. */
+  plantBiteFraction: number;
+  /** Plant scent deposited per unit E per tick. 0.018 matches the deposit/decay equilibrium level to the
+   *  old Kcell ceiling of 200 (foodCap 40 × foodMaxFertility 5): at 6.5 plants per 64 u scent cell, mean E
+   *  35 and decay 0.02, P* = this × 11,375. A STARTING value — increment 3 gates on the ratio of the new
+   *  gradient magnitude to the old, because level-matching is not gradient-matching. */
+  plantScentStrength: number;
+  /** Plant-scent diffusion per tick. Starts from the tuned pheroDiffuse. */
+  plantScentDiffuse: number;
+  /** Plant-scent decay per tick. Starts from the tuned pheroDecay; the plant field wants a shorter memory
+   *  than a communication trail. */
+  plantScentDecay: number;
+  /** Floor on a grazer's SPECIES band half-width (increment 2): breadth = this + FORAGE_BREADTH · (1 −
+   *  this). ≥ 0.5 is STRUCTURAL — at 0.5 an interior specialist's band spans the whole SPECIES axis, so no
+   *  plant is categorically inedible and §3.2a's areal count holds for every genotype. 0.58 leaves the
+   *  worst-matched plant at 0.14 rather than ~0. At 0.1 a narrow eater realises 0.49× its budget and
+   *  starves. The concession: FORAGE_BREADTH grades a preference rather than partitioning the resource.
+   *  Do not lower this to sharpen niches without first raising plant density. */
+  plantBreadthMin: number;
+  /** Radius (world units) the crowd scan counts neighbours in. Set to the plant-hash cell so a 3×3 pass
+   *  covers it. */
+  plantShadeRange: number;
+  /** LIGHT-specific crowd coefficient: shadeL = 1/(1 + this · n). 0.045 gives shadeL 0.60 at the measured
+   *  footprint-mean n = 14.6, spanning 0.82 at a sparse edge (n 5) to 0.43 in a dense core (n 30). */
+  plantShadeK: number;
+  /** UNIVERSAL crowd coefficient (space and soil): crowdK = 1/(1 + this · n), multiplying K for EVERY
+   *  plant regardless of strategy. 0.02 gives 0.774 at n = 14.6, spanning 0.91 to 0.63 — gentler than
+   *  shading on purpose. Without this a LIGHT_NEED-0 plant has no density feedback at all. */
+  plantCrowdK: number;
+
   // ── Observation hooks (optional; OFF by default — pure instrumentation, never affects the sim) ────
   /** Fired once per successful birth inside reproduce(), in ascending parent-slot order, BEFORE the
    *  tick counter advances. Read-only by contract: it must not touch the store, RNG, or iteration —
@@ -1066,6 +1197,39 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     senescenceAgeCost: 0.0005, // basal upkeep per unit SENESCENCE_AGE above center (the longevity tradeoff)
     display: 0.5,
     preference: 0.5,
+    // PLANTS: OFF by default → defaultConfig() stays the byte-identical baseline. The demo turns it on.
+    plantsEnabled: false,
+    plantCapacity: 32768,
+    plantFounderCount: 2000,
+    plantGrowthRate: 0.09,
+    plantMaxSize: 31,
+    plantSeedRange: 180,
+    plantMutationSigma: 0.05, // = the animal mutationSigma default
+    plantFounderSigma: 0.3, // = founderSigma
+    plantUpkeep: 0.05,
+    plantDefenceUpkeep: 1,
+    plantDefenceBite: 0.5,
+    plantLowLightYield: 0.5,
+    plantSeedThreshold: 0.6,
+    plantSeedCost: 6,
+    plantSeedEnergy: 4,
+    plantSeedCooldown: 50,
+    plantGermFertility: 2,
+    plantCellCap: 2, // MEASURED: 6 saturates the pool by tick 400 — see the doc comment
+    plantMaxAge: 2000,
+    plantMinK: 0.5,
+    plantStarveRate: 0.05,
+    plantDeathEnergy: 0.5,
+    plantGrazeRange: 32,
+    plantGrazeFloor: 0.15,
+    plantBiteFraction: 0.25,
+    plantScentStrength: 0.018,
+    plantScentDiffuse: 0.2, // = pheroDiffuse
+    plantScentDecay: 0.02, // = pheroDecay
+    plantBreadthMin: 0.58,
+    plantShadeRange: 32,
+    plantShadeK: 0.045,
+    plantCrowdK: 0.02,
     ...overrides,
   };
 }
