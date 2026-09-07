@@ -565,36 +565,59 @@ export function cullDead(store: OrganismStore, deathPositions?: Float64Array): n
  */
 export function scavenge(
   store: OrganismStore,
+  hash: SpatialHash,
   cfg: Config,
   deathPositions: Float64Array,
   deathCount: number,
 ): void {
   if (!cfg.scavengerEnabled || deathCount === 0) return;
-  const { liveIndices, liveCount, x, y, energy, scalarGenes } = store;
+  const { x, y, energy, scalarGenes } = store;
   const range = cfg.scavengeRange;
   const range2 = range * range;
   const corpseEnergy = cfg.corpseEnergy;
   const ww = cfg.worldWidth;
   const wh = cfg.worldHeight;
-  // For each death, find scavengers in range and split the corpse energy among them (× each one's gene).
-  // O(deaths × scavengers) — small at typical death rates; the death list is transient (this tick only).
+  // Scan a hash neighbourhood sized to scavengeRange, like hunt/parasiteStep/findMate. This used to be a
+  // full linear scan of the live population per death, so the pass was O(deaths × population) and became
+  // the dominant per-tick cost once the population grew into the thousands. Capped at half the grid so the
+  // toroidal scan can't visit a cell twice.
+  const { cols, rows, bucketStart, sorted } = hash;
+  const cellSize = Math.min(ww / cols, wh / rows);
+  const halfGrid = Math.floor((Math.min(cols, rows) - 1) / 2);
+  const sr = Math.min(halfGrid, Math.max(1, Math.ceil(range / cellSize)));
+  const eligible: number[] = []; // hoisted: reused per death instead of a fresh allocation each time
   for (let d = 0; d < deathCount; d++) {
     const dx = deathPositions[d * 2]!;
     const dy = deathPositions[d * 2 + 1]!;
     // First pass: collect eligible scavengers + their gene values (to split the corpse fairly).
-    let totalScav = 0;
-    const eligible: number[] = [];
-    for (let k = 0; k < liveCount; k++) {
-      const i = liveIndices[k]!;
-      const sg = i * SCALAR_GENE_COUNT;
-      const sc = scalarGenes[sg + ScalarGene.SCAVENGER]!;
-      if (sc <= 0) continue;
-      const ddx = wrapDelta(x[i]! - dx, ww);
-      const ddy = wrapDelta(y[i]! - dy, wh);
-      if (ddx * ddx + ddy * ddy > range2) continue;
-      eligible.push(i);
-      totalScav += sc;
+    eligible.length = 0;
+    const cx = hash.colOf(dx);
+    const cy = hash.rowOf(dy);
+    for (let ry = -sr; ry <= sr; ry++) {
+      const by = (cy + ry + rows) % rows;
+      for (let rx = -sr; rx <= sr; rx++) {
+        const bx = (cx + rx + cols) % cols;
+        const b = by * cols + bx;
+        const end = bucketStart[b + 1]!;
+        for (let idx = bucketStart[b]!; idx < end; idx++) {
+          const i = sorted[idx]!;
+          // The hash was built pre-cull, so it still holds this tick's dead. Skip them: a creature that
+          // just died must not take a share of the corpse pool (which the docstring already promised).
+          if (!store.isAlive(i)) continue;
+          const sc = scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.SCAVENGER]!;
+          if (sc <= 0) continue;
+          const ddx = wrapDelta(x[i]! - dx, ww);
+          const ddy = wrapDelta(y[i]! - dy, wh);
+          if (ddx * ddx + ddy * ddy > range2) continue;
+          eligible.push(i);
+        }
+      }
     }
+    // Ascending slot order, so the corpse split is identical however the hash happens to bucket them.
+    eligible.sort((a, b) => a - b);
+    let totalScav = 0;
+    for (let e = 0; e < eligible.length; e++)
+      totalScav += scalarGenes[eligible[e]! * SCALAR_GENE_COUNT + ScalarGene.SCAVENGER]!;
     if (totalScav <= 0) continue;
     // Split the corpse energy proportionally to each scavenger's gene (a committed scavenger gets a bigger
     // share; a mild one gets less). The total absorbed = corpseEnergy × (avg gene of eligible) — NOT minted
