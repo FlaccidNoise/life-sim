@@ -130,6 +130,29 @@ describe('parasiteStep host recycling (ABA)', () => {
  * but that velocity is the HOST's locomotion. Charging metabolize's moveCost·speed² against it made the
  * rider pay ~3× what its drain earns, so the morph was selected against exactly when it worked.
  */
+/**
+ * One free-living and one attached parasite, both moving at speed² = 25, both otherwise costless.
+ * Only the host's SIZE decides whether it is big enough to attach to, so the two runs differ ONLY in
+ * attachment (identical genes, identical velocity, identical position, identical gene upkeep).
+ */
+function riderPair(cfg: Config, attach: boolean): { s: OrganismStore; host: number; para: number } {
+  const s = new OrganismStore(8);
+  const host = s.alloc();
+  const para = s.alloc();
+  for (const i of [host, para]) {
+    s.x[i] = 20;
+    s.y[i] = 20;
+    s.energy[i] = 100;
+    s.vx[i] = 3;
+    s.vy[i] = 4; // speed² = 25
+  }
+  genes(s, host, cfg, { [ScalarGene.SIZE]: attach ? 10 : 4, [ScalarGene.PARASITISM]: 0 });
+  genes(s, para, cfg, { [ScalarGene.SIZE]: 4, [ScalarGene.PARASITISM]: 1 });
+  s.rebuildLive();
+  if (attach) parasiteStep(s, hashOf(s), cfg);
+  return { s, host, para };
+}
+
 describe('metabolize rider move cost', () => {
   const cfg = defaultConfig({
     parasiteEnabled: true,
@@ -144,30 +167,9 @@ describe('metabolize rider move cost', () => {
     worldHeight: H,
   });
 
-  /** One free-living and one attached creature, both moving at the same speed, both otherwise costless. */
-  function pair(attach: boolean): { s: OrganismStore; host: number; para: number } {
-    const s = new OrganismStore(8);
-    const host = s.alloc();
-    const para = s.alloc();
-    for (const i of [host, para]) {
-      s.x[i] = 20;
-      s.y[i] = 20;
-      s.energy[i] = 100;
-      s.vx[i] = 3;
-      s.vy[i] = 4; // speed² = 25
-    }
-    // Same parasite either way; only the host's size decides whether it is big enough to attach to, so
-    // the two runs differ ONLY in attachment (identical gene upkeep on the parasite).
-    genes(s, host, cfg, { [ScalarGene.SIZE]: attach ? 10 : 4, [ScalarGene.PARASITISM]: 0 });
-    genes(s, para, cfg, { [ScalarGene.SIZE]: 4, [ScalarGene.PARASITISM]: 1 });
-    s.rebuildLive();
-    if (attach) parasiteStep(s, hashOf(s), cfg);
-    return { s, host, para };
-  }
-
   it('an attached parasite pays NO move cost for the velocity it copied from its host', () => {
-    const free = pair(false);
-    const rider = pair(true);
+    const free = riderPair(cfg, false);
+    const rider = riderPair(cfg, true);
     expect(rider.s.hostSlot[rider.para]).toBeGreaterThanOrEqual(0);
     expect(free.s.hostSlot[free.para]).toBe(-1);
     metabolize(free.s, emptyFood(), hashOf(free.s), cfg);
@@ -177,14 +179,62 @@ describe('metabolize rider move cost', () => {
   });
 
   it('the host itself still pays its own move cost', () => {
-    const still = pair(true);
+    const still = riderPair(cfg, true);
     still.s.vx[still.host] = 0;
     still.s.vy[still.host] = 0;
-    const moving = pair(true);
+    const moving = riderPair(cfg, true);
     metabolize(still.s, emptyFood(), hashOf(still.s), cfg);
     metabolize(moving.s, emptyFood(), hashOf(moving.s), cfg);
     expect(still.s.energy[still.host]! - moving.s.energy[moving.host]!).toBeCloseTo(
       cfg.moveCost * 25,
     );
+  });
+});
+
+/**
+ * The move-cost exemption must not leak into photosynthesis. Both read speed², but the rider is exempt
+ * from paying for locomotion it never performed, NOT from physically moving — so the stillness factor
+ * 1/(1 + photosynthStillnessK·speed²) has to see the host's real speed. Zeroing speed² at the source gave
+ * every rider perfect photosynthesis while being carried at full speed.
+ */
+describe('metabolize rider photosynthesis stillness', () => {
+  const cfg = defaultConfig({
+    parasiteEnabled: true,
+    parasiteDrain: 0,
+    parasiteAttachRange: 40,
+    parasiteSizeRatio: 1.2,
+    basalCost: 0,
+    moveCost: 0, // photosynthesis is then the ONLY term that reads speed²
+    sizeMoveCostExp: 0,
+    eatRate: 0,
+    photosynthEnabled: true,
+    photosynthGain: 1,
+    photosynthStillnessK: 4,
+    worldWidth: W,
+    worldHeight: H,
+  });
+  const photo = { [ScalarGene.PHOTOSYNTH]: 1 };
+
+  it('a carried rider harvests light at its host speed, not as if still', () => {
+    const free = riderPair(cfg, false);
+    const rider = riderPair(cfg, true);
+    for (const p of [free, rider]) genes(p.s, p.para, cfg, { ...photo, [ScalarGene.SIZE]: 4 });
+    metabolize(free.s, emptyFood(), hashOf(free.s), cfg);
+    metabolize(rider.s, emptyFood(), hashOf(rider.s), cfg);
+    expect(rider.s.energy[rider.para]).toBeCloseTo(free.s.energy[free.para]!);
+  });
+
+  it('and a genuinely still creature still out-harvests it', () => {
+    const rider = riderPair(cfg, true);
+    genes(rider.s, rider.para, cfg, { ...photo, [ScalarGene.SIZE]: 4 });
+    const parked = riderPair(cfg, false);
+    genes(parked.s, parked.para, cfg, { ...photo, [ScalarGene.SIZE]: 4 });
+    parked.s.vx[parked.para] = 0;
+    parked.s.vy[parked.para] = 0;
+    metabolize(rider.s, emptyFood(), hashOf(rider.s), cfg);
+    metabolize(parked.s, emptyFood(), hashOf(parked.s), cfg);
+    // stillness 1 vs 1/(1+4·25) = 1/101, so at this light the parked creature gains 0.494 and the
+    // carried rider 0.0049 — before the fix the rider scored the parked creature's rate exactly.
+    expect(parked.s.energy[parked.para]! - rider.s.energy[rider.para]!).toBeGreaterThan(0.4);
   });
 });
