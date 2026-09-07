@@ -1203,6 +1203,19 @@ describe('reproduce (breed at the per-creature satiated bar)', () => {
     expect(s.energy[child]!).toBeCloseTo(25); // provisioned to its birthEnergy gene
   });
 
+  it('re-baselines the mother’s prevEnergy so the provisioning debit is not next tick’s learning reward', () => {
+    const s = new OrganismStore(4);
+    const p = s.alloc();
+    s.x[p] = 50;
+    s.y[p] = 50;
+    s.energy[p] = 100;
+    s.prevEnergy[p] = 100; // as learn() left it earlier this tick
+    genes(s, p, cfg);
+    s.rebuildLive();
+    expect(reproduce(s, new Rng(1), cfg, false, false, null, emptyHash(s, cfg))).toBe(1);
+    expect(s.prevEnergy[p]!).toBeCloseTo(s.energy[p]!); // next tick's reward starts at 0, not −40
+  });
+
   it('brainGatedBreeding: breedGate below threshold skips breeding (no births, no rng); at/above breeds (A2c)', () => {
     // A single satiated, mature, viable creature that WOULD breed this tick (energy above its satiated
     // bar). With the gate shut (breedGate 0 < threshold 0.5) reproduce() must skip it — 0 births, the
