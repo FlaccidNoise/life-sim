@@ -275,9 +275,16 @@ function reportNiches(world: World, s: World['store'], nRegions: number): void {
     .filter((r) => pop[r]! > 0)
     .sort((a, b) => pop[b]! - pop[a]!);
   const centres = world.food.pocketCentres();
-  // Region temperature (pocket mode only): the seeded abiotic optimum axis at each pocket centre.
-  const tempOf = (r: number): number =>
-    BY === 'pocket' && centres[r] ? temperatureAt(centres[r]!.x, centres[r]!.y, world.config) : NaN;
+  // Region temperature — the SAME value metabolize charges the THERMAL_PREF mismatch against, so the
+  // column tracks the actual selection pressure. With walls active that is the Voronoi region's optimum
+  // (a step function); with walls off it is the smooth field. In biome mode `r` IS the wall region index.
+  const wallsOn = world.walls.active;
+  const tempOf = (r: number): number => {
+    if (BY === 'biome') return wallsOn ? world.walls.regionTemp[r]! : NaN;
+    const c = centres[r];
+    if (!c) return NaN;
+    return wallsOn ? world.walls.regionTempAt(c.x, c.y) : temperatureAt(c.x, c.y, world.config);
+  };
   console.log(
     `  region niches (by pop): reg  pop   K    temp  diet[g….h]        mDiet mForage mThermal`,
   );
@@ -295,20 +302,19 @@ function reportNiches(world: World, s: World['store'], nRegions: number): void {
   // C3 differentiation-along-the-gradient signal: Pearson r between each inhabited region's temperature and
   // its mean THERMAL_PREF. THERMAL_PREF is under pure regional stabilizing selection toward the local temp, so
   // r → 1 confirms C3 is biting (region means track the gradient) — the companion to its high F_ST ratio.
-  if (BY === 'pocket') {
-    const temps: number[] = [];
-    const thermals: number[] = [];
-    for (const r of order) {
-      const t = tempOf(r);
-      if (!Number.isNaN(t)) {
-        temps.push(t);
-        thermals.push(thermalSum[r]! / pop[r]!);
-      }
+  const temps: number[] = [];
+  const thermals: number[] = [];
+  for (const r of order) {
+    const t = tempOf(r);
+    if (!Number.isNaN(t)) {
+      temps.push(t);
+      thermals.push(thermalSum[r]! / pop[r]!);
     }
+  }
+  if (temps.length >= 2)
     console.log(
       `  temp↔thermalPref region-mean correlation: r = ${pearson(temps, thermals).toFixed(2)}`,
     );
-  }
 }
 
 for (const seed of SEEDS) runSeed(seed);

@@ -16,7 +16,6 @@ import { type Rng } from './rng';
 import { type Config } from './config';
 import { type Walls } from './walls';
 import { temperatureAxis, temperatureAtAxis, lightAxis, lightAtAxis } from './abiotic';
-import { biomeAt } from './biomes';
 import {
   mutateGenome,
   mutateScalarGenes,
@@ -443,13 +442,13 @@ export function metabolize(
     // target). Quadratic = a sharp optimum. Gated so OFF (0) skips the field lookup → byte-identical; the
     // field is RNG-free (pure seed+position) and THERMAL_PREF is tail-gated → never perturbs the organism stream.
     if (tempAxis !== null) {
-      // Biome-coupled temperature: when walls are active, use the biome's targetTemp at this position
-      // (a step function between biomes) instead of the smooth sine field. Falls back to the smooth
-      // field when walls are inactive or the position isn't in a biome. Both paths are RNG-free →
-      // determinism holds. The biome field is a pure read of (position, walls.regionGen) → fixed value.
+      // Region-coupled temperature: when walls are active, every point in a Voronoi region shares that
+      // region's optimum (a step function, so a region is one selective niche). Walls off → the smooth
+      // field itself. Both are the SAME seeded field — the region value is just it sampled at the region
+      // seed — so temperatureScale shapes either path. RNG-free → determinism holds.
       const localTemp =
         walls && walls.active
-          ? (biomeAt(walls, x[i]!, y[i]!)?.targetTemp ?? temperatureAtAxis(x[i]!, y[i]!, tempAxis))
+          ? walls.regionTempAt(x[i]!, y[i]!)
           : temperatureAtAxis(x[i]!, y[i]!, tempAxis);
       const d = scalarGenes[sg + ScalarGene.THERMAL_PREF]! - localTemp;
       energy[i] = energy[i]! - basalCost * tempMetabCost * d * d;

@@ -333,10 +333,10 @@ export class World {
           const wi = Number(key);
           s.brain[bg0 + wi] = biome.brainOverrides[wi]!;
         }
-        // Seed THERMAL_PREF to the biome's target temperature so founders start adapted to their
-        // region (no temperature-mismatch death spiral at t0). Evolution then tunes it further.
+        // Seed THERMAL_PREF to the region's temperature optimum so founders start adapted to where they
+        // spawned (no temperature-mismatch death spiral at t0). Evolution then tunes it further.
         if (this.config.temperatureMetabCost > 0)
-          s.scalarGenes[sg0 + ScalarGene.THERMAL_PREF] = biome.targetTemp;
+          s.scalarGenes[sg0 + ScalarGene.THERMAL_PREF] = this.walls.regionTempAt(bx, by);
       }
       // Founder starts at its own (seeded) BIRTH_ENERGY gene — consistent with how offspring are provisioned.
       s.energy[i] = s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.BIRTH_ENERGY]!;
