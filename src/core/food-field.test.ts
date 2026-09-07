@@ -410,6 +410,77 @@ describe('FoodField three-channel place-coupling (F1)', () => {
     expect(f.sampleAt2(pC!.x, pC!.y)).toBeLessThan(0.05 * K);
   });
 
+  it('biome channel assignment still gives every channel at least one pocket', () => {
+    // Biome preference replaced round-robin's guaranteed near-equal split with a seed-dependent one:
+    // regionGen[k] = k % 3 over wallRegionCount regions, so a channel can end up with zero pockets. A
+    // channel with no pocket has capacity 0 everywhere and logistic regrowth has an absorbing state at
+    // B = 0, so it would be permanently extinct while its specialists starve. Worst case here: every
+    // pocket prefers channel A.
+    const f = new FoodField(1024, 1024, 128, 128, K, 1, 3, 0.5, 1);
+    const mainRng = new QueueRng([0.125, 0.125, 0.375, 0.375, 0.625, 0.625]);
+    const allA = (): number => 0;
+    f.seedPatches(
+      3,
+      5,
+      0,
+      mainRng,
+      1,
+      0,
+      1,
+      0,
+      undefined,
+      undefined,
+      0,
+      20,
+      0.2,
+      1,
+      0.6,
+      undefined,
+      false,
+      allA,
+    );
+    const centres = f.patchCenters as { x: number; y: number }[];
+    const covered = [
+      centres.some((p) => f.sampleAt(p.x, p.y) > 0.5 * K),
+      centres.some((p) => f.sampleAt2(p.x, p.y) > 0.5 * K),
+      centres.some((p) => f.sampleAt3(p.x, p.y) > 0.5 * K),
+    ];
+    expect(covered).toEqual([true, true, true]);
+  });
+
+  it('biome channel assignment is left alone when it already covers every channel', () => {
+    // The coverage pass must only fire on a zero-count channel; a preference that already spans all three
+    // channels is respected exactly (pocket p prefers channel p here).
+    const f = new FoodField(1024, 1024, 128, 128, K, 1, 3, 0.5, 1);
+    const mainRng = new QueueRng([0.125, 0.125, 0.375, 0.375, 0.625, 0.625]);
+    // Pocket centres land at x = 128, 384, 640 on a 1024-wide world → channel 2, 1, 0 (reversed p%3).
+    const reversed = (x: number): number => 2 - Math.floor(x / 256);
+    f.seedPatches(
+      3,
+      5,
+      0,
+      mainRng,
+      1,
+      0,
+      1,
+      0,
+      undefined,
+      undefined,
+      0,
+      20,
+      0.2,
+      1,
+      0.6,
+      undefined,
+      false,
+      reversed,
+    );
+    const [p0, p1, p2] = f.patchCenters as { x: number; y: number }[];
+    expect(f.sampleAt3(p0!.x, p0!.y)).toBeGreaterThan(0.5 * K); // channel C
+    expect(f.sampleAt2(p1!.x, p1!.y)).toBeGreaterThan(0.5 * K); // channel B
+    expect(f.sampleAt(p2!.x, p2!.y)).toBeGreaterThan(0.5 * K); // channel A
+  });
+
   it('mode 0 (ablation): ALL pockets grow channel A only — B and C stay inert everywhere', () => {
     const f = new FoodField(1024, 1024, 128, 128, K, 1, 3, 0.5, 0); // channels=3, mode 0
     const mainRng = new QueueRng([0.125, 0.125, 0.375, 0.375, 0.625, 0.625]);
@@ -902,7 +973,9 @@ describe('FoodField — migrating pockets (drifting centres)', () => {
     );
     const before = f.patchCenters.map((c) => ({ x: c.x, y: c.y }));
     // Classify each pocket by which channel carries biomass at its centre (even index → A under mode-1 round-robin).
-    const chanOf = f.patchCenters.map((c) => (f.sampleAt(c.x, c.y) >= f.sampleAt2(c.x, c.y) ? 0 : 1));
+    const chanOf = f.patchCenters.map((c) =>
+      f.sampleAt(c.x, c.y) >= f.sampleAt2(c.x, c.y) ? 0 : 1,
+    );
     for (let t = 0; t <= DRIFT_INTERVAL * 10; t++) f.driftPockets(t);
     let aSum = 0;
     let aN = 0;
