@@ -79,6 +79,23 @@ export class PheroField {
   }
 
   /**
+   * Allocation-free gradientAt: writes gx into out[base] and gy into out[base+1]. Same arithmetic as
+   * gradientAt, which returns a fresh {gx,gy} object — two of those per creature per tick at 5,000
+   * creatures is 10,000 allocations/tick on a path sense.ts documents as allocation-free.
+   */
+  gradientInto(x: number, y: number, step: number, out: Float64Array, base: number): void {
+    const ww = this.cols * this.cellW;
+    const wh = this.rows * this.cellH;
+    const inv = 1 / (2 * step);
+    const xp = wrap(x + step, ww);
+    const xm = wrap(x - step, ww);
+    const yp = wrap(y + step, wh);
+    const ym = wrap(y - step, wh);
+    out[base] = (this.P[this.idx(xp, y)]! - this.P[this.idx(xm, y)]!) * inv;
+    out[base + 1] = (this.P[this.idx(x, yp)]! - this.P[this.idx(x, ym)]!) * inv;
+  }
+
+  /**
    * One field step: toroidal double-buffered 4-neighbour diffusion (no-flux at blocked wall cells via
    * the foodBlockedMask, like FoodField), then a uniform multiplicative decay. RNG-free, deterministic.
    * `diffuse` 0 skips the diffusion pass (P unchanged by it); `decay` 0 skips the forget.
