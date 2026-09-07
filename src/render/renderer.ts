@@ -12,6 +12,7 @@ import { type OrganismStore } from '../core/store';
 import { type FoodField } from '../core/food-field';
 import { type ScentField } from '../core/scent-field';
 import { type Walls } from '../core/walls';
+import { BIOME_ATLAS, BiomeType } from '../core/biomes';
 import { ScalarGene, SCALAR_GENE_COUNT, SCALAR_GENE_SPECS, MIN_BAND } from '../core/genome';
 import {
   dietShape,
@@ -53,6 +54,13 @@ const VISION_MAX = SCALAR_GENE_SPECS[ScalarGene.VISION_RANGE]!.max;
 
 /** Format a JS number as a GLSL float literal (always has a decimal point, so `mix()` stays float). */
 const glf = (n: number): string => (Number.isInteger(n) ? `${n}.0` : `${n}`);
+
+/** Wall colors per wall-generator index (0=noise→OpenOcean, 1=CA→Reef, 2=rooms→Abyss). */
+const WALL_BIOME_COLORS = [
+  BIOME_ATLAS[BiomeType.OpenOcean].palette,
+  BIOME_ATLAS[BiomeType.Reef].palette,
+  BIOME_ATLAS[BiomeType.Abyss].palette,
+].map((p) => ({ r: p.wallR, g: p.wallG, b: p.wallB }));
 
 const DOT_VERT = `#version 300 es
 in vec2 a_pos;
@@ -275,9 +283,9 @@ in vec2 v_uv;
 uniform sampler2D u_tex;
 out vec4 outColor;
 void main() {
-  float s = texture(u_tex, v_uv).r;          // 0 open, 1 solid
-  if (s < 0.5) discard;                        // open cells show the food layer beneath
-  outColor = vec4(0.16, 0.18, 0.22, 1.0);      // slate rock
+  vec3 c = texture(u_tex, v_uv).rgb;       // biome-tinted RGB (0,0,0 = open)
+  if (c.r + c.g + c.b < 0.01) discard;      // open cells show the food layer beneath
+  outColor = vec4(c, 1.0);
 }`;
 
 // Debug overlay lines: a flat [x, y, r, g, b] vertex stream drawn as gl.LINES, sharing the camera.
@@ -736,8 +744,8 @@ export class Renderer {
     // ── Walls (over the food, under the dots) ──
     if (walls && showWalls && walls.active) {
       const cells = walls.cols * walls.rows;
-      if (this.wallTexData.length !== cells) this.wallTexData = new Uint8Array(cells);
-      walls.fillTexture(this.wallTexData);
+      if (this.wallTexData.length !== cells * 3) this.wallTexData = new Uint8Array(cells * 3);
+      walls.fillTextureRGB(this.wallTexData, WALL_BIOME_COLORS);
       gl.useProgram(this.wallProgram);
       gl.activeTexture(gl.TEXTURE0);
       gl.bindTexture(gl.TEXTURE_2D, this.wallTex);
@@ -745,11 +753,11 @@ export class Renderer {
         gl.texImage2D(
           gl.TEXTURE_2D,
           0,
-          gl.R8,
+          gl.RGB8,
           walls.cols,
           walls.rows,
           0,
-          gl.RED,
+          gl.RGB,
           gl.UNSIGNED_BYTE,
           this.wallTexData,
         );
@@ -762,7 +770,7 @@ export class Renderer {
           0,
           walls.cols,
           walls.rows,
-          gl.RED,
+          gl.RGB,
           gl.UNSIGNED_BYTE,
           this.wallTexData,
         );

@@ -184,7 +184,12 @@ export const livingWorldOverrides: Partial<Config> = {
   parasiteSizeRatio: 1.2, // host must be ≥1.2× the parasite's size (loose — more creatures qualify as hosts)
   parasiteCost: 0.02, // mild upkeep — slight pressure to drop the gene if never attaching (not lethal)
   parasite: 0.3, // founder center — gaussian around 0.3 so a meaningful minority can attach from t=0
-  parasiteHostSeekGain: 1.0, // ON — parasites actively seek hosts via the sight channel (neural-net driven)
+  parasiteHostSeekGain: 0, // OFF — A/B (parasite-host-seek-probe.ts) showed the sight-pull toward big
+  // bodies is maladaptive: it suppresses the parasite niche ~29× (141 vs 4106 parasites at 8k ticks) and
+  // LOWERS attachment (0.27 vs 0.37) because actively swimming toward hosts fights the parasite's evolved
+  // neural steering and starves it. Proximity attachment (parasiteStep's spatial scan) is the healthy
+  // strategy. Parasites still use the FULL neural net (sight/smell/brain) for grazing & fleeing — only
+  // the extra host-seeking pull term is off. Re-enable with the itsDiet<0.5 guard in sense.ts if revisited.
   // Scavenger (scavenger morph): a death-following niche. Creatures absorb energy from nearby death
   // events (transient corpse biomass) — a genuinely different strategy from grazing/hunting/parasitizing/
   // photosynthesizing. Creates a niche for creatures that follow where things are dying.

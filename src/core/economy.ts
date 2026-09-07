@@ -16,6 +16,7 @@ import { type Rng } from './rng';
 import { type Config } from './config';
 import { type Walls } from './walls';
 import { temperatureAxis, temperatureAtAxis, lightAxis, lightAtAxis } from './abiotic';
+import { biomeAt } from './biomes';
 import {
   mutateGenome,
   mutateScalarGenes,
@@ -175,7 +176,7 @@ export function hunt(store: OrganismStore, hash: SpatialHash, cfg: Config): void
  */
 export function parasiteStep(store: OrganismStore, hash: SpatialHash, cfg: Config): void {
   if (!cfg.parasiteEnabled) return;
-  const { liveIndices, liveCount, x, y, energy, scalarGenes, hostSlot } = store;
+  const { liveIndices, liveCount, x, y, energy, scalarGenes, hostSlot, parasiteCount } = store;
   const { parasiteAttachRange, parasiteSizeRatio, parasiteDrain, parasiteGain } = cfg;
   const { cols, rows, bucketStart, sorted } = hash;
   const range2 = parasiteAttachRange * parasiteAttachRange;
@@ -189,12 +190,16 @@ export function parasiteStep(store: OrganismStore, hash: SpatialHash, cfg: Confi
     if (para <= 0) continue;
     const host = hostSlot[i]!;
     if (host >= 0) {
-      // Already attached: drain the host (capped by its energy). If the host is dead/gone, detach.
-      if (!store.alive[host]!) {
+      // Already attached: drain the host (capped by its energy). Detach if the host is dead, OR if its
+      // slot has since been recycled into a different creature (genId mismatch) — without the genId check
+      // a newborn allocated into the dead host's slot would be silently drained by the orphaned parasite.
+      if (!store.alive[host]! || store.genId[host]! !== store.hostGen[i]!) {
         hostSlot[i] = -1;
+        // No parasiteCount decrement here — either the host is dead (its count is cleared when it's freed)
+        // or the slot now belongs to someone else whose own count must not be touched.
         continue;
       }
-      let drain = Math.min(parasiteDrain * para, energy[host]!);
+      const drain = Math.min(parasiteDrain * para, energy[host]!);
       if (drain <= 0) continue;
       energy[host] = energy[host]! - drain;
       energy[i] = energy[i]! + drain * parasiteGain;
@@ -219,7 +224,7 @@ export function parasiteStep(store: OrganismStore, hash: SpatialHash, cfg: Confi
             if (j === i) continue;
             const jg = j * SCALAR_GENE_COUNT;
             if (scalarGenes[jg + ScalarGene.SIZE]! < minHostSize) continue; // too small to be a host
-            if (hostSlot[j]! >= 0) continue; // don't stack on an already-parasitized host (one parasite each)
+            if (parasiteCount[j]! > 0) continue; // this host already has a parasite — skip (no swarming)
             const ddx = wrapDelta(xi - x[j]!, cfg.worldWidth);
             const ddy = wrapDelta(yi - y[j]!, cfg.worldHeight);
             const d2 = ddx * ddx + ddy * ddy;
@@ -230,7 +235,11 @@ export function parasiteStep(store: OrganismStore, hash: SpatialHash, cfg: Confi
           }
         }
       }
-      if (best >= 0) hostSlot[i] = best; // attach (no RNG; nearest compatible host)
+      if (best >= 0) {
+        hostSlot[i] = best;
+        store.hostGen[i] = store.genId[best]!; // stamp the host's generation so a slot recycle is detectable
+        parasiteCount[best] = (parasiteCount[best]! + 1) & 0xff;
+      } // attach + count
     }
   }
 }
@@ -262,6 +271,7 @@ export function metabolize(
   food: FoodField,
   hash: SpatialHash,
   cfg: Config,
+  walls?: Walls | null,
 ): void {
   const {
     liveIndices,
@@ -427,8 +437,15 @@ export function metabolize(
     // target). Quadratic = a sharp optimum. Gated so OFF (0) skips the field lookup → byte-identical; the
     // field is RNG-free (pure seed+position) and THERMAL_PREF is tail-gated → never perturbs the organism stream.
     if (tempAxis !== null) {
-      const d =
-        scalarGenes[sg + ScalarGene.THERMAL_PREF]! - temperatureAtAxis(x[i]!, y[i]!, tempAxis);
+      // Biome-coupled temperature: when walls are active, use the biome's targetTemp at this position
+      // (a step function between biomes) instead of the smooth sine field. Falls back to the smooth
+      // field when walls are inactive or the position isn't in a biome. Both paths are RNG-free →
+      // determinism holds. The biome field is a pure read of (position, walls.regionGen) → fixed value.
+      const localTemp =
+        walls && walls.active
+          ? (biomeAt(walls, x[i]!, y[i]!)?.targetTemp ?? temperatureAtAxis(x[i]!, y[i]!, tempAxis))
+          : temperatureAtAxis(x[i]!, y[i]!, tempAxis);
+      const d = scalarGenes[sg + ScalarGene.THERMAL_PREF]! - localTemp;
       energy[i] = energy[i]! - basalCost * tempMetabCost * d * d;
     }
     // Photosynthesis (autotroph morph): passive energy income from the light field, scaled by the
@@ -506,7 +523,7 @@ export function eatParcels(store: OrganismStore, parcels: Parcels, cfg: Config):
  *  is provided, appends each dying creature's (x,y) to it (for the scavenger step — death events as a
  *  transient energy source). The array is cleared by the caller before passing. */
 export function cullDead(store: OrganismStore, deathPositions?: Float64Array): number {
-  const { liveIndices, liveCount, energy, x, y } = store;
+  const { liveIndices, liveCount, energy, x, y, hostSlot, parasiteCount } = store;
   let deaths = 0;
   let dpIdx = 0;
   for (let k = 0; k < liveCount; k++) {
@@ -516,6 +533,11 @@ export function cullDead(store: OrganismStore, deathPositions?: Float64Array): n
         deathPositions[dpIdx++] = x[i]!;
         deathPositions[dpIdx++] = y[i]!;
       }
+      // Parasite morph bookkeeping: if this dying creature is a parasite (attached to a host), decrement
+      // the host's parasite count so a new parasite can attach. If it's a HOST, its parasites will detach
+      // next tick via syncParasites (which checks alive[host]); its parasiteCount is cleared on free.
+      if (hostSlot[i]! >= 0 && parasiteCount[hostSlot[i]!]! > 0)
+        parasiteCount[hostSlot[i]!] = parasiteCount[hostSlot[i]!]! - 1;
       store.free(i);
       deaths++;
     }

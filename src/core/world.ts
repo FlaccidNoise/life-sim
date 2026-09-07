@@ -17,20 +17,44 @@ import {
   ScalarGene,
   SCALAR_GENE_COUNT,
   SCALAR_GENE_SPECS,
+  BRAIN_GENES,
 } from './genome';
-import { metabolize, hunt, eatParcels, cullDead, reproduce, depositScent, parasiteStep, scavenge } from './economy';
+import {
+  metabolize,
+  hunt,
+  eatParcels,
+  cullDead,
+  reproduce,
+  depositScent,
+  parasiteStep,
+  scavenge,
+} from './economy';
 import { Hasher } from './hash';
+import { biomeAt } from './biomes';
 
 /** Sync attached parasites to their host's post-move position (parasite rides the host; no own
  *  locomotion while attached). Gated on parasiteEnabled so OFF is a no-op → byte-identical. */
 function syncParasites(store: OrganismStore, cfg: Config): void {
   if (!cfg.parasiteEnabled) return;
-  const { liveIndices, liveCount, x, y, vx, vy, hostSlot } = store;
+  const { liveIndices, liveCount, x, y, vx, vy, hostSlot, parasiteCount } = store;
   for (let k = 0; k < liveCount; k++) {
     const i = liveIndices[k]!;
     const host = hostSlot[i]!;
     if (host < 0) continue;
-    if (!store.alive[host]!) { hostSlot[i] = -1; continue; } // host died → detach
+    if (!store.alive[host]!) {
+      // Host died → detach. Decrement the host's parasite count (it may be mid-free in cullDead; the
+      // count is stale but harmless — the slot's parasiteCount is cleared to 0 in alloc/free).
+      if (parasiteCount[host]! > 0) parasiteCount[host] = parasiteCount[host]! - 1;
+      hostSlot[i] = -1;
+      continue;
+    }
+    if (store.genId[host]! !== store.hostGen[i]!) {
+      // The host's slot was recycled into a NEWBORN (cullDead frees, reproduce reallocs, same tick), so
+      // `alive[host]` is true again for an unrelated creature. Detach instead of riding the stranger — and
+      // do NOT decrement its parasiteCount, which belongs to the new occupant.
+      hostSlot[i] = -1;
+      continue;
+    }
     x[i] = x[host]!; // ride the host
     y[i] = y[host]!;
     vx[i] = vx[host]!; // match velocity (so the renderer doesn't smear)
@@ -179,6 +203,13 @@ export class World {
         // B-food-1: per-pocket drift directions (drawn from the SAME forked velocity rng above). On → each
         // pocket wanders independently; off → the legacy two per-channel global dirs (byte-identical).
         cfg.perPocketDrift,
+        // Biome-aware food channel assignment: each pocket gets its biome's preferredChannel instead of
+        // round-robin. Pure read of (position → walls → biome → preferredChannel), no RNG → determinism holds.
+        // Returns -1 when walls are inactive or the position isn't in a biome → falls back to round-robin.
+        (x, y) => {
+          const b = biomeAt(this.walls, x, y);
+          return b ? b.preferredChannel : -1;
+        },
       );
     } else {
       this.food.reset();
@@ -266,6 +297,26 @@ export class World {
         this.pheroSenseGenes,
       );
       seedScalarGenes(s.scalarGenes, i, this.rng, this.config); // incl. life-history + trophic genes
+      // Apply biome-specific presets based on spawn position (deterministic: position → region → biome →
+      // fixed overrides; no RNG draw, so the determinism contract holds). Gives founders in different
+      // wall-biomes different starting brains + scalar genes → regional differentiation from t0.
+      const biome = biomeAt(this.walls, bx, by);
+      if (biome) {
+        const sg0 = i * SCALAR_GENE_COUNT;
+        for (const key in biome.scalarOverrides) {
+          const gi = Number(key);
+          s.scalarGenes[sg0 + gi] = biome.scalarOverrides[gi]!;
+        }
+        const bg0 = i * BRAIN_GENES;
+        for (const key in biome.brainOverrides) {
+          const wi = Number(key);
+          s.brain[bg0 + wi] = biome.brainOverrides[wi]!;
+        }
+        // Seed THERMAL_PREF to the biome's target temperature so founders start adapted to their
+        // region (no temperature-mismatch death spiral at t0). Evolution then tunes it further.
+        if (this.config.temperatureMetabCost > 0)
+          s.scalarGenes[sg0 + ScalarGene.THERMAL_PREF] = biome.targetTemp;
+      }
       // Seed predators as OMNIVORES (diet 0.7): they survive on plants through the sparse early phase
       // AND hunt opportunistically, so the trait isn't wiped before prey density builds (without
       // prey-sensing a pure hunter starves first). Diet then evolves up where hunting pays.
@@ -364,7 +415,7 @@ export class World {
     if (this.parcels !== null) eatParcels(s, this.parcels, cfg);
     // METABOLIZE → LEARN → REPRO/DIE. Energy (the band the creature is in) is known after metabolize,
     // so the energy-gated within-life consolidation runs here (eligibility traces were laid in steer).
-    metabolize(s, this.food, this.hash, cfg);
+    metabolize(s, this.food, this.hash, cfg, this.walls);
     if (cfg.learningEnabled)
       learn(s, cfg.learningRate, cfg.weightDecay, cfg.maxLearnDeviation, cfg.learnRewardClamp);
     this.lastDeaths = cullDead(s, this.deathPositions);

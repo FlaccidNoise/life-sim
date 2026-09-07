@@ -275,13 +275,14 @@ export function senseCreatures(
             const dietSim = 1 - Math.abs(appeal); // |myDiet − itsDiet| ∈ [0,1]; 1 = same role
             pull += shelter * sizeDiff * dietSim;
           }
-          // HOST-SEEKING (parasite morph): a parasite finds LARGER creatures attractive — the bigger the
-          // host, the stronger the pull — scaled by its PARASITISM gene. This drives the existing SIGHT
-          // brain weights so the parasite's neural net actively steers toward hosts (not random wandering).
-          // Gated on parasiteHostSeekGain>0 so OFF is byte-identical (pull unchanged). Unlike shelter (which
-          // is diet-gated to stay near your own guild), parasites SEEK big bodies of ANY diet — a big
-          // predator is a host too (parasites don't care what their host eats).
-          if (hostSeek > 0 && sizeDiff > 0) {
+          // HOST-SEEKING (parasite morph): a parasite finds LARGER NON-PREDATOR creatures
+          // attractive — the bigger the host, the stronger the pull — scaled by its PARASITISM gene.
+          // This drives the existing SIGHT brain weights so the parasite's neural net actively steers
+          // toward hosts (not random wandering). Gated on parasiteHostSeekGain>0 so OFF is byte-identical.
+          // IMPORTANT: gated to itsDiet<0.5 (grazers/autotrophs) — predators (diet≥0.5) EAT parasites
+          // before they can attach, so seeking them is maladaptive (A/B showed a 37× parasite crash
+          // when predators were allowed as seek targets). A big herbivore is a safe host.
+          if (hostSeek > 0 && sizeDiff > 0 && itsDiet < 0.5) {
             pull += hostSeek * sizeDiff;
           }
           // Schooling: hue-blind (default) pulls toward ALL neighbors equally so diverse-lineage prey
