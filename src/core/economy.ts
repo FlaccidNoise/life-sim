@@ -198,6 +198,9 @@ export function parasiteStep(store: OrganismStore, hash: SpatialHash, cfg: Confi
         // or the slot now belongs to someone else whose own count must not be touched.
         continue;
       }
+      // A full parasite stops drinking, like a full grazer stops grazing and a full hunter stops biting.
+      // Without this the drain mints past the breed bar into a hoard that never becomes offspring.
+      if (cfg.morphSatiationCap && energy[i]! >= satiatedBar(scalarGenes, i, cfg)) continue;
       const drain = Math.min(parasiteDrain * para, energy[host]!);
       if (drain <= 0) continue;
       energy[host] = energy[host]! - drain;
@@ -466,7 +469,7 @@ export function metabolize(
     // gene is tail-gated → never perturbs the organism stream.
     if (lightAxisPre !== null) {
       const photo = scalarGenes[sg + ScalarGene.PHOTOSYNTH]!;
-      if (photo > 0) {
+      if (photo > 0 && !(cfg.morphSatiationCap && energy[i]! >= satiated)) {
         const light = lightAtAxis(x[i]!, y[i]!, lightAxisPre);
         const stillness = 1 / (1 + cfg.photosynthStillnessK * speed2);
         energy[i] = energy[i]! + photo * light * cfg.photosynthGain * stillness;
@@ -612,6 +615,9 @@ export function scavenge(
           if (!store.isAlive(i)) continue;
           const sc = scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.SCAVENGER]!;
           if (sc <= 0) continue;
+          // A full scavenger leaves the corpse, like a full grazer leaves the biomass. Skipping it here
+          // (not after the split) also means the remaining scavengers share the corpse between them.
+          if (cfg.morphSatiationCap && energy[i]! >= satiatedBar(scalarGenes, i, cfg)) continue;
           const ddx = wrapDelta(x[i]! - dx, ww);
           const ddy = wrapDelta(y[i]! - dy, wh);
           if (ddx * ddx + ddy * ddy > range2) continue;

@@ -646,11 +646,6 @@ export interface Config {
    *  offspring, so a morph that gets ahead compounds instead of saturating — the demo economy's missing
    *  restoring force. false = uncapped (byte-identical to before the cap existed). */
   morphSatiationCap: boolean;
-  /** Fraction of an attached rider's move cost (moveCost·moveFactor·speed²) charged to its HOST instead.
-   *  A rider is carried, so it pays nothing for the host's locomotion — without this the world loses that
-   *  energy cost entirely and attaching is free income. 1 = pure transfer (total move cost unchanged by
-   *  attachment); 0 = the cost vanishes (byte-identical to no carry term). */
-  parasiteCarryCost: number;
   /** PARASITISM founder CENTER. Drawn UNIFORM over [0,1] when enabled; pinned here with no draw when off. */
   parasite: number;
   /** How the PARASITISM founder pool is drawn. true = UNIFORM over [0,1] (the whole axis, so committed
@@ -1192,7 +1187,6 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     parasiteAttachRange: 20, // must be within this to latch on
     parasiteSizeRatio: 1.5, // host must be ≥1.5× the parasite's size (small parasites, big hosts)
     parasiteCost: 0.02, // attachment apparatus upkeep per unit above center
-    parasiteCarryCost: 0, // OFF by default — the demo opts in (see living-world-config)
     morphSatiationCap: false, // OFF by default — the demo opts in (see living-world-config)
     parasite: 0.3,
     parasiteFounderUniform: true, // whole-axis founding pool (as shipped since the morph landed)

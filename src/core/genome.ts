@@ -308,7 +308,15 @@ export function seedScalarGenes(genes: Float32Array, slot: number, rng: Rng, cfg
     // temperature band) from t=0. Without the spread an all-0.5 pool has no raw material and must build the
     // range by slow mutation, so regional differentiation never gets going. One RNG draw (rng.float()), like
     // the gaussian path it replaces, so it stays at the tail-safe draw position.
-    if (g === ScalarGene.FORAGE_PREF || g === ScalarGene.THERMAL_PREF || g === ScalarGene.PHOTOSYNTH || g === ScalarGene.PARASITISM || g === ScalarGene.SCAVENGER) {
+    // PARASITISM opts out of the uniform pool when parasiteFounderUniform is false: a morph carried by the
+    // whole founding population is a universal trait, not a niche, so the gaussian path makes it a minority.
+    const uniformSeeded =
+      g === ScalarGene.FORAGE_PREF ||
+      g === ScalarGene.THERMAL_PREF ||
+      g === ScalarGene.PHOTOSYNTH ||
+      g === ScalarGene.SCAVENGER ||
+      (g === ScalarGene.PARASITISM && cfg.parasiteFounderUniform);
+    if (uniformSeeded) {
       genes[base + g] = rng.float();
       continue;
     }
