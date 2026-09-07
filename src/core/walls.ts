@@ -210,6 +210,10 @@ export class Walls {
 
   /** Write the fine grid as 0/255 row-major for the render layer. */
   fillTexture(out: Uint8Array): void {
+    if (!this._active) {
+      out.fill(0);
+      return;
+    }
     for (let i = 0; i < this.solid.length; i++) out[i] = this.solid[i] ? 255 : 0;
   }
 

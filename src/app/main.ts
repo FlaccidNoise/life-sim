@@ -557,12 +557,18 @@ function rebuild(): void {
 function selectAt(clientX: number, clientY: number): void {
   const p = renderer.screenToWorld(clientX, clientY);
   const s = world.store;
+  const ww = config.worldWidth;
+  const wh = config.worldHeight;
+  // Toroidal distance: without the wrap, a click near a world edge selects a creature on the FAR side
+  // instead of the nearest one across the seam.
+  const wrap = (d: number, size: number): number =>
+    d > size * 0.5 ? d - size : d < -size * 0.5 ? d + size : d;
   let best = -1;
   let bestD = Infinity;
   for (let k = 0; k < s.liveCount; k++) {
     const i = s.liveIndices[k]!;
-    const dx = s.x[i]! - p.x;
-    const dy = s.y[i]! - p.y;
+    const dx = wrap(s.x[i]! - p.x, ww);
+    const dy = wrap(s.y[i]! - p.y, wh);
     const d = dx * dx + dy * dy;
     if (d < bestD) {
       bestD = d;

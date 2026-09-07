@@ -109,4 +109,16 @@ describe('scanHealth', () => {
     expect(r.violationCount).toBe(w.population);
     expect(r.byKind.energy).toBe(w.population);
   });
+
+  it('names every scalar gene, including the tail-gated morph genes', () => {
+    // GENE_NAMES stopped at 27 of 31 entries, so a violation on THERMAL_PREF, PHOTOSYNTH, PARASITISM or
+    // SCAVENGER was reported as "gene[29]=undefined".
+    const w = smallWorld();
+    const s = w.store;
+    const i = s.liveIndices[0]!;
+    s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.PARASITISM] = 99; // way past its clamp
+    const r = scanHealth(w);
+    const v = r.violations.find((x) => x.kind === 'gene' && x.slot === i);
+    expect(v?.field).toBe(`gene[${ScalarGene.PARASITISM}]=parasitism`);
+  });
 });
