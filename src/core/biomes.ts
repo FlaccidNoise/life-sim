@@ -43,8 +43,6 @@ export interface BiomeConfig {
   brainOverrides: BrainOverrides;
   /** Preferred food channel for this biome (0=A, 1=B, 2=C). Used by seedPatches when biome-aware channel assignment is on. */
   preferredChannel: number;
-  /** How strongly this biome's channel preference is enforced (0=not at all, 1=all pockets in this biome get the preferred channel). */
-  channelBias: number;
 }
 
 export const BIOME_PALETTE: Record<BiomeType, BiomePalette> = {
@@ -80,7 +78,6 @@ export const BIOME_ATLAS: Record<BiomeType, BiomeConfig> = {
       5: 0.5,
     },
     preferredChannel: 0, // channel A (stable, non-drifting)
-    channelBias: 0,
   },
   [BiomeType.Reef]: {
     name: 'Reef',
@@ -104,7 +101,6 @@ export const BIOME_ATLAS: Record<BiomeType, BiomeConfig> = {
       9: 0.8,
     },
     preferredChannel: 1, // channel B (drifting, mobile — matches the reef's dynamic corridors)
-    channelBias: 0,
   },
   [BiomeType.Abyss]: {
     name: 'Abyss',
@@ -130,7 +126,6 @@ export const BIOME_ATLAS: Record<BiomeType, BiomeConfig> = {
       5: 0.2,
     },
     preferredChannel: 2, // channel C (the scarce, place-coupled resource)
-    channelBias: 0,
   },
 };
 
