@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { World } from './world';
 import { defaultConfig, type Config } from './config';
 import { Brain, BRAIN_GENES, ScalarGene, SCALAR_GENE_COUNT } from './genome';
+import { biomeAt } from './biomes';
 
 /** A SMALL-SCALE test world: identical feature defaults to defaultConfig() but at 1024² (vs 8192²) with a
  *  lighter founding population. The determinism/ablation contracts below assert HASH equality and
@@ -260,9 +261,7 @@ describe('World — Phase 0 determinism contract', () => {
   it('perPocketDrift OFF vs ON diverge; both deterministic (B-food-1, forked-rng safe)', () => {
     const off = new World(smallConfig({ seed: 2, fertilityDriftRate: 1, perPocketDrift: false }));
     const on = new World(smallConfig({ seed: 2, fertilityDriftRate: 1, perPocketDrift: true }));
-    const off2 = new World(
-      smallConfig({ seed: 2, fertilityDriftRate: 1, perPocketDrift: false }),
-    );
+    const off2 = new World(smallConfig({ seed: 2, fertilityDriftRate: 1, perPocketDrift: false }));
     for (let t = 0; t < 400; t++) {
       off.step();
       on.step();
@@ -561,7 +560,13 @@ describe('World — Phase 0 determinism contract', () => {
     // — the demo's shipping state (src/app/main.ts) — to exercise the full env stack.
     const make = () =>
       new World(
-        smallConfig({ seed: 11, wallRegionCount: 5, flowStrength: 0.15, flowPushStrength: 1, initialPopulation: 250 }),
+        smallConfig({
+          seed: 11,
+          wallRegionCount: 5,
+          flowStrength: 0.15,
+          flowPushStrength: 1,
+          initialPopulation: 250,
+        }),
       );
     const a = make();
     const b = make();
@@ -641,6 +646,26 @@ describe('World — Phase 0 determinism contract', () => {
         expect(s.brain[base + g]!).toBe(0);
       }
     }
+  });
+
+  it('a biome scalar override survives the founder DIET/SIZE seeds (Abyss keeps its SIZE)', () => {
+    // The biome preset block used to run BEFORE the DIET/SIZE seeds, so founderSizeSpread (2.5 by default)
+    // unconditionally overwrote ScalarGene.SIZE and the Abyss biome's "big slow ambusher" identity was
+    // silently discarded on every founder. Biome overrides must be the LAST writer.
+    const cfg = smallConfig({ seed: 1, wallRegionCount: 5 });
+    const w = new World(cfg);
+    expect(w.walls.active).toBe(true);
+    const s = w.store;
+    let checked = 0;
+    for (let k = 0; k < s.liveCount; k++) {
+      const i = s.liveIndices[k]!;
+      const biome = biomeAt(w.walls, s.x[i]!, s.y[i]!);
+      const want = biome?.scalarOverrides[ScalarGene.SIZE];
+      if (want === undefined) continue;
+      expect(s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.SIZE]).toBeCloseTo(want);
+      checked++;
+    }
+    expect(checked).toBeGreaterThan(0); // non-vacuity: some founder actually spawned in a SIZE biome
   });
 
   it('seeking store fields are reset-deterministic and hashed', () => {
