@@ -815,9 +815,6 @@ export interface Config {
   /** Extra upkeep per unit DEFENCE: upkeep · (1 + this · DEFENCE). 1 → a fully armoured plant pays 2×.
    *  Not derived; it is the cost half of the armour tradeoff and increment 2 measures whether it bites. */
   plantDefenceUpkeep: number;
-  /** Bite reduction per unit DEFENCE (increment 2): bite · (1 − this · DEFENCE). Armour, NOT toxin — it
-   *  is symmetric, so the plant loses less biomass AND the grazer gains less. */
-  plantDefenceBite: number;
   /** Ceiling yield of a fully shade-tolerant plant (LIGHT_NEED 0): lightT = this + (lightEff − this) ·
    *  LIGHT_NEED. 0.5 = half the light ceiling, indifferent to the light field and to being shaded. */
   plantLowLightYield: number;
@@ -870,15 +867,6 @@ export interface Config {
   /** Graze reach (world units, increment 2). 32 = the plant-hash cell, so a 3×3 neighbourhood covers it in
    *  one pass. Raising it past the hash cell breaks that guarantee unless the cell grows with it. */
   plantGrazeRange: number;
-  /** Root reserve as a fraction of MAX_SIZE: a grazer can never take E below this (increment 2). With the
-   *  throttle it makes plant persistence UNCONDITIONAL — the bite vanishes at the reserve while growth
-   *  there is strictly positive, so no parameter inequality is required. */
-  plantGrazeFloor: number;
-  /** Fraction of the ABOVE-RESERVE energy one bite may take (increment 2): bite = min(budget, this ·
-   *  (E − reserve)). 0.25 puts a singly-grazed plant's equilibrium at E* 7.98 against a reserve of 4.65,
-   *  where realised intake is 0.83/tick = 40% of a mean 2.05 budget — survivable, heavily outcompeted by
-   *  moving on. That is the crop-and-move signal. */
-  plantBiteFraction: number;
   /** Plant scent deposited per unit E per tick. 0.018 matches the deposit/decay equilibrium level to the
    *  old Kcell ceiling of 200 (foodCap 40 × foodMaxFertility 5): at 6.5 plants per 64 u scent cell, mean E
    *  35 and decay 0.02, P* = this × 11,375. A STARTING value — increment 3 gates on the ratio of the new
@@ -889,13 +877,6 @@ export interface Config {
   /** Plant-scent decay per tick. Starts from the tuned pheroDecay; the plant field wants a shorter memory
    *  than a communication trail. */
   plantScentDecay: number;
-  /** Floor on a grazer's SPECIES band half-width (increment 2): breadth = this + FORAGE_BREADTH · (1 −
-   *  this). ≥ 0.5 is STRUCTURAL — at 0.5 an interior specialist's band spans the whole SPECIES axis, so no
-   *  plant is categorically inedible and §3.2a's areal count holds for every genotype. 0.58 leaves the
-   *  worst-matched plant at 0.14 rather than ~0. At 0.1 a narrow eater realises 0.49× its budget and
-   *  starves. The concession: FORAGE_BREADTH grades a preference rather than partitioning the resource.
-   *  Do not lower this to sharpen niches without first raising plant density. */
-  plantBreadthMin: number;
   /** Radius (world units) the crowd scan counts neighbours in. Set to the plant-hash cell so a 3×3 pass
    *  covers it. */
   plantShadeRange: number;
@@ -1246,7 +1227,6 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     plantFounderSigma: 0.3, // = founderSigma
     plantUpkeep: 0.05,
     plantDefenceUpkeep: 1,
-    plantDefenceBite: 0.5,
     plantLowLightYield: 0.5,
     plantSeedThreshold: 0.6,
     plantSeedCost: 6,
@@ -1259,12 +1239,9 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     plantStarveRate: 0.05,
     plantDeathEnergy: 0.5,
     plantGrazeRange: 32,
-    plantGrazeFloor: 0.15,
-    plantBiteFraction: 0.25,
     plantScentStrength: 0.018,
     plantScentDiffuse: 0.2, // = pheroDiffuse
     plantScentDecay: 0.02, // = pheroDecay
-    plantBreadthMin: 0.58,
     plantShadeRange: 32,
     plantShadeK: 0.045,
     plantCrowdK: 0.02,
