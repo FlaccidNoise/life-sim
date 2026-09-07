@@ -282,6 +282,24 @@ describe('eatParcels payoff', () => {
     expect(p.count).toBe(0);
   });
 
+  it('a decayed parcel pays what it has LEFT, not the flat parcelEnergy', () => {
+    // Parcels.step decays energy every tick. Paying the flat cfg.parcelEnergy made an almost-spent parcel
+    // worth exactly as much as a fresh one, so parcelDecay had no effect on payoff at all.
+    const s = new OrganismStore(2);
+    const a = s.alloc();
+    s.x[a] = 100;
+    s.y[a] = 100;
+    s.energy[a] = 10;
+    s.rebuildLive();
+    const p = new Parcels(cfg);
+    p.spawn();
+    p.x[0] = 103;
+    p.y[0] = 100;
+    p.energy[0] = 12; // decayed from 60
+    eatParcels(s, p, cfg);
+    expect(s.energy[a]).toBe(22); // 10 + 12, not 10 + 60
+  });
+
   it('a creature out of eat range does not consume the parcel', () => {
     const s = new OrganismStore(2);
     const a = s.alloc();

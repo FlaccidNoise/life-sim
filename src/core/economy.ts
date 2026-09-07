@@ -514,13 +514,16 @@ export function metabolize(
 export function eatParcels(store: OrganismStore, parcels: Parcels, cfg: Config): void {
   const { liveIndices, liveCount, x, y, energy } = store;
   const range = cfg.parcelEatRange;
-  const payoff = cfg.parcelEnergy;
   for (let k = 0; k < liveCount; k++) {
     const i = liveIndices[k]!;
     const slot = parcels.nearestTo(x[i]!, y[i]!, range);
     if (slot < 0) continue; // none in reach
+    // The parcel pays what it has LEFT, not the flat cfg.parcelEnergy it was spawned with. Parcels.step
+    // decays energy every tick, so a stale parcel is a smaller meal than a fresh one — otherwise
+    // parcelDecay only shortens lifetime, and at parcelLifetime 400 vs parcelEnergy/parcelDecay ticks to
+    // reach zero it usually does not even do that.
+    energy[i] = energy[i]! + parcels.energy[slot]!;
     parcels.consume(slot);
-    energy[i] = energy[i]! + payoff;
   }
 }
 
