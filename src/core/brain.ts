@@ -34,7 +34,7 @@ import {
   GLOW_SENSE_LAT_THRUST,
   GLOW_SENSE_FWD_THRUST,
 } from './genome';
-import { SCENT_CHANNELS } from './scent-field';
+import { SCENT_CHANNELS, Scent } from './scent-field';
 
 /**
  * Run each creature's runtime brain: food gradient (heading frame) → turn + thrust. Turns the heading
@@ -107,6 +107,10 @@ export function steer(
   const turnGainRatio = cfg.turnGainRatio > 0 ? cfg.turnGainRatio : 1;
   const minTurnRadius = cfg.minTurnRadius; // world units; 0 = off (turn rate independent of speed)
   const turnFloor = Math.max(0, cfg.turnFloor); // rad/tick a stopped creature may still pivot at
+  // Exemptions from the bound (0 = off for each). A fleeing or hungry creature must be free to turn;
+  // the spinners the bound targets are fed adults with nothing hunting them.
+  const threatGate = cfg.turnBoundThreatGate;
+  const hungerGate = cfg.turnBoundHungerGate;
   const hiddenLayer = cfg.hiddenLayer; // nonlinear tanh layer (conditional logic) on top of the linear map
   const moodGlow = cfg.moodGlow; // bioluminescence output read from the hidden "mood" layer (display + signal)
   // Per-creature scratch for the hidden layer (reused each iteration — no per-creature allocation).
@@ -129,7 +133,7 @@ export function steer(
     // gate (below) and the interoceptive hunger synapses (further down). Computed ONCE, only when a consumer
     // is on, so the all-off path never consults satiatedBar and stays byte-identical to pre-feature.
     let hunger = 0;
-    if (hungerSense || hungerGatesFood) {
+    if (hungerSense || hungerGatesFood || hungerGate > 0) {
       const sb = satiatedBar(genes, i, cfg);
       hunger = sb > 0 ? 1 - energy[i]! / sb : 1;
       if (hunger < 0) hunger = 0;
@@ -341,9 +345,20 @@ export function steer(
     // — integrate() runs after steer() — which is the speed the turn is actually executed at. turnFloor
     // keeps a stopped creature able to pivot at all, else it can never turn away from a wall it stalled on.
     if (minTurnRadius > 0) {
-      const cap = Math.max(turnFloor, Math.hypot(velX[i]!, velY[i]!) / minTurnRadius);
-      if (turn > cap) turn = cap;
-      else if (turn < -cap) turn = -cap;
+      // Exempt the creatures that NEED to turn. A turn-limited prey animal cannot evade, which is how the
+      // bound turned predation into an energy printer and decayed the demo to a monoculture by 12000 ticks
+      // (see living-world-config.ts). Threat = the magnitude of the predator-scent gradient, the same ∇ the
+      // brain steers on; it is 0 without cfg.pheromoneEnabled, so that gate cannot fire without the field.
+      let exempt = hungerGate > 0 && hunger >= hungerGate;
+      if (!exempt && threatGate > 0) {
+        const tb = i * SCENT_CHANNELS + Scent.PRED;
+        exempt = Math.hypot(scentSenseX[tb]!, scentSenseY[tb]!) >= threatGate;
+      }
+      if (!exempt) {
+        const cap = Math.max(turnFloor, Math.hypot(velX[i]!, velY[i]!) / minTurnRadius);
+        if (turn > cap) turn = cap;
+        else if (turn < -cap) turn = -cap;
+      }
     }
     const nh = h + turn;
     heading[i] = nh;

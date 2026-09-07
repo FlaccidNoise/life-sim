@@ -471,6 +471,20 @@ export interface Config {
    *  against). Keep it small — it is the rate a creature can spin at zero speed. Ignored when
    *  minTurnRadius is 0. */
   turnFloor: number;
+  /** THREAT exemption from the minTurnRadius bound: lift the bound when the magnitude of the predator-scent
+   *  gradient (ScentField channel PRED, the same ∇ the brain steers on) reaches this. A turn-limited prey
+   *  animal cannot evade, which is how the bound turned predation into an energy printer and decayed the
+   *  demo to a monoculture by 12000 ticks. The spinners the bound targets are FED ADULTS with nothing
+   *  hunting them, so exempting the hunted costs nothing on spin. Scale matters: on the demo at t=2000 this
+   *  gradient runs p50 3.6e-4 / p90 2.6e-3 / max 9.6e-3 among grazers, so the useful range is thousandths.
+   *  0 = OFF (no threat exemption); a threshold this low would otherwise exempt everything. Needs cfg.pheromoneEnabled — without the scent
+   *  field the gradient is 0 and this gate can never fire. Ignored when minTurnRadius is 0. */
+  turnBoundThreatGate: number;
+  /** HUNGER exemption from the minTurnRadius bound: lift the bound when hunger (0 = full, 1 = empty)
+   *  reaches this. A hungry forager closing on a food patch should not be turn-limited either, and the
+   *  spinners are the fed ones. 0 = OFF, for the same reason as the threat gate. Its own knob so the two
+   *  exemptions can be ablated separately. Ignored when minTurnRadius is 0. */
+  turnBoundHungerGate: number;
   /** Evolvable per-creature damping (drift ↔ dart): when on, integrate() reads each creature's DAMPING
    *  gene instead of the global `damping` constant. The gene is drawn from RNG regardless of this flag,
    *  so toggling it is a pure read-path switch — the determinism hash for a given seed is unaffected by
@@ -1115,6 +1129,13 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     minTurnRadius: 0, // OFF: the bound kills the spin but decays the demo's ecology by 12000t — see
     // living-world-config.ts. Set it to ~cellRadius (with turnGainRatio 4) to opt in.
     turnFloor: 0.05, // rad/tick a stopped creature may still pivot at (escapes walls)
+    // Exemptions from the bound. Inert while minTurnRadius is 0, so these are byte-identical at HEAD; they
+    // exist so that turning the bound back on does not reproduce the monoculture it caused. UNMEASURED.
+    // 0.0025 ≈ the 90th percentile of |∇predator-scent| among grazers on the demo at t=2000 (measured
+    // p50 3.6e-4, p90 2.6e-3, p95 4.1e-3, max 9.6e-3), so it exempts roughly the most threat-exposed
+    // decile of prey rather than the whole population. 0 = no threat exemption.
+    turnBoundThreatGate: 0.0025,
+    turnBoundHungerGate: 0.5, // lift the bound when hunger ≥ this (0 = no hunger exemption)
     evolvableDamping: true,
     reverseThrustFraction: 0.5, // ON by default: creatures can back away at half forward power
     brainGatedEating: true, // ON by default: eating is a decision — graze slow vs lift the head to flee fast

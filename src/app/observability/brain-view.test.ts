@@ -17,7 +17,7 @@ import {
   HIDDEN_UNITS,
   HiddenInput,
 } from '../../core/genome';
-import { SCENT_CHANNELS } from '../../core/scent-field';
+import { SCENT_CHANNELS, Scent } from '../../core/scent-field';
 import { steer } from '../../core/brain';
 import { satiatedBar } from '../../core/economy';
 import { computeBrainState } from './brain-view';
@@ -391,7 +391,13 @@ describe('computeBrainState', () => {
   });
 
   it('bounds the drawn turn by minTurnRadius, matching a real steer() run', () => {
-    const mtr = defaultConfig({ minTurnRadius: 6, turnFloor: 0.05 });
+    // Gates pinned off so this isolates the kinematic bound (setup()'s creature would trip the hunger gate).
+    const mtr = defaultConfig({
+      minTurnRadius: 6,
+      turnFloor: 0.05,
+      turnBoundThreatGate: 0,
+      turnBoundHungerGate: 0,
+    });
     const s = setup();
     const i = 0;
     s.learnedBrain[i * BRAIN_GENES + 4] = 999; // TURN_BIAS — asks for far more turn than the body can execute
@@ -402,6 +408,26 @@ describe('computeBrainState', () => {
     expect(st.turn).toBeCloseTo(0.2, 10);
     steer(s, false, mtr.eligLambda, mtr.motorSquash, mtr);
     expect(st.turn).toBeCloseTo(s.heading[i]! - h0, 10); // the panel matches the sim
+  });
+
+  it('mirrors the threat exemption from the turn bound (panel matches steer)', () => {
+    const cfg2 = defaultConfig({
+      minTurnRadius: 6,
+      turnFloor: 0.05,
+      turnBoundThreatGate: 0.0025,
+      turnBoundHungerGate: 0, // isolate the threat gate
+    });
+    const s = setup();
+    const i = 0;
+    s.learnedBrain[i * BRAIN_GENES + 4] = 999; // TURN_BIAS — asks for far more turn than the bound allows
+    s.vx[i] = 0;
+    s.vy[i] = 0;
+    s.scentSenseX[i * SCENT_CHANNELS + Scent.PRED] = 0.01; // above the gate → exempt
+    const h0 = s.heading[i]!;
+    const st = computeBrainState(s, cfg2, i);
+    steer(s, false, cfg2.eligLambda, cfg2.motorSquash, cfg2);
+    expect(st.turn).toBeCloseTo(s.heading[i]! - h0, 10);
+    expect(Math.abs(st.turn)).toBeGreaterThan(0.05); // exempt, so NOT pinned at turnFloor
   });
 
   it('matches steer() under motorSquash and eases below the limit (ON-mode contract)', () => {
