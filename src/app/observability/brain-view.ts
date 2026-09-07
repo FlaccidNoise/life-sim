@@ -31,7 +31,7 @@ import {
   GLOW_SENSE_LAT_THRUST,
   GLOW_SENSE_FWD_THRUST,
 } from '../../core/genome';
-import { SCENT_CHANNELS } from '../../core/scent-field';
+import { SCENT_CHANNELS, Scent } from '../../core/scent-field';
 
 export interface BrainInputNode {
   label: string;
@@ -297,12 +297,28 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
     else if (thrust > maxThrust) thrust = maxThrust;
   }
   // Minimum-turning-radius bound: mirror steer() so the panel shows the turn the body can actually execute,
-  // not the one the network asked for. The gap between turnRaw and turn is the point of the picture.
+  // not the one the network asked for. The gap between turnRaw and turn is the point of the picture. The
+  // threat/hunger exemptions are mirrored too — a fleeing creature's turn is NOT bounded, and the panel
+  // must not claim otherwise. Hunger is recomputed here because the display node above only exists when
+  // hungerSense is on, while steer() computes it whenever the gate is live.
   if (cfg.minTurnRadius > 0) {
-    const speed = Math.hypot(store.vx[slot]!, store.vy[slot]!);
-    const cap = Math.max(Math.max(0, cfg.turnFloor), speed / cfg.minTurnRadius);
-    if (turn > cap) turn = cap;
-    else if (turn < -cap) turn = -cap;
+    let exempt = false;
+    if (cfg.turnBoundHungerGate > 0) {
+      const bar = satiatedBar(store.scalarGenes, slot, cfg);
+      const h = bar > 0 ? Math.min(1, Math.max(0, 1 - store.energy[slot]! / bar)) : 1;
+      exempt = h >= cfg.turnBoundHungerGate;
+    }
+    if (!exempt && cfg.turnBoundThreatGate > 0) {
+      const tb = slot * SCENT_CHANNELS + Scent.PRED;
+      exempt =
+        Math.hypot(store.scentSenseX[tb]!, store.scentSenseY[tb]!) >= cfg.turnBoundThreatGate;
+    }
+    if (!exempt) {
+      const speed = Math.hypot(store.vx[slot]!, store.vy[slot]!);
+      const cap = Math.max(Math.max(0, cfg.turnFloor), speed / cfg.minTurnRadius);
+      if (turn > cap) turn = cap;
+      else if (turn < -cap) turn = -cap;
+    }
   }
   thrust *= eff;
   // Eat-gate (slice B): mirror steer() — eating throttles the body. Sigmoid gate from food + sight + bias.

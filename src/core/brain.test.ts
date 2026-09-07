@@ -14,8 +14,9 @@ import {
   GLOW_BIAS,
   GLOW_HID,
 } from './genome';
-import { SCENT_CHANNELS } from './scent-field';
+import { SCENT_CHANNELS, Scent } from './scent-field';
 import { steer, learn } from './brain';
+import { satiatedBar } from './economy';
 
 // Default config for the motor-mechanics steer() tests below. brainGatedEating is OFF here to ISOLATE
 // turn/thrust from the eat-immobilize penalty (slice B) — the eat-gate has its own test block that opts in.
@@ -159,7 +160,15 @@ describe('steer (per-creature brain)', () => {
   });
 
   it('a stopped creature turns at most turnFloor per tick (minTurnRadius bound)', () => {
-    const cfg = defaultConfig({ brainGatedEating: false, minTurnRadius: 6, turnFloor: 0.05 });
+    // Gates pinned off: this test is about the kinematic bound, and a fresh store has energy 0, which the
+    // default hunger gate would exempt.
+    const cfg = defaultConfig({
+      brainGatedEating: false,
+      minTurnRadius: 6,
+      turnFloor: 0.05,
+      turnBoundThreatGate: 0,
+      turnBoundHungerGate: 0,
+    });
     const s = new OrganismStore(4);
     const i = s.alloc();
     s.heading[i] = 0;
@@ -173,7 +182,13 @@ describe('steer (per-creature brain)', () => {
 
   it('a moving creature turns at most speed/minTurnRadius per tick, both directions', () => {
     const turnOf = (bias: number): number => {
-      const cfg = defaultConfig({ brainGatedEating: false, minTurnRadius: 6, turnFloor: 0.05 });
+      const cfg = defaultConfig({
+        brainGatedEating: false,
+        minTurnRadius: 6,
+        turnFloor: 0.05,
+        turnBoundThreatGate: 0,
+        turnBoundHungerGate: 0,
+      });
       const s = new OrganismStore(4);
       const i = s.alloc();
       s.heading[i] = 0;
@@ -198,6 +213,73 @@ describe('steer (per-creature brain)', () => {
     s.rebuildLive();
     steer(s, false, 0.2, false, cfg);
     expect(s.heading[i]).toBeCloseTo(0.3);
+  });
+
+  it('lifts the turn bound for a creature under predator-scent threat', () => {
+    const mk = (threat: number): number => {
+      const cfg = defaultConfig({
+        brainGatedEating: false,
+        minTurnRadius: 6,
+        turnFloor: 0.05,
+        turnBoundThreatGate: 0.0025,
+        turnBoundHungerGate: 0, // isolate the threat gate
+      });
+      const s = new OrganismStore(4);
+      const i = s.alloc();
+      s.heading[i] = 0; // stopped → bounded at turnFloor unless exempt
+      setBrain(s, i, { TURN_BIAS: 10 }); // MAX_TURN gene is 1, so an exempt creature turns a full radian
+      s.scentSenseX[i * SCENT_CHANNELS + Scent.PRED] = threat;
+      s.rebuildLive();
+      steer(s, false, 0.2, false, cfg);
+      return s.heading[i]!;
+    };
+    expect(mk(0.001)).toBeCloseTo(0.05); // below the gate → bounded at turnFloor
+    expect(mk(0.01)).toBeCloseTo(1); // above the gate → free to turn, capped only by MAX_TURN
+  });
+
+  it('lifts the turn bound for a hungry creature', () => {
+    const mk = (energy: number): number => {
+      const cfg = defaultConfig({
+        brainGatedEating: false,
+        minTurnRadius: 6,
+        turnFloor: 0.05,
+        turnBoundThreatGate: 0, // isolate the hunger gate
+        turnBoundHungerGate: 0.5,
+      });
+      const s = new OrganismStore(4);
+      const i = s.alloc();
+      s.heading[i] = 0;
+      setBrain(s, i, { TURN_BIAS: 10 });
+      // setBrain sets SATIATED_THRESHOLD 100, so hunger = 1 − energy/satiatedBar.
+      s.energy[i] = energy;
+      s.rebuildLive();
+      steer(s, false, 0.2, false, cfg);
+      const bar = satiatedBar(s.scalarGenes, i, cfg);
+      const hunger = bar > 0 ? Math.min(1, Math.max(0, 1 - energy / bar)) : 1;
+      expect(hunger > 0.5).toBe(energy < 1); // guard: the two cases really do straddle the gate
+      return s.heading[i]!;
+    };
+    expect(mk(0)).toBeCloseTo(1); // starving → exempt, free to turn
+    expect(mk(1e9)).toBeCloseTo(0.05); // full → bounded at turnFloor
+  });
+
+  it('both gates at 0 leave the bound applying to everyone', () => {
+    const cfg = defaultConfig({
+      brainGatedEating: false,
+      minTurnRadius: 6,
+      turnFloor: 0.05,
+      turnBoundThreatGate: 0,
+      turnBoundHungerGate: 0,
+    });
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.heading[i] = 0;
+    setBrain(s, i, { TURN_BIAS: 10 });
+    s.energy[i] = 0; // starving AND under threat — neither exempts while the gates are off
+    s.scentSenseX[i * SCENT_CHANNELS + Scent.PRED] = 1;
+    s.rebuildLive();
+    steer(s, false, 0.2, false, cfg);
+    expect(s.heading[i]).toBeCloseTo(0.05);
   });
 
   it('turnGainRatio=1 reproduces the original squash; >1 widens the graded region', () => {
