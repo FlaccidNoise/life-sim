@@ -208,15 +208,6 @@ export class Walls {
     };
   }
 
-  /** Write the fine grid as 0/255 row-major for the render layer. */
-  fillTexture(out: Uint8Array): void {
-    if (!this._active) {
-      out.fill(0);
-      return;
-    }
-    for (let i = 0; i < this.solid.length; i++) out[i] = this.solid[i] ? 255 : 0;
-  }
-
   /** Write the fine grid as BIOME-TINTED RGB (row-major, 3 bytes per cell). Open cells = black (the
    *  fragment shader discards them so the food layer shows through); solid cells = the biome's wall color
    *  from BIOME_ATLAS. Needs the biome palette imported lazily to avoid a core→render dependency. */
