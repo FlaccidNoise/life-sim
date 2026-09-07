@@ -108,13 +108,13 @@ export class OrganismStore {
   readonly genId: Uint32Array;
   readonly alive: Uint8Array;
   // Breeding refractory countdown (ticks until this slot may breed again; 0 = ready). Only touched when
-  // cfg.breedCooldown > 0, so the OFF path never reads/writes it. Auxiliary runtime state — NOT hashed
-  // (the determinism golden hash stays byte-identical when the cooldown feature is off).
+  // cfg.breedCooldown > 0, so the OFF path never reads/writes it. Hashed by `World.stateHash` (see
+  // `world.ts:601`) — stays 0 when the cooldown feature is off, so the OFF hash is byte-identical.
   readonly breedCooldownLeft: Uint32Array;
   // Predation handling-time refractory countdown (ticks until this predator may feed again after a kill;
   // 0 = ready). The Holling Type-II functional response. Only touched when cfg.huntHandlingTime > 0, so the
-  // OFF path never reads/writes it. Auxiliary runtime state — NOT hashed (the determinism golden hash stays
-  // byte-identical when the handling-time feature is off).
+  // OFF path never reads/writes it. Hashed by `World.stateHash` (see `world.ts:601`) — stays 0 when the
+  // handling-time feature is off, so the OFF hash is byte-identical.
   readonly huntCooldownLeft: Uint32Array;
 
   /** Mate-seeking state (life-sim-xa90): 1 while actively looking for a mate; seekTicksLeft counts the
@@ -123,7 +123,8 @@ export class OrganismStore {
   readonly seekTicksLeft: Uint32Array;
 
   /** Parasite attachment state (parasite morph): the slot a parasite is attached to, or -1 if free-living.
-   *  Auxiliary runtime state — NOT hashed (gated on parasiteEnabled; stays -1 when off → byte-identical). */
+   *  Hashed by `World.stateHash` (see `world.ts:601`) — gated on parasiteEnabled; stays -1 when off, so
+   *  the OFF hash is byte-identical. */
   readonly hostSlot: Int32Array;
   /** The host's `genId` at attach time. `hostSlot` alone is an ABA hazard: cullDead frees a dead host's
    *  slot and reproduce can hand that same slot to a newborn LATER IN THE SAME TICK, so an `alive[host]`
@@ -132,7 +133,8 @@ export class OrganismStore {
   readonly hostGen: Uint32Array;
   /** Reverse index for the parasite morph: how many parasites are attached to each creature. Lets a
    *  would-be parasite skip hosts that already have one (prevents swarming — one parasite per host).
-   *  Auxiliary runtime state — NOT hashed (stays 0 when off → byte-identical). */
+   *  Hashed by `World.stateHash` (see `world.ts:601`) — stays 0 when off, so the OFF hash is
+   *  byte-identical. */
   readonly parasiteCount: Uint8Array;
 
   /** Free slots available for allocation (LIFO). Reuse is genId-guarded. */

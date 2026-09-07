@@ -6,6 +6,10 @@
  * The mapping is seed-stable: walls.regionGen[regionIndex] → BiomeType, so a given seed always
  * produces the same biome layout. The atlas is the single source of truth for biome definitions.
  */
+import { ScalarGene, Brain } from './genome';
+
+export type ScalarGeneId = (typeof ScalarGene)[keyof typeof ScalarGene];
+export type BrainId = (typeof Brain)[keyof typeof Brain];
 
 /** The three biome archetypes matching the three wall generators (noise, CA, rooms). */
 export enum BiomeType {
@@ -27,12 +31,12 @@ export interface BiomePalette {
 }
 
 /** Overrides applied to a creature's scalar genes at birth when spawned in this biome.
- *  Each key is a ScalarGene index; the value replaces the config-centered seed. */
-export type ScalarOverrides = Partial<Record<number, number>>;
+ *  Each key is a ScalarGene id; the value replaces the config-centered seed. */
+export type ScalarOverrides = Partial<Record<ScalarGeneId, number>>;
 
 /** Overrides applied to a creature's brain weights at birth when spawned in this biome.
- *  Each key is a Brain index; the value replaces the founder-brain default. */
-export type BrainOverrides = Partial<Record<number, number>>;
+ *  Each key is a Brain id; the value replaces the founder-brain default. */
+export type BrainOverrides = Partial<Record<BrainId, number>>;
 
 export interface BiomeConfig {
   name: string;
@@ -45,12 +49,6 @@ export interface BiomeConfig {
   preferredChannel: number;
 }
 
-export const BIOME_PALETTE: Record<BiomeType, BiomePalette> = {
-  [BiomeType.OpenOcean]: { wallR: 0.25, wallG: 0.4, wallB: 0.55, bgR: 0.05, bgG: 0.12, bgB: 0.2 },
-  [BiomeType.Reef]: { wallR: 0.35, wallG: 0.55, wallB: 0.3, bgR: 0.08, bgG: 0.18, bgB: 0.1 },
-  [BiomeType.Abyss]: { wallR: 0.15, wallG: 0.1, wallB: 0.25, bgR: 0.02, bgG: 0.02, bgB: 0.06 },
-};
-
 /**
  * The biome atlas: one entry per generator type. Indexed by BiomeType (which equals the generator
  * index in walls.ts). This keeps the mapping 1:1 and deterministic.
@@ -58,72 +56,53 @@ export const BIOME_PALETTE: Record<BiomeType, BiomePalette> = {
 export const BIOME_ATLAS: Record<BiomeType, BiomeConfig> = {
   [BiomeType.OpenOcean]: {
     name: 'Open Ocean',
-    palette: BIOME_PALETTE[BiomeType.OpenOcean],
+    palette: { wallR: 0.25, wallG: 0.4, wallB: 0.55, bgR: 0.05, bgG: 0.12, bgB: 0.2 },
     // Fast cruisers with wide vision — the open-water pursuit niche.
     // Costed genes nudged CLOSE to centers so upkeep stays survivable (total extra ~0.05/tick).
     scalarOverrides: {
-      // MAX_SPEED: 6→7 (upkeep +0.05)
-      0: 7,
-      // VISION_RANGE: 140→250 (upkeep +0.066)
-      12: 250,
-      // SHELTER_DRIVE: down to 0 (below center → no upkeep, saves energy)
-      15: 0,
-      // COHESION_DRIVE: down to 0 (below center → saves energy)
-      16: 0,
+      [ScalarGene.MAX_SPEED]: 7, // 6→7 (upkeep +0.05)
+      [ScalarGene.VISION_RANGE]: 250, // 140→250 (upkeep +0.066)
+      [ScalarGene.SHELTER_DRIVE]: 0, // down to 0 (below center → no upkeep, saves energy)
+      [ScalarGene.COHESION_DRIVE]: 0, // down to 0 (below center → saves energy)
     },
     brainOverrides: {
-      // SIGHT_FWD_THRUST: stronger chase (no upkeep on brain weights)
-      9: 1.8,
-      // THRUST_BIAS: higher cruise
-      5: 0.5,
+      [Brain.SIGHT_FWD_THRUST]: 1.8, // stronger chase (no upkeep on brain weights)
+      [Brain.THRUST_BIAS]: 0.5, // higher cruise
     },
     preferredChannel: 0, // channel A (stable, non-drifting)
   },
   [BiomeType.Reef]: {
     name: 'Reef',
-    palette: BIOME_PALETTE[BiomeType.Reef],
+    palette: { wallR: 0.35, wallG: 0.55, wallB: 0.3, bgR: 0.08, bgG: 0.18, bgB: 0.1 },
     // Shelter-seeking, schooling — the crowded-reef niche.
     // Costed genes nudged gently (total extra ~0.045/tick).
     scalarOverrides: {
-      // SENSE_RANGE: 64→40 (below center → no upkeep)
-      2: 40,
-      // SHELTER_DRIVE: 0.06→0.12 (upkeep +0.03)
-      15: 0.12,
-      // COHESION_DRIVE: 0.15→0.3 (upkeep +0.015)
-      16: 0.3,
-      // VISION_RANGE: 140→80 (below center → no upkeep)
-      12: 80,
+      [ScalarGene.SENSE_RANGE]: 40, // 64→40 (below center → no upkeep)
+      [ScalarGene.SHELTER_DRIVE]: 0.12, // 0.06→0.12 (upkeep +0.03)
+      [ScalarGene.COHESION_DRIVE]: 0.3, // 0.15→0.3 (upkeep +0.015)
+      [ScalarGene.VISION_RANGE]: 80, // 140→80 (below center → no upkeep)
     },
     brainOverrides: {
-      // WALL_LAT_TURN: turn away from walls (no upkeep)
-      10: 1.0,
-      // SIGHT_FWD_THRUST: less aggressive chase
-      9: 0.8,
+      [Brain.WALL_LAT_TURN]: 1.0, // turn away from walls (no upkeep)
+      [Brain.SIGHT_FWD_THRUST]: 0.8, // less aggressive chase
     },
     preferredChannel: 1, // channel B (drifting, mobile — matches the reef's dynamic corridors)
   },
   [BiomeType.Abyss]: {
     name: 'Abyss',
-    palette: BIOME_PALETTE[BiomeType.Abyss],
+    palette: { wallR: 0.15, wallG: 0.1, wallB: 0.25, bgR: 0.02, bgG: 0.02, bgB: 0.06 },
     // Big, slow predators — the ambush niche in dark chambers.
     // Costed genes nudged gently (total extra ~0.045/tick).
     scalarOverrides: {
-      // SIZE: 6→9 (upkeep +0.045 — a bigger body with deep reserves)
-      3: 9,
-      // MAX_SPEED: 6→4 (below center → no upkeep)
-      0: 4,
-      // VISION_RANGE: 140→60 (below center → no upkeep)
-      12: 60,
-      // VISION_FOV: 1.0→1.8 (upkeep +0.12... bit high but survivable with the speed/size savings)
-      13: 1.8,
+      [ScalarGene.SIZE]: 9, // 6→9 (upkeep +0.045 — a bigger body with deep reserves)
+      [ScalarGene.MAX_SPEED]: 4, // 6→4 (below center → no upkeep)
+      [ScalarGene.VISION_RANGE]: 60, // 140→60 (below center → no upkeep)
+      [ScalarGene.VISION_FOV]: 1.8, // 1.0→1.8 (upkeep +0.12... bit high but survivable with the speed/size savings)
     },
     brainOverrides: {
-      // SIGHT_FWD_THRUST: ambush burst (no upkeep; gentler than before to avoid predator skew)
-      9: 1.5,
-      // BITE_GATE_BIAS: moderately eager biter
-      53: 3.5,
-      // THRUST_BIAS: low cruise (lurker)
-      5: 0.2,
+      [Brain.SIGHT_FWD_THRUST]: 1.5, // ambush burst (no upkeep; gentler than before to avoid predator skew)
+      [Brain.BITE_GATE_BIAS]: 3.5, // moderately eager biter
+      [Brain.THRUST_BIAS]: 0.2, // low cruise (lurker)
     },
     preferredChannel: 2, // channel C (the scarce, place-coupled resource)
   },

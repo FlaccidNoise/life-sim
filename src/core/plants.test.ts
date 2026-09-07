@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { World } from './world';
 import { Plants, PlantGene, PLANT_GENE_COUNT } from './plants';
+import { PlantScent } from './plant-scent';
 import { defaultConfig, type Config } from './config';
 import { FoodField } from './food-field';
 import { Walls } from './walls';
@@ -133,6 +134,25 @@ describe('Plants — lifecycle', () => {
       plants.step(t);
     }
     expect(plants.liveCount).toBe(0);
+  });
+
+  it('an unaffordable seed cost blocks seeding without killing the parent (I4 solvency guard)', () => {
+    // On collapsed-K ground plantSeedThreshold·K can fall below plantSeedCost — without the solvency
+    // guard the plant would pass the seed gate, pay a cost it cannot afford, and be culled the same
+    // tick (a churn treadmill that turns a fraction of the parent's energy into a full-energy child).
+    // Compare identical founders that differ only in whether plantSeedCost is affordable: the control
+    // must seed at least once; the guarded one must never pay a cost it cannot survive.
+    const shared = { plantFounderCount: 1, plantCapacity: 16, plantSeedCooldown: 0 };
+    const control = bare(shared).plants;
+    const guarded = bare({ ...shared, plantSeedCost: 1e6 }).plants;
+    for (let t = 0; t < 300; t++) {
+      control.buildHash();
+      control.step(t);
+      guarded.buildHash();
+      guarded.step(t);
+    }
+    expect(control.liveCount).toBeGreaterThan(1); // affordable cost: the founder does seed
+    expect(guarded.liveCount).toBe(1); // unaffordable cost: guard blocks every attempt, parent survives
   });
 
   it('the germination cell cap binds: no hash cell ever holds more than plantCellCap plants', () => {
@@ -276,6 +296,26 @@ describe('World — plant wiring', () => {
     const before = w.stateHash();
     w.plantScent!.lo.deposit(10, 10, 1);
     expect(w.stateHash()).not.toBe(before);
+  });
+
+  it('plants.step runs strictly before plantScent.depositAll each tick (§3.1a/§14 ordering)', () => {
+    // The cull must run (inside plants.step) before the deposit reads live plants, or a same-tick
+    // negative E would enter the diffusing scent field. defaultDeathEnergy makes that unreachable, which
+    // is exactly why the order itself — not just the outcome — needs to be pinned.
+    const w = new World(plantConfig());
+    const calls: string[] = [];
+    const stepSpy = vi.spyOn(w.plants!, 'step').mockImplementation((...args) => {
+      calls.push('step');
+      return Plants.prototype.step.apply(w.plants!, args);
+    });
+    const depositSpy = vi.spyOn(w.plantScent!, 'depositAll').mockImplementation((...args) => {
+      calls.push('depositAll');
+      return PlantScent.prototype.depositAll.apply(w.plantScent!, args);
+    });
+    w.step();
+    expect(calls).toEqual(['step', 'depositAll']);
+    stepSpy.mockRestore();
+    depositSpy.mockRestore();
   });
 
   it('the two scent channels split by SPECIES', () => {

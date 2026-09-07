@@ -133,7 +133,7 @@ export function steer(
     // gate (below) and the interoceptive hunger synapses (further down). Computed ONCE, only when a consumer
     // is on, so the all-off path never consults satiatedBar and stays byte-identical to pre-feature.
     let hunger = 0;
-    if (hungerSense || hungerGatesFood || hungerGate > 0) {
+    if (hungerSense || hungerGatesFood || (minTurnRadius > 0 && hungerGate > 0)) {
       const sb = satiatedBar(genes, i, cfg);
       hunger = sb > 0 ? 1 - energy[i]! / sb : 1;
       if (hunger < 0) hunger = 0;

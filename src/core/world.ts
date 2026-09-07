@@ -32,7 +32,7 @@ import {
   scavenge,
 } from './economy';
 import { Hasher } from './hash';
-import { biomeAt } from './biomes';
+import { biomeAt, type ScalarGeneId, type BrainId } from './biomes';
 
 /** Sync attached parasites to their host's post-move position (parasite rides the host; no own
  *  locomotion while attached). Gated on parasiteEnabled so OFF is a no-op → byte-identical. */
@@ -347,12 +347,12 @@ export class World {
       if (biome) {
         const sg0 = i * SCALAR_GENE_COUNT;
         for (const key in biome.scalarOverrides) {
-          const gi = Number(key);
+          const gi = Number(key) as ScalarGeneId;
           s.scalarGenes[sg0 + gi] = biome.scalarOverrides[gi]!;
         }
         const bg0 = i * BRAIN_GENES;
         for (const key in biome.brainOverrides) {
-          const wi = Number(key);
+          const wi = Number(key) as BrainId;
           s.brain[bg0 + wi] = biome.brainOverrides[wi]!;
         }
         // Seed THERMAL_PREF to the region's temperature optimum so founders start adapted to where they

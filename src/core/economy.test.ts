@@ -17,6 +17,7 @@ import {
 } from './economy';
 import { ScalarGene, SCALAR_GENE_COUNT, SCALAR_GENE_SPECS, MIN_BAND } from './genome';
 import { temperatureAt } from './abiotic';
+import { Walls } from './walls';
 
 const W = 128;
 const H = 128;
@@ -58,7 +59,7 @@ describe('metabolize', () => {
     genes(s, i, cfg, { [ScalarGene.EAT_RATE]: 2 });
     s.rebuildLive();
     const food = new FoodField(W, H, 16, 16, 10, 1); // cell full (B=10)
-    metabolize(s, food, hashOf(s), cfg);
+    metabolize(s, food, hashOf(s), cfg, null);
     expect(s.energy[i]).toBeCloseTo(5 + 2 - 0.4); // eat 2, basal 0.4·eff(1), no movement, no gene cost
     expect(food.sampleAt(10, 10)).toBeCloseTo(8); // 2 grazed
     expect(s.age[i]!).toBe(1);
@@ -74,7 +75,7 @@ describe('metabolize', () => {
     genes(s, i, cfg, { [ScalarGene.EAT_RATE]: 2 });
     s.rebuildLive();
     const food = new FoodField(W, H, 16, 16, 10, 1);
-    metabolize(s, food, hashOf(s), cfg);
+    metabolize(s, food, hashOf(s), cfg, null);
     expect(s.energy[i]).toBeCloseTo(5 + 1 - 0.4); // eat 2·0.5 = 1
     expect(food.sampleAt(10, 10)).toBeCloseTo(9); // only 1 grazed — depletion scales with the gate too
   });
@@ -95,7 +96,7 @@ describe('metabolize', () => {
     genes(s, i, cfgOff, { [ScalarGene.EAT_RATE]: 2 });
     s.rebuildLive();
     const food = new FoodField(W, H, 16, 16, 10, 1);
-    metabolize(s, food, hashOf(s), cfgOff);
+    metabolize(s, food, hashOf(s), cfgOff, null);
     expect(s.energy[i]).toBeCloseTo(5 + 2 - 0.4); // full eat 2 despite eatGate 0
   });
 
@@ -109,7 +110,7 @@ describe('metabolize', () => {
     genes(s, i, cfgSat, { [ScalarGene.EAT_RATE]: 2 });
     s.rebuildLive();
     const food = new FoodField(W, H, 16, 16, 10, 1);
-    metabolize(s, food, hashOf(s), cfgSat);
+    metabolize(s, food, hashOf(s), cfgSat, null);
     expect(food.sampleAt(10, 10)).toBeCloseTo(10); // nothing grazed
     expect(s.energy[i]).toBeCloseTo(100 - 0.4); // still pays basal
   });
@@ -125,7 +126,7 @@ describe('metabolize', () => {
     genes(s, i, cfg, { [ScalarGene.EAT_RATE]: 2 });
     s.rebuildLive();
     const food = new FoodField(W, H, 16, 16, 10, 0); // empty → no eat income
-    metabolize(s, food, hashOf(s), cfg);
+    metabolize(s, food, hashOf(s), cfg, null);
     expect(s.energy[i]).toBeCloseTo(50 - 0.4 - 0.01 * 25);
   });
 
@@ -142,7 +143,7 @@ describe('metabolize', () => {
     });
     s.rebuildLive();
     const food = new FoodField(W, H, 16, 16, 10, 0); // empty → isolate the costs
-    metabolize(s, food, hashOf(s), cfg);
+    metabolize(s, food, hashOf(s), cfg, null);
     // upkeep = basal(0.4)·eff(1) + 4·maxSpeedCost(0.05) + 2·eatRateCost(0.15) = 0.4 + 0.2 + 0.3 = 0.9
     expect(s.energy[i]).toBeCloseTo(50 - 0.9);
   });
@@ -156,7 +157,7 @@ describe('metabolize', () => {
     genes(s, i, cfg, { [ScalarGene.METAB_EFF]: 0.5 }); // half-efficiency metabolism
     s.rebuildLive();
     const food = new FoodField(W, H, 16, 16, 10, 0); // empty
-    metabolize(s, food, hashOf(s), cfg);
+    metabolize(s, food, hashOf(s), cfg, null);
     expect(s.energy[i]).toBeCloseTo(50 - 0.4 * 0.5); // basal halved, no gene upkeep
   });
 
@@ -184,7 +185,13 @@ describe('metabolize', () => {
       s.energy[i] = 50;
       genes(s, i, cfg); // herbivore, centred genes → no gene upkeep, efficiency 1
       s.rebuildLive();
-      metabolize(s, food, hashOf(s), defaultConfig({ basalCost: 0.4, moveCost: 0, deadWaterCost }));
+      metabolize(
+        s,
+        food,
+        hashOf(s),
+        defaultConfig({ basalCost: 0.4, moveCost: 0, deadWaterCost }),
+        null,
+      );
       return 50 - s.energy[i];
     };
     expect(lossAt(0)).toBeCloseTo(0.4); // OFF: just basal (no food in dead water → no graze income)
@@ -220,12 +227,58 @@ describe('metabolize', () => {
       const cfg = defaultConfig({ ...opts, temperatureMetabCost });
       genes(s, i, cfg, { [ScalarGene.THERMAL_PREF]: PREF }); // herbivore, centred genes, efficiency 1
       s.rebuildLive();
-      metabolize(s, food, hashOf(s), cfg);
+      metabolize(s, food, hashOf(s), cfg, null);
       return 50 - s.energy[i]!;
     };
     const d = PREF - temp;
     expect(lossAt(0)).toBeCloseTo(0.4); // OFF: just basal·eff(1), no temp tax → byte-identical
     expect(lossAt(2)).toBeCloseTo(0.4 + 0.4 * 2 * d * d); // basal + basalCost·tmc·(pref−temp)²
+  });
+
+  it('walls active: temperature is a per-region step, not the smooth field (Arc C3 region-coupled path)', () => {
+    // I1: metabolize's walls param is required, and production always passes a live Walls — this is the
+    // path the demo actually runs. Two positions inside the SAME Voronoi region must pay identical
+    // temperature cost (a shared regional optimum); two positions in DIFFERENT regions generally must not.
+    const cfg = defaultConfig({
+      worldWidth: W,
+      worldHeight: H,
+      wallCols: 16,
+      wallRows: 16,
+      wallRegionCount: 4,
+      wallDensity: 0,
+      basalCost: 0.4,
+      moveCost: 0,
+      deadWaterCost: 0,
+      temperatureScale: 3,
+      temperatureMetabCost: 2,
+      seed: 7,
+    });
+    const walls = new Walls(W, H, cfg.wallCols, cfg.wallRows, cfg);
+    const food = new FoodField(W, H, 16, 16, 10, 0); // empty → no graze income to muddy the comparison
+    const PREF = 0.2;
+
+    const pts: { x: number; y: number; region: number }[] = [];
+    for (let y = 4; y < H; y += 8)
+      for (let x = 4; x < W; x += 8) pts.push({ x, y, region: walls.regionAt(x, y) });
+    const anchor = pts[0]!;
+    const same = pts.find((p, idx) => idx > 0 && p.region === anchor.region);
+    const diff = pts.find((p) => p.region !== anchor.region);
+    expect(same).toBeDefined();
+    expect(diff).toBeDefined();
+
+    const lossAt = (x: number, y: number): number => {
+      const s = new OrganismStore(4);
+      const i = s.alloc();
+      s.x[i] = x;
+      s.y[i] = y;
+      s.energy[i] = 50;
+      genes(s, i, cfg, { [ScalarGene.THERMAL_PREF]: PREF });
+      s.rebuildLive();
+      metabolize(s, food, hashOf(s), cfg, walls);
+      return 50 - s.energy[i]!;
+    };
+    expect(lossAt(anchor.x, anchor.y)).toBeCloseTo(lossAt(same!.x, same!.y), 10);
+    expect(lossAt(anchor.x, anchor.y)).not.toBeCloseTo(lossAt(diff!.x, diff!.y), 6);
   });
 });
 
@@ -261,21 +314,21 @@ describe('metabolize density-dependent crowding drain (lever D)', () => {
   it('crowdingMortality=0 → no drain even when densely packed (the byte-identical OFF path)', () => {
     const cfg = defaultConfig({ ...base, crowdingMortality: 0 });
     const { s, focal } = cluster(cfg, 9); // focal + 8 neighbors
-    metabolize(s, empty(), hashOf(s), cfg);
+    metabolize(s, empty(), hashOf(s), cfg, null);
     expect(s.energy[focal]).toBeCloseTo(50); // OFF → unchanged (gained 0, costs 0)
   });
 
   it('drains crowdingMortality per neighbor above crowdThreshold', () => {
     const cfg = defaultConfig({ ...base, crowdingMortality: 0.3 });
     const { s, focal } = cluster(cfg, 9); // focal sees 8 neighbors; over = 8 − 6 = 2
-    metabolize(s, empty(), hashOf(s), cfg);
+    metabolize(s, empty(), hashOf(s), cfg, null);
     expect(s.energy[focal]).toBeCloseTo(50 - 0.3 * 2); // drain 0.6
   });
 
   it('a creature inside the free band (neighbors ≤ crowdThreshold) pays nothing', () => {
     const cfg = defaultConfig({ ...base, crowdingMortality: 0.3 });
     const { s, focal } = cluster(cfg, 5); // focal sees 4 ≤ 6 → no drain
-    metabolize(s, empty(), hashOf(s), cfg);
+    metabolize(s, empty(), hashOf(s), cfg, null);
     expect(s.energy[focal]).toBeCloseTo(50);
   });
 
@@ -293,7 +346,7 @@ describe('metabolize density-dependent crowding drain (lever D)', () => {
     s.energy[b] = 50;
     genes(s, b, cfg);
     s.rebuildLive();
-    metabolize(s, empty(), hashOf(s), cfg);
+    metabolize(s, empty(), hashOf(s), cfg, null);
     expect(s.energy[a]).toBeCloseTo(50);
     expect(s.energy[b]).toBeCloseTo(50);
   });
@@ -322,7 +375,7 @@ describe('metabolize two-channel niche split (lever B)', () => {
     genes(s, i, cfg, { [ScalarGene.EAT_RATE]: 2, [ScalarGene.FORAGE_PREF]: 0.5 });
     s.rebuildLive();
     const food = dualFood();
-    metabolize(s, food, hashOf(s), cfg);
+    metabolize(s, food, hashOf(s), cfg, null);
     expect(s.energy[i]).toBeCloseTo(5 + 1.4); // take 1 from A + 1 from B = 2, ×floor 0.7 → gained 1.4
     expect(food.sampleAt(10, 10)).toBeCloseTo(5 - 1); // biomass still depletes by the grazed amount (no windfall)
     expect(food.sampleAt2(10, 10)).toBeCloseTo(5 - 1);
@@ -345,7 +398,7 @@ describe('metabolize two-channel niche split (lever B)', () => {
     genes(s, i, cfgNoPenalty, { [ScalarGene.EAT_RATE]: 2, [ScalarGene.FORAGE_PREF]: 0.5 });
     s.rebuildLive();
     const food = dualFood();
-    metabolize(s, food, hashOf(s), cfgNoPenalty);
+    metabolize(s, food, hashOf(s), cfgNoPenalty, null);
     expect(s.energy[i]).toBeCloseTo(5 + 2); // spec=1 → gained 2 (legacy)
   });
 
@@ -358,7 +411,7 @@ describe('metabolize two-channel niche split (lever B)', () => {
     genes(s, i, cfg, { [ScalarGene.EAT_RATE]: 2, [ScalarGene.FORAGE_PREF]: 1 });
     s.rebuildLive();
     const food = dualFood();
-    metabolize(s, food, hashOf(s), cfg);
+    metabolize(s, food, hashOf(s), cfg, null);
     expect(s.energy[i]).toBeCloseTo(5 + 3); // takeB 2, spec=1.5 → gained 3
     expect(food.sampleAt(10, 10)).toBeCloseTo(5); // channel A untouched
     expect(food.sampleAt2(10, 10)).toBeCloseTo(5 - 2); // channel B depleted by 2
@@ -380,7 +433,7 @@ describe('metabolize two-channel niche split (lever B)', () => {
     genes(s, i, cfg0, { [ScalarGene.EAT_RATE]: 2, [ScalarGene.FORAGE_PREF]: 1 });
     s.rebuildLive();
     const food = dualFood();
-    metabolize(s, food, hashOf(s), cfg0);
+    metabolize(s, food, hashOf(s), cfg0, null);
     expect(s.energy[i]).toBeCloseTo(5 + 2); // takeB 2, spec=1 → gained 2 (no specialization bonus)
   });
 });
@@ -419,7 +472,7 @@ describe('metabolize two-channel availability-weighting (fugitive-B-niche fix)',
   it('LEGACY: a soft B-specialist (pref 0.8) on A-only food under-eats (wastes its B share on empty B)', () => {
     const s = forager(cfgLegacy);
     const food = aOnlyFood();
-    metabolize(s, food, hashOf(s), cfgLegacy);
+    metabolize(s, food, hashOf(s), cfgLegacy, null);
     // budget 2 split by pref: takeA=2·0.2=0.4 from A, takeB=2·0.8=1.6 but B is empty → 0. spec(0.8)=1.18.
     expect(s.energy[0]).toBeCloseTo(5 + 0.4 * 1.18); // gained 0.472 — starving despite A all around
     expect(food.sampleAt(10, 10)).toBeCloseTo(5 - 0.4); // only 0.4 of the available A grazed
@@ -428,7 +481,7 @@ describe('metabolize two-channel availability-weighting (fugitive-B-niche fix)',
   it('AVAIL-WEIGHTED: the same forager spends its full budget on the present resource (A)', () => {
     const s = forager(cfgAvail);
     const food = aOnlyFood();
-    metabolize(s, food, hashOf(s), cfgAvail);
+    metabolize(s, food, hashOf(s), cfgAvail, null);
     // availability renormalizes the budget onto A (B absent): takeA=2 from A, takeB=0. spec(0.8)=1.18.
     expect(s.energy[0]).toBeCloseTo(5 + 2 * 1.18); // gained 2.36 — fallback feeds it (5× the legacy)
     expect(food.sampleAt(10, 10)).toBeCloseTo(5 - 2); // full budget grazed from A
@@ -439,7 +492,7 @@ describe('metabolize two-channel availability-weighting (fugitive-B-niche fix)',
     const food = aOnlyFood();
     food.grazeAt(10, 10, 100); // strip channel A too → this cell is now barren in both channels
     const before = s.energy[0]!;
-    metabolize(s, food, hashOf(s), cfgAvail);
+    metabolize(s, food, hashOf(s), cfgAvail, null);
     expect(s.energy[0]).toBeLessThanOrEqual(before); // no food gained (eSum=0 guard); costs are zeroed in cfg
     expect(s.energy[0]).toBeCloseTo(before); // basalCost/moveCost are 0 here → energy unchanged, not NaN
     expect(food.sampleAt(10, 10)).toBeCloseTo(0); // nothing to graze
@@ -459,10 +512,10 @@ describe('metabolize two-channel availability-weighting (fugitive-B-niche fix)',
     };
     const sL = mk(cfgLegacy);
     const fL = new FoodField(W, H, 16, 16, 10, 1, 2, 0.5);
-    metabolize(sL, fL, hashOf(sL), cfgLegacy);
+    metabolize(sL, fL, hashOf(sL), cfgLegacy, null);
     const sA = mk(cfgAvail);
     const fA = new FoodField(W, H, 16, 16, 10, 1, 2, 0.5);
-    metabolize(sA, fA, hashOf(sA), cfgAvail);
+    metabolize(sA, fA, hashOf(sA), cfgAvail, null);
     expect(sA.energy[0]).toBe(sL.energy[0]); // exact equality — same arithmetic when both channels are present
     expect(fA.sampleAt(10, 10)).toBe(fL.sampleAt(10, 10));
     expect(fA.sampleAt2(10, 10)).toBe(fL.sampleAt2(10, 10));
@@ -517,7 +570,7 @@ describe('metabolize three-channel place-coupled niche (F1)', () => {
     });
     s.rebuildLive();
     const cBefore = food.sampleAt3(pC.x, pC.y);
-    metabolize(s, food, hashOf(s), cfg);
+    metabolize(s, food, hashOf(s), cfg, null);
     // takeC = budget·wC = 2, spec = 1+0.5·1 = 1.5 → gained 3.
     expect(s.energy[i]).toBeCloseTo(5 + 3);
     expect(food.sampleAt3(pC.x, pC.y)).toBeCloseTo(cBefore - 2); // channel C depleted by exactly the take
@@ -540,7 +593,7 @@ describe('metabolize three-channel place-coupled niche (F1)', () => {
       [ScalarGene.FORAGE_PREF_C]: 1, // pure C eater
     });
     s.rebuildLive();
-    metabolize(s, food, hashOf(s), cfg);
+    metabolize(s, food, hashOf(s), cfg, null);
     expect(s.energy[i]).toBeCloseTo(5); // wA=wB=0, no C here → grazed nothing, no costs → unchanged
     expect(food.sampleAt(pA.x, pA.y)).toBeGreaterThan(5); // the A resource it can't use is untouched
   });
@@ -562,7 +615,7 @@ describe('metabolize three-channel place-coupled niche (F1)', () => {
       [ScalarGene.FORAGE_PREF_C]: 0.5,
     });
     s.rebuildLive();
-    metabolize(s, food, hashOf(s), cfg);
+    metabolize(s, food, hashOf(s), cfg, null);
     // Only C present → eSum = wC·avC, so takeC = budget·(eC/eSum) = budget = 2 (availability-weighting works).
     // maxW = 0.5 → s01 = 0.25 → spec = floor 0.7 + (1.5−0.7)·0.25 = 0.9 (the generalist penalty applies).
     // gained = 2·0.9 = 1.8.
@@ -591,7 +644,7 @@ describe('metabolize diet-axis disruptive selection (dietGeneralistFloor)', () =
     s.energy[i] = 5;
     genes(s, i, cfg, { [ScalarGene.EAT_RATE]: 2, [ScalarGene.DIET]: diet });
     s.rebuildLive();
-    metabolize(s, food(), hashOf(s), cfg);
+    metabolize(s, food(), hashOf(s), cfg, null);
     return s.energy[i]! - 5; // == graze income (all costs zeroed)
   };
 
@@ -670,7 +723,7 @@ describe('metabolize size→move-cost coupling', () => {
     genes(s, i, cfg, { [ScalarGene.SIZE]: 12 }); // 2× reference → moveFactor (12/6)^1 = 2
     s.rebuildLive();
     const food = new FoodField(W, H, 16, 16, 10, 0); // empty → isolate the costs
-    metabolize(s, food, hashOf(s), cfg);
+    metabolize(s, food, hashOf(s), cfg, null);
     expect(s.energy[i]).toBeCloseTo(50 - 0.4 - 0.01 * 2 * 25); // movement cost doubled by size
   });
 });
@@ -1072,7 +1125,7 @@ describe('hunt Holling Type-II handling-time refractory (huntHandlingTime)', () 
     for (let expected = 4; expected >= 1; expected--) {
       const preyBefore = s.energy[prey]!;
       const predBefore = s.energy[pred]!;
-      metabolize(s, new FoodField(W, H, 16, 16, 10, 0), hash, cfg); // empty food → no graze income
+      metabolize(s, new FoodField(W, H, 16, 16, 10, 0), hash, cfg, null); // empty food → no graze income
       expect(s.huntCooldownLeft[pred]!).toBe(expected); // decremented by exactly 1
       hunt(s, hash, cfg);
       expect(s.energy[prey]).toBeCloseTo(preyBefore); // busy handling → no bite landed
@@ -1080,7 +1133,7 @@ describe('hunt Holling Type-II handling-time refractory (huntHandlingTime)', () 
     }
 
     // One more metabolize drives the cooldown to 0 → the predator may feed again on the next hunt.
-    metabolize(s, new FoodField(W, H, 16, 16, 10, 0), hash, cfg);
+    metabolize(s, new FoodField(W, H, 16, 16, 10, 0), hash, cfg, null);
     expect(s.huntCooldownLeft[pred]!).toBe(0);
     const preyBefore = s.energy[prey]!;
     hunt(s, hash, cfg);
@@ -1105,7 +1158,7 @@ describe('hunt Holling Type-II handling-time refractory (huntHandlingTime)', () 
     const hash = mkHash(s);
     hunt(s, hash, off);
     expect(s.huntCooldownLeft[pred]!).toBe(0); // OFF path never writes the counter
-    metabolize(s, new FoodField(W, H, 16, 16, 10, 0), hash, off);
+    metabolize(s, new FoodField(W, H, 16, 16, 10, 0), hash, off, null);
     const preyBefore = s.energy[prey]!;
     hunt(s, hash, off); // no refractory → bites again immediately
     expect(s.energy[prey]).toBeCloseTo(preyBefore - 5);
@@ -1453,7 +1506,7 @@ describe('metabolize senescence tax (age stages)', () => {
     s.age[i] = age;
     s.rebuildLive();
     const food = new FoodField(W, H, 16, 16, 10, 0); // empty → isolate the costs
-    metabolize(s, food, hashOf(s), c);
+    metabolize(s, food, hashOf(s), c, null);
     return 50 - s.energy[i]!;
   };
 
@@ -1503,7 +1556,7 @@ describe('metabolize SENESCENCE_AGE longevity cost (geneUpkeep)', () => {
     s.age[i] = 0;
     s.rebuildLive();
     const food = new FoodField(W, H, 16, 16, 10, 0); // empty
-    metabolize(s, food, hashOf(s), cfg);
+    metabolize(s, food, hashOf(s), cfg, null);
     return 50 - s.energy[i]!;
   };
 

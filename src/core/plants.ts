@@ -358,7 +358,12 @@ export class Plants {
       energy[i] = e;
       if (age[i]! < 65535) age[i] = age[i]! + 1;
       if (seedCooldownLeft[i]! > 0) seedCooldownLeft[i] = seedCooldownLeft[i]! - 1;
-      else if (e >= cfg.plantSeedThreshold * K && K > minK) this.trySeed(i, g, px, py, e);
+      // Solvency guard: on collapsed-K ground the threshold (plantSeedThreshold·K) can fall below
+      // plantSeedCost, so seeding would pay more than the parent has and get culled the same tick — a
+      // churn treadmill that turns a ~0.3-energy parent into a net energy SOURCE via the 4-energy child.
+      // Require the parent to survive the cost (with room above the death floor) before it may seed.
+      else if (e - cfg.plantSeedCost > deathE && e >= cfg.plantSeedThreshold * K && K > minK)
+        this.trySeed(i, g, px, py, e);
       const eNow = energy[i]!;
       if (eNow <= deathE || age[i]! >= maxAge) this.free(i);
     }
