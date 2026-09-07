@@ -491,7 +491,8 @@ export class World {
   }
 
   /** Deterministic fingerprint of the dynamic state (the determinism-contract digest). Covers kinematics,
-   *  energy, age, genId, the mate-seeking counters, ALL heritable scalar genes + hue, and the active fields.
+   *  energy, age, genId, the mate-seeking counters, the parasite link + the breed/hunt cooldowns, ALL
+   *  heritable scalar genes + hue, and the active fields.
    *  The brain weights are intentionally excluded: they drive steer→motion, so a divergence surfaces in
    *  x/y/v transitively, and a full per-creature brain hash on every frame would be prohibitively costly. */
   stateHash(): string {
@@ -515,6 +516,10 @@ export class World {
       seekTicksLeft,
       scalarGenes,
       hue,
+      hostSlot,
+      parasiteCount,
+      breedCooldownLeft,
+      huntCooldownLeft,
     } = s;
     for (let k = 0; k < liveCount; k++) {
       const i = liveIndices[k]!;
@@ -528,6 +533,12 @@ export class World {
       h.u32(genId[i]!);
       h.u32(seeking[i]!);
       h.u32(seekTicksLeft[i]!);
+      // Live counters that steer FUTURE positions rather than the current one. A divergence in them
+      // surfaces in x/y a tick or more later, so folding them in here removes the detection lag.
+      h.u32(hostSlot[i]! >>> 0);
+      h.u32(parasiteCount[i]!);
+      h.u32(breedCooldownLeft[i]!);
+      h.u32(huntCooldownLeft[i]!);
       // Heritable genome: motor genes are caught transitively via motion, but motor-inert genes (DISPLAY/
       // PREFERENCE; hue when scent is off) would otherwise be an invisible divergence — fold them in here.
       const g = i * SCALAR_GENE_COUNT;

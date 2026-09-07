@@ -67,6 +67,10 @@ const GENE_NAMES = [
   'display',
   'preference',
   'damping',
+  'thermalPref',
+  'photosynth',
+  'parasitism',
+  'scavenger',
 ] as const;
 
 // Float32 storage can nudge a hard-clamped gene a hair past its (double) bound — e.g. 0.98 stores

@@ -529,7 +529,8 @@ export function eatParcels(store: OrganismStore, parcels: Parcels, cfg: Config):
 
 /** Free every organism whose energy has run out (≤ 0). Returns the death count. When `deathPositions`
  *  is provided, appends each dying creature's (x,y) to it (for the scavenger step — death events as a
- *  transient energy source). The array is cleared by the caller before passing. */
+ *  transient energy source). The array is OVERWRITTEN from index 0 each call, not cleared — reads of it
+ *  are bounded by the returned death count. */
 export function cullDead(store: OrganismStore, deathPositions?: Float64Array): number {
   const { liveIndices, liveCount, energy, x, y, hostSlot, parasiteCount } = store;
   let deaths = 0;
