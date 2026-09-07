@@ -7,7 +7,14 @@
  * Cell size ≥ the interaction cutoff (2·cellRadius), so a 3×3 neighborhood is guaranteed to contain
  * every potential interactor.
  */
-import { type OrganismStore } from './store';
+/** What build() needs from a pool: an ascending live list and the positions it indexes. Both
+ *  OrganismStore and the plant pool satisfy it. */
+export interface LivePositions {
+  readonly liveIndices: Uint32Array;
+  readonly liveCount: number;
+  readonly x: Float64Array;
+  readonly y: Float64Array;
+}
 
 export class SpatialHash {
   readonly cols: number;
@@ -44,8 +51,10 @@ export class SpatialHash {
     return r < 0 ? 0 : r >= this.rows ? this.rows - 1 : r;
   }
 
-  /** Rebuild from the store's current live set (call after rebuildLive, before any query). */
-  build(store: OrganismStore): void {
+  /** Rebuild from a pool's current live set (call after its rebuildLive, before any query). Structural,
+   *  not OrganismStore-typed: the plant pool has its own hash at its own cell size and satisfies the same
+   *  four fields, so one counting sort serves both. */
+  build(store: LivePositions): void {
     const { cols, rows, counts, bucketStart, sorted } = this;
     const nb = cols * rows;
     counts.fill(0);
