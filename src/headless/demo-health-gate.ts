@@ -19,6 +19,7 @@ import { World } from '../core/world';
 import { defaultConfig } from '../core/config';
 import { ScalarGene, SCALAR_GENE_COUNT } from '../core/genome';
 import { livingWorldOverrides } from '../app/living-world-config';
+import { writeSync } from 'node:fs';
 
 // ── Health thresholds ────────────────────────────────────────────────────────────────────────────────────
 // Grounded in the shipped-demo validation (this gate, 12k/warmup6k, seeds 1-3, floor 0.7 + B4 cap): pred%
@@ -100,12 +101,22 @@ function runSeed(seed: number): SeedResult {
   return { seed, pop: liveCount, predFrac, dietSigma, postWarmupBirths, fails };
 }
 
-console.log(`demo-health-gate · ${TICKS} ticks · warmup ${WARMUP} · seeds ${SEEDS.join(',')}`);
-console.log('seed    pop    pred%   σDIET   births>warm  verdict');
-const results = SEEDS.map(runSeed);
-for (const r of results) {
+/** Write one line to stdout and flush it NOW. A demo-scale seed takes minutes to hours, and this run gets
+ *  killed often enough (memory pressure) that a buffered report is a report you never see: a killed run used
+ *  to leave nothing but the header. writeSync bypasses the async pipe buffer, so every completed seed is on
+ *  disk before the next one starts. */
+function emit(line: string): void {
+  writeSync(1, line + '\n');
+}
+
+emit(`demo-health-gate · ${TICKS} ticks · warmup ${WARMUP} · seeds ${SEEDS.join(',')}`);
+emit('seed    pop    pred%   σDIET   births>warm  verdict');
+const results: SeedResult[] = [];
+for (const seed of SEEDS) {
+  const r = runSeed(seed);
+  results.push(r);
   const verdict = r.fails.length === 0 ? 'PASS' : 'FAIL: ' + r.fails.join('; ');
-  console.log(
+  emit(
     `${String(r.seed).padEnd(8)}${String(r.pop).padEnd(7)}${(100 * r.predFrac).toFixed(1).padEnd(8)}` +
       `${r.dietSigma.toFixed(3).padEnd(8)}${String(r.postWarmupBirths).padEnd(13)}${verdict}`,
   );
