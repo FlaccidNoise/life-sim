@@ -484,6 +484,32 @@ describe('Baldwin within-life learning (reward-modulated)', () => {
     expect(s.learnedBrain[b + Brain.FWD_THRUST]!).toBeGreaterThan(1.0); // it did consolidate, just bounded
   });
 
+  it('leaves the evolve-only blocks (W1, glow bias + hidden→glow) exactly at the genome', () => {
+    // steer() writes no eligibility for the W1 input→hidden matrix (the Hebbian rule cannot credit-assign
+    // reward back through a hidden unit) or for the glow output bias and its hidden weights. resetLearned
+    // syncs learnedBrain to brain at birth, so their deviation is identically 0 forever — 101 of 185
+    // weights that learn() no longer walks. Assert the invariant that makes skipping them safe.
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.heading[i] = 0;
+    s.senseX[i] = 1;
+    setBrain(s, i, { FWD_THRUST: 1.0 });
+    const b = i * BRAIN_GENES;
+    for (let g = HIDDEN_W1; g < BRAIN_GENES; g++) s.brain[b + g] = 0.3 + 0.001 * g; // non-zero instinct
+    s.resetLearned(i);
+    s.rebuildLive();
+    for (let t = 0; t < 50; t++) {
+      s.prevEnergy[i] = 50;
+      s.energy[i] = 60; // sustained reward, so anything plastic WILL move
+      steer(s, true, 0.5, false, CFG);
+      learn(s, 1.0, 0.1, 0.5, 5); // decay 0.1: a walked-but-dead weight would still be pinned to instinct
+    }
+    for (let g = HIDDEN_W1; g < HIDDEN_W2; g++) expect(s.learnedBrain[b + g]).toBe(s.brain[b + g]); // W1 input→hidden
+    for (let g = GLOW_BIAS; g < GLOW_HID + HIDDEN_UNITS; g++)
+      expect(s.learnedBrain[b + g]).toBe(s.brain[b + g]); // glow bias + hidden→glow
+    expect(s.learnedBrain[b + Brain.FWD_THRUST]).not.toBe(s.brain[b + Brain.FWD_THRUST]); // non-vacuity
+  });
+
   it('does NOT make the bias synapses plastic (the spin runaway is removed)', () => {
     const s = new OrganismStore(4);
     const i = s.alloc();

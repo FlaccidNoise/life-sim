@@ -248,7 +248,8 @@ export function steer(
       dietN = genes[sg + ScalarGene.DIET]!;
       crowdN = crowding[i]! / crowdSenseNorm;
       if (crowdN > 1) crowdN = 1;
-      turnRaw += learnedBrain[b + Brain.SIZE_TURN]! * sizeN + learnedBrain[b + Brain.DIET_TURN]! * dietN;
+      turnRaw +=
+        learnedBrain[b + Brain.SIZE_TURN]! * sizeN + learnedBrain[b + Brain.DIET_TURN]! * dietN;
       thrustRaw +=
         learnedBrain[b + Brain.SIZE_THRUST]! * sizeN + learnedBrain[b + Brain.DIET_THRUST]! * dietN;
       turnRaw += learnedBrain[b + Brain.CROWD_TURN]! * crowdN;
@@ -485,7 +486,8 @@ export function steer(
     // Local-crowding eligibility (A1b): pre = crowdN, post = motor output. CROWD VARIES within a life, so it
     // LEARNS (unlike A1a's constant own-size/diet, which get NO elig). Gated on bodySense.
     if (bodySense) {
-      elig[b + Brain.CROWD_TURN] = keep * elig[b + Brain.CROWD_TURN]! + eligLambda * crowdN * turnRaw;
+      elig[b + Brain.CROWD_TURN] =
+        keep * elig[b + Brain.CROWD_TURN]! + eligLambda * crowdN * turnRaw;
       elig[b + Brain.CROWD_THRUST] =
         keep * elig[b + Brain.CROWD_THRUST]! + eligLambda * crowdN * thrustRaw;
       // Fertility-under-foot eligibility (A1c): pre = fertN, post = motor output. FERT VARIES within a life,
@@ -524,6 +526,23 @@ export function steer(
  * Hebbian a positive-feedback spin runaway), and the learned DEVIATION from the heritable instinct is
  * bounded, so learning refines instinct and dies with the individual (children copy the genome).
  */
+/**
+ * The brain-gene index ranges `learn()` walks, as [start, end) pairs. Everything outside them gets NO
+ * eligibility trace in steer(), so its update reduces to dev = (learnedBrain − brain)·keep, and
+ * resetLearned sets those equal at birth — dev is identically 0 for the life of the creature. Walking
+ * them was 101 of 185 weights of provably dead work per creature per tick, in the innermost loop of the
+ * sim. The two skipped blocks are the W1 input→hidden matrix (the Hebbian rule cannot credit-assign
+ * reward back through a hidden unit, so W1 is evolve-only) and the glow output bias + its hidden weights.
+ */
+const PLASTIC_RANGES = [
+  0,
+  HIDDEN_W1, // the named linear synapses (biases skipped individually inside the loop)
+  HIDDEN_W2,
+  GLOW_BIAS, // hidden→output W2
+  GLOW_SENSE_LAT_TURN,
+  BRAIN_GENES, // the 4 glow-sense weights
+] as const;
+
 export function learn(
   store: OrganismStore,
   learningRate: number,
@@ -540,24 +559,27 @@ export function learn(
     if (reward > rewardClamp) reward = rewardClamp;
     else if (reward < -rewardClamp) reward = -rewardClamp;
     const b = i * BRAIN_GENES;
-    for (let g = 0; g < BRAIN_GENES; g++) {
-      // Biases are NOT plastic: their input is the constant 1, so Hebbian pre·post just accumulates the
-      // motor output's own sign → a positive-feedback runaway that saturates turn/thrust (= spinning in
-      // place). Sensorimotor synapses self-correct (their input vanishes as the creature aligns).
-      if (
-        g === Brain.TURN_BIAS ||
-        g === Brain.THRUST_BIAS ||
-        g === Brain.EAT_GATE_BIAS ||
-        g === Brain.BITE_GATE_BIAS ||
-        g === Brain.SCENT_GATE_BIAS ||
-        g === Brain.BREED_GATE_BIAS
-      )
-        continue;
-      const w0 = brain[b + g]!; // genome instinct = the anchor the deviation relaxes toward
-      let dev = (learnedBrain[b + g]! - w0) * keep + learningRate * reward * elig[b + g]!;
-      if (dev > maxLearnDeviation) dev = maxLearnDeviation;
-      else if (dev < -maxLearnDeviation) dev = -maxLearnDeviation;
-      learnedBrain[b + g] = w0 + dev;
+    for (let r = 0; r < PLASTIC_RANGES.length; r += 2) {
+      const end = PLASTIC_RANGES[r + 1]!;
+      for (let g = PLASTIC_RANGES[r]!; g < end; g++) {
+        // Biases are NOT plastic: their input is the constant 1, so Hebbian pre·post just accumulates the
+        // motor output's own sign → a positive-feedback runaway that saturates turn/thrust (= spinning in
+        // place). Sensorimotor synapses self-correct (their input vanishes as the creature aligns).
+        if (
+          g === Brain.TURN_BIAS ||
+          g === Brain.THRUST_BIAS ||
+          g === Brain.EAT_GATE_BIAS ||
+          g === Brain.BITE_GATE_BIAS ||
+          g === Brain.SCENT_GATE_BIAS ||
+          g === Brain.BREED_GATE_BIAS
+        )
+          continue;
+        const w0 = brain[b + g]!; // genome instinct = the anchor the deviation relaxes toward
+        let dev = (learnedBrain[b + g]! - w0) * keep + learningRate * reward * elig[b + g]!;
+        if (dev > maxLearnDeviation) dev = maxLearnDeviation;
+        else if (dev < -maxLearnDeviation) dev = -maxLearnDeviation;
+        learnedBrain[b + g] = w0 + dev;
+      }
     }
   }
 }
