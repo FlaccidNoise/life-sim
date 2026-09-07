@@ -702,6 +702,11 @@ function provisionAndFinalize(
   energy[child] = childEnergy;
   store.prevEnergy[child] = childEnergy;
   energy[mom] = energy[mom]! - childEnergy - cfg.reproOverhead;
+  // Re-baseline the mother's learning reward. reward = energy − prevEnergy, and prevEnergy was snapshotted
+  // by learn() earlier this tick; without this re-sync the provisioning debit (childEnergy + reproOverhead)
+  // lands as NEXT tick's reward, pinned at −learnRewardClamp, so every birth punishes the eligibility traces
+  // of the foraging that earned the breed. Breeding is an investment, not a loss.
+  store.prevEnergy[mom] = energy[mom]!;
   if (cfg.breedCooldown > 0) store.breedCooldownLeft[mom] = cfg.breedCooldown;
   cfg.onBirth?.(mom, store.genId[mom]!, child, store.genId[child]!, dad);
 }
