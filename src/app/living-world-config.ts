@@ -91,6 +91,13 @@ export const livingWorldOverrides: Partial<Config> = {
   pheromoneEnabled: true,
   hungerSense: true, // DEMO: the brain senses its own energy deficit (dead in default config — audit)
   scentIdentity: true,
+  // PLANTS AS ENTITIES (increment 1 — the pool runs in parallel; nothing eats it yet). Rooted, brainless
+  // producers on the soil-fertility substrate, with their own 6-gene genome and their own forked RNG, so
+  // the organism stream is byte-identical to plants-off and this increment is measurable in isolation.
+  // MEASURED at 8k, seeds 1-3: ~17k plants holding ~800k standing crop against the plan's 700,000
+  // prediction, NND 13.8 u (inside biteRange 16 — the direct fix for the recorded NND-75u density wall),
+  // 4.5 plants inside a grazer's reach, every fertile pocket occupied, 1.09x the plants-off ms/tick.
+  plantsEnabled: true,
   // Sight-only drifting food parcels + the census-proven vision-cost cut → the dead vision genes get a
   // reason to evolve up (this tuning lives in the demo so defaultConfig stays byte-identical to legacy).
   parcelsEnabled: true,
