@@ -288,6 +288,27 @@ export class FoodField {
             const ch = biomeChannelFn(pcs[p]! * this.cellW, prs[p]! * this.cellH);
             pocketChannels[p] = ch >= 0 && ch < this.channels ? ch : p % this.channels;
           }
+          // Coverage guarantee. Round-robin gave every channel a near-equal share; the biome path gives a
+          // channel as many pockets as its biome type has regions, which is seed-dependent and can reach
+          // zero. A channel with no pocket has capacity 0 everywhere, and logistic regrowth has an
+          // absorbing state at B=0, so it would be permanently extinct while its FORAGE_PREF/SENSE_RANGE
+          // genes keep drawing RNG and its specialists starve. Reassign the lowest-index pocket from the
+          // fullest channel until every channel has one. Pure count arithmetic, RNG-free.
+          const perChannel = new Int32Array(this.channels);
+          for (let p = 0; p < count; p++) perChannel[pocketChannels[p]!]!++;
+          for (let ch = 0; ch < this.channels && ch < count; ch++) {
+            if (perChannel[ch]! > 0) continue;
+            let from = 0;
+            for (let c = 1; c < this.channels; c++)
+              if (perChannel[c]! > perChannel[from]!) from = c;
+            for (let p = 0; p < count; p++) {
+              if (pocketChannels[p] !== from) continue;
+              pocketChannels[p] = ch;
+              perChannel[from]!--;
+              perChannel[ch]!++;
+              break;
+            }
+          }
         } else {
           for (let p = 0; p < count; p++) pocketChannels[p] = p % this.channels;
         }
