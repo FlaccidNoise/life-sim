@@ -16,16 +16,17 @@ export const livingWorldOverrides: Partial<Config> = {
   // 8 seeds (mean end-pop 326); fs≥2 sweeps bodies off food → 1/8 seeds goes extinct. flowPush stays live.
   flowPushStrength: 0.25,
   motorSquash: true,
-  // Kinematic steering (spin fix). Turn rate used to be independent of speed, so a slow creature at the
-  // MAX_TURN rail cornered inside its own body. spin-probe seed 1, 6000t: baseline 13.5% spinner windows
-  // at 56.7% turn saturation, pop 12664, pred 62.9%, σDIET 0.193 → these values 4.6% spinners at 6.5%
-  // saturation, pop 5367, pred 45.0%, σDIET 0.256. Better than baseline on diet diversity as well as spin.
-  // turnFloor is NOT a rounding detail — it is the second lever. At 0.05 the ecology collapses (pop 660,
-  // pred 3.0%, σDIET 0.132: a creature too slow to turn can neither flee nor close a chase); 0.15 recovers
-  // (pop 5175, σDIET 0.323) but leaves twice the spinners. turnGainRatio 2 is worse than 4 on every axis.
-  minTurnRadius: 4,
-  turnFloor: 0.1,
-  turnGainRatio: 4,
+  // Kinematic steering (spin fix) — MEASURED AND HELD BACK. The knobs work: bounding |dθ| by speed/4 with
+  // turnFloor 0.1 and squash gain 4·MAX_TURN cut spinner windows 15.6%→5.9% and turn saturation
+  // 28.5-56.7%→6.5-10.3% over 3 seeds at 6000t. But the bound also shifts the flee/chase balance, and the
+  // demo does not survive it at 12000t. demo-health-gate, seed 1, warmup 6000, paired same-horizon runs:
+  //   these values      pop    40  pred 55.0%  σDIET 0.133  births 499   FAIL (stalled + monoculture)
+  //   legacy motor      pop  1877  pred 52.4%  σDIET 0.228  births 8595  PASS
+  // At 6000t the same setting reads pop 5367 / σDIET 0.256 and PASSES, so this is a decay between 6k and
+  // 12k, not a bad seed — exactly the horizon trap the Arc B finding warns about. Turn-limited prey cannot
+  // evade, so predation runs as an energy printer until the prey base is gone. Re-enable only with an
+  // ecology-side compensation (e.g. exempt prey under sight-threat from the bound) and a paired 12k gate.
+  minTurnRadius: 0,
   // Density (the proven lever): more + bigger pockets → dense → predators + niche partitioning return.
   // B-food-2: separate A/B patches (mode 1), blobbier (radius 8→14), drifting per-pocket → two-niche diversity.
   // count: the plan called for 40→20 but 20 STARVES the demo at the realistic 8000-tick horizon (2/3 seeds
@@ -215,4 +216,14 @@ export const livingWorldOverrides: Partial<Config> = {
   scavengeRange: 20, // range a scavenger senses death events
   scavengerCost: 0.05, // scavenging apparatus upkeep — expensive enough to be a niche, not a monoculture
   scavenger: 0.3, // founder center (drawn uniform[0,1] at seed)
+  // ── The morph economy's restoring force ──────────────────────────────────────────────────────────────
+  // The three morphs above added income channels that, unlike grazing and hunting, kept paying a creature
+  // that was already full — so a lineage that got ahead compounded instead of saturating and the demo lost
+  // its attractor. Measured at 6000 ticks, seeds 1-4 (scratchpad/eco-retune.md): without the cap the end
+  // population spans 80 / 1448 / 908 / 2513 (a 31× spread, seed 1 declining monotonically to near-death and
+  // 0% predators); with it, 1103 / 1376 / 1639 / 1183 — a 1.5× spread, every seed turning over (births after
+  // t=3000: 3987 / 6275 / 13334 / 4631) and all three guilds present on every seed. Every further retune
+  // tried on top of it (parasite carry cost, gaussian parasite founding, higher morph upkeep, corpseEnergy,
+  // predationGain, basalCost) re-opened a 100-330× spread, so the cap is the whole tune.
+  morphSatiationCap: true,
 };

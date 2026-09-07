@@ -625,8 +625,27 @@ export interface Config {
   parasiteSizeRatio: number;
   /** Basal upkeep per unit PARASITISM above the founder center (attachment apparatus maintenance). */
   parasiteCost: number;
+  /** Extends the satiation cap that already governs grazing (metabolize) and hunting (hunt) to the three
+   *  morph income channels: photosynthesis, the parasite's host drain, and scavenged corpse energy. A FULL
+   *  creature stops earning from them, exactly as a full grazer stops grazing and a full hunter stops
+   *  biting. Without it those three channels mint past the breed bar into a hoard that never becomes
+   *  offspring, so a morph that gets ahead compounds instead of saturating — the demo economy's missing
+   *  restoring force. false = uncapped (byte-identical to before the cap existed). */
+  morphSatiationCap: boolean;
+  /** Fraction of an attached rider's move cost (moveCost·moveFactor·speed²) charged to its HOST instead.
+   *  A rider is carried, so it pays nothing for the host's locomotion — without this the world loses that
+   *  energy cost entirely and attaching is free income. 1 = pure transfer (total move cost unchanged by
+   *  attachment); 0 = the cost vanishes (byte-identical to no carry term). */
+  parasiteCarryCost: number;
   /** PARASITISM founder CENTER. Drawn UNIFORM over [0,1] when enabled; pinned here with no draw when off. */
   parasite: number;
+  /** How the PARASITISM founder pool is drawn. true = UNIFORM over [0,1] (the whole axis, so committed
+   *  parasites exist from t=0 — the shipped default, shared with PHOTOSYNTH/SCAVENGER/THERMAL_PREF).
+   *  false = gaussian around the `parasite` center like an ordinary gene, which makes the morph a founding
+   *  MINORITY instead of a universal trait. Uniform seeding was measured as the dominant term in the
+   *  2026-07-15 ecology regression: most of the population attaches, so parasitism is never a niche — it is
+   *  a population-wide sink (pre-fix) or a population-wide subsidy (post-fix). One RNG draw either way. */
+  parasiteFounderUniform: boolean;
   /** Host-seeking sight gain: scales the PARASITISM gene's pull toward LARGER creatures in the sight vector
    *  (sense.ts) so a parasite's neural net actively steers it toward hosts instead of random wandering.
    *  0 = no host-seeking (parasites wander blindly). */
@@ -1093,7 +1112,8 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     // smoothly tanh-squash turn/thrust → graded, legible steering (kills the motor-saturation spin).
     motorSquash: false,
     turnGainRatio: 1, // 1 = the original squash gain (byte-identical); raise it to widen the graded region
-    minTurnRadius: 4, // ON by default: a body cannot corner tighter than this (kills the on-the-spot spin)
+    minTurnRadius: 0, // OFF: the bound kills the spin but decays the demo's ecology by 12000t — see
+    // living-world-config.ts. Set it to ~cellRadius (with turnGainRatio 4) to opt in.
     turnFloor: 0.05, // rad/tick a stopped creature may still pivot at (escapes walls)
     evolvableDamping: true,
     reverseThrustFraction: 0.5, // ON by default: creatures can back away at half forward power
@@ -1151,7 +1171,10 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     parasiteAttachRange: 20, // must be within this to latch on
     parasiteSizeRatio: 1.5, // host must be ≥1.5× the parasite's size (small parasites, big hosts)
     parasiteCost: 0.02, // attachment apparatus upkeep per unit above center
+    parasiteCarryCost: 0, // OFF by default — the demo opts in (see living-world-config)
+    morphSatiationCap: false, // OFF by default — the demo opts in (see living-world-config)
     parasite: 0.3,
+    parasiteFounderUniform: true, // whole-axis founding pool (as shipped since the morph landed)
     parasiteHostSeekGain: 0, // OFF default — no host-seeking sight pull (the ablation). Demo opts in.
     // Scavenger (scavenger morph): OFF by default (gene never draws, scavenge step skipped → byte-identical).
     // Flip on to add a death-following niche.
