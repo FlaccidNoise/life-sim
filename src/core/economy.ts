@@ -412,7 +412,12 @@ export function metabolize(
     const d01 = 2 * Math.abs(diet - 0.5);
     const dietSpec = cfg.dietGeneralistFloor + (1 - cfg.dietGeneralistFloor) * d01;
     gained *= dietSpec;
-    const speed2 = parasiteRiders && hostSlot[i]! >= 0 ? 0 : vx[i]! * vx[i]! + vy[i]! * vy[i]!;
+    // Two speeds, deliberately: speed2 is how fast the body ACTUALLY moves (what photosynthesis stillness
+    // reads), moveSpeed2 is what it is CHARGED for. An attached rider is carried — syncParasites copies the
+    // host's velocity onto it — so it pays no locomotion cost, but it is still physically moving and must
+    // not harvest light as if it were sitting still.
+    const speed2 = vx[i]! * vx[i]! + vy[i]! * vy[i]!;
+    const moveSpeed2 = parasiteRiders && hostSlot[i]! >= 0 ? 0 : speed2;
     // Bigger bodies are costlier to move (mass): the speed² cost scales by (size/cellRadius)^sizeMoveCostExp.
     let moveFactor = 1;
     if (cfg.sizeMoveCostExp > 0) {
@@ -428,7 +433,7 @@ export function metabolize(
       if (over > 0) basal = basalCost * (1 + cfg.senescenceRate * over);
     }
     const upkeep = basal * efficiency + geneUpkeep(scalarGenes, i, cfg);
-    energy[i] = energy[i]! + gained - upkeep - moveCost * moveFactor * speed2;
+    energy[i] = energy[i]! + gained - upkeep - moveCost * moveFactor * moveSpeed2;
     // Dead-water tax (isolation lever): extra drain where fertility is low — max in the dead gaps, 0 inside
     // a pocket — so crossing the open water is risky and residents stay home. Gated so OFF (0) skips the
     // fertility lookup entirely and the energy line above stays byte-identical.
