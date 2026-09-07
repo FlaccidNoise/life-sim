@@ -423,7 +423,7 @@ export class World {
     this.lastDeaths = cullDead(s, this.deathPositions);
     // SCAVENGE: scavengers absorb energy from this tick's death events (transient corpse biomass).
     // Gated (no-op when off → byte-identical). Runs AFTER cull so dead creatures don't scavenge themselves.
-    if (cfg.scavengerEnabled) scavenge(s, cfg, this.deathPositions, this.lastDeaths);
+    if (cfg.scavengerEnabled) scavenge(s, this.hash, cfg, this.deathPositions, this.lastDeaths);
     this.lastBirths = reproduce(
       s,
       this.rng,

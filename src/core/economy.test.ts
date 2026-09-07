@@ -5,7 +5,15 @@ import { ScentField, Scent } from './scent-field';
 import { SpatialHash } from './spatial-hash';
 import { Rng } from './rng';
 import { defaultConfig, type Config } from './config';
-import { metabolize, hunt, cullDead, reproduce, satiatedBar, depositScent } from './economy';
+import {
+  metabolize,
+  hunt,
+  cullDead,
+  reproduce,
+  satiatedBar,
+  depositScent,
+  scavenge,
+} from './economy';
 import { ScalarGene, SCALAR_GENE_COUNT, SCALAR_GENE_SPECS, MIN_BAND } from './genome';
 import { temperatureAt } from './abiotic';
 
@@ -1685,5 +1693,80 @@ describe('sexual reproduction (crossover + compatibility + seeking)', () => {
     const after = s.energy[0]! + s.energy[1]! + s.energy[2]!;
     // total drops by exactly reproOverhead (provisioning is an internal transfer mother→child).
     expect(before - after).toBeCloseTo(defaultConfig({}).reproOverhead, 5);
+  });
+});
+
+describe('scavenge (corpse absorption)', () => {
+  const cfg = defaultConfig({
+    scavengerEnabled: true,
+    scavengeRange: 20,
+    corpseEnergy: 20,
+    worldWidth: W,
+    worldHeight: H,
+  });
+  const hashOf = (s: OrganismStore): SpatialHash => {
+    const h = new SpatialHash(W, H, 2 * cfg.cellRadius, s.capacity);
+    h.build(s);
+    return h;
+  };
+  /** One corpse at (100,100) plus the scavengers the caller places. */
+  const deaths = (): Float64Array => Float64Array.from([100, 100]);
+
+  it('splits a corpse by gene² / Σgenes among the scavengers in range', () => {
+    const s = new OrganismStore(4);
+    const a = s.alloc();
+    const b = s.alloc();
+    for (const i of [a, b]) {
+      s.x[i] = 105; // 5u from the corpse < scavengeRange 20
+      s.y[i] = 100;
+      s.energy[i] = 50;
+      const base = i * SCALAR_GENE_COUNT;
+      for (let g = 0; g < SCALAR_GENE_COUNT; g++)
+        s.scalarGenes[base + g] = cfg[SCALAR_GENE_SPECS[g]!.centerKey];
+    }
+    s.scalarGenes[a * SCALAR_GENE_COUNT + ScalarGene.SCAVENGER] = 1;
+    s.scalarGenes[b * SCALAR_GENE_COUNT + ScalarGene.SCAVENGER] = 0.5;
+    s.rebuildLive();
+    scavenge(s, hashOf(s), cfg, deaths(), 1);
+    expect(s.energy[a]! - 50).toBeCloseTo((1 / 1.5) * 20 * 1);
+    expect(s.energy[b]! - 50).toBeCloseTo((0.5 / 1.5) * 20 * 0.5);
+  });
+
+  it('a scavenger beyond scavengeRange gets nothing', () => {
+    const s = new OrganismStore(4);
+    const a = s.alloc();
+    s.x[a] = 200; // 100u away > scavengeRange 20
+    s.y[a] = 100;
+    s.energy[a] = 50;
+    const base = a * SCALAR_GENE_COUNT;
+    for (let g = 0; g < SCALAR_GENE_COUNT; g++)
+      s.scalarGenes[base + g] = cfg[SCALAR_GENE_SPECS[g]!.centerKey];
+    s.scalarGenes[base + ScalarGene.SCAVENGER] = 1;
+    s.rebuildLive();
+    scavenge(s, hashOf(s), cfg, deaths(), 1);
+    expect(s.energy[a]).toBe(50);
+  });
+
+  it('a creature that died this tick takes no share of the corpse pool', () => {
+    // The hash is built pre-cull and liveIndices is not rebuilt until the end of the tick, so the dead
+    // are still visible to this pass. They must not dilute the split.
+    const s = new OrganismStore(4);
+    const alive = s.alloc();
+    const dying = s.alloc();
+    for (const i of [alive, dying]) {
+      s.x[i] = 105;
+      s.y[i] = 100;
+      s.energy[i] = 50;
+      const base = i * SCALAR_GENE_COUNT;
+      for (let g = 0; g < SCALAR_GENE_COUNT; g++)
+        s.scalarGenes[base + g] = cfg[SCALAR_GENE_SPECS[g]!.centerKey];
+      s.scalarGenes[base + ScalarGene.SCAVENGER] = 1;
+    }
+    s.rebuildLive();
+    const hash = hashOf(s); // built while both are alive
+    s.energy[dying] = 0;
+    cullDead(s);
+    scavenge(s, hash, cfg, deaths(), 1);
+    expect(s.energy[alive]! - 50).toBeCloseTo(20); // the whole corpse, not half of it
   });
 });
