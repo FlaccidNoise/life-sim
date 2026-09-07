@@ -297,26 +297,6 @@ export class World {
         this.pheroSenseGenes,
       );
       seedScalarGenes(s.scalarGenes, i, this.rng, this.config); // incl. life-history + trophic genes
-      // Apply biome-specific presets based on spawn position (deterministic: position → region → biome →
-      // fixed overrides; no RNG draw, so the determinism contract holds). Gives founders in different
-      // wall-biomes different starting brains + scalar genes → regional differentiation from t0.
-      const biome = biomeAt(this.walls, bx, by);
-      if (biome) {
-        const sg0 = i * SCALAR_GENE_COUNT;
-        for (const key in biome.scalarOverrides) {
-          const gi = Number(key);
-          s.scalarGenes[sg0 + gi] = biome.scalarOverrides[gi]!;
-        }
-        const bg0 = i * BRAIN_GENES;
-        for (const key in biome.brainOverrides) {
-          const wi = Number(key);
-          s.brain[bg0 + wi] = biome.brainOverrides[wi]!;
-        }
-        // Seed THERMAL_PREF to the biome's target temperature so founders start adapted to their
-        // region (no temperature-mismatch death spiral at t0). Evolution then tunes it further.
-        if (this.config.temperatureMetabCost > 0)
-          s.scalarGenes[sg0 + ScalarGene.THERMAL_PREF] = biome.targetTemp;
-      }
       // Seed predators as OMNIVORES (diet 0.7): they survive on plants through the sparse early phase
       // AND hunt opportunistically, so the trait isn't wiped before prey density builds (without
       // prey-sensing a pure hunter starves first). Diet then evolves up where hunting pays.
@@ -335,6 +315,28 @@ export class World {
         // boost 0 leaves the predator floor at lo → byte-identical to the un-boosted seed.
         const plo = isPredator ? lo + this.config.predatorSizeBoost * (hi - lo) : lo;
         s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.SIZE] = this.rng.range(plo, hi);
+      }
+      // Apply biome-specific presets based on spawn position (deterministic: position → region → biome →
+      // fixed overrides; no RNG draw, so the determinism contract holds). Gives founders in different
+      // wall-biomes different starting brains + scalar genes → regional differentiation from t0. Runs LAST
+      // of the gene seeds so a biome override is the final writer — the DIET/SIZE seeds above used to
+      // silently overwrite it (the Abyss biome's SIZE 9 never survived on any founder).
+      const biome = biomeAt(this.walls, bx, by);
+      if (biome) {
+        const sg0 = i * SCALAR_GENE_COUNT;
+        for (const key in biome.scalarOverrides) {
+          const gi = Number(key);
+          s.scalarGenes[sg0 + gi] = biome.scalarOverrides[gi]!;
+        }
+        const bg0 = i * BRAIN_GENES;
+        for (const key in biome.brainOverrides) {
+          const wi = Number(key);
+          s.brain[bg0 + wi] = biome.brainOverrides[wi]!;
+        }
+        // Seed THERMAL_PREF to the biome's target temperature so founders start adapted to their
+        // region (no temperature-mismatch death spiral at t0). Evolution then tunes it further.
+        if (this.config.temperatureMetabCost > 0)
+          s.scalarGenes[sg0 + ScalarGene.THERMAL_PREF] = biome.targetTemp;
       }
       // Founder starts at its own (seeded) BIRTH_ENERGY gene — consistent with how offspring are provisioned.
       s.energy[i] = s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.BIRTH_ENERGY]!;
