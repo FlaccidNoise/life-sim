@@ -381,11 +381,27 @@ describe('computeBrainState', () => {
   it('clamps turn to the maxTurn gene', () => {
     const s = setup();
     const i = 0;
-    // Force a huge turn signal via the bias weight; turn must clamp to ±maxTurn.
+    // Force a huge turn signal via the bias weight; turn must clamp to ±maxTurn. minTurnRadius off so this
+    // isolates the GENE clamp — the speed bound (which would cap a stationary creature at turnFloor) has its
+    // own test below.
     s.learnedBrain[i * BRAIN_GENES + 4] = 999; // TURN_BIAS
-    const st = computeBrainState(s, cfg, i);
+    const st = computeBrainState(s, defaultConfig({ minTurnRadius: 0 }), i);
     expect(st.turn).toBeCloseTo(s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.MAX_TURN]!, 10);
     expect(st.turnRaw).toBeGreaterThan(st.turn); // raw exceeds the clamp
+  });
+
+  it('bounds the drawn turn by minTurnRadius, matching a real steer() run', () => {
+    const mtr = defaultConfig({ minTurnRadius: 6, turnFloor: 0.05 });
+    const s = setup();
+    const i = 0;
+    s.learnedBrain[i * BRAIN_GENES + 4] = 999; // TURN_BIAS — asks for far more turn than the body can execute
+    s.vx[i] = 1.2; // speed 1.2 → cap 1.2/6 = 0.2 rad/tick
+    s.vy[i] = 0;
+    const h0 = s.heading[i]!;
+    const st = computeBrainState(s, mtr, i);
+    expect(st.turn).toBeCloseTo(0.2, 10);
+    steer(s, false, mtr.eligLambda, mtr.motorSquash, mtr);
+    expect(st.turn).toBeCloseTo(s.heading[i]! - h0, 10); // the panel matches the sim
   });
 
   it('matches steer() under motorSquash and eases below the limit (ON-mode contract)', () => {

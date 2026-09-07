@@ -40,9 +40,11 @@ import { SCENT_CHANNELS } from './scent-field';
  * Run each creature's runtime brain: food gradient (heading frame) → turn + thrust. Turns the heading
  * and SETS the force buffer (repulsion += on top afterward). Turn + thrust are clamped to this
  * creature's OWN evolved MAX_TURN / MAX_THRUST genes, and the resulting force is scaled by its
- * metabolic-efficiency gene (thrifty bodies push weaker). When `learn` is true, also accumulates the
- * per-synapse eligibility trace (pre·post, blended by `eligLambda`) for the later weight update — the
- * trace bridges the gap between a steering decision and the energy reward it earns ticks later.
+ * metabolic-efficiency gene (thrifty bodies push weaker). With `cfg.minTurnRadius` on, the turn is also
+ * bounded by the creature's current speed, so cornering hard costs it forward motion (a body, not a
+ * rudder). When `learn` is true, also accumulates the per-synapse eligibility trace (pre·post, blended by
+ * `eligLambda`) for the later weight update — the trace bridges the gap between a steering decision and
+ * the energy reward it earns ticks later.
  *
  * When `cfg.hungerSense` is on, an extra interoceptive input is mixed in: hunger = clamp(1 −
  * energy/satiatedBar, 0, 1) (0 = full, 1 = empty), gated on two evolvable synapses (interoception
@@ -79,6 +81,7 @@ export function steer(
   const { wallSenseX, wallSenseY, flowSenseX, flowSenseY, scentSenseX, scentSenseY } = store;
   const { glowSenseX, glowSenseY } = store;
   const { learnedBrain, elig, energy } = store;
+  const { vx: velX, vy: velY } = store; // last tick's velocity — the speed the minTurnRadius bound uses
   const genes = store.scalarGenes;
   const hungerSense = cfg.hungerSense;
   const hungerGatesFood = cfg.hungerGatesFood;
@@ -99,6 +102,11 @@ export function steer(
   const cellRadius = cfg.cellRadius; // SIZE normalization divisor (2·cellRadius)
   const crowdSenseNorm = cfg.crowdSenseNorm; // A1b: local-crowding count → [0,1] divisor
   const foodCap = cfg.foodCap; // A1c: fertility-under-foot normalization divisor (local biomass → [0,1])
+  // Turn-command gain as a multiple of MAX_TURN (motorSquash only). 1 = the original squash. Guarded at the
+  // boundary because a ratio ≤0 would divide by 0 or flip the turn's sign.
+  const turnGainRatio = cfg.turnGainRatio > 0 ? cfg.turnGainRatio : 1;
+  const minTurnRadius = cfg.minTurnRadius; // world units; 0 = off (turn rate independent of speed)
+  const turnFloor = Math.max(0, cfg.turnFloor); // rad/tick a stopped creature may still pivot at
   const hiddenLayer = cfg.hiddenLayer; // nonlinear tanh layer (conditional logic) on top of the linear map
   const moodGlow = cfg.moodGlow; // bioluminescence output read from the hidden "mood" layer (display + signal)
   // Per-creature scratch for the hidden layer (reused each iteration — no per-creature allocation).
@@ -313,7 +321,7 @@ export function steer(
       // Smooth saturation: out = max·tanh(raw/max). Slope→1 near 0 (small signals steer ~linearly), eases
       // asymptotically into ±max — no bang-bang snap to the limit (the saturated-rudder spin). Guard the
       // max≤0 edge: tanh(raw/0) is ±1/NaN, so a zero gene would otherwise poison the output → force 0.
-      turn = maxTurn > 0 ? maxTurn * Math.tanh(turnRaw / maxTurn) : 0;
+      turn = maxTurn > 0 ? maxTurn * Math.tanh(turnRaw / (maxTurn * turnGainRatio)) : 0;
       // tanh is symmetric, so negative thrustRaw yields a negative (reverse) thrust; floor it at the reverse
       // cap. With reverseFrac 0 the floor is 0, reproducing the old forward-only squash exactly.
       thrust = maxThrust > 0 ? maxThrust * Math.tanh(thrustRaw / maxThrust) : 0;
@@ -327,6 +335,15 @@ export function steer(
       thrust = thrustRaw;
       if (thrust < reverseFloor) thrust = reverseFloor;
       else if (thrust > maxThrust) thrust = maxThrust;
+    }
+    // Kinematic bound (minimum turning radius): a body travelling at `speed` cannot corner tighter than
+    // minTurnRadius, so |dθ| ≤ speed/minTurnRadius (units/tick ÷ units = rad/tick). Velocity is last tick's
+    // — integrate() runs after steer() — which is the speed the turn is actually executed at. turnFloor
+    // keeps a stopped creature able to pivot at all, else it can never turn away from a wall it stalled on.
+    if (minTurnRadius > 0) {
+      const cap = Math.max(turnFloor, Math.hypot(velX[i]!, velY[i]!) / minTurnRadius);
+      if (turn > cap) turn = cap;
+      else if (turn < -cap) turn = -cap;
     }
     const nh = h + turn;
     heading[i] = nh;

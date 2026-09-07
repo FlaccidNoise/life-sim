@@ -740,7 +740,10 @@ describe('sexual reproduction — determinism + liveness', () => {
 
   it('liveness guardrail: world stays alive + breeds under sexual reproduction', () => {
     const w = new World(demoish());
-    for (let t = 0; t < 300; t++) w.step();
+    // 900 ticks, not 300: sexual births in this small test world are rare (breedCooldown 150 + a mate-
+    // encounter bottleneck), so at 300 the guardrail rides on ONE birth and flips to 0 on any dynamics
+    // change. 900 gives a margin of 3 births for ~1.2s, and the population assertion still has room.
+    for (let t = 0; t < 900; t++) w.step();
     expect(w.population).toBeGreaterThan(50); // not collapsed to extinction
     expect(w.totalBirths).toBeGreaterThan(0); // sexual births actually happen
   });
