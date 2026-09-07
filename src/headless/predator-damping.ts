@@ -193,7 +193,8 @@ for (const v of VARIANTS) {
     );
     console.log(`   pred% @10k steps: ${shape}`);
     // Machine-readable line for the parallel sweep aggregator (exact, unrounded).
-    const { traj: _omit, ...rec } = r;
+    const { traj, ...rec } = r;
+    void traj;
     console.log(`RESULT_JSON ${JSON.stringify(rec)}`);
   }
 }

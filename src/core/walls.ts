@@ -45,7 +45,7 @@ export class Walls {
   private readonly _active: boolean;
   private pocketCells: number[] = []; // fine-cell index of each food-pocket centroid (cached in generate)
   private region: Int32Array = new Int32Array(0); // fine-cell → Voronoi region index (built in generate)
-  private regionGen: Int32Array = new Int32Array(0); // region index → genType (which generator carved it)
+  regionGen: Int32Array = new Int32Array(0); // region index → genType (which generator carved it)
 
   constructor(
     private readonly worldWidth: number,
@@ -198,6 +198,30 @@ export class Walls {
   /** Write the fine grid as 0/255 row-major for the render layer. */
   fillTexture(out: Uint8Array): void {
     for (let i = 0; i < this.solid.length; i++) out[i] = this.solid[i] ? 255 : 0;
+  }
+
+  /** Write the fine grid as BIOME-TINTED RGB (row-major, 3 bytes per cell). Open cells = black (the
+   *  fragment shader discards them so the food layer shows through); solid cells = the biome's wall color
+   *  from BIOME_ATLAS. Needs the biome palette imported lazily to avoid a core→render dependency. */
+  fillTextureRGB(out: Uint8Array, biomeColors: { r: number; g: number; b: number }[]): void {
+    if (!this._active) {
+      out.fill(0);
+      return;
+    }
+    for (let i = 0; i < this.solid.length; i++) {
+      const j = i * 3;
+      if (!this.solid[i]) {
+        out[j] = 0;
+        out[j + 1] = 0;
+        out[j + 2] = 0;
+      } else {
+        const gen = this.regionGen[this.region[i]!] ?? 0;
+        const c = biomeColors[gen] ?? { r: 0.16, g: 0.18, b: 0.22 };
+        out[j] = Math.round(c.r * 255);
+        out[j + 1] = Math.round(c.g * 255);
+        out[j + 2] = Math.round(c.b * 255);
+      }
+    }
   }
 
   // ── generation ────────────────────────────────────────────────────────────

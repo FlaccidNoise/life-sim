@@ -125,6 +125,15 @@ export class OrganismStore {
   /** Parasite attachment state (parasite morph): the slot a parasite is attached to, or -1 if free-living.
    *  Auxiliary runtime state — NOT hashed (gated on parasiteEnabled; stays -1 when off → byte-identical). */
   readonly hostSlot: Int32Array;
+  /** The host's `genId` at attach time. `hostSlot` alone is an ABA hazard: cullDead frees a dead host's
+   *  slot and reproduce can hand that same slot to a newborn LATER IN THE SAME TICK, so an `alive[host]`
+   *  check passes against an unrelated creature and the parasite silently rides/drains the newborn.
+   *  Comparing this against the live `genId[host]` detects the recycle. Auxiliary — NOT hashed. */
+  readonly hostGen: Uint32Array;
+  /** Reverse index for the parasite morph: how many parasites are attached to each creature. Lets a
+   *  would-be parasite skip hosts that already have one (prevents swarming — one parasite per host).
+   *  Auxiliary runtime state — NOT hashed (stays 0 when off → byte-identical). */
+  readonly parasiteCount: Uint8Array;
 
   /** Free slots available for allocation (LIFO). Reuse is genId-guarded. */
   private readonly freeStack: number[] = [];
@@ -180,6 +189,8 @@ export class OrganismStore {
     this.seeking = new Uint8Array(capacity);
     this.seekTicksLeft = new Uint32Array(capacity);
     this.hostSlot = new Int32Array(capacity);
+    this.hostGen = new Uint32Array(capacity);
+    this.parasiteCount = new Uint8Array(capacity);
     this.liveIndices = new Uint32Array(capacity);
     this.liveGen = new Uint32Array(capacity);
     this.clear();
@@ -200,6 +211,8 @@ export class OrganismStore {
     this.seeking.fill(0);
     this.seekTicksLeft.fill(0);
     this.hostSlot.fill(-1);
+    this.hostGen.fill(0);
+    this.parasiteCount.fill(0);
     this.freeStack.length = 0;
     for (let i = this.capacity - 1; i >= 0; i--) this.freeStack.push(i);
     this.liveCount = 0;
@@ -217,6 +230,8 @@ export class OrganismStore {
     this.seeking[slot] = 0;
     this.seekTicksLeft[slot] = 0;
     this.hostSlot[slot] = -1; // a newborn is free-living (no inherited attachment)
+    this.hostGen[slot] = 0;
+    this.parasiteCount[slot] = 0; // a newborn has no parasites on it
     this.eatGate[slot] = 1; // default full eating until steer() recomputes (avoids a stale pre-steer read)
     this.biteGate[slot] = 1; // default bite-open until steer() recomputes (A2a; avoids a stale pre-steer read)
     this.scentGate[slot] = 1; // default broadcast-open until steer() recomputes (A2b; avoids a stale pre-steer read)
@@ -241,6 +256,9 @@ export class OrganismStore {
   free(slot: number): void {
     if (this.alive[slot] === 0) return;
     this.alive[slot] = 0;
+    this.hostSlot[slot] = -1; // detach any parasite link (host or parasite dying)
+    this.hostGen[slot] = 0;
+    this.parasiteCount[slot] = 0; // no parasites on a dead creature
     this.freeStack.push(slot);
   }
 

@@ -237,6 +237,10 @@ export class FoodField {
     // driftPockets steps each pocket along its own; false keeps the legacy two per-channel global dirs
     // (byte-identical). Stored before the drawDriftDirections call so it sees the flag.
     perPocketDrift = false,
+    // Biome-aware channel assignment: when provided (and pocketChannelMode===1), each pocket's channel
+    // is taken from its biome's preferredChannel instead of round-robin p%channels. Returns the preferred
+    // channel (0..channels-1) or -1 for "no biome → fall back to round-robin". Pure read of (x,y) → no RNG.
+    biomeChannelFn?: (x: number, y: number) => number,
   ): void {
     const { cols, rows } = this;
     this.patchCenters.length = 0;
@@ -279,7 +283,14 @@ export class FoodField {
         const median = count > 0 ? sortedProx[Math.floor(count / 2)]! : 0;
         for (let p = 0; p < count; p++) pocketChannels[p] = prox[p]! < median ? 0 : 1;
       } else if (this.pocketChannelMode === 1) {
-        for (let p = 0; p < count; p++) pocketChannels[p] = p % this.channels;
+        if (biomeChannelFn) {
+          for (let p = 0; p < count; p++) {
+            const ch = biomeChannelFn(pcs[p]! * this.cellW, prs[p]! * this.cellH);
+            pocketChannels[p] = ch >= 0 && ch < this.channels ? ch : p % this.channels;
+          }
+        } else {
+          for (let p = 0; p < count; p++) pocketChannels[p] = p % this.channels;
+        }
       }
       // else mode 0: all-A (Int32Array already zero-initialised)
     }
