@@ -170,8 +170,8 @@ void main() {
 // ── Bioluminescence glow pass ──────────────────────────────────────────────────────────────────
 // A second pass over the SAME live-creature points, drawn LARGER with a soft radial falloff and
 // composited additively (SRC_ALPHA, ONE) so overlapping halos pool into brighter pockets — the
-// deep-sea "lit creature" look. Intensity per creature ~ activity (speed) × energy, scaled by a
-// global u_glow knob. Hue follows the active color-mode (same channels as the dot pass) so the
+// deep-sea "lit creature" look. Intensity per creature is the brain's own glow output (a_mood),
+// scaled by a global u_glow knob. Hue follows the active color-mode (same channels as the dot pass) so the
 // bloom matches its creature; a cool abyssal floor (GLOW_CORE_*) is mixed toward the core so warm
 // creatures still read as bioluminescent teal rather than fire. Role tints the bloom radius
 // (predators flare wider) for a function-colored cue. Purely additive + bracketed by BLEND
@@ -182,7 +182,6 @@ in float a_hue;
 in float a_size;
 in float a_diet;
 in float a_vis;
-in float a_spd;
 in float a_shape;                 // 0 herbivore · 1 omnivore · 2 predator → flare width
 in float a_efrac;                 // energy band fraction [0,1]
 in float a_mood;                  // brain glow output [0,1] → bioluminescence brightness
@@ -429,7 +428,6 @@ export class Renderer {
   private readonly gSize: number;
   private readonly gDiet: number;
   private readonly gVis: number;
-  private readonly gSpd: number;
   private readonly gShape: number;
   private readonly gEfrac: number;
   private readonly gMood: number;
@@ -515,7 +513,6 @@ export class Renderer {
     this.gSize = gl.getAttribLocation(this.glowProgram, 'a_size');
     this.gDiet = gl.getAttribLocation(this.glowProgram, 'a_diet');
     this.gVis = gl.getAttribLocation(this.glowProgram, 'a_vis');
-    this.gSpd = gl.getAttribLocation(this.glowProgram, 'a_spd');
     this.gShape = gl.getAttribLocation(this.glowProgram, 'a_shape');
     this.gEfrac = gl.getAttribLocation(this.glowProgram, 'a_efrac');
     this.gMood = gl.getAttribLocation(this.glowProgram, 'a_mood');
@@ -999,9 +996,6 @@ export class Renderer {
         gl.bindBuffer(gl.ARRAY_BUFFER, this.visBuffer);
         gl.enableVertexAttribArray(this.gVis);
         gl.vertexAttribPointer(this.gVis, 1, gl.FLOAT, false, 0, 0);
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.spdBuffer);
-        gl.enableVertexAttribArray(this.gSpd);
-        gl.vertexAttribPointer(this.gSpd, 1, gl.FLOAT, false, 0, 0);
         gl.bindBuffer(gl.ARRAY_BUFFER, this.shapeBuffer);
         gl.enableVertexAttribArray(this.gShape);
         gl.vertexAttribPointer(this.gShape, 1, gl.FLOAT, false, 0, 0);
