@@ -648,6 +648,27 @@ describe('World — Phase 0 determinism contract', () => {
     }
   });
 
+  it('no founder is stranded at the world origin when every spawn sample lands in rock', () => {
+    // The spawn scan scored a solid candidate -1 and accepted on `f > best` with best starting at -1, so
+    // solid candidates were never accepted. When all 8 tries landed in rock, bx/by kept their 0
+    // initialisers and the founder spawned at (0,0) — inside rock, permanently frozen, with every other
+    // such founder stacked on the same point. wallDensity is pushed high here to force the case.
+    const cfg = smallConfig({
+      seed: 4,
+      wallRegionCount: 5,
+      wallDensity: 0.97,
+      initialPopulation: 200,
+    });
+    const w = new World(cfg);
+    const s = w.store;
+    let atOrigin = 0;
+    for (let k = 0; k < s.liveCount; k++) {
+      const i = s.liveIndices[k]!;
+      if (s.x[i] === 0 && s.y[i] === 0) atOrigin++;
+    }
+    expect(atOrigin).toBe(0);
+  });
+
   it('a biome scalar override survives the founder DIET/SIZE seeds (Abyss keeps its SIZE)', () => {
     // The biome preset block used to run BEFORE the DIET/SIZE seeds, so founderSizeSpread (2.5 by default)
     // unconditionally overwrote ScalarGene.SIZE and the Abyss biome's "big slow ambusher" identity was

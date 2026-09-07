@@ -263,7 +263,13 @@ export class World {
       } else {
         // Try a few random spots; take the first in a pocket (else the last tried) so founders start on
         // food rather than starving in dead water.
-        let best = -1;
+        // best starts BELOW the -1 a solid candidate scores, so a solid candidate is still accepted when
+        // it is all there is. With `best = -1` the guard `f > best` rejected every one of them, and if all
+        // 8 tries landed in rock bx/by kept their 0 initialisers: the founder spawned at the world origin,
+        // possibly inside solid rock, where sweptCollide finds every axis blocked and freezes it forever
+        // while computeRepulsion skips its co-located twins (d2 === 0). Unreachable at wallDensity 0.43
+        // (0 occurrences across demo seeds 1-8) but reachable if the density is raised.
+        let best = -2;
         for (let t = 0; t < 8; t++) {
           const tx = this.rng.range(0, worldWidth);
           const ty = this.rng.range(0, worldHeight);
