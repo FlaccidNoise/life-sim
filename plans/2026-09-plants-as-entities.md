@@ -573,7 +573,25 @@ Per tick at 20,000 plants and 5,000 creatures, using the corrected density (§3.
 
 **Instrument, already present:** `stepMsEma` in `main.ts:668` — an EMA of wall-clock ms per sim tick, shown on the 500 ms perf cadence alongside `world.hash.stats()` (`main.ts:871`). Headless equivalent: wrap `world.step()` in `performance.now()` in `plant-probe.ts` and report mean ms/tick over the last 1,000 ticks.
 
-**Baseline:** increment 0. Measure at `plantsEnabled: false`, at steady-state population, before any code.
+**Baseline: MEASURED, increment 0.** Demo config headless, `plantsEnabled` absent, mean ms/tick over
+ticks 2000-6000, seeds 1-3 (macOS, node 22, other agents' jobs on other cores):
+
+| seed | end pop | ms/tick, plants OFF |
+|---|---|---|
+| 1 | 5,367 | 66.56 |
+| 2 | 70 | 16.57 |
+| 3 | 10,292 | 86.85 |
+| **mean** | | **56.66** |
+
+Cost tracks population at roughly 8 µs per creature per tick; seed 2 is cheap because that seed very
+nearly collapses (pop 70), which is a separate demo-health question and not a plant one.
+
+**This measurement invalidates the absolute threshold below, and that is increment 0's real finding.**
+The 0.26 ms/tick figure was derived as 16.7 ms ÷ 64 on the assumption that the demo holds 64× speed. The
+plants-OFF baseline is **218× over it**, so no plant work of any kind could ever meet it and a gate
+nothing can pass gates nothing. Either the browser demo does not in fact hold 64× at a 5k population, or
+the browser and headless numbers diverge in a way nobody has measured — the browser `stepMsEma` half of
+increment 0 is still owed and is what would settle it. **Until then the ratio is the only usable gate.**
 
 | trigger | meaning | response |
 |---|---|---|
@@ -581,7 +599,12 @@ Per tick at 20,000 plants and 5,000 creatures, using the corrected density (§3.
 | > 1.25 × baseline | the plant subsystem costs more than a quarter of the sim | reserve list below, re-measure |
 | > 0.26 ms/tick absolute | 64× speed no longer holds 60 fps (16.7 ms ÷ 64 ticks) | same, and blocking for the demo |
 
-The absolute number matters more than the ratio: the demo is watched at 64×, so 0.26 ms/tick is the real budget, and a baseline already near it leaves no headroom regardless of what the plants add.
+~~The absolute number matters more than the ratio~~ — **retracted by the increment-0 measurement above.**
+The baseline is 56.66 ms/tick, so the absolute row cannot discriminate between a cheap plant subsystem and
+an expensive one. Increment 1 measures **1.09×** (70.50 / 21.86 / 93.56 ms/tick on seeds 1/2/3 against the
+baselines above), inside the 1.25× gate, so the ratio gate passes and nothing on the reserve list is
+triggered. Both halves were measured interleaved in one process so they saw identical machine conditions;
+the absolute numbers carry background load from other jobs, the ratio does not.
 
 **Reserve list, in order. None ship in increment 1.**
 
