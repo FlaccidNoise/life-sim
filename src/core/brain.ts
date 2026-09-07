@@ -514,7 +514,8 @@ export function steer(
 }
 
 /**
- * Reward-modulated Hebbian consolidation (run after METABOLIZE, once this tick's energy is known) — a
+ * Reward-modulated Hebbian consolidation (run after every energy-moving pass, once this tick's net
+ * energy change is final) — a
  * 3-factor rule (pre × post × reward):
  *   reward = clamp( energy − prevEnergy, ±rewardClamp )          // this tick's NET energy change
  *   dev    = clamp( (w − genome)·(1−decay) + learningRate·reward·elig, ±maxDev )
@@ -554,6 +555,9 @@ export function learn(
   const keep = 1 - weightDecay;
   for (let k = 0; k < liveCount; k++) {
     const i = liveIndices[k]!;
+    // liveIndices is not rebuilt until the end of the tick, so it still holds this tick's dead by the
+    // time learn() runs (after cullDead). Skip them: nothing consolidates into a corpse.
+    if (!store.isAlive(i)) continue;
     let reward = energy[i]! - prevEnergy[i]!; // net Δenergy this tick (food + predation − costs)
     prevEnergy[i] = energy[i]!; // baseline for next tick's reward
     if (reward > rewardClamp) reward = rewardClamp;

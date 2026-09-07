@@ -415,15 +415,19 @@ export class World {
     // EAT PARCELS: a creature that its sight steered onto a parcel now cashes the intercept (post-MOVE
     // positions, ascending live-slot order, RNG-free). Gated (null = OFF, byte-identical).
     if (this.parcels !== null) eatParcels(s, this.parcels, cfg);
-    // METABOLIZE → LEARN → REPRO/DIE. Energy (the band the creature is in) is known after metabolize,
+    // METABOLIZE → REPRO/DIE → LEARN. Energy (the band the creature is in) is known after metabolize,
     // so the energy-gated within-life consolidation runs here (eligibility traces were laid in steer).
     metabolize(s, this.food, this.hash, cfg, this.walls);
-    if (cfg.learningEnabled)
-      learn(s, cfg.learningRate, cfg.weightDecay, cfg.maxLearnDeviation, cfg.learnRewardClamp);
     this.lastDeaths = cullDead(s, this.deathPositions);
     // SCAVENGE: scavengers absorb energy from this tick's death events (transient corpse biomass).
     // Gated (no-op when off → byte-identical). Runs AFTER cull so dead creatures don't scavenge themselves.
     if (cfg.scavengerEnabled) scavenge(s, this.hash, cfg, this.deathPositions, this.lastDeaths);
+    // LEARN runs after EVERY energy-moving pass, so this tick's reward is this tick's whole net Δenergy.
+    // It used to run before scavenge, which credited a scavenger's corpse income (up to corpseEnergy) to
+    // whatever it did on the NEXT tick rather than to the approach that earned it — hunt, parasiteStep and
+    // eatParcels were already attributed correctly because they run before metabolize.
+    if (cfg.learningEnabled)
+      learn(s, cfg.learningRate, cfg.weightDecay, cfg.maxLearnDeviation, cfg.learnRewardClamp);
     this.lastBirths = reproduce(
       s,
       this.rng,
