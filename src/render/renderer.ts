@@ -12,6 +12,7 @@ import { type OrganismStore } from '../core/store';
 import { type FoodField } from '../core/food-field';
 import { type ScentField } from '../core/scent-field';
 import { type Walls } from '../core/walls';
+import { type Plants, PLANT_GENE_COUNT, PlantGene } from '../core/plants';
 import { BIOME_ATLAS, BiomeType } from '../core/biomes';
 import { ScalarGene, SCALAR_GENE_COUNT, SCALAR_GENE_SPECS, MIN_BAND } from '../core/genome';
 import {
@@ -31,7 +32,15 @@ import {
 } from './palette';
 
 /** Canvas color-by mode (cycled with 'c'): which gene/state drives dot hue. */
-export const ColorMode = { LINEAGE: 0, DIET: 1, ENERGY: 2, FORAGE: 3, PHOTOSYNTH: 4, PARASITE: 5, SCAVENGER: 6 } as const;
+export const ColorMode = {
+  LINEAGE: 0,
+  DIET: 1,
+  ENERGY: 2,
+  FORAGE: 3,
+  PHOTOSYNTH: 4,
+  PARASITE: 5,
+  SCAVENGER: 6,
+} as const;
 export type ColorMode = (typeof ColorMode)[keyof typeof ColorMode];
 
 /** Food-field overlay layer (cycled with 'f'): which field the heatmap shows + its tint. The four SCENT_*
@@ -288,6 +297,36 @@ void main() {
   outColor = vec4(c, 1.0);
 }`;
 
+// PLANTS (increment 1, minimal): one square point per plant, radius ∝ √E, hue from the SPECIES gene on
+// the SAME wheel the creature hue gene uses — so a specialist grazer visibly matches the colour of the
+// plants it eats. Square, and never moving, so it reads as vegetation against the circular creature dots.
+// Its own pass with its own two attribute buffers: appending 20,000 plants to the creature dot pass would
+// take its ten per-frame attribute uploads from ~50k floats to ~250k.
+const PLANT_VERT = `#version 300 es
+in vec2 a_pos;
+in float a_size;                // device px, ∝ √E (floored so a seedling stays visible at world zoom)
+in float a_species;             // SPECIES gene [0,1] → hue (the resource axis, visible for the first time)
+uniform vec2 u_cam;
+uniform vec2 u_canvas;
+uniform float u_scale;
+out vec3 v_color;
+vec3 hsv2rgb(float h, float s, float v) {
+  vec3 p = abs(fract(vec3(h) + vec3(1.0, 2.0/3.0, 1.0/3.0)) * 6.0 - 3.0);
+  return v * mix(vec3(1.0), clamp(p - 1.0, 0.0, 1.0), s);
+}
+void main() {
+  vec2 px = (a_pos - u_cam) * u_scale + u_canvas * 0.5;
+  gl_Position = vec4(px.x / u_canvas.x * 2.0 - 1.0, 1.0 - px.y / u_canvas.y * 2.0, 0.0, 1.0);
+  gl_PointSize = a_size;
+  v_color = hsv2rgb(a_species, 0.55, 0.72);
+}`;
+
+const PLANT_FRAG = `#version 300 es
+precision mediump float;
+in vec3 v_color;
+out vec4 outColor;
+void main() { outColor = vec4(v_color, 1.0); }`;
+
 // Debug overlay lines: a flat [x, y, r, g, b] vertex stream drawn as gl.LINES, sharing the camera.
 const LINE_VERT = `#version 300 es
 in vec2 a_pos;
@@ -398,6 +437,17 @@ export class Renderer {
   private readonly gPhoto: number;
   private readonly gPara: number;
   private readonly gScav: number;
+  // plants (own pass; buffers + scratch grow on demand, since plantCapacity is independent of maxOrganisms)
+  private readonly plantProgram: WebGLProgram;
+  private readonly pPos: number;
+  private readonly pSize: number;
+  private readonly pSpecies: number;
+  private plantPosBuffer: WebGLBuffer | null = null;
+  private plantSizeBuffer: WebGLBuffer | null = null;
+  private plantSpeciesBuffer: WebGLBuffer | null = null;
+  private plantPosScratch: Float32Array = new Float32Array(0);
+  private plantSizeScratch: Float32Array = new Float32Array(0);
+  private plantSpeciesScratch: Float32Array = new Float32Array(0);
   // debug overlay lines
   private readonly lineProgram: WebGLProgram;
   private readonly lineBuffer: WebGLBuffer;
@@ -444,6 +494,10 @@ export class Renderer {
     this.foodProgram = link(gl, FOOD_VERT, FOOD_FRAG);
     this.wallProgram = link(gl, FOOD_VERT, WALL_FRAG);
     this.lineProgram = link(gl, LINE_VERT, LINE_FRAG);
+    this.plantProgram = link(gl, PLANT_VERT, PLANT_FRAG);
+    this.pPos = gl.getAttribLocation(this.plantProgram, 'a_pos');
+    this.pSize = gl.getAttribLocation(this.plantProgram, 'a_size');
+    this.pSpecies = gl.getAttribLocation(this.plantProgram, 'a_species');
     this.aPos = gl.getAttribLocation(this.dotProgram, 'a_pos');
     this.aHue = gl.getAttribLocation(this.dotProgram, 'a_hue');
     this.aSize = gl.getAttribLocation(this.dotProgram, 'a_size');
@@ -685,6 +739,7 @@ export class Renderer {
       alpha: number;
     } | null,
     colorMode: ColorMode = ColorMode.LINEAGE,
+    plants: Plants | null = null,
   ): void {
     const gl = this.gl;
     const sc = this.effScale();
@@ -782,6 +837,9 @@ export class Renderer {
       gl.vertexAttribPointer(this.aWallCorner, 2, gl.FLOAT, false, 0, 0);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     }
+
+    // ── Plants (under the creatures: at world zoom they ARE the fertility map) ──
+    if (plants !== null) this.drawPlants(plants, sc);
 
     // ── Organisms (on top) ──
     const n = store.liveCount;
@@ -975,6 +1033,54 @@ export class Renderer {
         gl.disable(gl.BLEND); // restore the sticky GL state → opaque passes unaffected next frame
       }
     }
+  }
+
+  /**
+   * One square point per live plant: radius ∝ √E (energy is an area, so √ makes the dot read as size),
+   * hue from SPECIES. Buffers and scratch are allocated on first use and grown to the live count, because
+   * plantCapacity is independent of the maxOrganisms the constructor sizes everything else to.
+   * Uploads plainly every frame — dirty-flagging position and species (which change only on birth and
+   * death, unlike size) is on the perf reserve list, not here.
+   */
+  private drawPlants(plants: Plants, sc: number): void {
+    const n = plants.liveCount;
+    if (n === 0) return;
+    const gl = this.gl;
+    if (this.plantPosScratch.length < n * 2) {
+      this.plantPosScratch = new Float32Array(n * 2);
+      this.plantSizeScratch = new Float32Array(n);
+      this.plantSpeciesScratch = new Float32Array(n);
+    }
+    this.plantPosBuffer ??= gl.createBuffer();
+    this.plantSizeBuffer ??= gl.createBuffer();
+    this.plantSpeciesBuffer ??= gl.createBuffer();
+    const pos = this.plantPosScratch;
+    const size = this.plantSizeScratch;
+    const spec = this.plantSpeciesScratch;
+    const { liveIndices, x, y, energy, genes } = plants;
+    for (let k = 0; k < n; k++) {
+      const i = liveIndices[k]!;
+      pos[k * 2] = x[i]!;
+      pos[k * 2 + 1] = y[i]!;
+      const e = energy[i]!;
+      size[k] = Math.max(1.5, Math.sqrt(e > 0 ? e : 0) * sc);
+      spec[k] = genes[i * PLANT_GENE_COUNT + PlantGene.SPECIES]!;
+    }
+    gl.useProgram(this.plantProgram);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.plantPosBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, pos.subarray(0, n * 2), gl.DYNAMIC_DRAW);
+    gl.enableVertexAttribArray(this.pPos);
+    gl.vertexAttribPointer(this.pPos, 2, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.plantSizeBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, size.subarray(0, n), gl.DYNAMIC_DRAW);
+    gl.enableVertexAttribArray(this.pSize);
+    gl.vertexAttribPointer(this.pSize, 1, gl.FLOAT, false, 0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.plantSpeciesBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, spec.subarray(0, n), gl.DYNAMIC_DRAW);
+    gl.enableVertexAttribArray(this.pSpecies);
+    gl.vertexAttribPointer(this.pSpecies, 1, gl.FLOAT, false, 0, 0);
+    this.setCommonUniforms(this.plantProgram, sc);
+    gl.drawArrays(gl.POINTS, 0, n);
   }
 
   /**

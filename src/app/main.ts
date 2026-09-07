@@ -29,7 +29,12 @@ import { FollowRecorder } from './observability/follow-recorder';
 import { Lineage } from './observability/lineage';
 import { LineageModal } from './observability/lineage-modal';
 import { TimeSeriesGraph } from './observability/graph';
-import { HistoryRecorder, sampleGeneStats, type HistorySample } from './observability/history';
+import {
+  HistoryRecorder,
+  sampleGeneStats,
+  samplePlantStats,
+  type HistorySample,
+} from './observability/history';
 
 function el<T extends HTMLElement>(id: string): T {
   const e = document.getElementById(id);
@@ -320,6 +325,7 @@ let histPrevDeaths = 0;
 function buildHistorySample(): HistorySample {
   const summary = summarizePopulation(world.store, world.tick, config);
   const genes = sampleGeneStats(world.store);
+  const plantStats = samplePlantStats(world.plants);
   const dTick = Math.max(1, world.tick - histPrevTick);
   const avgBirths = (world.totalBirths - histPrevBirths) / dTick;
   const avgDeaths = (world.totalDeaths - histPrevDeaths) / dTick;
@@ -342,6 +348,10 @@ function buildHistorySample(): HistorySample {
     avgBirths,
     avgDeaths,
     food: world.food.total(),
+    plantCount: plantStats.count,
+    plantBiomass: plantStats.biomass,
+    speciesMean: plantStats.speciesMean,
+    speciesSigma: plantStats.speciesSigma,
     meanGen: lineage.liveMeanGeneration(world.store),
     health: scanHealth(world, 5).violationCount,
     geneMean: genes.mean,
@@ -748,6 +758,7 @@ function frame(): void {
     showWalls,
     interp,
     colorMode,
+    world.plants,
   );
   // Sight-only food parcels: bright cyan crosses that drift on the current (a creature with eyes chases
   // them; they emit no smell). Drawn as gl.LINES plus-signs so they read as glowing motes.
