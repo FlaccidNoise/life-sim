@@ -285,7 +285,13 @@ export function metabolize(
     scalarGenes,
     eatGate,
     huntCooldownLeft,
+    hostSlot,
   } = store;
+  // Attached parasites RIDE their host: syncParasites copies the host's velocity into them so the renderer
+  // doesn't smear, but that copied velocity is not locomotion they paid for. Charging moveCost against it
+  // made attachment cost ~3× the drain it earns (demo, seed 1, t=800: 0.1221 rider move cost vs 0.0397
+  // drain income), so the morph was selected against exactly when it worked. Gated → OFF is byte-identical.
+  const parasiteRiders = cfg.parasiteEnabled;
   const { basalCost, moveCost, deadWaterCost } = cfg;
   const { crowdingMortality, crowdThreshold, crowdRadius, worldWidth, worldHeight } = cfg;
   // Lever D (density-dependent mortality): when crowdingMortality>0 each creature pays an energy drain
@@ -407,7 +413,7 @@ export function metabolize(
     const d01 = 2 * Math.abs(diet - 0.5);
     const dietSpec = cfg.dietGeneralistFloor + (1 - cfg.dietGeneralistFloor) * d01;
     gained *= dietSpec;
-    const speed2 = vx[i]! * vx[i]! + vy[i]! * vy[i]!;
+    const speed2 = parasiteRiders && hostSlot[i]! >= 0 ? 0 : vx[i]! * vx[i]! + vy[i]! * vy[i]!;
     // Bigger bodies are costlier to move (mass): the speed² cost scales by (size/cellRadius)^sizeMoveCostExp.
     let moveFactor = 1;
     if (cfg.sizeMoveCostExp > 0) {
