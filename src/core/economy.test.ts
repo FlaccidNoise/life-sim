@@ -5,6 +5,7 @@ import { ScentField, Scent } from './scent-field';
 import { SpatialHash } from './spatial-hash';
 import { Rng } from './rng';
 import { defaultConfig, type Config } from './config';
+import { World } from './world';
 import {
   metabolize,
   hunt,
@@ -1745,6 +1746,36 @@ describe('scavenge (corpse absorption)', () => {
     s.rebuildLive();
     scavenge(s, hashOf(s), cfg, deaths(), 1);
     expect(s.energy[a]).toBe(50);
+  });
+
+  it('the corpse income lands in the SAME tick’s learning reward, not the next one’s', () => {
+    // scavenge used to run after learn(), so a scavenger's corpse income (up to corpseEnergy) was
+    // attributed to whatever it did on the NEXT tick instead of the approach that earned it. learn() now
+    // runs after every energy-moving pass, so at the end of a tick prevEnergy (the baseline for the next
+    // reward) equals the survivor's final energy — the income cannot leak forward.
+    const w = new World(
+      defaultConfig({
+        worldWidth: 512,
+        worldHeight: 512,
+        initialPopulation: 40,
+        seed: 5,
+        scavengerEnabled: true,
+        scavengeRange: 400, // world-spanning, so every death reaches every scavenger
+      }),
+    );
+    let ticksWithDeaths = 0;
+    for (let t = 0; t < 120; t++) {
+      w.step();
+      if (w.lastDeaths === 0) continue;
+      ticksWithDeaths++;
+      const st = w.store;
+      for (let k = 0; k < st.liveCount; k++) {
+        const i = st.liveIndices[k]!;
+        if (!st.isAlive(i)) continue;
+        expect(st.prevEnergy[i]).toBe(st.energy[i]);
+      }
+    }
+    expect(ticksWithDeaths).toBeGreaterThan(0); // non-vacuity: corpses existed to scavenge
   });
 
   it('a creature that died this tick takes no share of the corpse pool', () => {
