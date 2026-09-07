@@ -172,8 +172,8 @@ describe('metabolize rider move cost', () => {
     const rider = riderPair(cfg, true);
     expect(rider.s.hostSlot[rider.para]).toBeGreaterThanOrEqual(0);
     expect(free.s.hostSlot[free.para]).toBe(-1);
-    metabolize(free.s, emptyFood(), hashOf(free.s), cfg);
-    metabolize(rider.s, emptyFood(), hashOf(rider.s), cfg);
+    metabolize(free.s, emptyFood(), hashOf(free.s), cfg, null);
+    metabolize(rider.s, emptyFood(), hashOf(rider.s), cfg, null);
     // Identical genes and velocity; the ONLY difference is the attachment, so the gap is the speed² cost.
     expect(rider.s.energy[rider.para]! - free.s.energy[free.para]!).toBeCloseTo(cfg.moveCost * 25);
   });
@@ -183,8 +183,8 @@ describe('metabolize rider move cost', () => {
     still.s.vx[still.host] = 0;
     still.s.vy[still.host] = 0;
     const moving = riderPair(cfg, true);
-    metabolize(still.s, emptyFood(), hashOf(still.s), cfg);
-    metabolize(moving.s, emptyFood(), hashOf(moving.s), cfg);
+    metabolize(still.s, emptyFood(), hashOf(still.s), cfg, null);
+    metabolize(moving.s, emptyFood(), hashOf(moving.s), cfg, null);
     expect(still.s.energy[still.host]! - moving.s.energy[moving.host]!).toBeCloseTo(
       cfg.moveCost * 25,
     );
@@ -219,8 +219,8 @@ describe('metabolize rider photosynthesis stillness', () => {
     const free = riderPair(cfg, false);
     const rider = riderPair(cfg, true);
     for (const p of [free, rider]) genes(p.s, p.para, cfg, { ...photo, [ScalarGene.SIZE]: 4 });
-    metabolize(free.s, emptyFood(), hashOf(free.s), cfg);
-    metabolize(rider.s, emptyFood(), hashOf(rider.s), cfg);
+    metabolize(free.s, emptyFood(), hashOf(free.s), cfg, null);
+    metabolize(rider.s, emptyFood(), hashOf(rider.s), cfg, null);
     expect(rider.s.energy[rider.para]).toBeCloseTo(free.s.energy[free.para]!);
   });
 
@@ -231,8 +231,8 @@ describe('metabolize rider photosynthesis stillness', () => {
     genes(parked.s, parked.para, cfg, { ...photo, [ScalarGene.SIZE]: 4 });
     parked.s.vx[parked.para] = 0;
     parked.s.vy[parked.para] = 0;
-    metabolize(rider.s, emptyFood(), hashOf(rider.s), cfg);
-    metabolize(parked.s, emptyFood(), hashOf(parked.s), cfg);
+    metabolize(rider.s, emptyFood(), hashOf(rider.s), cfg, null);
+    metabolize(parked.s, emptyFood(), hashOf(parked.s), cfg, null);
     // stillness 1 vs 1/(1+4·25) = 1/101, so at this light the parked creature gains 0.494 and the
     // carried rider 0.0049 — before the fix the rider scored the parked creature's rate exactly.
     expect(parked.s.energy[parked.para]! - rider.s.energy[rider.para]!).toBeGreaterThan(0.4);
@@ -284,7 +284,7 @@ describe('morphSatiationCap', () => {
       genes(p.s, p.para, cfg, { [ScalarGene.PHOTOSYNTH]: 1, [ScalarGene.SIZE]: 4 });
       const full = satiatedBar(p.s.scalarGenes, p.para, cfg) + 1;
       p.s.energy[p.para] = full;
-      metabolize(p.s, emptyFood(), hashOf(p.s), cfg);
+      metabolize(p.s, emptyFood(), hashOf(p.s), cfg, null);
       const gained = p.s.energy[p.para]! - full;
       if (cap) expect(gained).toBeLessThan(0.001);
       else expect(gained).toBeGreaterThan(0.4);

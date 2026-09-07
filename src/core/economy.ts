@@ -273,7 +273,7 @@ export function metabolize(
   food: FoodField,
   hash: SpatialHash,
   cfg: Config,
-  walls?: Walls | null,
+  walls: Walls | null,
 ): void {
   const {
     liveIndices,
