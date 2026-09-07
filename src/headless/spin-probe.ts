@@ -95,6 +95,14 @@ for (let c = 0; c < SCENT_CHANNELS; c++) {
 for (let j = 0; j < HIDDEN_UNITS; j++) TURN_WEIGHTS.push(HIDDEN_W2 + j * HIDDEN_OUTPUTS + 0);
 const turnScale = Number(extra.turnscale ?? 1);
 delete extra.turnscale;
+if (!Number.isFinite(turnScale)) {
+  console.error(
+    `spin-probe: turnscale must be a finite number, got ${JSON.stringify(extra.turnscale)}. ` +
+      `Pass each override as its OWN argv token (zsh does not word-split an unquoted variable), ` +
+      `e.g. npx tsx src/headless/spin-probe.ts 4000 3 turnscale=0.25 photosynthStillnessK=0`,
+  );
+  process.exit(1);
+}
 
 function wrapDelta(d: number, size: number): number {
   const h = size * 0.5;
@@ -150,6 +158,10 @@ interface Acc {
   tbAbs: number;
   tbN: number;
   maxTurnMean: number;
+  // end-of-run ecology, so a steering change that quietly kills the population cannot look like a win
+  pop: number;
+  predFrac: number; // fraction with DIET > 0.5
+  dietSigma: number;
 }
 
 function newAcc(): Acc {
@@ -184,6 +196,9 @@ function newAcc(): Acc {
     tbAbs: 0,
     tbN: 0,
     maxTurnMean: 0,
+    pop: 0,
+    predFrac: 0,
+    dietSigma: 0,
   };
 }
 
@@ -330,12 +345,22 @@ function runSeed(seed: number): Acc {
   const world = new World(cfg);
   const s = world.store;
   const cap = s.capacity;
-  const tracks: Track[] = new Array(cap);
-  for (let i = 0; i < cap; i++)
-    tracks[i] = { gen: -1, h0: 0, x0: 0, y0: 0, satTicks: 0, absTurn: 0, speed: 0, n: 0 };
+  const tracks: Track[] = Array.from({ length: cap }, () => ({
+    gen: -1,
+    h0: 0,
+    x0: 0,
+    y0: 0,
+    satTicks: 0,
+    absTurn: 0,
+    speed: 0,
+    n: 0,
+  }));
   const prevHeading = new Float64Array(cap);
   const lastTurn = new Float64Array(cap); // this tick's turn output, so heading_before = heading − lastTurn
   const prevGen = new Int32Array(cap).fill(-1);
+  // Speed as steer() saw it, snapshotted before step() on decomposition ticks (integrate() runs after
+  // steer(), so the post-step vx/vy is a tick too late for the turn-cap reconstruction).
+  const preSpeed = new Float64Array(cap);
   const acc = newAcc();
 
   /** Force the constant-input turn synapses to 0 for every slot (see `pin` above). */
@@ -359,6 +384,12 @@ function runSeed(seed: number): Acc {
 
   const WARMUP = Math.floor(TICKS * 0.25); // let the ecology settle before measuring
   for (let t = 1; t <= TICKS; t++) {
+    if (t % 200 === 0) {
+      for (let k = 0; k < s.liveCount; k++) {
+        const i = s.liveIndices[k]!;
+        preSpeed[i] = Math.hypot(s.vx[i]!, s.vy[i]!);
+      }
+    }
     world.step();
     applyPin(); // newborns inherit a mutated bias each birth — re-zero before the next steer
     const { liveIndices, liveCount, heading, x, y, vx, vy, scalarGenes, genId } = s;
@@ -474,15 +505,39 @@ function runSeed(seed: number): Acc {
         acc.dSense += Math.abs(d.sense);
         // Self-check: does the reconstruction reproduce the observed turn? (motorSquash tanh path)
         const mt = scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.MAX_TURN]!;
-        const predicted = cfg.motorSquash
+        let predicted = cfg.motorSquash
           ? mt > 0
-            ? mt * Math.tanh(d.raw / mt)
+            ? mt * Math.tanh(d.raw / (mt * (cfg.turnGainRatio > 0 ? cfg.turnGainRatio : 1)))
             : 0
           : Math.max(-mt, Math.min(mt, d.raw));
+        // Mirror brain.ts's minimum-turning-radius bound. steer() read the PRE-step velocity, so use the
+        // snapshot taken before world.step() rather than the post-integrate vx/vy.
+        if (cfg.minTurnRadius > 0) {
+          const turnCap = Math.max(Math.max(0, cfg.turnFloor), preSpeed[i]! / cfg.minTurnRadius);
+          predicted = Math.max(-turnCap, Math.min(turnCap, predicted));
+        }
         acc.dResid += Math.abs(predicted - lastTurn[i]!);
         acc.dN++;
       }
     }
+  }
+  {
+    const { liveIndices, liveCount, scalarGenes } = s;
+    acc.pop = liveCount;
+    let sum = 0;
+    for (let k = 0; k < liveCount; k++) {
+      const d = scalarGenes[liveIndices[k]! * SCALAR_GENE_COUNT + ScalarGene.DIET]!;
+      sum += d;
+      if (d > 0.5) acc.predFrac++;
+    }
+    const mean = liveCount > 0 ? sum / liveCount : 0;
+    let v = 0;
+    for (let k = 0; k < liveCount; k++) {
+      const d = scalarGenes[liveIndices[k]! * SCALAR_GENE_COUNT + ScalarGene.DIET]! - mean;
+      v += d * d;
+    }
+    acc.dietSigma = liveCount > 0 ? Math.sqrt(v / liveCount) : 0;
+    acc.predFrac = liveCount > 0 ? acc.predFrac / liveCount : 0;
   }
   acc.popHungry /= Math.max(1, acc.dN);
   acc.popFed /= Math.max(1, acc.dN);
@@ -508,6 +563,7 @@ for (let seed = 1; seed <= SEEDS; seed++) {
   const nonSpin = a.n - a.spin;
   console.log(
     `\nseed ${seed}: windows=${a.n}  SPINNERS=${pct(a.spin, a.n)}%  ` +
+      `pop=${a.pop} pred=${(100 * a.predFrac).toFixed(1)}% σDIET=${a.dietSigma.toFixed(3)}  ` +
       `meanSpeed spinner=${(a.spinSpeed / Math.max(1, a.spin)).toFixed(3)} ` +
       `non-spinner=${(a.nonSpinSpeed / Math.max(1, nonSpin)).toFixed(3)}`,
   );

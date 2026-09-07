@@ -444,7 +444,8 @@ export interface Config {
    *  plasticity entirely (their constant input makes Hebbian learning a positive-feedback runaway). */
   maxLearnDeviation: number;
 
-  // ── Steering output shaping (ablation knob; OFF by default = byte-identical to the hard clamp) ─────
+  // ── Steering output shaping (motorSquash + turnGainRatio are ablation knobs, byte-identical at their
+  //    defaults; minTurnRadius ships ON — it is the kinematic bound that stops the on-the-spot spin) ────
   /** Motor-output saturation mode. false = HARD clamp turn/thrust to the per-creature MAX_TURN/MAX_THRUST
    *  genes (bang-bang: a strong signal snaps to the limit → the visible spin/vibrate pathology when a
    *  saturated controller pins the rudder). true = smooth tanh squash: out = max·tanh(raw/max), so small
@@ -452,6 +453,24 @@ export interface Config {
    *  the applied motor output — the eligibility trace still uses the pre-shaping raw signal, so within-life
    *  learning is unchanged. OFF by default so the determinism hash is byte-identical until you opt in. */
   motorSquash: boolean;
+  /** Turn-command gain, as a MULTIPLE of MAX_TURN, for the motorSquash tanh: turn =
+   *  maxTurn·tanh(raw/(maxTurn·turnGainRatio)). The squash originally tied its gain to the very ceiling it
+   *  squashes into, so a turnRaw summed from ~30 unnormalised synapses ran 2-3× past the 90%-saturation
+   *  point and the motor was bang-bang anyway. Raising the ratio widens the graded region so the turn
+   *  tracks the evidence driving it. 1 = the original squash (byte-identical). Ignored when motorSquash
+   *  is off. */
+  turnGainRatio: number;
+  /** Minimum turning radius in WORLD UNITS. Bounds the per-tick heading change by the creature's current
+   *  speed: |dθ| ≤ max(turnFloor, speed/minTurnRadius). Without it turn rate is independent of speed, so a
+   *  slow creature at the MAX_TURN rail corners inside its own body — the visible spinning-on-the-spot.
+   *  Set it near the body radius (cellRadius) to make tight cornering cost speed, the way a real body
+   *  works. 0 = off (turn rate independent of speed, the legacy motor). */
+  minTurnRadius: number;
+  /** Floor on the minTurnRadius bound, in rad/tick. A stopped creature has speed 0 and so no kinematic
+   *  turn budget at all; this lets it still pivot slowly (needed to turn away from a wall it has stalled
+   *  against). Keep it small — it is the rate a creature can spin at zero speed. Ignored when
+   *  minTurnRadius is 0. */
+  turnFloor: number;
   /** Evolvable per-creature damping (drift ↔ dart): when on, integrate() reads each creature's DAMPING
    *  gene instead of the global `damping` constant. The gene is drawn from RNG regardless of this flag,
    *  so toggling it is a pure read-path switch — the determinism hash for a given seed is unaffected by
@@ -942,6 +961,9 @@ export function defaultConfig(overrides: Partial<Config> = {}): Config {
     // Steering output shaping: OFF = hard clamp (current behavior, byte-identical hash). Flip on to
     // smoothly tanh-squash turn/thrust → graded, legible steering (kills the motor-saturation spin).
     motorSquash: false,
+    turnGainRatio: 1, // 1 = the original squash gain (byte-identical); raise it to widen the graded region
+    minTurnRadius: 4, // ON by default: a body cannot corner tighter than this (kills the on-the-spot spin)
+    turnFloor: 0.05, // rad/tick a stopped creature may still pivot at (escapes walls)
     evolvableDamping: true,
     reverseThrustFraction: 0.5, // ON by default: creatures can back away at half forward power
     brainGatedEating: true, // ON by default: eating is a decision — graze slow vs lift the head to flee fast

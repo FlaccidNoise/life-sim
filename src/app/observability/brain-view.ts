@@ -50,7 +50,7 @@ export interface BrainState {
   inputs: BrainInputNode[];
   turnRaw: number; // pre-clamp network sum → turn
   thrustRaw: number; // pre-clamp network sum → thrust
-  turn: number; // applied turn (clamped to ±maxTurn gene)
+  turn: number; // applied turn (±maxTurn gene, then the minTurnRadius speed bound)
   thrust: number; // applied thrust (reverse floor … maxThrust, ×metabolic efficiency, ×eat-gate penalty)
   eatGate: number; // eat-gate output 0..1 (slice B): 1 = head-down eating (slow), 0 = head-up (full speed)
   biteGate: number; // bite-gate output 0..1 (A2a): the predation decision read from the hidden layer; 0 when off
@@ -166,10 +166,16 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
   for (let c = 0; c < SCENT_CHANNELS; c++) {
     const pb = Brain.PHERO_C0_LAT_TURN + c * 4;
     const name = SCENT_LABELS[c] ?? `sc${c}`;
-    inputs.push(node(`${name} fwd`, scentGrad[c * 2]!, pb + 1, pb + 3, HiddenInput.SCENT_C0_FWD + c * 2));
-    inputs.push(node(`${name} lat`, scentGrad[c * 2 + 1]!, pb, pb + 2, HiddenInput.SCENT_C0_LAT + c * 2));
+    inputs.push(
+      node(`${name} fwd`, scentGrad[c * 2]!, pb + 1, pb + 3, HiddenInput.SCENT_C0_FWD + c * 2),
+    );
+    inputs.push(
+      node(`${name} lat`, scentGrad[c * 2 + 1]!, pb, pb + 2, HiddenInput.SCENT_C0_LAT + c * 2),
+    );
   }
-  inputs.push(node('bias', 1, Brain.TURN_BIAS, Brain.THRUST_BIAS, HiddenInput.BIAS, Brain.EAT_GATE_BIAS));
+  inputs.push(
+    node('bias', 1, Brain.TURN_BIAS, Brain.THRUST_BIAS, HiddenInput.BIAS, Brain.EAT_GATE_BIAS),
+  );
   // Interoceptive scalars — hoisted to function scope so the hidden layer below can read them (steer parity).
   // Each is 0 unless its lever is on, exactly mirroring steer().
   let hunger = 0;
@@ -278,7 +284,8 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
   let turn: number;
   let thrust: number;
   if (cfg.motorSquash) {
-    turn = maxTurn > 0 ? maxTurn * Math.tanh(turnRaw / maxTurn) : 0;
+    const gain = cfg.turnGainRatio > 0 ? cfg.turnGainRatio : 1;
+    turn = maxTurn > 0 ? maxTurn * Math.tanh(turnRaw / (maxTurn * gain)) : 0;
     thrust = maxThrust > 0 ? maxThrust * Math.tanh(thrustRaw / maxThrust) : 0;
     if (thrust < reverseFloor) thrust = reverseFloor;
   } else {
@@ -288,6 +295,14 @@ export function computeBrainState(store: OrganismStore, cfg: Config, slot: numbe
     thrust = thrustRaw;
     if (thrust < reverseFloor) thrust = reverseFloor;
     else if (thrust > maxThrust) thrust = maxThrust;
+  }
+  // Minimum-turning-radius bound: mirror steer() so the panel shows the turn the body can actually execute,
+  // not the one the network asked for. The gap between turnRaw and turn is the point of the picture.
+  if (cfg.minTurnRadius > 0) {
+    const speed = Math.hypot(store.vx[slot]!, store.vy[slot]!);
+    const cap = Math.max(Math.max(0, cfg.turnFloor), speed / cfg.minTurnRadius);
+    if (turn > cap) turn = cap;
+    else if (turn < -cap) turn = -cap;
   }
   thrust *= eff;
   // Eat-gate (slice B): mirror steer() — eating throttles the body. Sigmoid gate from food + sight + bias.
@@ -494,7 +509,14 @@ export class BrainView {
           // W2 columns: 0=turn, 1=thrust, 2=eat, 3=biteGate, 4=scentGate, 5=breedGate. Glow (node 3) reads the
           // separate GLOW_HID block, so route biteGate col (3)→node 4, scentGate col (4)→node 5, breedGate col
           // (5)→node 6; keep turn/thrust/eat at 0..2.
-          edge(hidX, hidY(j), outX, outY(o === 3 ? 4 : o === 4 ? 5 : o === 5 ? 6 : o), wgt, a * wgt);
+          edge(
+            hidX,
+            hidY(j),
+            outX,
+            outY(o === 3 ? 4 : o === 4 ? 5 : o === 5 ? 6 : o),
+            wgt,
+            a * wgt,
+          );
         }
         // hidden→glow (slice F): glow is output node 3, reading the hidden layer via the GLOW_HID block.
         const gwgt = lbw[hb + GLOW_HID + j]!;

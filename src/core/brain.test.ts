@@ -19,7 +19,9 @@ import { steer, learn } from './brain';
 
 // Default config for the motor-mechanics steer() tests below. brainGatedEating is OFF here to ISOLATE
 // turn/thrust from the eat-immobilize penalty (slice B) — the eat-gate has its own test block that opts in.
-const CFG = defaultConfig({ brainGatedEating: false });
+// minTurnRadius is 0 here too: the speed-bounded turn has its own block below, and leaving it on would
+// silently cap every turn in this file at the stationary turnFloor.
+const CFG = defaultConfig({ brainGatedEating: false, minTurnRadius: 0 });
 
 /** Set a creature's genome brain weights (slot), seed generous movement genes (so steer's per-creature
  *  maxTurn/maxThrust clamps + the efficiency multiplier don't interfere), and sync the runtime brain. */
@@ -154,6 +156,64 @@ describe('steer (per-creature brain)', () => {
     steer(s, false, 0.2, true, cfg); // motorSquash = true
     expect(s.forceX[i]!).toBeCloseTo(-2.5); // floored at 0.5·5
     expect(s.forceY[i]!).toBeCloseTo(0);
+  });
+
+  it('a stopped creature turns at most turnFloor per tick (minTurnRadius bound)', () => {
+    const cfg = defaultConfig({ brainGatedEating: false, minTurnRadius: 6, turnFloor: 0.05 });
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.heading[i] = 0;
+    s.vx[i] = 0;
+    s.vy[i] = 0; // stopped → no kinematic turn budget, only the floor
+    setBrain(s, i, { TURN_BIAS: 10 }); // wants a huge turn (MAX_TURN gene is 1 from setBrain)
+    s.rebuildLive();
+    steer(s, false, 0.2, false, cfg);
+    expect(s.heading[i]).toBeCloseTo(0.05); // turnFloor, not MAX_TURN
+  });
+
+  it('a moving creature turns at most speed/minTurnRadius per tick, both directions', () => {
+    const turnOf = (bias: number): number => {
+      const cfg = defaultConfig({ brainGatedEating: false, minTurnRadius: 6, turnFloor: 0.05 });
+      const s = new OrganismStore(4);
+      const i = s.alloc();
+      s.heading[i] = 0;
+      s.vx[i] = 1.2; // speed 1.2 → cap 1.2/6 = 0.2 rad/tick, well above the 0.05 floor
+      s.vy[i] = 0;
+      setBrain(s, i, { TURN_BIAS: bias });
+      s.rebuildLive();
+      steer(s, false, 0.2, false, cfg);
+      return s.heading[i]!;
+    };
+    expect(turnOf(10)).toBeCloseTo(0.2);
+    expect(turnOf(-10)).toBeCloseTo(-0.2);
+  });
+
+  it('minTurnRadius=0 leaves the turn bounded only by the MAX_TURN gene', () => {
+    const cfg = defaultConfig({ brainGatedEating: false, minTurnRadius: 0 });
+    const s = new OrganismStore(4);
+    const i = s.alloc();
+    s.heading[i] = 0; // stopped, so the bound would otherwise cap this at turnFloor
+    setBrain(s, i, { TURN_BIAS: 10 });
+    s.scalarGenes[i * SCALAR_GENE_COUNT + ScalarGene.MAX_TURN] = 0.3;
+    s.rebuildLive();
+    steer(s, false, 0.2, false, cfg);
+    expect(s.heading[i]).toBeCloseTo(0.3);
+  });
+
+  it('turnGainRatio=1 reproduces the original squash; >1 widens the graded region', () => {
+    const squashed = (turnGainRatio: number): number => {
+      const cfg = defaultConfig({ brainGatedEating: false, minTurnRadius: 0, turnGainRatio });
+      const s = new OrganismStore(4);
+      const i = s.alloc();
+      s.heading[i] = 0;
+      setBrain(s, i, { TURN_BIAS: 0.5 }); // MAX_TURN gene 1 → turn = tanh(0.5/ratio); 0.5 is exact in f32
+      s.rebuildLive();
+      steer(s, false, 0.2, true, cfg); // motorSquash = true
+      return s.heading[i]!;
+    };
+    expect(squashed(1)).toBe(Math.tanh(0.5)); // exactly the pre-knob formula
+    expect(squashed(4)).toBeCloseTo(Math.tanh(0.125)); // same ceiling, quarter the gain
+    expect(squashed(4)).toBeLessThan(squashed(1));
   });
 
   it('eating slows the body (eat-gate thrust penalty) when brainGatedEating is on', () => {
