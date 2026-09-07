@@ -21,14 +21,22 @@ DIET is the default dot color (vivid green-grazer→red-predator ramp), the popu
 stacked grazer/omnivore/predator band + a diet-σ diversity line, the world panel reports turnover +
 hoarding (median age, % founders, generations, % satiated, and a turnover-stalled flag), bodies
 auto-appear on zoom, and runtime invariant breaks surface a non-fatal banner.
-New mechanisms remain **OFF-default knobs** (byte-identical when off) — the demo opts in via
-`src/app/living-world-config.ts`. WebGL2 viewer; `defaultConfig()` is the single source of truth for the
-demo, headless harness, and tests. Decision log in `docs/decisions/INDEX.md`; the prior M0–M7.5 engine is
-archived/superseded.
+New features ship **ON by default** (2026-06-23 convention; the only invariant is determinism for a given
+`(config, seed)`) — older mechanisms that predate that convention may still default off, individually
+toggleable. The demo's overrides live in `src/app/living-world-config.ts`. WebGL2 viewer; `defaultConfig()`
+is the single source of truth for the demo, headless harness, and tests. Decision log in
+`docs/decisions/INDEX.md`; the prior M0–M7.5 engine is archived/superseded.
+
+**In progress (2026-09):** plants are being rebuilt as evolving entities in their own pool (`src/core/plants.ts`)
+— germinate, grow, seed, die — with `FoodField` demoted to soil fertility. Increment 0+1 (the plant pool,
+scent, and rendering) has landed and is on in the demo; nothing eats plants yet, so live grazing still runs
+on the old food-field channels. See `plans/2026-09-plants-as-entities.md` for the design and
+`HANDOFF.md` for the current session state.
 
 ## Docs
 - Design spec: `docs/superpowers/specs/2026-06-15-life-sim-design.md`
 - Decisions: `docs/decisions/INDEX.md`
+- Session handoff: `HANDOFF.md`
 
 ## Commands
 Run `make help`. Common: `make dev`, `make test`, `make check`, `make headless`.
