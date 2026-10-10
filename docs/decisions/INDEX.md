@@ -3,6 +3,11 @@
 Significant, hard-to-reverse decisions. Detail lives in the linked topic files;
 full design rationale lives in `docs/superpowers/specs/`.
 
+## Tidepool rebuild
+- 2026-10-09: GROUND-UP REBUILD AS A GAME in `tidepool/`. This codebase (`src/`) is now the first draft: kept as a reference, not extended. Tidepool has its own decision log → [../../tidepool/docs/decisions/INDEX.md](../../tidepool/docs/decisions/INDEX.md)
+- 2026-10-09: Tidepool REVISES the 2026-06-20 "Baldwin learning is core" decision: evolution only in v1, within-life learning as an off-by-default Lab toggle later → [../../tidepool/docs/design.md](../../tidepool/docs/design.md) §6
+- 2026-10-10: Tidepool REVERSES the 2026-06-15 "TypeScript over Rust" choice for its simulation core, on a measured 2.0-2.6x at the target population → [../../tidepool/docs/research/kernel-bench.md](../../tidepool/docs/research/kernel-bench.md)
+
 ## Architecture
 - 2026-06-15: Data-oriented SoA ("ECS-lite") over OOP/ECS-library → [architecture.md](architecture.md)
 - 2026-06-15: Custom particle physics over rigid-body engines → [architecture.md](architecture.md)

@@ -1,5 +1,11 @@
 # Agent Instructions
 
+## Two projects in this repo
+
+- **`tidepool/`** is the active project: a ground-up rebuild as a game. It has its own `AGENTS.md`,
+  toolchain, and pnpm root. For Tidepool work, read `tidepool/AGENTS.md` and work from `tidepool/`.
+- **`src/`** is the first draft. Keep it working. Do not extend it unless asked.
+
 This project uses **bd** (beads) for issue tracking. Run `bd onboard` to get started.
 
 ## Quick Reference
