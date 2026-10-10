@@ -58,6 +58,14 @@ project kept the machine at a load average near 5, so these readings are lower b
 | 2026-10-10 | 9 (M0 exit) | 1,500 drifters, no plants, no brains | 1,500 | 34,264 | 23,250 | 2,400 |
 | 2026-10-10 | 10 (M1 skeleton, stub rules) | 3072 by 1536, 1,500 founders that wander, no plants yet | 1,500 | 12,627 | 10,633 | 2,400 |
 | 2026-10-10 | 11 and 12 (motor, plants, scent) | 3072 by 1536, 1,500 founders that wander, 3,000 founder plants | 1,500 | 9,396 | 8,366 | 2,400 |
+| 2026-10-10 | 13 (energy) | The same world. Creatures now starve | 228 | VOID | VOID | 2,400 |
+
+**The void row after Task 13.** Both benches print `VOID: population fell` and `make gates` exits 2. The
+gate works as built: it refuses to time a world that has emptied. The bench world falls from 1,500
+creatures to 573 at tick 500 and 51 at tick 1,000, and nearly every death is starvation. Creatures still
+steer by noise, and a wandering body pays 0.086 energy per tick against 0.288 per tick on a plant, so it
+must touch a plant 30% of the time. The brain that follows scent is Task 15. No parameter, rule, or
+bench was changed to hide this. The gate must pass again at Task 15.
 
 ## In-page bench, reference machine
 

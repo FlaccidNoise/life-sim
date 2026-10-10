@@ -278,7 +278,7 @@ test('a snapshot with a possessed creature keeps the player in the body', () => 
   expect(f.possessedSlot).toBe(6);
 });
 
-// Nothing dies in the core until Task 13. Until then a wrapper reports the death: on the tick after
+// A wrapper that reports a death, so that a test picks the tick and the cause: on the tick after
 // `die(cause)` the host sees no possessed creature and that cause, as it does when the core kills
 // the creature during a tick.
 function mortal() {
@@ -361,4 +361,35 @@ test('a death cause that this build does not know is an error, not a silent paus
   r.advance(100);
   expect(r.of('died')).toEqual([]);
   expect(r.of('error')[0]?.message).toContain('death cause 9');
+});
+
+test('death pauses the world, posts the cause and heirs, and possessing an heir resumes', () => {
+  const r = rig({ recycle: true });
+  r.host.handle({ type: 'init', seed: 1 });
+  const idx = (name: string) => {
+    const p = r.of('ready')[0]?.params.find((q) => q.name === name);
+    if (!p) throw new Error(`no parameter ${name}`);
+    return p.index;
+  };
+  r.advance(100);
+  const f = frameOf(r);
+  const pos = (i: number) => {
+    const o = f.creatureBase + i * P.CREATURE_STRIDE;
+    return { x: f.f32[o + P.C_X] ?? 0, y: f.f32[o + P.C_Y] ?? 0, radius: 4 };
+  };
+  r.host.handle({ type: 'possessAt', ...pos(0) }); // marked by possession: it may outlive the player
+  r.host.handle({ type: 'possessAt', ...pos(1) }); // the body the player dies in
+  r.host.handle({ type: 'param', index: idx('lifespan'), value: 600 });
+  r.advance(40_000); // 800 ticks: longer than the lifespan
+  const died = r.of('died')[0];
+  expect(['old age', 'starved']).toContain(died?.cause);
+  expect(r.of('died').length).toBe(1);
+  const tickAtDeath = r.lastTick();
+  r.advance(1000);
+  expect(r.lastTick()).toBe(tickAtDeath); // paused
+  // The only marked creature besides the player is the first one possessed. Nothing buds yet.
+  expect(died?.heirs.length).toBeLessThanOrEqual(1);
+  r.host.handle({ type: 'speed', ticksPerSecond: P.TICK_HZ });
+  r.advance(100);
+  expect(r.lastTick()).toBeGreaterThan(tickAtDeath);
 });

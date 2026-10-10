@@ -674,7 +674,9 @@ fn counters_at_the_top_of_their_range_do_not_panic_or_wrap_a_uid() {
     };
     let mut w = p.load().expect("load");
     w.run(2);
-    assert_eq!((w.tick, w.creatures.age[0]), (1, u32::MAX));
+    // An age that wrapped would be young. Both creatures die of old age on the first tick.
+    assert_eq!((w.tick, w.creatures.slots.count()), (1, 0));
+    assert_eq!(w.stat(STAT_DEATHS), 2.0);
     // A birth takes the last uid that can be given out.
     let child = SpawnAt {
         x: 10.0,
@@ -686,14 +688,15 @@ fn counters_at_the_top_of_their_range_do_not_panic_or_wrap_a_uid() {
         generation: 1,
         mark: 0,
     };
-    assert_eq!(w.spawn(Genome::default(), child), Some(2));
+    assert_eq!(w.spawn(Genome::default(), child), Some(0));
     assert_eq!(w.stat(STAT_BIRTHS), u64::MAX as f64);
     w.seed_founders(10, 0);
-    assert_eq!((w.creatures.slots.count(), w.next_uid), (3, u32::MAX));
-    assert_eq!(w.creatures.uid[2], last);
-    w.kill(0, CAUSE_STARVED);
-    assert_eq!(w.stat(STAT_DEATHS), 1.0);
+    assert_eq!((w.creatures.slots.count(), w.next_uid), (1, u32::MAX));
+    assert_eq!(w.creatures.uid[0], last);
     World::load(&w.save()).expect("the world still loads");
+    w.kill(0, CAUSE_STARVED);
+    assert_eq!(w.stat(STAT_DEATHS), 3.0);
+    World::load(&w.save()).expect("the empty world still loads");
 }
 
 #[test]

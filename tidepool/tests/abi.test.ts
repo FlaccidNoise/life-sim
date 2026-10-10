@@ -39,7 +39,9 @@ test('a frame of the whole world holds every creature', () => {
     expect(f.f32[o + P.C_X]).toBeLessThanOrEqual(1536);
     expect(f.f32[o + P.C_LENGTH]).toBeGreaterThan(0);
     expect(f.f32[o + P.C_WIDTH]).toBeLessThan(f.f32[o + P.C_LENGTH] ?? 0);
-    expect(f.f32[o + P.C_ENERGY]).toBeCloseTo(0.5, 5);
+    // A founder starts at 0.5 and has paid 10 ticks of upkeep with nothing to eat.
+    expect(f.f32[o + P.C_ENERGY]).toBeGreaterThan(0.45);
+    expect(f.f32[o + P.C_ENERGY]).toBeLessThan(0.5);
     expect(f.u32[o + P.C_FLAGS]).toBe(0);
     uids.add(f.u32[o + P.C_UID] ?? 0);
   }
