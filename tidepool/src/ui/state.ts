@@ -1,6 +1,7 @@
 // What the overlay shows. `src/app/main.ts` writes these from worker messages.
 
 import { signal } from '@preact/signals';
+import type { DeathCause, Heir } from '../protocol';
 
 export const errorText = signal<string | null>(null);
 export const ready = signal(false);
@@ -9,3 +10,6 @@ export const benchText = signal<string | null>(null);
 export const mode = signal<'watch' | 'play'>('watch');
 export const brainDriving = signal(false);
 export const hint = signal<string | null>(null);
+export const death = signal<{ cause: DeathCause; heirs: Heir[] } | null>(null);
+export const focusHeir = signal<Heir | null>(null); // main.ts moves the camera to it
+export const heirGone = signal(false); // a pick came back empty: the heir was not alive

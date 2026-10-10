@@ -6,12 +6,24 @@ import {
   viewFrame,
   type FrameView,
   type FromWorker,
+  type Heir,
   type ParamInfo,
   type ToWorker,
 } from '../protocol';
 import { createRenderer, type Renderer } from '../render/renderer';
 import { App } from '../ui/App';
-import { benchText, brainDriving, errorText, hint, mode, ready, stats } from '../ui/state';
+import {
+  benchText,
+  brainDriving,
+  death,
+  errorText,
+  focusHeir,
+  heirGone,
+  hint,
+  mode,
+  ready,
+  stats,
+} from '../ui/state';
 import {
   PLAY_SCALE,
   SCALE_MAX,
@@ -45,7 +57,6 @@ const WHEEL_ZOOM = 0.0015; // the zoom exponent per wheel pixel
 const PINCH_WHEEL_ZOOM = 0.01; // a trackpad pinch is a wheel event with ctrlKey and small steps
 const PICK_RADIUS = 24; // CSS pixels around a click in which a creature is picked
 const HINT_MS = 1500;
-const DIED_HINT_MS = 3000;
 const LATENCY_SAMPLES = 20;
 
 interface PointerHandlers {
@@ -143,7 +154,30 @@ function start(): void {
   if (!canvas || !ui) throw new Error('index.html has no #view or no #ui');
 
   const query = new URLSearchParams(location.search);
-  render(h(App, { debug: query.has('debug') }), ui);
+  // The death overlay's three actions. They run after `send` and `resume` exist.
+  const closeDeath = (): void => {
+    death.value = null;
+    focusHeir.value = null;
+    heirGone.value = false;
+  };
+  render(
+    h(App, {
+      debug: query.has('debug'),
+      onPick(uid) {
+        const heir = death.peek()?.heirs.find((x) => x.uid === uid);
+        if (heir) seenAt = { x: heir.x, y: heir.y };
+        send({ type: 'possess', uid });
+      },
+      onWatch() {
+        closeDeath();
+        resume();
+      },
+      onFocus(heir: Heir | null) {
+        focusHeir.value = heir;
+      },
+    }),
+    ui,
+  );
 
   let world: { w: number; h: number } | undefined;
   let cam: Camera = { x: 0, y: 0, scale: 1 };
@@ -176,6 +210,9 @@ function start(): void {
       },
       get frame(): FrameView | null {
         return cur;
+      },
+      get death(): ReturnType<typeof death.peek> {
+        return death.peek();
       },
       get inputLatencyMs(): number | null {
         return median(latencies);
@@ -277,7 +314,7 @@ function start(): void {
       else playScale = Math.min(Math.max(playScale * factor, SCALE_MIN), SCALE_MAX);
     },
     click(sx, sy) {
-      if (mode.peek() !== 'watch' || !world) return;
+      if (mode.peek() !== 'watch' || death.peek() || !world) return;
       const at = screenToWorld(cam, cssW, cssH, sx, sy);
       picking = true;
       seenAt = at;
@@ -291,6 +328,8 @@ function start(): void {
   window.addEventListener('keydown', (e) => {
     // A shortcut is not steering, and macOS sends no `keyup` for a key pressed with Command.
     if (inText(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
+    // The overlay owns the keyboard: Tab and Enter work its buttons, and nothing steers behind it.
+    if (death.peek()) return;
     if (e.code === 'Escape' && mode.peek() === 'play') {
       send({ type: 'release' });
       watch();
@@ -337,16 +376,20 @@ function start(): void {
           playScale = PLAY_SCALE;
           hint.value = null;
           mode.value = 'play';
+          closeDeath();
+        } else if (death.peek()) {
+          heirGone.value = true;
         } else if (picking) {
           flash('Nothing there.', HINT_MS);
         }
         picking = false;
         break;
       case 'died':
-        // Task 19 puts the death overlay here. Until then the world runs on: the worker paused it.
+        // The worker paused the world. It stays paused until a `possess` or a `speed`.
         watch();
-        flash('You died.', DIED_HINT_MS);
-        resume();
+        hint.value = null;
+        closeDeath();
+        death.value = { cause: msg.cause, heirs: msg.heirs };
         break;
       case 'stats':
         stats.value = {
@@ -378,7 +421,8 @@ function start(): void {
   const resume = (): void => send({ type: 'speed', ticksPerSecond: document.hidden ? 0 : TICK_HZ });
   document.addEventListener('visibilitychange', () => {
     dropKeys();
-    resume();
+    // A `speed` message would end the pause of a death. The overlay's buttons end it.
+    if (!death.peek()) resume();
   });
 
   let raf = 0;
@@ -396,6 +440,8 @@ function start(): void {
     lastFrame = now;
     const alpha = Math.min(Math.max((now - arrival) / TICK_MS, 0), 1);
     body = cur ? possessedBody(prev, cur, alpha) : null;
+    const focus = focusHeir.peek();
+    if (focus && death.peek()) cam = inWorld(follow(cam, focus.x, focus.y, cam.scale, dt));
     if (mode.peek() === 'play') {
       // Zoom about the body, then slide it to the centre. A plain `follow` zooms about the centre,
       // which throws a body near the edge off the screen and out of the next frames. While no
