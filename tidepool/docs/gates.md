@@ -15,8 +15,8 @@ output seen. All proofs ran on 2026-10-10, except the CI row, which has no proof
 | Type check | `pnpm exec tsc --noEmit` | A file `src/x.ts` that contains `export const n: number = 'a';` | `src/x.ts(1,14): error TS2322: Type 'string' is not assignable to type 'number'.`, exit 2 | 2026-10-10 |
 | Snapshot round trip | `cargo test --test snapshot` | The `vy` line removed from both `Creatures::save` and `Creatures::load` in `crates/sim/src/creature.rs` | 5 tests fail. The round-trip test is `load_then_run_equals_unbroken_run ... FAILED`, with ``assertion `left == right` failed``, `left: 865352771`, `right: 4132115202`. The other 4 are in the notes. | 2026-10-10 |
 | Native equals WASM | `pnpm exec vitest run tests/determinism.test.ts` | `#[cfg(target_arch = "wasm32")] { self.creatures.vx[0] += 1.0e-6; }` added to `World::tick`, just before `self.tick` is incremented at the end, then `make wasm` | All 3 seeds fail. Seed 1: `AssertionError: expected 3869756312 to be 1603536447 // Object.is equality` | 2026-10-10 |
-| Throughput, native | `make gates` (runs `target/release/tidepool-headless bench`) | `bench --floor 1000000000` | `bench creatures=1500 median_tps=37372 floor=1000000000 FAIL`, exit 1 | 2026-10-10 |
-| Throughput, WASM in Node | `make gates` (runs `node scripts/bench-wasm.mjs`) | `node scripts/bench-wasm.mjs --floor 1000000000` | `bench-wasm creatures=1500 median_tps=24027 floor=1000000000 FAIL`, exit 1 | 2026-10-10 |
+| Throughput, native | `make gates` (runs `target/release/tidepool-headless bench`) | `bench --floor 1000000000`, and `bench --reference 5000` | `bench creatures=1539 median_tps=4430 floor=1000000000 FAIL`, exit 1. `VOID: population fell`, exit 1. The full output is in "Throughput bench" below. | 2026-10-10 |
+| Throughput, WASM in Node | `make gates` (runs `node scripts/bench-wasm.mjs`) | `node scripts/bench-wasm.mjs --floor 1000000000`, and `--reference 5000` | `bench-wasm creatures=1539 median_tps=3761 floor=1000000000 FAIL`, exit 1. `VOID: population fell`, exit 1. The full output is in "Throughput bench" below. | 2026-10-10 |
 | Health | `make gates` (runs `target/release/tidepool-headless gate-health`) | `gate-health --param plant_growth=0`, and `gate-health --param basal=0.01` | Both: every seed `FAIL`, `gate-health 0/3 FAIL`, exit 1. The full output is in "Health gate" below. | 2026-10-10 |
 | CI | `.github/workflows/tidepool.yml` runs `make check`, `bench --floor 800`, `scripts/bench-wasm.mjs --floor 800`, and `gate-health` | Not proven yet: the workflow has not run. First push runs it. | Not proven yet: the workflow has not run. First push runs it. | Not run |
 
@@ -33,20 +33,84 @@ output seen. All proofs ran on 2026-10-10, except the CI row, which has no proof
   `wild_creature_values_load_and_run_without_panic`, and
   `counters_at_the_top_of_their_range_do_not_panic_or_wrap_a_uid`. They fail because the test helper
   `raw_payload` writes 5 creature fields.
-- **Throughput.** The floor is 2,400 ticks per second at 1,500 creatures, for WASM in Node
+- **Throughput.** The floor is 2,400 ticks per second at the reference world, for WASM in Node
   (`architecture.md` section 2). `scripts/bench-wasm.mjs` enforces it. The native bench is for probes
-  and a quick reading. On the M0 world, native reads about 1.4 times WASM. In M0 the world has no
-  senses, brains, or fields, so both numbers are a ceiling, not the real reading.
-- **Throughput, void run.** `bench --creatures 6000 --runs 2` fills the 4,096-slot pool, so the mean
-  alive count is 4,096. That is below 80% of 6,000. Each bench prints `VOID: population fell` and exits 1.
-- **Throughput, WASM in Node, load.** The timer responds to load: `node scripts/bench-wasm.mjs
-  --creatures 4000 --runs 3 --world 1024x512 --floor 30000` prints `median_tps=2574 ... FAIL`, exit 1.
+  and a quick reading. "Throughput bench" below says what both benches time.
+- **Throughput, void run.** A run is void when its mean alive count over the timed ticks is below 80%
+  of `--reference` (1,500, so 1,200). The bench prints `VOID: population fell` and exits 1. The rule
+  reads `--reference`, not `--creatures`: the founders are 400 and the settled world holds more.
 - **CI.** The workflow is not proven. Nobody has pushed it, so it has never run. Treat it as untested until
   the first push passes and a deliberately bad commit makes it fail. CI uses a floor of 800 ticks per second,
   a third of the real floor, because shared runners are slower than the reference machine by an unknown
   factor. `make gates` enforces the real floor on the reference machine.
 - **Known, not a gate.** M0 drifters gain energy on a long run: the audit measured a mean speed of 0.76
   units per tick at tick 0 and 48 at tick 72,000. Task 10 and Task 11 replace the M0 motion.
+
+## Throughput bench
+
+`target/release/tidepool-headless bench` and `node scripts/bench-wasm.mjs` take the same flags and
+print the same lines. The summary line starts `bench` or `bench-wasm`.
+
+`[--world 1536x1024] [--creatures 400] [--plants 1200] [--settle 12000] [--ticks 2000] [--runs 5]
+[--reference 1500] [--floor 2400]`
+
+1. Make the default world on seed 1 and run `--settle` ticks. These ticks are not timed.
+2. Print `settled tick=<n> creatures=<n> plants=<n>` and save a snapshot.
+3. For each run, load the snapshot and time `--ticks` ticks. Every run does the same work. The alive
+   count is sampled every 100 ticks, outside the timed section.
+4. Exit 0 on `PASS`, 1 on `FAIL` or a void run, 2 on a usage error.
+
+The `settled` line at the defaults matches the seed 1 row of the health gate: 1,477 creatures and
+1,682 plants at tick 12,000.
+
+The proofs. Other work ran on the machine, so the `tps` figures here are not gate readings.
+
+```
+$ target/release/tidepool-headless bench --floor 1000000000
+settled tick=12000 creatures=1477 plants=1682
+run 1 creatures=1539 tps=4371
+run 2 creatures=1539 tps=4430
+run 3 creatures=1539 tps=4467
+run 4 creatures=1539 tps=4352
+run 5 creatures=1539 tps=4443
+bench creatures=1539 median_tps=4430 floor=1000000000 FAIL
+exit=1
+$ node scripts/bench-wasm.mjs --floor 1000000000
+settled tick=12000 creatures=1477 plants=1682
+run 1 creatures=1539 tps=3714
+run 2 creatures=1539 tps=3739
+run 3 creatures=1539 tps=3793
+run 4 creatures=1539 tps=3770
+run 5 creatures=1539 tps=3761
+bench-wasm creatures=1539 median_tps=3761 floor=1000000000 FAIL
+exit=1
+$ target/release/tidepool-headless bench --reference 5000
+settled tick=12000 creatures=1477 plants=1682
+run 1 creatures=1539 tps=4454
+VOID: population fell
+exit=1
+$ node scripts/bench-wasm.mjs --reference 5000
+settled tick=12000 creatures=1477 plants=1682
+run 1 creatures=1539 tps=3789
+VOID: population fell
+exit=1
+```
+
+The reading responds to work. A world that settles for 200 ticks is young and sparse. It reads about
+3 times as fast as the default, and it is void.
+
+```
+$ target/release/tidepool-headless bench --settle 200
+settled tick=200 creatures=493 plants=1295
+run 1 creatures=485 tps=13420
+VOID: population fell
+exit=1
+$ node scripts/bench-wasm.mjs --settle 200
+settled tick=200 creatures=493 plants=1295
+run 1 creatures=485 tps=11174
+VOID: population fell
+exit=1
+```
 
 ## Throughput readings
 
@@ -62,6 +126,8 @@ project kept the machine at a load average near 5, so these readings are lower b
 | 2026-10-10 | 13 (energy) | The same world. Creatures now starve | 228 | VOID | VOID | 2,400 |
 | 2026-10-10 | 14 (budding) | The same world | 234 | VOID | VOID | 2,400 |
 | 2026-10-10 | 15 (brains) | The same world. Creatures now follow scent | 144 | VOID | VOID | 2,400 |
+| 2026-10-10 | 16 (tuned defaults) | The same world | 425 | VOID | VOID | 2,400 |
+| 2026-10-10 | 16, bench on the settled world | The default world after 12,000 ticks, seed 1 | 1,539 | 4,381 | 3,757 | 2,400 |
 
 **The void row after Task 13.** Both benches print `VOID: population fell` and `make gates` exits 2. The
 gate works as built: it refuses to time a world that has emptied. The bench world falls from 1,500
@@ -87,6 +153,17 @@ A trial with enough food for the bench (`plant_growth=0.07`, bench mean 1,418) p
 creatures in the default world at tick 12,000, which fails the health gate, and that default world ran
 at 1,381 ticks per second. No bench, floor, or void rule was changed. `docs/findings/m1-tuning.md` has
 the trials. What the bench should time is an open question for the orchestrator.
+
+**Decided after Task 16: the benches time the default world after it has settled.** The seeded bench
+world was an estimate from before the ecology existed: 3072 by 1536, 1,500 adult founders, 3,000
+plants asked, timed from tick 200 to tick 2,200. In the tuned ecology that world is not a steady
+state. It has 3 times the area of the default world and the same 14 fertile patches, so it falls to
+about 200 creatures by tick 1,000. The default world (1536 by 1024, 400 founders, 1,200 plants) is the
+world the game ships and the world `gate-health` judges. It holds 1,148 to 1,477 creatures at tick
+12,000 on seeds 1 to 3. That is the reference population of 1,500, reached by living instead of by
+seeding. So both benches now run the default world for 12,000 ticks on seed 1 and time the next 2,000.
+The floor (2,400), the reference population (1,500), and the 80% void rule did not change. No
+simulation rule or parameter changed. "Throughput bench" above has the protocol and the proofs.
 
 **A reading that is not a gate reading.** To see the cost of a full world before it can exist, Task 15
 timed a probe world with all upkeep set to 0 (probe only, mean 1,678 alive, plants eaten down to
@@ -169,13 +246,20 @@ What has rejected a world, and what has not:
 
 ## In-page bench, reference machine
 
-`http://localhost:<port>/?bench` on the dev server, tab in the foreground. The worker runs 2,000 ticks of
-a second world of 1,500 drifters while the page keeps drawing. Add a row when a task changes the cost of
-a tick.
+`http://localhost:<port>/?bench` on the dev server, tab in the foreground. The worker makes a second
+default world on seed 1, runs 12,000 ticks to settle it, and then times 2,000 ticks. This is the world
+that the throughput benches time. The main world waits, and the page shows "Measuring. This can take a
+minute on a slow device." The result names the alive count at the end of the timed ticks. Below 1,200
+creatures the same line says that the reading is too fast. Add a row when a task changes the cost of a
+tick.
 
 | Date | After task | Browser | World | Ticks per second | 24,000-tick skip |
 |---|---|---|---|---|---|
 | 2026-10-10 | 8 (M0) | Chrome, Apple M4 Pro | 1,500 drifters, no plants, no brains | 17,197 | 1.4 s |
+| 2026-10-10 | 16, bench on the settled world | Chrome, Apple M4 Pro | The default world after 12,000 ticks, 1,537 creatures | 3,961 | 6.1 s |
 
-Four more loads on the same day read 16,207 to 17,212. The same module in Node reads about 16,300 for
-2,000 ticks, so the browser costs nothing over Node here. The native reading above is about 2 times this.
+The M0 row: four more loads on the same day read 16,207 to 17,212. The same module in Node read about
+16,300 for 2,000 ticks, so the browser cost nothing over Node there.
+
+The settled-world row: a second load read 4,004 ticks per second and 6.0 s. The WASM bench in Node read
+3,757 on the same world, so the page is not slower than Node. The skip budget is 10 s on this machine.

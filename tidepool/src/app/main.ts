@@ -2,6 +2,7 @@
 
 import { h, render } from 'preact';
 import {
+  BENCH_SETTLE_TICKS,
   TICK_HZ,
   viewFrame,
   type FrameView,
@@ -51,6 +52,8 @@ import {
 
 const TICK_MS = 1000 / TICK_HZ;
 const BENCH_TICKS = 2000;
+// 80% of the reference population, docs/architecture.md section 2. Below it a bench reads too fast.
+const BENCH_MIN_CREATURES = 1200;
 const SKIP_TICKS = 24000; // the time-skip target, docs/architecture.md section 2
 const DRAG_SLOP = 4; // CSS pixels. A press that moves less than this is a click.
 const WHEEL_ZOOM = 0.0015; // the zoom exponent per wheel pixel
@@ -359,7 +362,10 @@ function start(): void {
           zoomAt(fitWorld(world.w, world.h, cssW, cssH), cssW, cssH, cssW / 2, cssH / 2, 1),
         );
         ready.value = true;
-        if (query.has('bench')) send({ type: 'bench', ticks: BENCH_TICKS });
+        if (query.has('bench')) {
+          benchText.value = 'Measuring. This can take a minute on a slow device.';
+          send({ type: 'bench', settle: BENCH_SETTLE_TICKS, ticks: BENCH_TICKS });
+        }
         break;
       case 'frame':
         // The buffer goes back whole: the worker drops a buffer of another length.
@@ -402,10 +408,14 @@ function start(): void {
         break;
       case 'benchResult': {
         const perSecond = (msg.ticks / msg.millis) * 1000;
+        const creatures = msg.creatures.toLocaleString('en-US');
         benchText.value =
-          `${Math.round(perSecond).toLocaleString('en-US')} ticks per second. ` +
+          `${Math.round(perSecond).toLocaleString('en-US')} ticks per second at ${creatures} creatures. ` +
           `A ${SKIP_TICKS.toLocaleString('en-US')}-tick skip would take ` +
-          `${(SKIP_TICKS / perSecond).toFixed(1)} seconds on this device.`;
+          `${(SKIP_TICKS / perSecond).toFixed(1)} seconds on this device.` +
+          (msg.creatures < BENCH_MIN_CREATURES
+            ? ` The world held only ${creatures} creatures, so this reading is too fast.`
+            : '');
         break;
       }
       case 'error':

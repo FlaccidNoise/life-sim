@@ -17,8 +17,8 @@ export interface HostDeps {
   now(): number; // milliseconds
   post(msg: FromWorker, transfer?: Transferable[]): void;
   every(ms: number, fn: () => void): () => void; // returns cancel
-  /** Throws SimError. Without `worldW` and `worldH` the world has the default size. */
-  makeSim(opts: { seed: number; snapshot?: Uint8Array; worldW?: number; worldH?: number }): Sim;
+  /** Throws SimError. A world with no snapshot has the default size. */
+  makeSim(opts: { seed: number; snapshot?: Uint8Array }): Sim;
 }
 export interface Host {
   handle(msg: ToWorker): void;
@@ -27,9 +27,8 @@ export interface Host {
 const STEP_MS = 10;
 const MAX_TICKS_PER_STEP = 5;
 const STATS_EVERY = 10; // ticks
-// The reference world of docs/architecture.md section 2. The same world as the benches in
-// crates/headless/src/bench.rs and scripts/bench-wasm.mjs.
-const BENCH = { seed: 1, worldW: 3072, worldH: 1536, creatures: 1500, plants: 3000 };
+// The seed of the benches in crates/headless/src/bench.rs and scripts/bench-wasm.mjs.
+const BENCH_SEED = 1;
 // Keys of `tp_stat`: the `STAT_` constants in crates/sim/src/stats.rs.
 const STAT_CREATURES = 0;
 const STAT_PLANTS = 1;
@@ -161,9 +160,12 @@ export function createHost(deps: HostDeps): Host {
     deps.post({ type: 'possessed', uid: ok ? uid : 0 });
   };
 
-  const bench = (ticks: number): void => {
-    const world = deps.makeSim({ seed: BENCH.seed, worldW: BENCH.worldW, worldH: BENCH.worldH });
-    world.seedFounders(BENCH.creatures, BENCH.plants);
+  // Times the reference world of docs/architecture.md section 2: a second default world, after
+  // `settle` ticks that are not timed.
+  const bench = (settle: number, ticks: number): void => {
+    const world = deps.makeSim({ seed: BENCH_SEED });
+    world.seedFounders(FOUNDER_CREATURES, FOUNDER_PLANTS);
+    world.tick(settle);
     const start = deps.now();
     world.tick(ticks);
     const millis = deps.now() - start;
@@ -192,7 +194,7 @@ export function createHost(deps: HostDeps): Host {
             if (msg.buffer.byteLength === MAX_FRAME_BYTES) pool.push(msg.buffer);
             break;
           case 'bench':
-            bench(msg.ticks);
+            bench(msg.settle, msg.ticks);
             break;
           case 'possessAt':
             possess(sim, sim.pick(msg.x, msg.y, msg.radius));

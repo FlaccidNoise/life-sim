@@ -73,6 +73,9 @@ export const WORLD_W = 1536;
 export const WORLD_H = 1024;
 export const FOUNDER_CREATURES = 400;
 export const FOUNDER_PLANTS = 1200;
+// Ticks that a bench runs before it times anything. The same as `--settle` of the benches in
+// crates/headless/src/bench.rs and scripts/bench-wasm.mjs.
+export const BENCH_SETTLE_TICKS = 12000;
 export const FRAME_POOL = 3;
 export const MAX_FRAME_BYTES =
   4 * (FRAME_HEADER_WORDS + 4096 * CREATURE_STRIDE + 8192 * PLANT_STRIDE);
@@ -105,7 +108,7 @@ export type ToWorker =
   | { type: 'view'; x0: number; y0: number; x1: number; y1: number }
   | { type: 'speed'; ticksPerSecond: number } // 0 pauses. TICK_HZ is normal.
   | { type: 'recycle'; buffer: ArrayBuffer }
-  | { type: 'bench'; ticks: number }
+  | { type: 'bench'; settle: number; ticks: number } // `settle` ticks run first and are not timed
   | { type: 'possessAt'; x: number; y: number; radius: number }
   | { type: 'possess'; uid: number }
   | { type: 'release' }
@@ -118,5 +121,5 @@ export type FromWorker =
   | { type: 'possessed'; uid: number } // 0: nothing there, or released
   | { type: 'died'; cause: DeathCause; heirs: Heir[] }
   | { type: 'stats'; tick: number; creatures: number; plants: number; tickMicros: number }
-  | { type: 'benchResult'; ticks: number; millis: number; creatures: number }
+  | { type: 'benchResult'; ticks: number; millis: number; creatures: number } // alive at the end
   | { type: 'error'; message: string };

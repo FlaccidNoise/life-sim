@@ -3,7 +3,6 @@
 Status: set 2026-10-10 from `research/kernel-bench.md` and `research/tech-feasibility.md`. This file says
 HOW the game is built. `design.md` says what it is. `roadmap.md` says in what order.
 
-A value marked ESTIMATE is not measured. The milestone that first measures it is named.
 
 ## 1. Stack
 
@@ -33,8 +32,8 @@ These numbers are the contract. Changing one is a decision, logged in `docs/deci
 | Think rate | Each creature senses and thinks every 2nd tick. Odd and even slots alternate. | Halves the two largest phases |
 | Time-skip target | 24,000 ticks (20 minutes of world time, about 30 generations) | `design.md` §4 |
 | Time-skip wall time | 10 seconds on the reference machine. Hard stop at 30 seconds on any machine. | The report says how many generations passed |
-| **Throughput floor** | **2,400 ticks per second** at the reference world, WASM in Node, reference machine (Apple M4 Pro) | 24,000 ticks in 10 s |
-| Reference world | 1,500 creatures, 3,000 plants, small brains | ESTIMATE, about 340 µs of the 417 µs tick. M0 measures a stand-in. M1 measures a world with no eyes, which understates it. M2 gives the first full reading. |
+| **Throughput floor** | **2,400 ticks per second** at the reference world, WASM in Node, reference machine (Apple M4 Pro). A run with a mean below 80% of the reference population of 1,500 creatures is void. | 24,000 ticks in 10 s |
+| Reference world | The default world (1536 by 1024, 400 founder creatures, 1,200 founder plants, seed 1) after 12,000 ticks | It holds 1,148 to 1,477 creatures on seeds 1 to 3. Measured at M1: 3,757 ticks per second in WASM and 4,381 native, at a mean of 1,539 creatures (`gates.md`). That is a 24,000-tick skip in 6.4 s. M1 has no eyes, so it understates M2. M2 gives the first full reading. |
 | Creature pool | 4,096 slots. Budding fails when the pool is full. | Bounds the worst case |
 | Plant pool | 8,192 slots | |
 | Parts per genome | 12 genes (up to 24 parts when mirrored) | Enforced from M2 |
@@ -215,7 +214,7 @@ view are built before its normal state.
 | Command | Purpose | Fails when |
 |---|---|---|
 | `run` | Run N ticks from a seed. Print the state hash and counts. | Never |
-| `bench` | Ticks per second of the native build. For probes and a quick reading. | Below `--floor` |
+| `bench` | Ticks per second of the native build, on the reference world of §2. For probes and a quick reading. | Below `--floor`, or a void run |
 | `gate-health` | 12,000 ticks on 3 seeds, one at a time. | Any seed leaves its bands |
 | `probe-*` | Named measurements. Output goes to `docs/findings/`. | Never |
 | `bake` | Run long, pass the health gate, write the shipped snapshot. | Gate fails |
@@ -227,9 +226,9 @@ Every gate is proven on a known-bad input before it counts. The proof and its ou
 defines the floor for WASM. It takes the same flags as `bench` and prints the same lines.
 
 `make check` runs the crate count, format for Rust and TypeScript, Clippy, Rust tests, the WASM build,
-type check, ESLint, and Vitest. `make gates` runs `bench` and `scripts/bench-wasm.mjs`. Task 16 adds
-`gate-health` to `make gates`. CI runs `make check` and both benches at a floor of 800 on every push that
-touches `tidepool/`.
+type check, ESLint, and Vitest. `make gates` runs `bench`, `scripts/bench-wasm.mjs`, and `gate-health`.
+CI runs `make check`, both benches at a floor of 800, and `gate-health` on every push that touches
+`tidepool/`.
 
 ## 11. Later systems
 

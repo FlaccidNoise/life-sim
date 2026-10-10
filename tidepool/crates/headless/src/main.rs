@@ -8,10 +8,15 @@ use tidepool_sim::params::{Params, DEFS};
 use tidepool_sim::world::{size_ok, World, MAX_WORLD_SIZE};
 
 const USAGE: &str = "usage: tidepool-headless run --seed <u32> --ticks <u32> --creatures <u32> [--plants <u32>] [--world <W>x<H>] [--param <name>=<value>]...
-       tidepool-headless bench [--creatures <u32>] [--plants <u32>] [--world <W>x<H>] [--ticks <u32>] [--warmup <u32>] [--runs <u32>] [--floor <n>]
+       tidepool-headless bench [--creatures <u32>] [--plants <u32>] [--world <W>x<H>] [--settle <u32>] [--ticks <u32>] [--runs <u32>] [--reference <u32>] [--floor <n>]
        tidepool-headless gate-health [--seeds <u32>,<u32>,...] [--ticks <u32>] [--param <name>=<value>]...
        tidepool-headless probe-density [--seed <u32>] [--ticks <u32>] [--param <name>=<value>]...
        tidepool-headless probe-skip [--seed <u32>] [--ticks <settle ticks>] [--param <name>=<value>]...";
+
+/// The default world: 1536 by 1024, 400 founder creatures, 1,200 founder plants. The health gate
+/// judges it and the bench times it.
+const WORLD: (f32, f32) = (1536.0, 1024.0);
+const FOUNDERS: (u32, u32) = (400, 1200);
 
 fn usage(problem: &str) -> ! {
     eprintln!("error: {problem}\n{USAGE}");
@@ -59,7 +64,7 @@ fn param(flag: &str, v: Option<&str>) -> (usize, f32) {
 
 fn run(args: &[String]) {
     let (mut seed, mut ticks, mut creatures, mut plants) = (None, None, None, 0u32);
-    let (mut w, mut h) = (1536.0f32, 1024.0f32);
+    let (mut w, mut h) = WORLD;
     let mut params = Vec::new();
     let mut it = args.iter().map(String::as_str);
     while let Some(flag) = it.next() {
