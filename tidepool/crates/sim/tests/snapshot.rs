@@ -4,15 +4,16 @@ use tidepool_sim::creature::MAX_CREATURES;
 use tidepool_sim::frame;
 use tidepool_sim::genome::{BrainGenome, ConnGene, Genome};
 use tidepool_sim::params::{id, Params, DEFS};
+use tidepool_sim::plant::MAX_PLANTS;
 use tidepool_sim::snapshot::{seal, LoadError, Writer, FORMAT_VERSION};
 use tidepool_sim::stats::{STAT_BIRTHS, STAT_DEATHS, STAT_MEAN_ENERGY01};
 use tidepool_sim::world::{SpawnAt, World, MAX_WORLD_SIZE};
 
-/// Founders, a changed parameter, a possessed creature, and held manual input.
+/// Founders, plants, a changed parameter, a possessed creature, and held manual input.
 fn world_at(ticks: u32) -> World {
     let mut w = World::new(9, 1536.0, 1024.0);
     w.params.set(id::REPEL, 0.5);
-    w.seed_founders(400, 0);
+    w.seed_founders(400, 1200);
     assert!(w.possess(w.creatures.uid[3]));
     w.input(true, 0.8, 0.5);
     w.run(ticks);
@@ -21,10 +22,10 @@ fn world_at(ticks: u32) -> World {
 
 #[test]
 fn load_then_run_equals_unbroken_run() {
-    let saved = world_at(500).save();
+    let saved = world_at(1000).save();
     let mut resumed = World::load(&saved).expect("load");
-    resumed.run(500);
-    assert_eq!(resumed.state_hash(), world_at(1000).state_hash());
+    resumed.run(1000);
+    assert_eq!(resumed.state_hash(), world_at(2000).state_hash());
 }
 
 #[test]
@@ -119,6 +120,13 @@ fn every_saved_field_is_in_the_hash_and_survives_a_load() {
         ("possessed", |w| assert!(w.possess(w.creatures.uid[S]))),
         ("manual input", |w| w.input(true, 0.3, -0.2)),
         ("death cause", |w| w.kill(3, CAUSE_OLD_AGE)),
+        ("plant slots", |w| w.plants.slots.free(S as u32)),
+        ("plant x", |w| w.plants.x[S] += 1.0),
+        ("plant y", |w| w.plants.y[S] += 1.0),
+        ("plant reserve", |w| w.plants.reserve[S] *= 0.5),
+        ("plant cap", |w| w.plants.cap[S] += 1.0),
+        ("fertility", |w| w.fertility.v[S] = 0.123),
+        ("scent", |w| w.scent.a[S] += 1.0),
     ];
     let base = world_at(50).state_hash();
     for (name, edit) in edits {
@@ -177,7 +185,18 @@ struct Crafted {
     births: u64,
     /// The uid of the possessed creature, the manual flag, thrust, turn, and the death cause.
     control: (u32, u32, f32, f32, u32),
+    plant_slots: Vec<u32>,
+    /// The x and the y of every plant.
+    plant_place: Vec<f32>,
+    plant_reserve: Vec<f32>,
+    plant_cap: Vec<f32>,
+    fertility: Vec<f32>,
+    scent: Vec<f32>,
 }
+
+/// The cells of the fertility map and of the scent field in the 64 by 64 world of `Crafted`.
+const FERTILITY_CELLS: usize = 2 * 2;
+const SCENT_CELLS: usize = 8 * 8;
 
 impl Crafted {
     /// A 64 by 64 world with `live` as the slot list and `field` as every `f32` creature field.
@@ -196,6 +215,24 @@ impl Crafted {
             brain: BrainGenome::default(),
             births: 0,
             control: (0, 0, 0.0, 0.0, 0),
+            plant_slots: vec![],
+            plant_place: vec![],
+            plant_reserve: vec![],
+            plant_cap: vec![],
+            fertility: vec![0.0; FERTILITY_CELLS],
+            scent: vec![0.0; SCENT_CELLS],
+        }
+    }
+
+    /// No creatures, and one plant per value of `place`, in slots 0 and up, with a reserve of 1 and
+    /// a cap of 2.
+    fn plants(place: &[f32]) -> Crafted {
+        Crafted {
+            plant_slots: (0..place.len() as u32).collect(),
+            plant_place: place.to_vec(),
+            plant_reserve: vec![1.0; place.len()],
+            plant_cap: vec![2.0; place.len()],
+            ..Crafted::new(&[], &[])
         }
     }
 
@@ -250,6 +287,13 @@ impl Crafted {
         p.f32(thrust);
         p.f32(turn);
         p.u32(cause);
+        p.u32s(&self.plant_slots);
+        p.f32s(&self.plant_place); // x
+        p.f32s(&self.plant_place); // y
+        p.f32s(&self.plant_reserve);
+        p.f32s(&self.plant_cap);
+        p.f32s(&self.fertility);
+        p.f32s(&self.scent);
         p.bytes
     }
 
@@ -497,6 +541,113 @@ fn a_bad_control_block_is_invalid() {
 }
 
 #[test]
+fn a_crafted_plant_loads_and_its_grid_is_rebuilt() {
+    let p = Crafted {
+        plant_slots: vec![0, 7],
+        ..Crafted::plants(&[10.0, 40.0])
+    };
+    let mut w = p.load().expect("load");
+    assert_eq!(
+        (w.plants.slots.count(), w.plants.slots.high_water()),
+        (2, 8)
+    );
+    let at = (
+        w.plants.x[7],
+        w.plants.y[7],
+        w.plants.reserve[7],
+        w.plants.cap[7],
+    );
+    assert_eq!(at, (40.0, 40.0, 1.0, 2.0));
+    frame::write(&mut w, 0.0, 0.0, 64.0, 64.0);
+    assert_eq!(w.frame[2], 2);
+}
+
+#[test]
+fn a_bad_plant_part_is_invalid() {
+    let place = [10.0, 40.0];
+    let with_slots = |slots: &[u32]| Crafted {
+        plant_slots: slots.to_vec(),
+        ..Crafted::plants(&place)
+    };
+    let with_reserve_and_cap = |reserve: f32, cap: f32| Crafted {
+        plant_reserve: vec![1.0, reserve],
+        plant_cap: vec![2.0, cap],
+        ..Crafted::plants(&place)
+    };
+    assert!(with_reserve_and_cap(0.0, f32::MAX).load().is_ok());
+    assert!(with_reserve_and_cap(2.0, 2.0).load().is_ok());
+    let cases = [
+        (with_slots(&[3, 3]), "plant slots not ascending"),
+        (with_slots(&[5, 2]), "plant slots not ascending"),
+        (with_slots(&[0, MAX_PLANTS]), "plant slot past capacity"),
+        (with_slots(&[0]), "plant field length"),
+        (with_slots(&[0, 1, 2]), "plant field length"),
+        (
+            Crafted {
+                plant_cap: vec![2.0],
+                ..Crafted::plants(&place)
+            },
+            "plant field length",
+        ),
+    ];
+    for (bad, reason) in cases {
+        assert_eq!(bad.err(), Some(LoadError::Invalid(reason)));
+    }
+    // A cap of 0 would make `reserve / cap` NaN in the frame and in the growth rule.
+    for (reserve, cap) in [
+        (0.0, 0.0),
+        (1.0, -2.0),
+        (1.0, f32::NAN),
+        (1.0, f32::INFINITY),
+        (f32::INFINITY, f32::INFINITY),
+        (f32::NAN, 2.0),
+        (-0.1, 2.0),
+        (2.1, 2.0),
+    ] {
+        assert_eq!(
+            with_reserve_and_cap(reserve, cap).err(),
+            Some(LoadError::Invalid("plant reserve or cap out of range")),
+            "reserve {reserve}, cap {cap}"
+        );
+    }
+}
+
+#[test]
+fn a_bad_fertility_map_or_scent_field_is_invalid() {
+    let with_fertility = |fertility: Vec<f32>| Crafted {
+        fertility,
+        ..Crafted::plants(&[10.0])
+    };
+    for cells in [0, FERTILITY_CELLS - 1, FERTILITY_CELLS + 1] {
+        assert_eq!(
+            with_fertility(vec![0.5; cells]).err(),
+            Some(LoadError::Invalid("fertility map size")),
+            "{cells} cells"
+        );
+    }
+    for bad in [f32::NAN, f32::INFINITY, -0.1, 1.1] {
+        let mut v = vec![1.0; FERTILITY_CELLS];
+        v[1] = bad;
+        assert_eq!(
+            with_fertility(v).err(),
+            Some(LoadError::Invalid("fertility out of range")),
+            "{bad}"
+        );
+    }
+    for cells in [0, SCENT_CELLS - 1, SCENT_CELLS + 1] {
+        let p = Crafted {
+            scent: vec![0.5; cells],
+            ..Crafted::plants(&[10.0])
+        };
+        assert_eq!(
+            p.err(),
+            Some(LoadError::Invalid("scent field size")),
+            "{cells} cells"
+        );
+    }
+}
+
+#[test]
 fn a_crafted_possession_loads_with_its_slot_and_steers_on_the_first_tick() {
     let p = Crafted {
         control: (2, 1, 1.0, -1.0, CAUSE_STARVED),
@@ -571,6 +722,10 @@ fn every_cut_of_a_payload_is_an_error() {
     let p = Crafted {
         brain: brain(1, vec![conn(0, N_IN), conn(N_IN, N_IN + 1)]),
         control: (2, 1, 0.5, 0.5, 0),
+        plant_slots: vec![0, 4],
+        plant_place: vec![10.0, 40.0],
+        plant_reserve: vec![1.0, 2.0],
+        plant_cap: vec![2.0, 2.0],
         ..Crafted::new(&[0, 1, 2], &[1.0, 2.0, 3.0])
     };
     assert!(p.load().is_ok());
@@ -624,6 +779,37 @@ fn wild_creature_values_load_and_run_without_panic() {
     w.write_heirs();
     w.stat(STAT_MEAN_ENERGY01);
     w.pick(10.0, 10.0, 50.0);
+    frame::write(&mut w, 0.0, 0.0, 64.0, 64.0);
+    World::load(&w.save()).expect("the world still loads");
+}
+
+/// `load` does not check where a plant is or what the scent field holds. Every plant seeds at each
+/// update here, so the growth, seeding, and death rules all run on these values.
+#[test]
+fn wild_plant_places_and_scent_values_load_and_run_without_panic() {
+    let wild = [
+        f32::NAN,
+        f32::INFINITY,
+        f32::NEG_INFINITY,
+        1e30,
+        -1e30,
+        10.0,
+    ];
+    let mut scent = vec![0.0; SCENT_CELLS];
+    scent[..wild.len()].copy_from_slice(&wild);
+    let p = Crafted {
+        fertility: vec![1.0; FERTILITY_CELLS],
+        scent,
+        ..Crafted::plants(&wild)
+    };
+    let mut w = p.load().expect("load");
+    w.params.set(id::PLANT_SEED_AT, 0.1);
+    w.params.set(id::PLANT_SEED_CHANCE, 1.0);
+    w.run(100);
+    // A seedling has the cap of its cell, not the crafted cap.
+    assert!(w.plants.cap.contains(&w.params.get(id::PLANT_CAP)));
+    w.scent.sample(f32::NAN, -1e30);
+    w.scent.gradient(f32::INFINITY, f32::NAN);
     frame::write(&mut w, 0.0, 0.0, 64.0, 64.0);
     World::load(&w.save()).expect("the world still loads");
 }
