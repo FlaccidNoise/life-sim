@@ -38,6 +38,14 @@ impl Slots {
         self.count -= 1;
     }
 
+    /// Marks a free slot below `capacity` as alive. For `load`, which rebuilds the pool slot by slot.
+    pub fn mark_alive(&mut self, slot: u32) {
+        debug_assert!(slot < self.capacity && !self.is_alive(slot));
+        self.alive[slot as usize / 64] |= 1 << (slot % 64);
+        self.count += 1;
+        self.high_water = self.high_water.max(slot + 1);
+    }
+
     pub fn is_alive(&self, slot: u32) -> bool {
         self.alive[slot as usize / 64] >> (slot % 64) & 1 == 1
     }
