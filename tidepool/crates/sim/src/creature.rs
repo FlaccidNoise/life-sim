@@ -1,7 +1,7 @@
 //! Creature arrays. One index per slot. A dead slot holds stale values.
 
 use crate::pool::Slots;
-use crate::snapshot::Writer;
+use crate::snapshot::{LoadError, Reader, Writer};
 
 pub const MAX_CREATURES: u32 = 4096;
 
@@ -51,5 +51,47 @@ impl Creatures {
         f32s(w, &self.vx);
         f32s(w, &self.vy);
         f32s(w, &self.radius);
+    }
+
+    /// Reads what `save` wrote. The slot list must be strictly ascending and below capacity, and
+    /// every field must have one value per listed slot.
+    pub fn load(r: &mut Reader) -> Result<Creatures, LoadError> {
+        let live = r.u32s()?;
+        if live.windows(2).any(|p| p[0] >= p[1]) {
+            return Err(LoadError::Invalid("creature slots not ascending"));
+        }
+        if live.last().is_some_and(|&s| s >= MAX_CREATURES) {
+            return Err(LoadError::Invalid("creature slot past capacity"));
+        }
+        let mut c = Creatures::default();
+        for &s in &live {
+            c.slots.mark_alive(s);
+        }
+        let sized = |n: usize| {
+            if n == live.len() {
+                Ok(())
+            } else {
+                Err(LoadError::Invalid("creature field length"))
+            }
+        };
+        let f32s = |r: &mut Reader, a: &mut [f32]| {
+            let v = r.f32s()?;
+            sized(v.len())?;
+            for (&s, x) in live.iter().zip(v) {
+                a[s as usize] = x;
+            }
+            Ok(())
+        };
+        let uid = r.u32s()?;
+        sized(uid.len())?;
+        for (&s, u) in live.iter().zip(uid) {
+            c.uid[s as usize] = u;
+        }
+        f32s(r, &mut c.x)?;
+        f32s(r, &mut c.y)?;
+        f32s(r, &mut c.vx)?;
+        f32s(r, &mut c.vy)?;
+        f32s(r, &mut c.radius)?;
+        Ok(c)
     }
 }

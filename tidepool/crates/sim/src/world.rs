@@ -3,8 +3,10 @@
 use crate::creature::Creatures;
 use crate::grid::Grid;
 use crate::rng::Rng;
-use crate::snapshot::{crc32, Writer};
+use crate::snapshot::{self, crc32, LoadError, Reader, Writer};
 
+/// Largest `w` or `h` that `load` accepts. Bounds the grid that a snapshot can make `load` allocate.
+pub const MAX_WORLD_SIZE: f32 = 65536.0;
 /// Largest sum of two radii. Sets the neighbour search box.
 const BODY_REACH: f32 = 16.0;
 /// Velocity change per unit of overlap, per unit of distance.
@@ -113,13 +115,42 @@ impl World {
         w.f32(self.w);
         w.f32(self.h);
         w.u32(self.next_uid);
-        w.u32(self.rng_spawn.0 as u32);
-        w.u32((self.rng_spawn.0 >> 32) as u32);
+        self.rng_spawn.save(&mut w);
         self.creatures.save(&mut w);
         w.bytes
     }
 
     pub fn state_hash(&self) -> u32 {
         crc32(&self.save_payload())
+    }
+
+    /// MAGIC, FORMAT_VERSION, payload length, payload, crc32(payload). All little-endian.
+    pub fn save(&self) -> Vec<u8> {
+        snapshot::seal(&self.save_payload())
+    }
+
+    /// Reads in the order `save_payload` writes. Never panics. Bad data is an error, not a world.
+    pub fn load(bytes: &[u8]) -> Result<World, LoadError> {
+        let mut r = Reader::new(snapshot::open(bytes)?);
+        let tick = r.u32()?;
+        let (w, h) = (r.f32()?, r.f32()?);
+        // False for NaN and infinity too.
+        let in_range = |v: f32| v > 0.0 && v <= MAX_WORLD_SIZE;
+        if !in_range(w) || !in_range(h) {
+            return Err(LoadError::Invalid("world size"));
+        }
+        let next_uid = r.u32()?;
+        let rng_spawn = Rng::load(&mut r)?;
+        let creatures = Creatures::load(&mut r)?;
+        r.end()?;
+        Ok(World {
+            tick,
+            w,
+            h,
+            creatures,
+            next_uid,
+            rng_spawn,
+            grid: Grid::new(w, h),
+        })
     }
 }

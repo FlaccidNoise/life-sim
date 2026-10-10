@@ -1,5 +1,7 @@
 //! Seeded generator: splitmix64. One stream per subsystem, made with `fork`.
 
+use crate::snapshot::{LoadError, Reader, Writer};
+
 const GOLDEN: u64 = 0x9E37_79B9_7F4A_7C15;
 
 fn mix(mut z: u64) -> u64 {
@@ -43,6 +45,17 @@ impl Rng {
     /// An independent stream. Does not advance `self`.
     pub fn fork(&self, tag: u64) -> Rng {
         Rng(mix(self.0 ^ mix(tag.wrapping_add(GOLDEN))))
+    }
+
+    /// The low word, then the high word.
+    pub fn save(&self, w: &mut Writer) {
+        w.u32(self.0 as u32);
+        w.u32((self.0 >> 32) as u32);
+    }
+
+    pub fn load(r: &mut Reader) -> Result<Rng, LoadError> {
+        let (lo, hi) = (r.u32()?, r.u32()?);
+        Ok(Rng(lo as u64 | (hi as u64) << 32))
     }
 }
 
