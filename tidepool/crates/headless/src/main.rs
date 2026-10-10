@@ -1,10 +1,12 @@
+mod bench;
+
 use std::process::exit;
 use std::str::FromStr;
 
 use tidepool_sim::world::{size_ok, World, MAX_WORLD_SIZE};
 
-const USAGE: &str =
-    "usage: tidepool-headless run --seed <u32> --ticks <u32> --creatures <u32> [--world <W>x<H>]";
+const USAGE: &str = "usage: tidepool-headless run --seed <u32> --ticks <u32> --creatures <u32> [--world <W>x<H>]
+       tidepool-headless bench [--creatures <u32>] [--world <W>x<H>] [--ticks <u32>] [--warmup <u32>] [--runs <u32>] [--floor <n>]";
 
 fn usage(problem: &str) -> ! {
     eprintln!("error: {problem}\n{USAGE}");
@@ -16,6 +18,17 @@ fn value<T: FromStr>(flag: &str, v: Option<&str>) -> T {
         .unwrap_or_else(|| usage(&format!("{flag} needs a valid value")))
 }
 
+fn world_size(flag: &str, v: Option<&str>) -> (f32, f32) {
+    let (ws, hs) = v.and_then(|s| s.split_once('x')).unzip();
+    let (w, h) = (value(flag, ws), value(flag, hs));
+    if !size_ok(w, h) {
+        usage(&format!(
+            "--world needs two numbers above 0 and at most {MAX_WORLD_SIZE}, like 1536x1024"
+        ));
+    }
+    (w, h)
+}
+
 fn run(args: &[String]) {
     let (mut seed, mut ticks, mut creatures) = (None, None, None);
     let (mut w, mut h) = (1536.0f32, 1024.0f32);
@@ -25,15 +38,7 @@ fn run(args: &[String]) {
             "--seed" => seed = Some(value::<u32>(flag, it.next())),
             "--ticks" => ticks = Some(value::<u32>(flag, it.next())),
             "--creatures" => creatures = Some(value::<u32>(flag, it.next())),
-            "--world" => {
-                let (ws, hs) = it.next().and_then(|s| s.split_once('x')).unzip();
-                (w, h) = (value(flag, ws), value(flag, hs));
-                if !size_ok(w, h) {
-                    usage(&format!(
-                        "--world needs two numbers above 0 and at most {MAX_WORLD_SIZE}, like 1536x1024"
-                    ));
-                }
-            }
+            "--world" => (w, h) = world_size(flag, it.next()),
             _ => usage(&format!("unknown flag {flag}")),
         }
     }
@@ -55,6 +60,7 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
         Some("run") => run(&args[1..]),
-        _ => usage("expected the subcommand `run`"),
+        Some("bench") => bench::bench(&args[1..]),
+        _ => usage("expected the subcommand `run` or `bench`"),
     }
 }
