@@ -1,0 +1,11 @@
+disallowed-methods = [
+  { path = "f32::sin", reason = "use sim::math: std transcendentals differ between native and wasm" },
+  { path = "f32::cos", reason = "use sim::math: std transcendentals differ between native and wasm" },
+  { path = "f32::sin_cos", reason = "use sim::math::sin_cos" },
+  { path = "f32::tan", reason = "use sim::math" },
+  { path = "f32::exp", reason = "use sim::math" },
+  { path = "f32::powf", reason = "use sim::math" },
+  { path = "f32::tanh", reason = "use sim::math::act" },
+  { path = "f32::atan2", reason = "use sim::math" },
+  { path = "f32::mul_add", reason = "fused multiply-add differs between targets" },
+]
