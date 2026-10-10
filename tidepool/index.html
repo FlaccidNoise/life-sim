@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
     <title>Tidepool</title>
+    <link rel="icon" href="data:," />
     <style>
       html,
       body {
@@ -23,6 +24,51 @@
         position: fixed;
         inset: 0;
         pointer-events: none;
+        display: grid;
+        place-items: center;
+        color: #cfe6ee;
+        font:
+          16px/1.5 system-ui,
+          sans-serif;
+      }
+      .panel {
+        max-width: 32rem;
+        margin: 1rem;
+        padding: 1.5rem 2rem;
+        border-radius: 12px;
+        background: rgb(4 18 28 / 0.9);
+        text-align: center;
+        pointer-events: auto;
+      }
+      .panel[role='alert'] {
+        border: 1px solid #3b6377;
+      }
+      .panel button {
+        padding: 0.5rem 1.5rem;
+        border: 0;
+        border-radius: 8px;
+        background: #cfe6ee;
+        color: #04121c;
+        font: inherit;
+        cursor: pointer;
+      }
+      .readout,
+      .bench {
+        position: fixed;
+        left: 12px;
+        margin: 0;
+        padding: 6px 10px;
+        border-radius: 6px;
+        background: rgb(4 18 28 / 0.75);
+      }
+      .readout {
+        top: 12px;
+        font:
+          12px/1.4 ui-monospace,
+          monospace;
+      }
+      .bench {
+        bottom: 12px;
       }
     </style>
   </head>
