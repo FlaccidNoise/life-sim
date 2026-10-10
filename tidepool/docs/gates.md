@@ -59,6 +59,8 @@ project kept the machine at a load average near 5, so these readings are lower b
 | 2026-10-10 | 10 (M1 skeleton, stub rules) | 3072 by 1536, 1,500 founders that wander, no plants yet | 1,500 | 12,627 | 10,633 | 2,400 |
 | 2026-10-10 | 11 and 12 (motor, plants, scent) | 3072 by 1536, 1,500 founders that wander, 3,000 founder plants | 1,500 | 9,396 | 8,366 | 2,400 |
 | 2026-10-10 | 13 (energy) | The same world. Creatures now starve | 228 | VOID | VOID | 2,400 |
+| 2026-10-10 | 14 (budding) | The same world | 234 | VOID | VOID | 2,400 |
+| 2026-10-10 | 15 (brains) | The same world. Creatures now follow scent | 144 | VOID | VOID | 2,400 |
 
 **The void row after Task 13.** Both benches print `VOID: population fell` and `make gates` exits 2. The
 gate works as built: it refuses to time a world that has emptied. The bench world falls from 1,500
@@ -66,6 +68,20 @@ creatures to 573 at tick 500 and 51 at tick 1,000, and nearly every death is sta
 steer by noise, and a wandering body pays 0.086 energy per tick against 0.288 per tick on a plant, so it
 must touch a plant 30% of the time. The brain that follows scent is Task 15. No parameter, rule, or
 bench was changed to hide this. The gate must pass again at Task 15.
+
+**Still void after Task 15.** Brains work: at tick 500 on the default world, 83% to 89% of creatures are
+within 2 body lengths of a plant, against 34% to 51% with the turn output forced to 0. The bench world
+still empties, from 1,500 to 381 at tick 500 and 3 at tick 1,000, and every death is starvation. The
+cause is the food supply at the default parameters, which are arithmetic and not yet tuned. A plant
+grows at most 0.025 energy per tick and a default creature burns about 0.10. The 2,023 plants that fit
+in the bench world can feed about 500 creatures, and the gate needs a mean of 1,200 alive. No brain can
+pass it at these defaults. Task 16 tunes the defaults, and its final proof includes this gate.
+
+**A reading that is not a gate reading.** To see the cost of a full world before it can exist, Task 15
+timed a probe world with all upkeep set to 0 (probe only, mean 1,678 alive, plants eaten down to
+almost none). Native 4,274 and WASM 3,708 ticks per second, with other work running. The motor phase
+was 58% of the tick: the push between bodies scans every neighbour, and creatures pile onto scent
+peaks. Treat this as the shape of the cost. The margin over the 2,400 floor is thin, and M2 adds eyes.
 
 ## In-page bench, reference machine
 

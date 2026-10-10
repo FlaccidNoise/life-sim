@@ -28,7 +28,7 @@ fn load_then_run_equals_unbroken_run() {
     assert_eq!(resumed.state_hash(), world_at(2000).state_hash());
 }
 
-/// The save falls between births: `world_at` has 44 by tick 1,500 and 86 by tick 3,000. So the
+/// The save falls between births: `world_at` has 13 by tick 1,500 and 25 by tick 3,000. So the
 /// genomes of the born, the cooldowns of their parents, and `rng_mutate` are all in the round trip.
 #[test]
 fn load_then_run_equals_unbroken_run_across_births() {
@@ -94,7 +94,6 @@ fn every_saved_field_is_in_the_hash_and_survives_a_load() {
         ("rng_spawn", |w| w.rng_spawn.0 ^= 1),
         ("rng_mutate", |w| w.rng_mutate.0 ^= 1),
         ("rng_plants", |w| w.rng_plants.0 ^= 1),
-        ("rng_wander", |w| w.rng_wander.0 ^= 1),
         ("params", |w| w.params.set(id::CHEMO_GAIN, 9.0)),
         ("x", |w| w.creatures.x[S] += 1.0),
         ("y", |w| w.creatures.y[S] += 1.0),
@@ -122,6 +121,9 @@ fn every_saved_field_is_in_the_hash_and_survives_a_load() {
         ("genome hue", |w| w.genomes[S].hue += 0.1),
         ("genome bias", |w| w.genomes[S].brain.bias[0] += 0.5),
         ("genome alpha", |w| w.genomes[S].brain.alpha[0] = 0.5),
+        ("brain activation", |w| {
+            w.brains.cur[S * MAX_NEURONS + N_IN] += 0.5
+        }),
         ("genome connections", |w| {
             let gene = ConnGene {
                 src: 0,
@@ -179,8 +181,8 @@ fn garbage_is_rejected_without_panic() {
 // Crafted input. Every snapshot below has a valid envelope and checksum, so only `load`'s own checks
 // can reject it.
 
-/// Bytes before the first length prefix: 5 header words and 4 generators of 2 words each.
-const HEADER_BYTES: usize = 4 * (5 + 4 * 2);
+/// Bytes before the first length prefix: 5 header words and 3 generators of 2 words each.
+const HEADER_BYTES: usize = 4 * (5 + 3 * 2);
 /// The `f32` creature fields before the integer fields, and after them.
 const FLOATS_BEFORE: usize = 10;
 const FLOATS_AFTER: usize = 7;
@@ -200,6 +202,8 @@ struct Crafted {
     /// The brain of every genome.
     brain: BrainGenome,
     births: u64,
+    /// The brain activations of every live slot. None for a zero per neuron.
+    activations: Option<Vec<f32>>,
     /// The uid of the possessed creature, the manual flag, thrust, turn, and the death cause.
     control: (u32, u32, f32, f32, u32),
     plant_slots: Vec<u32>,
@@ -231,6 +235,7 @@ impl Crafted {
             parents: vec![0; n],
             brain: BrainGenome::default(),
             births: 0,
+            activations: None,
             control: (0, 0, 0.0, 0.0, 0),
             plant_slots: vec![],
             plant_place: vec![],
@@ -271,7 +276,7 @@ impl Crafted {
         p.f32(self.size.1);
         p.u32(self.next_uid);
         p.u32(1); // next_history
-        for _ in 0..4 {
+        for _ in 0..3 {
             p.u64(0); // a generator
         }
         p.f32s(&self.params);
@@ -298,6 +303,9 @@ impl Crafted {
         p.u64(self.births);
         p.u64(0); // deaths
         p.u64(0f64.to_bits()); // eaten
+        let neurons = N_IN + self.brain.n_hidden as usize + N_OUT;
+        let zeros = vec![0.0; self.live.len() * neurons];
+        p.f32s(self.activations.as_ref().unwrap_or(&zeros));
         let (possessed, manual, thrust, turn, cause) = self.control;
         p.u32(possessed);
         p.u32(manual);
@@ -529,6 +537,22 @@ fn a_bad_brain_genome_is_invalid() {
         ),
     ] {
         assert_eq!(with_brain(bad).err(), Some(LoadError::Invalid(reason)));
+    }
+}
+
+#[test]
+fn a_brain_part_of_the_wrong_length_is_invalid() {
+    // Two creatures with the smallest brain hold 18 activations.
+    for count in [0, 17, 19] {
+        let p = Crafted {
+            activations: Some(vec![0.0; count]),
+            ..Crafted::new(&[0, 1], &[1.0, 2.0])
+        };
+        assert_eq!(
+            p.err(),
+            Some(LoadError::Invalid("brain activation count")),
+            "{count} values"
+        );
     }
 }
 
@@ -830,6 +854,36 @@ fn wild_plant_places_and_scent_values_load_and_run_without_panic() {
     assert!(w.plants.cap.contains(&w.params.get(id::PLANT_CAP)));
     w.scent.sample(f32::NAN, -1e30);
     w.scent.gradient(f32::INFINITY, f32::NAN);
+    frame::write(&mut w, 0.0, 0.0, 64.0, 64.0);
+    World::load(&w.save()).expect("the world still loads");
+}
+
+/// `load` does not check a brain activation or the scent field. Sensing and thinking must survive
+/// any of them. The brain has a hidden neuron and a loop, so every wild value is read.
+#[test]
+fn wild_activations_and_scent_under_a_creature_load_and_run_without_panic() {
+    let wild = [
+        f32::NAN,
+        f32::INFINITY,
+        f32::NEG_INFINITY,
+        1e30,
+        -1e30,
+        10.0,
+    ];
+    let cycle = |n: usize| (0..n).map(|i| wild[i % wild.len()]).collect::<Vec<f32>>();
+    let (hidden, thrust, turn) = (N_IN, N_IN + 1, N_IN + 2);
+    let mut conns: Vec<ConnGene> = (0..N_IN).map(|i| conn(i, hidden)).collect();
+    conns.extend([conn(hidden, thrust), conn(hidden, turn), conn(turn, hidden)]);
+    let live: Vec<u32> = (0..7).collect();
+    let p = Crafted {
+        brain: brain(1, conns),
+        activations: Some(cycle(live.len() * (N_IN + 1 + N_OUT))),
+        scent: cycle(SCENT_CELLS),
+        // A body of size 1 pays little upkeep, so each of the 7 lives to its first thought.
+        ..Crafted::new(&live, &[1.0; 7])
+    };
+    let mut w = p.load().expect("load");
+    w.run(10);
     frame::write(&mut w, 0.0, 0.0, 64.0, 64.0);
     World::load(&w.save()).expect("the world still loads");
 }

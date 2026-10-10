@@ -395,14 +395,15 @@ test('death pauses the world, posts the cause and heirs, and possessing an heir 
   expect(r.lastTick()).toBeGreaterThan(tickAtDeath);
 });
 
-// Seed 1, with the default parameters. Creatures steer by noise, so most founders starve before
-// tick 2,000. Founder 252 is one of the 5 whose line has a member younger than 600 ticks then. If
-// a change to the rules empties that line, pick the founder again: mark one, run 2,000 ticks, cut
-// the lifespan to 600, and take a founder whose marked line outlives the cut.
+// Seed 7, with the default parameters. Most founders starve before tick 1,000, and 18 creatures
+// are alive at tick 2,000. Founder 158 is one of the 4 whose line has a member younger than 600
+// ticks then: a child of 113 ticks. On seed 1 no child is alive at that tick. If a change to the
+// rules empties the line, pick the seed and the founder again: mark one, run 2,000 ticks, cut the
+// lifespan to 600, and take a founder whose marked line outlives the cut.
 test('picking an heir resumes the world in that body', () => {
   const r = rig({ recycle: true });
-  r.host.handle({ type: 'init', seed: 1 });
-  r.host.handle({ type: 'possess', uid: 252 });
+  r.host.handle({ type: 'init', seed: 7 });
+  r.host.handle({ type: 'possess', uid: 158 });
   r.host.handle({ type: 'release' });
   r.advance(100_000); // 2,000 ticks: the line buds marked children
   expect(r.of('died')).toEqual([]);
