@@ -1,4 +1,5 @@
 mod bench;
+mod health;
 
 use std::process::exit;
 use std::str::FromStr;
@@ -7,7 +8,10 @@ use tidepool_sim::params::{Params, DEFS};
 use tidepool_sim::world::{size_ok, World, MAX_WORLD_SIZE};
 
 const USAGE: &str = "usage: tidepool-headless run --seed <u32> --ticks <u32> --creatures <u32> [--plants <u32>] [--world <W>x<H>] [--param <name>=<value>]...
-       tidepool-headless bench [--creatures <u32>] [--plants <u32>] [--world <W>x<H>] [--ticks <u32>] [--warmup <u32>] [--runs <u32>] [--floor <n>]";
+       tidepool-headless bench [--creatures <u32>] [--plants <u32>] [--world <W>x<H>] [--ticks <u32>] [--warmup <u32>] [--runs <u32>] [--floor <n>]
+       tidepool-headless gate-health [--seeds <u32>,<u32>,...] [--ticks <u32>] [--param <name>=<value>]...
+       tidepool-headless probe-density [--seed <u32>] [--ticks <u32>] [--param <name>=<value>]...
+       tidepool-headless probe-skip [--seed <u32>] [--ticks <settle ticks>] [--param <name>=<value>]...";
 
 fn usage(problem: &str) -> ! {
     eprintln!("error: {problem}\n{USAGE}");
@@ -93,6 +97,9 @@ fn main() {
     match args.first().map(String::as_str) {
         Some("run") => run(&args[1..]),
         Some("bench") => bench::bench(&args[1..]),
-        _ => usage("expected the subcommand `run` or `bench`"),
+        Some("gate-health") => health::gate(&args[1..]),
+        Some("probe-density") => health::probe_density(&args[1..]),
+        Some("probe-skip") => health::probe_skip(&args[1..]),
+        _ => usage("expected a subcommand: run, bench, gate-health, probe-density, or probe-skip"),
     }
 }

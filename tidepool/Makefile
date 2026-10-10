@@ -31,6 +31,7 @@ check: wasm headless ## Every fast gate
 	pnpm exec eslint .
 	pnpm exec vitest run
 
-gates: headless wasm ## Throughput and health gates (task 16 adds the health gate)
+gates: headless wasm ## Throughput and health gates
 	$(HEADLESS) bench
 	node scripts/bench-wasm.mjs
+	$(HEADLESS) gate-health

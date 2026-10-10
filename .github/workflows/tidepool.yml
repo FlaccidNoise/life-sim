@@ -26,3 +26,4 @@ jobs:
       - run: make check
       - run: target/release/tidepool-headless bench --floor 800
       - run: node scripts/bench-wasm.mjs --floor 800
+      - run: target/release/tidepool-headless gate-health

@@ -29,7 +29,8 @@ macro_rules! table {
     };
 }
 
-// Name, default, minimum, maximum. The defaults are arithmetic, not measurement: Task 16 tunes them.
+// Name, default, minimum, maximum. `plant_growth` and `intake_rate` are tuned against the health
+// gate (`docs/findings/m1-tuning.md`). The other defaults are arithmetic, not measurement.
 table! {
     /// Ticks until death by old age.
     LIFESPAN "lifespan" 4800.0 600.0 24000.0;
@@ -58,7 +59,7 @@ table! {
     /// Plant reserve limit at fertility 1.
     PLANT_CAP "plant_cap" 20.0 1.0 200.0;
     /// Logistic growth rate per tick.
-    PLANT_GROWTH "plant_growth" 0.005 0.0 0.1;
+    PLANT_GROWTH "plant_growth" 0.02 0.0 0.1;
     /// Reserve fraction needed to seed.
     PLANT_SEED_AT "plant_seed_at" 0.7 0.1 1.0;
     /// Chance to seed per plant update.
@@ -96,7 +97,7 @@ table! {
     /// Cost of thrust.
     MOVE_COST "move_cost" 0.006 0.0 1.0;
     /// Energy per tick per unit filter per unit length.
-    INTAKE_RATE "intake_rate" 0.04 0.0 1.0;
+    INTAKE_RATE "intake_rate" 0.08 0.0 1.0;
     /// Largest share of a plant's reserve taken per tick.
     BITE_FRACTION "bite_fraction" 0.05 0.001 1.0;
     /// `energy01` above which a juvenile grows.
