@@ -1,27 +1,75 @@
 //! The world: every piece of simulation state, the tick, and the state hash.
 
-use crate::creature::Creatures;
+use crate::brain::{self, Brains};
+use crate::control::{self, Control};
+use crate::creature::{Creatures, MAX_CREATURES};
+use crate::energy;
+use crate::field::{self, Field};
+use crate::genome::Genome;
 use crate::grid::Grid;
+use crate::math::{sin_cos, wrap_angle, PI};
+use crate::motor::{self, Motor};
+use crate::params::{id, Params};
+use crate::plant::{self, Fertility, Plants};
+use crate::repro;
 use crate::rng::Rng;
+use crate::sense;
 use crate::snapshot::{self, crc32, LoadError, Reader, Writer};
+use crate::stats::Stats;
 
-/// Largest `w` or `h` of a world. Bounds the grid that a caller or a snapshot can make it allocate.
-pub const MAX_WORLD_SIZE: f32 = 65536.0;
-/// Largest sum of two radii. Sets the neighbour search box.
-const BODY_REACH: f32 = 16.0;
-/// Velocity change per unit of overlap, per unit of distance.
-const REPEL: f32 = 0.2;
+/// Largest `w` or `h` of a world. Bounds what a caller or a snapshot can make the world allocate:
+/// at this size the scent field, the largest grid, holds 4 million cells.
+pub const MAX_WORLD_SIZE: f32 = 16384.0;
+/// A founder is an adult at half of its energy capacity.
+const FOUNDER_GROWTH: f32 = 1.0;
+const FOUNDER_ENERGY01: f32 = 0.5;
+/// Places tried for each founder. Each place is kept with a chance equal to its fertility.
+const FOUNDER_TRIES: u32 = 8;
+
+/// Where and what a new creature is. The genome gives the rest.
+pub struct SpawnAt {
+    pub x: f32,
+    pub y: f32,
+    pub heading: f32,
+    pub growth: f32,
+    pub energy01: f32,
+    /// The uid of the budding parent. 0 for a creature that was not born.
+    pub parent: u32,
+    pub generation: u32,
+    pub mark: u8,
+}
 
 pub struct World {
     pub tick: u32,
     pub w: f32,
     pub h: f32,
+    pub params: Params,
     pub creatures: Creatures,
+    /// By slot. A dead slot holds a stale genome.
+    pub genomes: Vec<Genome>,
     /// Starts at 1. 0 means none.
     pub next_uid: u32,
+    /// The next history id for a new brain connection.
+    pub next_history: u32,
+    pub plants: Plants,
+    pub fertility: Fertility,
+    pub scent: Field,
+    pub brains: Brains,
+    pub control: Control,
+    pub stats: Stats,
+    /// One generator per subsystem, so that a change to one never moves the draws of another.
+    /// Founder genomes and founder places.
     pub rng_spawn: Rng,
+    /// Mutation and the heading of a newborn.
+    pub rng_mutate: Rng,
+    /// The fertility map, founder plants, and seeding.
+    pub rng_plants: Rng,
+    /// The wander stub. Task 15 deletes it.
+    pub rng_wander: Rng,
     /// Scratch. Rebuilt every tick, never saved.
     pub grid: Grid,
+    /// Scratch. Never saved.
+    pub motor: Motor,
     /// Scratch. The last frame that `frame::write` made. Never saved.
     pub frame: Vec<u32>,
     /// Scratch. The last snapshot that `tp_save` made. Never saved.
@@ -35,7 +83,8 @@ pub fn size_ok(w: f32, h: f32) -> bool {
 }
 
 impl World {
-    /// The caller checks `size_ok(w, h)` first.
+    /// An empty world with default parameters and a fertility map of zeros. The caller checks
+    /// `size_ok(w, h)` first.
     pub fn new(seed: u32, w: f32, h: f32) -> World {
         debug_assert!(size_ok(w, h));
         let root = Rng::new(seed as u64);
@@ -43,80 +92,135 @@ impl World {
             tick: 0,
             w,
             h,
+            params: Params::new(),
             creatures: Creatures::default(),
+            genomes: vec![Genome::default(); MAX_CREATURES as usize],
             next_uid: 1,
+            next_history: 1,
+            plants: Plants::new(w, h),
+            fertility: Fertility::new(w, h),
+            scent: Field::new(w, h),
+            brains: Brains::new(MAX_CREATURES),
+            control: Control::default(),
+            stats: Stats::default(),
             rng_spawn: root.fork(1),
+            rng_mutate: root.fork(2),
+            rng_plants: root.fork(3),
+            rng_wander: root.fork(4),
             grid: Grid::new(w, h),
+            motor: Motor::default(),
             frame: Vec::new(),
             save_buf: Vec::new(),
         }
     }
 
-    /// Random position, velocity in `[-1, 1]`, radius in `[3, 8]`. Stops when the pool is full.
-    pub fn spawn_drifters(&mut self, n: u32) {
-        let (c, r) = (&mut self.creatures, &mut self.rng_spawn);
-        for _ in 0..n {
-            // The last uid is never given out, so the counter cannot wrap to 0.
-            if self.next_uid == u32::MAX {
-                return;
-            }
-            let Some(slot) = c.slots.alloc() else { return };
-            let s = slot as usize;
-            c.uid[s] = self.next_uid;
-            self.next_uid += 1;
-            c.x[s] = r.range(0.0, self.w);
-            c.y[s] = r.range(0.0, self.h);
-            c.vx[s] = r.range(-1.0, 1.0);
-            c.vy[s] = r.range(-1.0, 1.0);
-            c.radius[s] = r.range(3.0, 8.0);
+    /// Allocates a slot, sets every array from the genome and `at`, and calls `brains.express`.
+    /// The heading is wrapped and the place is clamped to the world. A spawn with a parent counts
+    /// as a birth. None if the pool is full.
+    pub fn spawn(&mut self, genome: Genome, at: SpawnAt) -> Option<u32> {
+        // The last uid is never given out, so the counter cannot wrap to 0.
+        if self.next_uid == u32::MAX {
+            return None;
+        }
+        let slot = self.creatures.slots.alloc()?;
+        let (s, c) = (slot as usize, &mut self.creatures);
+        c.uid[s] = self.next_uid;
+        self.next_uid += 1;
+        (c.x[s], c.y[s]) = (at.x.clamp(0.0, self.w), at.y.clamp(0.0, self.h));
+        (c.vx[s], c.vy[s], c.omega[s]) = (0.0, 0.0, 0.0);
+        c.heading[s] = wrap_angle(at.heading);
+        (c.hs[s], c.hc[s]) = sin_cos(c.heading[s]);
+        (c.cmd_thrust[s], c.cmd_turn[s]) = (0.0, 0.0);
+        (c.age[s], c.bud_cooldown[s]) = (0, 0);
+        (c.generation[s], c.parent[s], c.mark[s]) = (at.generation, at.parent, at.mark);
+        (c.len[s], c.wid[s], c.hue[s]) = (genome.len, genome.wid, genome.hue);
+        (c.flagellum[s], c.cilia[s]) = (genome.flagellum, genome.cilia);
+        (c.filter[s], c.chemo[s]) = (genome.filter, genome.chemo);
+        c.growth[s] = at.growth;
+        c.energy[s] = at.energy01 * self.params.get(id::ENERGY_PER_MASS) * c.mass(s);
+        self.brains.express(s, &genome.brain);
+        self.genomes[s] = genome;
+        if at.parent != 0 {
+            self.stats.births = self.stats.births.saturating_add(1);
+        }
+        Some(slot)
+    }
+
+    /// Frees the slot and counts a death. If the creature was possessed, records the cause and
+    /// ends the possession.
+    pub fn kill(&mut self, slot: u32, cause: u32) {
+        self.creatures.slots.free(slot);
+        self.creatures.uid[slot as usize] = 0;
+        self.stats.deaths = self.stats.deaths.saturating_add(1);
+        let c = &mut self.control;
+        if c.possessed != 0 && c.possessed_slot == slot {
+            c.death_cause = cause;
+            c.possessed = 0;
+            c.manual = false;
         }
     }
 
+    /// Makes the starting world: the fertility map, then the creatures, then the plants. Call it
+    /// once, on a new world, after the parameters are set. It replaces the fertility map.
+    ///
+    /// Founders are adults (growth 1) at `energy01` 0.5, with an age uniform in
+    /// `[0, lifespan / 2)`. Each one draws from `rng_spawn`, in this order: its genome, then
+    /// `FOUNDER_TRIES` places of 3 draws each (x, y, and a chance), then its heading, then its age.
+    /// It takes the first place whose chance is below the fertility there, or the last place if
+    /// none is. Every founder makes the same number of draws, so the fertility map moves founders
+    /// but does not change their genomes.
+    pub fn seed_founders(&mut self, creatures: u32, plants: u32) {
+        self.fertility = Fertility::generate(
+            &mut self.rng_plants,
+            self.w,
+            self.h,
+            self.params.get(id::FERT_BLOBS) as u32,
+            self.params.get(id::FERT_RADIUS),
+        );
+        let half_lifespan = (self.params.get(id::LIFESPAN) / 2.0) as u32;
+        for _ in 0..creatures {
+            let rng = &mut self.rng_spawn;
+            let genome = Genome::founder(rng);
+            let (mut place, mut placed) = ((0.0, 0.0), false);
+            for _ in 0..FOUNDER_TRIES {
+                let (x, y, chance) = (rng.range(0.0, self.w), rng.range(0.0, self.h), rng.unit());
+                if !placed {
+                    place = (x, y);
+                    placed = chance < self.fertility.at(x, y);
+                }
+            }
+            let (heading, age) = (rng.range(-PI, PI), rng.below(half_lifespan));
+            let at = SpawnAt {
+                x: place.0,
+                y: place.1,
+                heading,
+                growth: FOUNDER_GROWTH,
+                energy01: FOUNDER_ENERGY01,
+                parent: 0,
+                generation: 0,
+                mark: 0,
+            };
+            let Some(slot) = self.spawn(genome, at) else {
+                break;
+            };
+            self.creatures.age[slot as usize] = age;
+        }
+        plant::seed(self, plants);
+    }
+
+    /// The phases in their fixed order, and nothing else.
     pub fn tick(&mut self) {
-        let c = &mut self.creatures;
-        self.grid.rebuild(&c.slots, &c.x, &c.y);
-        for s in 0..c.slots.high_water() as usize {
-            if !c.slots.is_alive(s as u32) {
-                continue;
-            }
-            let (px, py, ri) = (c.x[s], c.y[s], c.radius[s]);
-            let (mut fx, mut fy) = (0.0f32, 0.0f32);
-            self.grid.for_each_in_box(
-                px - BODY_REACH,
-                py - BODY_REACH,
-                px + BODY_REACH,
-                py + BODY_REACH,
-                |j| {
-                    let j = j as usize;
-                    let (dx, dy) = (px - c.x[j], py - c.y[j]);
-                    let rs = ri + c.radius[j];
-                    let d2 = dx * dx + dy * dy;
-                    if d2 < rs * rs && d2 > 0.0 {
-                        let d = d2.sqrt();
-                        let f = (rs - d) / d * REPEL;
-                        fx += dx * f;
-                        fy += dy * f;
-                    }
-                },
-            );
-            c.vx[s] += fx;
-            c.vy[s] += fy;
-        }
-        for s in 0..c.slots.high_water() as usize {
-            if !c.slots.is_alive(s as u32) {
-                continue;
-            }
-            let x = c.x[s] + c.vx[s];
-            let y = c.y[s] + c.vy[s];
-            if !(0.0..=self.w).contains(&x) {
-                c.vx[s] = -c.vx[s];
-            }
-            if !(0.0..=self.h).contains(&y) {
-                c.vy[s] = -c.vy[s];
-            }
-            c.x[s] = x.clamp(0.0, self.w);
-            c.y[s] = y.clamp(0.0, self.h);
-        }
+        self.grid
+            .rebuild(&self.creatures.slots, &self.creatures.x, &self.creatures.y);
+        sense::step(self);
+        brain::step(self);
+        control::apply(self);
+        motor::step(self);
+        energy::contact(self);
+        energy::life(self);
+        repro::step(self);
+        plant::step(self);
+        field::step(self);
         // Wraps: a snapshot can hold any tick, and a debug build panics on overflow.
         self.tick = self.tick.wrapping_add(1);
     }
@@ -127,15 +231,35 @@ impl World {
         }
     }
 
-    /// Every field that affects the future, live slots only. Header, then one part per module.
+    /// Every field that affects the future, live slots only. The header, the generators, the
+    /// parameters, the creatures, their genomes, the counters, then one part per module in tick
+    /// order.
     pub fn save_payload(&self) -> Vec<u8> {
         let mut w = Writer::new();
         w.u32(self.tick);
         w.f32(self.w);
         w.f32(self.h);
         w.u32(self.next_uid);
+        w.u32(self.next_history);
         self.rng_spawn.save(&mut w);
+        self.rng_mutate.save(&mut w);
+        self.rng_plants.save(&mut w);
+        self.rng_wander.save(&mut w);
+        self.params.save(&mut w);
         self.creatures.save(&mut w);
+        let c = &self.creatures;
+        for s in (0..c.slots.high_water()).filter(|&s| c.slots.is_alive(s)) {
+            self.genomes[s as usize].save(&mut w);
+        }
+        self.stats.save(&mut w);
+        sense::save(self, &mut w);
+        brain::save(self, &mut w);
+        control::save(self, &mut w);
+        motor::save(self, &mut w);
+        energy::save(self, &mut w);
+        repro::save(self, &mut w);
+        plant::save(self, &mut w);
+        field::save(self, &mut w);
         w.bytes
     }
 
@@ -149,6 +273,7 @@ impl World {
     }
 
     /// Reads in the order `save_payload` writes. Never panics. Bad data is an error, not a world.
+    /// A world that loads does not panic on a tick: every value used as an index is checked here.
     pub fn load(bytes: &[u8]) -> Result<World, LoadError> {
         let mut r = Reader::new(snapshot::open(bytes)?);
         let tick = r.u32()?;
@@ -156,27 +281,41 @@ impl World {
         if !size_ok(w, h) {
             return Err(LoadError::Invalid("world size"));
         }
-        let next_uid = r.u32()?;
-        if next_uid == 0 {
+        // The scratch state, and the state that a module's `load` fills, start as in a new world.
+        let mut world = World::new(0, w, h);
+        world.tick = tick;
+        world.next_uid = r.u32()?;
+        if world.next_uid == 0 {
             return Err(LoadError::Invalid("next uid of 0"));
         }
-        let rng_spawn = Rng::load(&mut r)?;
-        let creatures = Creatures::load(&mut r)?;
+        world.next_history = r.u32()?;
+        world.rng_spawn = Rng::load(&mut r)?;
+        world.rng_mutate = Rng::load(&mut r)?;
+        world.rng_plants = Rng::load(&mut r)?;
+        world.rng_wander = Rng::load(&mut r)?;
+        world.params = Params::load(&mut r)?;
+        world.creatures = Creatures::load(&mut r)?;
         // A dead slot holds uid 0, so this reads live uids only.
-        if creatures.uid.iter().any(|&u| u >= next_uid) {
+        if world.creatures.uid.iter().any(|&u| u >= world.next_uid) {
             return Err(LoadError::Invalid("creature uid not below next uid"));
         }
+        for s in 0..world.creatures.slots.high_water() as usize {
+            if world.creatures.slots.is_alive(s as u32) {
+                world.genomes[s] = Genome::load(&mut r)?;
+                // Bias, alpha, and connections are not saved. They come from the genome.
+                world.brains.express(s, &world.genomes[s].brain);
+            }
+        }
+        world.stats = Stats::load(&mut r)?;
+        sense::load(&mut world, &mut r)?;
+        brain::load(&mut world, &mut r)?;
+        control::load(&mut world, &mut r)?;
+        motor::load(&mut world, &mut r)?;
+        energy::load(&mut world, &mut r)?;
+        repro::load(&mut world, &mut r)?;
+        plant::load(&mut world, &mut r)?;
+        field::load(&mut world, &mut r)?;
         r.end()?;
-        Ok(World {
-            tick,
-            w,
-            h,
-            creatures,
-            next_uid,
-            rng_spawn,
-            grid: Grid::new(w, h),
-            frame: Vec::new(),
-            save_buf: Vec::new(),
-        })
+        Ok(world)
     }
 }

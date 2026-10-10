@@ -1,7 +1,7 @@
 // Constants and layouts shared by the page and the worker. The frame layout mirrors
 // crates/sim/src/frame.rs. tests/abi.test.ts fails if the two disagree.
 
-export const ABI_VERSION = 1;
+export const ABI_VERSION = 2;
 export const TICK_HZ = 20;
 export const FRAME_HEADER_WORDS = 8;
 export const CREATURE_STRIDE = 10;
@@ -58,23 +58,65 @@ export function viewFrame(buffer: ArrayBuffer): FrameView {
   };
 }
 
+// Word offsets in an heir record (HEIR_STRIDE words). The layout mirrors `write_heirs` in
+// crates/sim/src/control.rs.
+export const HEIR_STRIDE = 7;
+export const H_UID = 0,
+  H_SLOT = 1,
+  H_X = 2,
+  H_Y = 3,
+  H_ENERGY = 4,
+  H_GENERATION = 5,
+  H_HUE = 6;
+
 export const WORLD_W = 1536;
 export const WORLD_H = 1024;
-export const M0_DRIFTERS = 1500;
+export const FOUNDER_CREATURES = 400;
+export const FOUNDER_PLANTS = 1200;
 export const FRAME_POOL = 3;
 export const MAX_FRAME_BYTES =
   4 * (FRAME_HEADER_WORDS + 4096 * CREATURE_STRIDE + 8192 * PLANT_STRIDE);
+
+export type DeathCause = 'starved' | 'old age';
+
+/** One row of the parameter table in crates/sim/src/params.rs. */
+export interface ParamInfo {
+  index: number;
+  name: string;
+  value: number;
+  default: number;
+  min: number;
+  max: number;
+}
+
+/** A living creature of the player's lineage. */
+export interface Heir {
+  uid: number;
+  slot: number;
+  x: number;
+  y: number;
+  energy01: number;
+  generation: number;
+  hue: number;
+}
 
 export type ToWorker =
   | { type: 'init'; seed: number; snapshot?: ArrayBuffer }
   | { type: 'view'; x0: number; y0: number; x1: number; y1: number }
   | { type: 'speed'; ticksPerSecond: number } // 0 pauses. TICK_HZ is normal.
   | { type: 'recycle'; buffer: ArrayBuffer }
-  | { type: 'bench'; ticks: number };
+  | { type: 'bench'; ticks: number }
+  | { type: 'possessAt'; x: number; y: number; radius: number }
+  | { type: 'possess'; uid: number }
+  | { type: 'release' }
+  | { type: 'input'; manual: boolean; thrust: number; turn: number }
+  | { type: 'param'; index: number; value: number };
 
 export type FromWorker =
-  | { type: 'ready'; abi: number; worldW: number; worldH: number }
+  | { type: 'ready'; abi: number; worldW: number; worldH: number; params: ParamInfo[] }
   | { type: 'frame'; buffer: ArrayBuffer }
+  | { type: 'possessed'; uid: number } // 0: nothing there, or released
+  | { type: 'died'; cause: DeathCause; heirs: Heir[] }
   | { type: 'stats'; tick: number; creatures: number; plants: number; tickMicros: number }
   | { type: 'benchResult'; ticks: number; millis: number; creatures: number }
   | { type: 'error'; message: string };

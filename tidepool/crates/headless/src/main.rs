@@ -3,10 +3,11 @@ mod bench;
 use std::process::exit;
 use std::str::FromStr;
 
+use tidepool_sim::params::{Params, DEFS};
 use tidepool_sim::world::{size_ok, World, MAX_WORLD_SIZE};
 
-const USAGE: &str = "usage: tidepool-headless run --seed <u32> --ticks <u32> --creatures <u32> [--world <W>x<H>]
-       tidepool-headless bench [--creatures <u32>] [--world <W>x<H>] [--ticks <u32>] [--warmup <u32>] [--runs <u32>] [--floor <n>]";
+const USAGE: &str = "usage: tidepool-headless run --seed <u32> --ticks <u32> --creatures <u32> [--plants <u32>] [--world <W>x<H>] [--param <name>=<value>]...
+       tidepool-headless bench [--creatures <u32>] [--plants <u32>] [--world <W>x<H>] [--ticks <u32>] [--warmup <u32>] [--runs <u32>] [--floor <n>]";
 
 fn usage(problem: &str) -> ! {
     eprintln!("error: {problem}\n{USAGE}");
@@ -29,16 +30,42 @@ fn world_size(flag: &str, v: Option<&str>) -> (f32, f32) {
     (w, h)
 }
 
+/// One `--param name=value`: the parameter's index and the value. An unknown name or a value
+/// outside the parameter's range is a usage error.
+fn param(flag: &str, v: Option<&str>) -> (usize, f32) {
+    let Some((name, number)) = v.and_then(|s| s.split_once('=')) else {
+        usage(&format!("{flag} needs <name>=<value>, like drag_fwd=0.1"))
+    };
+    let Some(i) = Params::index_of(name) else {
+        let names: Vec<&str> = DEFS.iter().map(|d| d.name).collect();
+        usage(&format!(
+            "unknown parameter {name}. Valid names: {}",
+            names.join(", ")
+        ))
+    };
+    let (x, d) = (value::<f32>(flag, Some(number)), &DEFS[i]);
+    if !(d.min..=d.max).contains(&x) {
+        usage(&format!(
+            "{flag} {name}={number} is outside the range {} to {}",
+            d.min, d.max
+        ));
+    }
+    (i, x)
+}
+
 fn run(args: &[String]) {
-    let (mut seed, mut ticks, mut creatures) = (None, None, None);
+    let (mut seed, mut ticks, mut creatures, mut plants) = (None, None, None, 0u32);
     let (mut w, mut h) = (1536.0f32, 1024.0f32);
+    let mut params = Vec::new();
     let mut it = args.iter().map(String::as_str);
     while let Some(flag) = it.next() {
         match flag {
             "--seed" => seed = Some(value::<u32>(flag, it.next())),
             "--ticks" => ticks = Some(value::<u32>(flag, it.next())),
             "--creatures" => creatures = Some(value::<u32>(flag, it.next())),
+            "--plants" => plants = value(flag, it.next()),
             "--world" => (w, h) = world_size(flag, it.next()),
+            "--param" => params.push(param(flag, it.next())),
             _ => usage(&format!("unknown flag {flag}")),
         }
     }
@@ -46,12 +73,17 @@ fn run(args: &[String]) {
         usage("--seed, --ticks, and --creatures are required")
     };
     let mut world = World::new(seed, w, h);
-    world.spawn_drifters(creatures);
+    // Before the founders: the fertility map and the founder ages read the parameters.
+    for (i, x) in params {
+        world.params.set(i, x);
+    }
+    world.seed_founders(creatures, plants);
     world.run(ticks);
     println!(
-        "tick={} creatures={} plants=0 hash={:08x}",
+        "tick={} creatures={} plants={} hash={:08x}",
         world.tick,
         world.creatures.slots.count(),
+        world.plants.slots.count(),
         world.state_hash()
     );
 }

@@ -18,6 +18,8 @@ function nativeHash(seed: number, ticks: number, creatures: number): number {
     String(ticks),
     '--creatures',
     String(creatures),
+    '--plants',
+    '0',
   ]).toString();
   const m = /hash=([0-9a-f]{8})/.exec(out);
   if (!m?.[1]) throw new Error(`no hash in headless output: ${out}. Fix: run \`make headless\`.`);
@@ -26,7 +28,7 @@ function nativeHash(seed: number, ticks: number, creatures: number): number {
 
 test.each([1, 2, 3])('WASM and native agree after 2,000 ticks (seed %i)', (seed) => {
   const sim = createSim(module, { seed, worldW: 1536, worldH: 1024 });
-  sim.spawnDrifters(500);
+  sim.seedFounders(500, 0);
   sim.tick(2000);
   expect(sim.hash()).toBe(nativeHash(seed, 2000, 500));
 });

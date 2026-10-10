@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs';
 
 const USAGE =
-  'usage: node scripts/bench-wasm.mjs [--creatures <u32>] [--world <W>x<H>] [--ticks <u32>] [--warmup <u32>] [--runs <u32>] [--floor <n>]';
+  'usage: node scripts/bench-wasm.mjs [--creatures <u32>] [--plants <u32>] [--world <W>x<H>] [--ticks <u32>] [--warmup <u32>] [--runs <u32>] [--floor <n>]';
 // Ticks between two population samples. The sample is outside the timed section.
 const CHUNK = 100;
 // A run whose mean alive count is below this share of `--creatures` is void.
@@ -29,12 +29,13 @@ function float(flag, v) {
   return n;
 }
 
-let [creatures, ticks, warmup, runs, floor] = [1500, 2000, 200, 5, 2400];
+let [creatures, plants, ticks, warmup, runs, floor] = [1500, 3000, 2000, 200, 5, 2400];
 let [w, h] = [3072, 1536];
 const args = process.argv.slice(2);
 for (let i = 0; i < args.length; i += 2) {
   const [flag, v] = [args[i], args[i + 1]];
   if (flag === '--creatures') creatures = u32(flag, v);
+  else if (flag === '--plants') plants = u32(flag, v);
   else if (flag === '--ticks') ticks = u32(flag, v);
   else if (flag === '--warmup') warmup = u32(flag, v);
   else if (flag === '--runs') runs = u32(flag, v);
@@ -68,7 +69,7 @@ for (let run = 1; run <= runs; run++) {
     const reason = new Uint8Array(x.memory.buffer, x.tp_error_ptr(), x.tp_error_len());
     usage(new TextDecoder().decode(reason));
   }
-  x.tp_spawn_drifters(world, creatures);
+  x.tp_seed_founders(world, creatures, plants);
   x.tp_tick(world, warmup);
   let [timedMillis, aliveSum, chunks] = [0, 0, 0];
   for (let left = ticks; left > 0;) {

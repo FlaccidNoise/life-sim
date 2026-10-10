@@ -2,10 +2,12 @@
 // `postMessage`, and the sim factory arrive through `HostDeps`, so tests drive it with a fake clock.
 
 import {
+  FOUNDER_CREATURES,
+  FOUNDER_PLANTS,
   FRAME_POOL,
-  M0_DRIFTERS,
   MAX_FRAME_BYTES,
   TICK_HZ,
+  type DeathCause,
   type FromWorker,
   type ToWorker,
 } from '../protocol';
@@ -15,7 +17,8 @@ export interface HostDeps {
   now(): number; // milliseconds
   post(msg: FromWorker, transfer?: Transferable[]): void;
   every(ms: number, fn: () => void): () => void; // returns cancel
-  makeSim(opts: { seed: number; snapshot?: Uint8Array }): Sim; // throws SimError
+  /** Throws SimError. Without `worldW` and `worldH` the world has the default size. */
+  makeSim(opts: { seed: number; snapshot?: Uint8Array; worldW?: number; worldH?: number }): Sim;
 }
 export interface Host {
   handle(msg: ToWorker): void;
@@ -24,16 +27,25 @@ export interface Host {
 const STEP_MS = 10;
 const MAX_TICKS_PER_STEP = 5;
 const STATS_EVERY = 10; // ticks
-const BENCH_SEED = 1;
-// Keys of `tp_stat` in crates/sim/src/abi.rs.
+// The reference world of docs/architecture.md section 2. The same world as the benches in
+// crates/headless/src/bench.rs and scripts/bench-wasm.mjs.
+const BENCH = { seed: 1, worldW: 3072, worldH: 1536, creatures: 1500, plants: 3000 };
+// Keys of `tp_stat`: the `STAT_` constants in crates/sim/src/stats.rs.
 const STAT_CREATURES = 0;
 const STAT_PLANTS = 1;
+// The `CAUSE_` constants in crates/sim/src/control.rs. 0 is no death.
+const CAUSES: Record<number, DeathCause> = { 1: 'starved', 2: 'old age' };
+const NO_INPUT = { manual: false, thrust: 0, turn: 0 };
 
 export function createHost(deps: HostDeps): Host {
   let sim: Sim | undefined;
   let stop = (): void => {};
   let view = { x0: 0, y0: 0, x1: 0, y1: 0 };
   let ticksPerSecond = TICK_HZ;
+  // True from the death of the possessed creature until the next possess or `speed`.
+  let pausedByDeath = false;
+  // The latest `input` message. It belongs to one possession: a new body starts without it.
+  let input = NO_INPUT;
   let last = 0; // the time of the previous step
   let owed = 0; // milliseconds of world time that have not run yet
   // Since the last `stats` message.
@@ -60,10 +72,27 @@ export function createHost(deps: HostDeps): Host {
     let ran = 0;
     for (; owed >= period && ran < MAX_TICKS_PER_STEP; ran++) {
       owed -= period;
+      const wasPossessed = sim.possessed() !== 0;
+      sim.input(input.manual, input.thrust, input.turn);
       const start = deps.now();
       sim.tick(1);
       tickMillis += deps.now() - start;
       timedTicks++;
+      const died = wasPossessed && sim.possessed() === 0 ? sim.deathCause() : 0;
+      if (died !== 0) {
+        const cause = CAUSES[died];
+        if (!cause) {
+          throw new Error(
+            `the core reported death cause ${died}, and this build knows only 1 and 2. Fix: add it to CAUSES in src/worker/host.ts and to DeathCause in src/protocol.ts.`,
+          );
+        }
+        // The world waits for the player to pick an heir.
+        ticksPerSecond = 0;
+        pausedByDeath = true;
+        input = NO_INPUT;
+        owed = 0;
+        deps.post({ type: 'died', cause, heirs: sim.heirs() });
+      }
       const tick = sim.tickCount();
       if (tick % STATS_EVERY === 0) {
         deps.post({
@@ -97,10 +126,16 @@ export function createHost(deps: HostDeps): Host {
         ? { seed: msg.seed, snapshot: new Uint8Array(msg.snapshot) }
         : { seed: msg.seed },
     );
-    if (!msg.snapshot) made.spawnDrifters(M0_DRIFTERS);
+    if (!msg.snapshot) made.seedFounders(FOUNDER_CREATURES, FOUNDER_PLANTS);
     sim = made;
     view = { x0: 0, y0: 0, x1: made.worldW, y1: made.worldH };
-    deps.post({ type: 'ready', abi: made.abi, worldW: made.worldW, worldH: made.worldH });
+    deps.post({
+      type: 'ready',
+      abi: made.abi,
+      worldW: made.worldW,
+      worldH: made.worldH,
+      params: made.params(),
+    });
     for (let i = 0; i < FRAME_POOL; i++) pool.push(new ArrayBuffer(MAX_FRAME_BYTES));
     last = deps.now();
     stop = deps.every(STEP_MS, () => {
@@ -112,9 +147,23 @@ export function createHost(deps: HostDeps): Host {
     });
   };
 
+  // Posts `possessed` with the uid, or with 0 when no living creature has it. A failed possess
+  // leaves the player where they were.
+  const possess = (sim: Sim, uid: number): void => {
+    const ok = uid !== 0 && sim.possess(uid);
+    if (ok) {
+      input = NO_INPUT;
+      if (pausedByDeath) {
+        pausedByDeath = false;
+        ticksPerSecond = TICK_HZ;
+      }
+    }
+    deps.post({ type: 'possessed', uid: ok ? uid : 0 });
+  };
+
   const bench = (ticks: number): void => {
-    const world = deps.makeSim({ seed: BENCH_SEED });
-    world.spawnDrifters(M0_DRIFTERS);
+    const world = deps.makeSim({ seed: BENCH.seed, worldW: BENCH.worldW, worldH: BENCH.worldH });
+    world.seedFounders(BENCH.creatures, BENCH.plants);
     const start = deps.now();
     world.tick(ticks);
     const millis = deps.now() - start;
@@ -137,12 +186,30 @@ export function createHost(deps: HostDeps): Host {
             break;
           case 'speed':
             ticksPerSecond = msg.ticksPerSecond;
+            pausedByDeath = false;
             break;
           case 'recycle':
             if (msg.buffer.byteLength === MAX_FRAME_BYTES) pool.push(msg.buffer);
             break;
           case 'bench':
             bench(msg.ticks);
+            break;
+          case 'possessAt':
+            possess(sim, sim.pick(msg.x, msg.y, msg.radius));
+            break;
+          case 'possess':
+            possess(sim, msg.uid);
+            break;
+          case 'release':
+            sim.release();
+            input = NO_INPUT;
+            deps.post({ type: 'possessed', uid: 0 });
+            break;
+          case 'input':
+            input = { manual: msg.manual, thrust: msg.thrust, turn: msg.turn };
+            break;
+          case 'param':
+            sim.setParam(msg.index, msg.value);
             break;
         }
       } catch (e) {

@@ -3,13 +3,26 @@
 // No typed-array view of WASM memory outlives one call: a call that grows memory detaches every
 // older view. Each read makes a new view of `memory.buffer`.
 
-import { ABI_VERSION } from '../protocol';
+import {
+  ABI_VERSION,
+  H_ENERGY,
+  H_GENERATION,
+  H_HUE,
+  H_SLOT,
+  H_UID,
+  H_X,
+  H_Y,
+  HEIR_STRIDE,
+  type Heir,
+  type ParamInfo,
+} from '../protocol';
 
 export interface Sim {
   readonly abi: number;
   readonly worldW: number;
   readonly worldH: number;
-  spawnDrifters(n: number): void;
+  /** Makes the starting world. Call once, on a new world, after any `setParam`. */
+  seedFounders(creatures: number, plants: number): void;
   tick(n: number): void;
   tickCount(): number;
   hash(): number; // unsigned
@@ -17,6 +30,21 @@ export interface Sim {
   /** Writes a frame for the rectangle and copies it into `into`. Returns words written, or -1 if `into` is too small. */
   writeFrame(x0: number, y0: number, x1: number, y1: number, into: ArrayBuffer): number;
   save(): Uint8Array; // a copy
+  params(): ParamInfo[];
+  /** Clamps to the parameter's range. An index out of range does nothing. */
+  setParam(index: number, value: number): void;
+  /** The uid of the nearest creature within `r` of the point, or 0. */
+  pick(x: number, y: number, r: number): number;
+  /** False if no living creature has the uid. */
+  possess(uid: number): boolean;
+  release(): void;
+  /** The uid of the possessed creature, or 0. */
+  possessed(): number;
+  input(manual: boolean, thrust: number, turn: number): void;
+  /** 0 for none. Set when the possessed creature dies. Cleared by the next possess. */
+  deathCause(): number;
+  /** At most 5, highest `energy01` first. */
+  heirs(): Heir[];
   free(): void;
 }
 
@@ -30,7 +58,7 @@ interface Exports {
   tp_abi_version(): number;
   tp_new(seed: number, w: number, h: number): Ptr;
   tp_free(world: Ptr): void;
-  tp_spawn_drifters(world: Ptr, n: number): void;
+  tp_seed_founders(world: Ptr, creatures: number, plants: number): void;
   tp_tick(world: Ptr, n: number): void;
   tp_world_w(world: Ptr): number;
   tp_world_h(world: Ptr): number;
@@ -46,6 +74,23 @@ interface Exports {
   tp_load(ptr: Ptr, len: number): Ptr;
   tp_error_ptr(): Ptr;
   tp_error_len(): number;
+  tp_param_count(): number;
+  tp_param_name_ptr(i: number): Ptr;
+  tp_param_name_len(i: number): number;
+  tp_param_default(i: number): number;
+  tp_param_min(i: number): number;
+  tp_param_max(i: number): number;
+  tp_param_get(world: Ptr, i: number): number;
+  tp_param_set(world: Ptr, i: number, v: number): void;
+  tp_pick(world: Ptr, x: number, y: number, r: number): number;
+  tp_possess(world: Ptr, uid: number): number;
+  tp_release(world: Ptr): void;
+  tp_possessed(world: Ptr): number;
+  tp_input(world: Ptr, manual: number, thrust: number, turn: number): void;
+  tp_death_cause(world: Ptr): number;
+  tp_heir_stride(): number;
+  tp_heirs_write(world: Ptr): number;
+  tp_heirs_ptr(world: Ptr): Ptr;
 }
 
 /** Instantiates the module and makes or loads a world. Throws SimError on a wrong ABI version or a bad snapshot. */
@@ -62,10 +107,9 @@ export function createSim(
     );
   }
 
-  const lastError = (): string =>
-    new TextDecoder().decode(
-      new Uint8Array(x.memory.buffer, x.tp_error_ptr() >>> 0, x.tp_error_len() >>> 0),
-    );
+  const text = (ptr: number, len: number): string =>
+    new TextDecoder().decode(new Uint8Array(x.memory.buffer, ptr >>> 0, len >>> 0));
+  const lastError = (): string => text(x.tp_error_ptr(), x.tp_error_len());
 
   const load = (snapshot: Uint8Array): Ptr => {
     const len = snapshot.length;
@@ -87,7 +131,7 @@ export function createSim(
     // From the core, not from `opts`: a snapshot carries its own size.
     worldW: x.tp_world_w(world),
     worldH: x.tp_world_h(world),
-    spawnDrifters: (n) => x.tp_spawn_drifters(world, n),
+    seedFounders: (creatures, plants) => x.tp_seed_founders(world, creatures, plants),
     tick: (n) => x.tp_tick(world, n),
     tickCount: () => x.tp_tick_count(world) >>> 0,
     hash: () => x.tp_hash(world) >>> 0,
@@ -102,6 +146,47 @@ export function createSim(
     save() {
       const len = x.tp_save(world) >>> 0;
       return new Uint8Array(x.memory.buffer, x.tp_save_ptr(world) >>> 0, len).slice();
+    },
+    params() {
+      const out: ParamInfo[] = [];
+      const count = x.tp_param_count() >>> 0;
+      for (let index = 0; index < count; index++) {
+        out.push({
+          index,
+          name: text(x.tp_param_name_ptr(index), x.tp_param_name_len(index)),
+          value: x.tp_param_get(world, index),
+          default: x.tp_param_default(index),
+          min: x.tp_param_min(index),
+          max: x.tp_param_max(index),
+        });
+      }
+      return out;
+    },
+    setParam: (index, value) => x.tp_param_set(world, index, value),
+    pick: (px, py, r) => x.tp_pick(world, px, py, r) >>> 0,
+    possess: (uid) => x.tp_possess(world, uid) !== 0,
+    release: () => x.tp_release(world),
+    possessed: () => x.tp_possessed(world) >>> 0,
+    input: (manual, thrust, turn) => x.tp_input(world, manual ? 1 : 0, thrust, turn),
+    deathCause: () => x.tp_death_cause(world) >>> 0,
+    heirs() {
+      const words = (x.tp_heirs_write(world) >>> 0) * HEIR_STRIDE;
+      const ptr = x.tp_heirs_ptr(world) >>> 0;
+      const u32 = new Uint32Array(x.memory.buffer, ptr, words);
+      const f32 = new Float32Array(x.memory.buffer, ptr, words);
+      const out: Heir[] = [];
+      for (let o = 0; o < words; o += HEIR_STRIDE) {
+        out.push({
+          uid: u32[o + H_UID] ?? 0,
+          slot: u32[o + H_SLOT] ?? 0,
+          x: f32[o + H_X] ?? 0,
+          y: f32[o + H_Y] ?? 0,
+          energy01: f32[o + H_ENERGY] ?? 0,
+          generation: u32[o + H_GENERATION] ?? 0,
+          hue: f32[o + H_HUE] ?? 0,
+        });
+      }
+      return out;
     },
     // The core treats a null world as a no-op, so a call after `free` does nothing.
     free() {

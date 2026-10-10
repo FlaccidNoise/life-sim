@@ -56,6 +56,7 @@ project kept the machine at a load average near 5, so these readings are lower b
 | Date | After task | World | Mean creatures | Native `median_tps` | WASM `median_tps` | Floor |
 |---|---|---|---|---|---|---|
 | 2026-10-10 | 9 (M0 exit) | 1,500 drifters, no plants, no brains | 1,500 | 34,264 | 23,250 | 2,400 |
+| 2026-10-10 | 10 (M1 skeleton, stub rules) | 3072 by 1536, 1,500 founders that wander, no plants yet | 1,500 | 12,627 | 10,633 | 2,400 |
 
 ## In-page bench, reference machine
 
