@@ -1,0 +1,27 @@
+name: Tidepool
+on:
+  push:
+    paths: ['tidepool/**', '.github/workflows/tidepool.yml']
+  pull_request:
+    paths: ['tidepool/**', '.github/workflows/tidepool.yml']
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tidepool
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup toolchain install 1.99.0 --profile minimal --component rustfmt,clippy --target wasm32-unknown-unknown
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: tidepool/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: tidepool/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: make check
+      - run: target/release/tidepool-headless bench --floor 800

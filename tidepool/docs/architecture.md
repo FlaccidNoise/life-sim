@@ -155,8 +155,8 @@ Parameters are part of the snapshot.
 
 ### 5.6 Snapshot
 
-A little-endian byte buffer: magic `TDPL`, format version, section table, payload, CRC32. `World::save`
-and `World::load`. A load of bad data returns an error and never a half-built world. The format version
+A little-endian byte buffer: magic `TDPL`, format version, payload length, payload, CRC32 of the payload.
+`World::save` and `World::load`. A load of bad data returns an error and never a half-built world. The format version
 rises on any layout change. M5 adds migration, last-good backup, and export.
 
 ## 6. ABI

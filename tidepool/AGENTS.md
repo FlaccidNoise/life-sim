@@ -14,17 +14,18 @@ creature among creatures that each run an evolved neural network. It shares no c
 
 ## Status
 
-Planning is done. No code is built yet. The next work is Task 1 of
-`docs/plans/2026-10-10-m0-m1-first-swim.md`. Until Task 1 lands there is no `Makefile` here.
+M0 (foundation) is built: the Rust core, the C ABI, the worker host, the WebGL2 page, `make check`,
+`make gates`, and a CI workflow. The CI workflow has not run yet, because nothing is pushed. M1 starts at
+Task 10 of `docs/plans/2026-10-10-m0-m1-first-swim.md`.
 
-## Commands (after Task 1)
+## Commands
 
 Run from `tidepool/`. If `cargo` is not found, run `. "$HOME/.cargo/env"`.
 
 | Command | Does |
 |---|---|
 | `make check` | Format, Clippy, Rust tests, WASM build, type check, ESLint, Vitest |
-| `make gates` | Throughput gate and health gate |
+| `make gates` | Throughput gate only. Task 16 adds the health gate |
 | `make dev` | Build the WASM and start the dev server |
 
 ## Gotchas
