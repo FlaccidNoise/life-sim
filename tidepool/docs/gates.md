@@ -17,7 +17,8 @@ output seen. All proofs ran on 2026-10-10, except the CI row, which has no proof
 | Native equals WASM | `pnpm exec vitest run tests/determinism.test.ts` | `#[cfg(target_arch = "wasm32")] { self.creatures.vx[0] += 1.0e-6; }` added to `World::tick`, just before `self.tick` is incremented at the end, then `make wasm` | All 3 seeds fail. Seed 1: `AssertionError: expected 3869756312 to be 1603536447 // Object.is equality` | 2026-10-10 |
 | Throughput, native | `make gates` (runs `target/release/tidepool-headless bench`) | `bench --floor 1000000000` | `bench creatures=1500 median_tps=37372 floor=1000000000 FAIL`, exit 1 | 2026-10-10 |
 | Throughput, WASM in Node | `make gates` (runs `node scripts/bench-wasm.mjs`) | `node scripts/bench-wasm.mjs --floor 1000000000` | `bench-wasm creatures=1500 median_tps=24027 floor=1000000000 FAIL`, exit 1 | 2026-10-10 |
-| CI | `.github/workflows/tidepool.yml` runs `make check`, `bench --floor 800`, and `scripts/bench-wasm.mjs --floor 800` | Not proven yet: the workflow has not run. First push runs it. | Not proven yet: the workflow has not run. First push runs it. | Not run |
+| Health | `make gates` (runs `target/release/tidepool-headless gate-health`) | `gate-health --param plant_growth=0`, and `gate-health --param basal=0.01` | Both: every seed `FAIL`, `gate-health 0/3 FAIL`, exit 1. The full output is in "Health gate" below. | 2026-10-10 |
+| CI | `.github/workflows/tidepool.yml` runs `make check`, `bench --floor 800`, `scripts/bench-wasm.mjs --floor 800`, and `gate-health` | Not proven yet: the workflow has not run. First push runs it. | Not proven yet: the workflow has not run. First push runs it. | Not run |
 
 ## Notes
 
@@ -77,11 +78,94 @@ grows at most 0.025 energy per tick and a default creature burns about 0.10. The
 in the bench world can feed about 500 creatures, and the gate needs a mean of 1,200 alive. No brain can
 pass it at these defaults. Task 16 tunes the defaults, and its final proof includes this gate.
 
+**Still void after Task 16.** Task 16 tuned `plant_growth` (0.005 to 0.02) and `intake_rate` (0.04 to
+0.08). The health gate passes. The bench world still empties below the void line: 1,500 founders, then
+1,552, 1,064, 525, 292, 215, 196, 212, 245, 306, 374, and 461 alive at ticks 200 to 2,200. The mean is
+425 and the gate needs 1,200. This is not a tuning miss. The bench world has the same 14 fertile
+patches as the default world (`fert_blobs` is a count, not a density) and 1,500 founders against 400.
+A trial with enough food for the bench (`plant_growth=0.07`, bench mean 1,418) put 3,152 to 3,731
+creatures in the default world at tick 12,000, which fails the health gate, and that default world ran
+at 1,381 ticks per second. No bench, floor, or void rule was changed. `docs/findings/m1-tuning.md` has
+the trials. What the bench should time is an open question for the orchestrator.
+
 **A reading that is not a gate reading.** To see the cost of a full world before it can exist, Task 15
 timed a probe world with all upkeep set to 0 (probe only, mean 1,678 alive, plants eaten down to
 almost none). Native 4,274 and WASM 3,708 ticks per second, with other work running. The motor phase
 was 58% of the tick: the push between bodies scans every neighbour, and creatures pile onto scent
 peaks. Treat this as the shape of the cost. The margin over the 2,400 floor is thin, and M2 adds eyes.
+
+## Health gate
+
+`target/release/tidepool-headless gate-health [--seeds 1,2,3] [--ticks 12000] [--param name=value]...`
+runs the default world (1536 by 1024, 400 founder creatures, 1,200 founder plants), one seed after
+another. It prints one row per seed and exits 0 only when every seed is inside every band.
+
+| Measure | Meaning | Band |
+|---|---|---|
+| `creatures` | Alive at the end | 150 to 3,000 |
+| `min_late` | Fewest alive at any tick in the second half | 100 or more |
+| `plants` | Alive at the end | 300 to 7,000 |
+| `births_late` | Births in the last 2,000 ticks | 20 or more |
+| `max_gen` | Highest generation alive at the end | 8 or more |
+| `mean_chemo` | Mean `chemo` gene of the living | 0.15 or more |
+| `parked` | Share of adults with `energy01` above 0.9 and speed below 0.05 | 0.25 or less |
+| `first_bud` | Mean age at first bud, over the run, of creatures born in the run | Reported, no band |
+
+`first_bud` leaves founders out. A founder starts as an adult at a random age, so its age at its first
+bud is not the length of a generation.
+
+The three proofs of the plan, on the tuned defaults. The same three ran before the tuning, on the old
+defaults, with the same verdicts.
+
+```
+$ target/release/tidepool-headless gate-health --param plant_growth=0
+seed=1 creatures=0 min_late=0 plants=700 births_late=0 max_gen=0 mean_chemo=0.00 parked=0.00 first_bud=none FAIL(creatures=0 < 150, min_late=0 < 100, births_late=0 < 20, max_gen=0 < 8, mean_chemo=0.00 < 0.15)
+seed=2 creatures=0 min_late=0 plants=779 births_late=0 max_gen=0 mean_chemo=0.00 parked=0.00 first_bud=none FAIL(creatures=0 < 150, min_late=0 < 100, births_late=0 < 20, max_gen=0 < 8, mean_chemo=0.00 < 0.15)
+seed=3 creatures=0 min_late=0 plants=745 births_late=0 max_gen=0 mean_chemo=0.00 parked=0.00 first_bud=none FAIL(creatures=0 < 150, min_late=0 < 100, births_late=0 < 20, max_gen=0 < 8, mean_chemo=0.00 < 0.15)
+gate-health 0/3 FAIL
+exit=1
+$ target/release/tidepool-headless gate-health --param basal=0.01
+seed=1 creatures=0 min_late=0 plants=2229 births_late=0 max_gen=0 mean_chemo=0.00 parked=0.00 first_bud=none FAIL(creatures=0 < 150, min_late=0 < 100, births_late=0 < 20, max_gen=0 < 8, mean_chemo=0.00 < 0.15)
+seed=2 creatures=0 min_late=0 plants=2076 births_late=0 max_gen=0 mean_chemo=0.00 parked=0.00 first_bud=none FAIL(creatures=0 < 150, min_late=0 < 100, births_late=0 < 20, max_gen=0 < 8, mean_chemo=0.00 < 0.15)
+seed=3 creatures=0 min_late=0 plants=1965 births_late=0 max_gen=0 mean_chemo=0.00 parked=0.00 first_bud=none FAIL(creatures=0 < 150, min_late=0 < 100, births_late=0 < 20, max_gen=0 < 8, mean_chemo=0.00 < 0.15)
+gate-health 0/3 FAIL
+exit=1
+$ target/release/tidepool-headless gate-health --seeds 1 --ticks 12000 --param mut_rate=0 --param mut_weight_rate=0
+seed=1 creatures=723 min_late=660 plants=2012 births_late=554 max_gen=7 mean_chemo=0.54 parked=0.00 first_bud=2135 FAIL(max_gen=7 < 8)
+gate-health 0/1 FAIL
+exit=1
+```
+
+The third proof does not crash, and the gene measures print with no mutation. It also fails, on
+`max_gen` alone. `docs/findings/m1-tuning.md` says what that means for the tuned world.
+
+Three more bad worlds, so that each side of each band has rejected something. Seed 1, 12,000 ticks.
+
+```
+$ target/release/tidepool-headless gate-health --seeds 1 --param fert_blobs=1 --param fert_radius=20
+seed=1 creatures=0 min_late=0 plants=0 births_late=0 max_gen=0 mean_chemo=0.00 parked=0.00 first_bud=none FAIL(creatures=0 < 150, min_late=0 < 100, plants=0 < 300, births_late=0 < 20, max_gen=0 < 8, mean_chemo=0.00 < 0.15)
+gate-health 0/1 FAIL
+exit=1
+$ target/release/tidepool-headless gate-health --seeds 1 --param basal=0.01 --param plant_cell_cap=16 --param fert_radius=600 --param plant_seed_chance=1 --param plant_growth=0.1
+seed=1 creatures=0 min_late=0 plants=8192 births_late=0 max_gen=0 mean_chemo=0.00 parked=0.00 first_bud=none FAIL(creatures=0 < 150, min_late=0 < 100, plants=8192 > 7000, births_late=0 < 20, max_gen=0 < 8, mean_chemo=0.00 < 0.15)
+gate-health 0/1 FAIL
+exit=1
+$ target/release/tidepool-headless gate-health --seeds 1 --param basal=0 --param part_upkeep=0 --param neuron_upkeep=0 --param conn_upkeep=0 --param move_cost=0 --param lifespan=24000 --param plant_growth=0.1 --param bite_fraction=0.01 --param bud_cooldown=0
+seed=1 creatures=4096 min_late=4096 plants=2229 births_late=0 max_gen=2 mean_chemo=0.50 parked=0.52 first_bud=659 FAIL(creatures=4096 > 3000, births_late=0 < 20, max_gen=2 < 8, parked=0.52 > 0.25)
+gate-health 0/1 FAIL
+exit=1
+```
+
+What has rejected a world, and what has not:
+
+- Rejected: `creatures` on both sides, `min_late`, `plants` on both sides, `births_late`, `max_gen`,
+  and `parked`. `max_gen` also rejected worlds with living creatures: the third proof, the baseline on
+  the old defaults, and tuning trial 2. `creatures` above 3,000 rejected a tuning trial on all 3 seeds.
+- **`mean_chemo` has only rejected an empty world**, where the mean of no creatures prints as 0. No
+  world with living creatures and a mean below 0.15 has been made. The band is not proven as a warning
+  for risk R1 until a world that strips the gene exists.
+- A usage error exits 2: an unknown parameter name, a value outside the range of its parameter, or a
+  seed that is not a number.
 
 ## In-page bench, reference machine
 

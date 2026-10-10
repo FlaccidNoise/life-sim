@@ -28,7 +28,7 @@ fn load_then_run_equals_unbroken_run() {
     assert_eq!(resumed.state_hash(), world_at(2000).state_hash());
 }
 
-/// The save falls between births: `world_at` has 13 by tick 1,500 and 25 by tick 3,000. So the
+/// The save falls between births: `world_at` has 352 by tick 1,500 and 717 by tick 3,000. So the
 /// genomes of the born, the cooldowns of their parents, and `rng_mutate` are all in the round trip.
 #[test]
 fn load_then_run_equals_unbroken_run_across_births() {

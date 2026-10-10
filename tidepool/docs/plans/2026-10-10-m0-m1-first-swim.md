@@ -1516,7 +1516,7 @@ The table. Defaults are starting values derived by arithmetic. Task 16 tunes the
 | `repel` | 0.2 | 0 | 1 | Push between overlapping bodies | 11 |
 | `v_max` | 4 | 1 | 8 | Hard speed limit, world units per tick | 11 |
 | `plant_cap` | 20 | 1 | 200 | Plant reserve limit at fertility 1 | 12 |
-| `plant_growth` | 0.005 | 0 | 0.1 | Logistic growth rate per tick | 12 |
+| `plant_growth` | 0.02 | 0 | 0.1 | Logistic growth rate per tick | 12 |
 | `plant_seed_at` | 0.7 | 0.1 | 1 | Reserve fraction needed to seed | 12 |
 | `plant_seed_chance` | 0.02 | 0 | 1 | Chance to seed per plant update | 12 |
 | `plant_seed_range` | 48 | 8 | 256 | Seed throw distance | 12 |
@@ -1535,7 +1535,7 @@ The table. Defaults are starting values derived by arithmetic. Task 16 tunes the
 | `neuron_upkeep` | 0.0002 | 0 | 0.01 | Upkeep per neuron per tick | 13 |
 | `conn_upkeep` | 0.00005 | 0 | 0.01 | Upkeep per connection per tick | 13 |
 | `move_cost` | 0.006 | 0 | 1 | Cost of thrust (see Task 13) | 13 |
-| `intake_rate` | 0.04 | 0 | 1 | Energy per tick per unit filter per unit length | 13 |
+| `intake_rate` | 0.08 | 0 | 1 | Energy per tick per unit filter per unit length | 13 |
 | `bite_fraction` | 0.05 | 0.001 | 1 | Largest share of a plant's reserve taken per tick | 13 |
 | `grow_reserve` | 0.35 | 0 | 1 | `energy01` above which a juvenile grows | 13 |
 | `grow_rate` | 0.0015 | 0 | 0.1 | Growth per tick | 13 |

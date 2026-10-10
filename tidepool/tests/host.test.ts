@@ -133,10 +133,11 @@ test('a corrupt snapshot becomes an error message', () => {
 test('bench replies and does not advance the main world', () => {
   const r = rig();
   r.host.handle({ type: 'init', seed: 1 });
-  // Too few ticks for a founder to feed up to a bud or to starve, so the count is the founders.
-  r.host.handle({ type: 'bench', ticks: 50 });
+  // Too few ticks for a founder to feed up to a bud or to starve, so the count is the founders. A
+  // founder starts at half of its capacity, buds at 0.8, and its mouth takes about 1% per tick.
+  r.host.handle({ type: 'bench', ticks: 10 });
   const b = r.of('benchResult')[0];
-  expect(b?.ticks).toBe(50);
+  expect(b?.ticks).toBe(10);
   expect(b?.creatures).toBe(1500);
   expect(r.of('frame').length).toBe(0);
 });
@@ -395,15 +396,15 @@ test('death pauses the world, posts the cause and heirs, and possessing an heir 
   expect(r.lastTick()).toBeGreaterThan(tickAtDeath);
 });
 
-// Seed 7, with the default parameters. Most founders starve before tick 1,000, and 18 creatures
-// are alive at tick 2,000. Founder 158 is one of the 4 whose line has a member younger than 600
-// ticks then: a child of 113 ticks. On seed 1 no child is alive at that tick. If a change to the
-// rules empties the line, pick the seed and the founder again: mark one, run 2,000 ticks, cut the
-// lifespan to 600, and take a founder whose marked line outlives the cut.
+// Seed 1, with the default parameters. 525 creatures are alive at tick 2,000. Founder 88 has 9
+// living descendants then, and 4 of them are younger than 500 ticks. No founder on this seed has
+// more young ones. If a change to the rules or the defaults empties the line, pick the founder
+// again: for each founder count the living descendants younger than 500 ticks at tick 2,000, and
+// take the founder with the most.
 test('picking an heir resumes the world in that body', () => {
   const r = rig({ recycle: true });
-  r.host.handle({ type: 'init', seed: 7 });
-  r.host.handle({ type: 'possess', uid: 158 });
+  r.host.handle({ type: 'init', seed: 1 });
+  r.host.handle({ type: 'possess', uid: 88 });
   r.host.handle({ type: 'release' });
   r.advance(100_000); // 2,000 ticks: the line buds marked children
   expect(r.of('died')).toEqual([]);
