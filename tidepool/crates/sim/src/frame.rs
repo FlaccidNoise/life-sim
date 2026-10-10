@@ -159,7 +159,7 @@ mod tests {
         let mut w = World::new(5, 1536.0, 1024.0);
         w.seed_founders(50, 0);
         w.run(3);
-        w.creatures.energy[4] *= 1.5;
+        w.creatures.energy[4] = 0.75 * w.params.get(id::ENERGY_PER_MASS) * w.creatures.mass(4);
         write(&mut w, 0.0, 0.0, 1536.0, 1024.0);
         let (c, r) = (&w.creatures, record(&w, 4));
         let floats = [
