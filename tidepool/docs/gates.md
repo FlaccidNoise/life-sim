@@ -33,4 +33,13 @@ cost of a tick.
 
 ## In-page bench, reference machine
 
-Not measured yet. Task 8 fills this in.
+`http://localhost:<port>/?bench` on the dev server, tab in the foreground. The worker runs 2,000 ticks of
+a second world of 1,500 drifters while the page keeps drawing. Add a row when a task changes the cost of
+a tick.
+
+| Date | After task | Browser | World | Ticks per second | 24,000-tick skip |
+|---|---|---|---|---|---|
+| 2026-10-10 | 8 (M0) | Chrome, Apple M4 Pro | 1,500 drifters, no plants, no brains | 17,197 | 1.4 s |
+
+Four more loads on the same day read 16,207 to 17,212. The same module in Node reads about 16,300 for
+2,000 ticks, so the browser costs nothing over Node here. The native reading above is about 2 times this.
