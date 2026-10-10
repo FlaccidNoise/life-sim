@@ -41,6 +41,20 @@ export default tseslint.config(
       'no-console': 'error',
     },
   },
+  {
+    files: ['src/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'ImportExpression',
+          message:
+            'No dynamic import() in src: the dependency rule cannot check it. See docs/architecture.md section 4',
+        },
+      ],
+    },
+  },
+  layer('src/*.ts', ['**/worker/**', '**/render/**', '**/ui/**', '**/app/**']),
   layer('src/render/**/*.{ts,tsx}', ['**/worker/**', '**/ui/**', '**/app/**']),
   layer('src/ui/**/*.{ts,tsx}', ['**/worker/**', '**/render/**', '**/app/**']),
   layer('src/worker/**/*.{ts,tsx}', ['**/render/**', '**/ui/**', '**/app/**']),

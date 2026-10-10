@@ -24,8 +24,8 @@ Run from `tidepool/`. If `cargo` is not found, run `. "$HOME/.cargo/env"`.
 
 | Command | Does |
 |---|---|
-| `make check` | Format, Clippy, Rust tests, WASM build, type check, ESLint, Vitest |
-| `make gates` | Throughput gate only. Task 16 adds the health gate |
+| `make check` | Crate count, format (Rust and TypeScript), Clippy, Rust tests, WASM build, type check, ESLint, Vitest |
+| `make gates` | Native bench, then the throughput gate (`scripts/bench-wasm.mjs`). Task 16 adds the health gate |
 | `make dev` | Build the WASM and start the dev server |
 
 ## Gotchas
@@ -33,8 +33,12 @@ Run from `tidepool/`. If `cargo` is not found, run `. "$HOME/.cargo/env"`.
 - **`tidepool/` is its own pnpm root.** `pnpm-workspace.yaml` here gives it a separate lockfile and
   `node_modules`. Run `pnpm` from `tidepool/`, never from the repo root, for Tidepool work.
 - **TypeScript stays on 6.** `typescript-eslint` 8 requires `<6.1.0`.
-- **No standard-library `sin`, `cos`, `exp`, `powf`, `tanh`, or `mul_add` in `crates/sim`.** They differ
-  between native and WASM and break the determinism test. Use `sim::math`. Clippy rejects them.
+- **No standard-library transcendental math in `crates/sim`.** Banned on `f32` and `f64`: trigonometric
+  and hyperbolic functions and their inverses, exponentials, logarithms, powers (`powf`, `powi`),
+  `hypot`, `cbrt`, and `mul_add`. They differ between native and WASM and break the determinism test.
+  Use `sim::math`. `sqrt`, `abs`, and rounding are allowed. Clippy rejects the banned calls
+  (`clippy.toml`). A test file under `crates/sim/tests/` runs native only and can start with
+  `#![allow(clippy::disallowed_methods)]`.
 - **A field that is not in `save` and `load` is a bug.** The state hash is the CRC of the saved bytes.
 - **A number that needs tuning goes in `params.rs`.** Rule code has no magic numbers.
 - **Tune at 12,000 ticks on 3 seeds, one run at a time, against a baseline.** Shorter runs were wrong in

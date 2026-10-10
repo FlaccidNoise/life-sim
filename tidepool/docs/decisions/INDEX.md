@@ -47,6 +47,9 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
   the core. → `../architecture.md` §5.3
 - 2026-10-10: WebGL2 only, hand-written. Preact with signals for UI. Netlify for hosting.
   → `../architecture.md` §1
+- 2026-10-10: The throughput gate times the `.wasm` in Node, because the floor in §2 is defined for
+  WASM. The native bench stays for probes. Found by the M0 audit: native read 1.46 times WASM.
+  → `../gates.md`
 
 ## Process
 

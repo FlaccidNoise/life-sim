@@ -28,9 +28,9 @@ pub struct World {
     pub save_buf: Vec<u8>,
 }
 
-/// True when both sides are above 0 and at most `MAX_WORLD_SIZE`. False for NaN and infinity.
+/// True when both sides are at least 1 and at most `MAX_WORLD_SIZE`. False for NaN and infinity.
 pub fn size_ok(w: f32, h: f32) -> bool {
-    let in_range = |v: f32| v > 0.0 && v <= MAX_WORLD_SIZE;
+    let in_range = |v: f32| (1.0..=MAX_WORLD_SIZE).contains(&v);
     in_range(w) && in_range(h)
 }
 
@@ -56,6 +56,10 @@ impl World {
     pub fn spawn_drifters(&mut self, n: u32) {
         let (c, r) = (&mut self.creatures, &mut self.rng_spawn);
         for _ in 0..n {
+            // The last uid is never given out, so the counter cannot wrap to 0.
+            if self.next_uid == u32::MAX {
+                return;
+            }
             let Some(slot) = c.slots.alloc() else { return };
             let s = slot as usize;
             c.uid[s] = self.next_uid;
@@ -113,7 +117,8 @@ impl World {
             c.x[s] = x.clamp(0.0, self.w);
             c.y[s] = y.clamp(0.0, self.h);
         }
-        self.tick += 1;
+        // Wraps: a snapshot can hold any tick, and a debug build panics on overflow.
+        self.tick = self.tick.wrapping_add(1);
     }
 
     pub fn run(&mut self, ticks: u32) {
@@ -152,8 +157,15 @@ impl World {
             return Err(LoadError::Invalid("world size"));
         }
         let next_uid = r.u32()?;
+        if next_uid == 0 {
+            return Err(LoadError::Invalid("next uid of 0"));
+        }
         let rng_spawn = Rng::load(&mut r)?;
         let creatures = Creatures::load(&mut r)?;
+        // A dead slot holds uid 0, so this reads live uids only.
+        if creatures.uid.iter().any(|&u| u >= next_uid) {
+            return Err(LoadError::Invalid("creature uid not below next uid"));
+        }
         r.end()?;
         Ok(World {
             tick,

@@ -9,14 +9,15 @@ const module = new WebAssembly.Module(
 );
 
 // The fake clock moves in 10 ms steps. With `recycle`, each posted frame buffer is handed back after
-// the step that posted it, as the page does.
+// the step that posted it, as the page does. After `drift(ms)`, each read of the clock also moves it.
 function rig(opts: { recycle?: boolean } = {}) {
   let now = 0;
+  let perRead = 0;
   let timer: (() => void) | undefined;
   let recycled = 0;
   const sent: P.FromWorker[] = [];
   const deps: HostDeps = {
-    now: () => now,
+    now: () => (now += perRead),
     post: (m) => void sent.push(m),
     every: (_ms, fn) => {
       timer = fn;
@@ -43,11 +44,12 @@ function rig(opts: { recycle?: boolean } = {}) {
     }
   };
   const jump = (ms: number) => void (now += ms);
+  const drift = (ms: number) => void (perRead = ms);
   const lastTick = () => {
     const f = of('frame').at(-1);
     return f ? P.viewFrame(f.buffer).tick : -1;
   };
-  return { host, advance, jump, sent, of, lastTick };
+  return { host, advance, jump, drift, sent, of, lastTick };
 }
 
 test('init posts ready with the ABI version and world size', () => {
@@ -114,4 +116,18 @@ test('bench replies and does not advance the main world', () => {
   expect(b?.ticks).toBe(200);
   expect(b?.creatures).toBe(P.M0_DRIFTERS);
   expect(r.of('frame').length).toBe(0);
+});
+
+test('the time a bench takes is not owed to the main world', () => {
+  const r = rig({ recycle: true });
+  r.host.handle({ type: 'init', seed: 1 });
+  r.advance(100);
+  expect(r.lastTick()).toBe(2);
+  r.drift(5000);
+  r.host.handle({ type: 'bench', ticks: 200 });
+  r.drift(0);
+  expect(r.of('benchResult')[0]?.millis).toBe(5000);
+  r.advance(10);
+  // One tick at most. A stall of that length would run 5.
+  expect(r.lastTick()).toBeLessThanOrEqual(3);
 });

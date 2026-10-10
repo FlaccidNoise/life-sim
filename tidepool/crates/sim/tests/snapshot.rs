@@ -58,21 +58,41 @@ fn garbage_is_rejected_without_panic() {
 // Crafted input. Every snapshot below has a valid envelope and checksum, so only `load`'s own checks
 // can reject it.
 
-/// A payload with `live` as the slot list and `field` as every creature field.
-fn payload(w: f32, h: f32, live: &[u32], field: &[f32]) -> Vec<u8> {
+fn raw_payload(
+    tick: u32,
+    (w, h): (f32, f32),
+    next_uid: u32,
+    live: &[u32],
+    uids: &[u32],
+    field: &[f32],
+) -> Vec<u8> {
     let mut p = Writer::new();
-    p.u32(0);
+    p.u32(tick);
     p.f32(w);
     p.f32(h);
-    p.u32(1 + field.len() as u32);
+    p.u32(next_uid);
     p.u32(0);
     p.u32(0);
     p.u32s(live);
-    p.u32s(&(1..=field.len() as u32).collect::<Vec<_>>());
+    p.u32s(uids);
     for _ in 0..5 {
         p.f32s(field);
     }
     p.bytes
+}
+
+/// A payload with `live` as the slot list and `field` as every creature field.
+fn payload(w: f32, h: f32, live: &[u32], field: &[f32]) -> Vec<u8> {
+    let n = field.len() as u32;
+    let uids: Vec<u32> = (1..=n).collect();
+    raw_payload(0, (w, h), 1 + n, live, &uids, field)
+}
+
+/// A 64 by 64 world with one creature per uid, in slots 0 and up.
+fn uid_payload(tick: u32, next_uid: u32, uids: &[u32]) -> Vec<u8> {
+    let live: Vec<u32> = (0..uids.len() as u32).collect();
+    let field = vec![1.0; uids.len()];
+    raw_payload(tick, (64.0, 64.0), next_uid, &live, uids, &field)
 }
 
 fn load_err(payload: &[u8]) -> Option<LoadError> {
@@ -119,7 +139,15 @@ fn a_field_of_the_wrong_length_is_invalid() {
 
 #[test]
 fn a_bad_world_size_is_invalid() {
-    for bad in [f32::NAN, f32::INFINITY, 0.0, -64.0, MAX_WORLD_SIZE * 2.0] {
+    for bad in [
+        f32::NAN,
+        f32::INFINITY,
+        0.0,
+        f32::from_bits(1),
+        0.5,
+        -64.0,
+        MAX_WORLD_SIZE * 2.0,
+    ] {
         for (w, h) in [(bad, 64.0), (64.0, bad)] {
             let p = payload(w, h, &[], &[]);
             assert_eq!(
@@ -129,6 +157,38 @@ fn a_bad_world_size_is_invalid() {
             );
         }
     }
+}
+
+#[test]
+fn a_bad_uid_is_invalid() {
+    for (next_uid, uids, reason) in [
+        (0, &[][..], "next uid of 0"),
+        (5, &[0], "creature uid of 0"),
+        (5, &[2, 0], "creature uid of 0"),
+        (5, &[2, 2], "creature uid repeats"),
+        (5, &[3, 1, 3], "creature uid repeats"),
+        (5, &[1, 5], "creature uid not below next uid"),
+        (5, &[9, 1], "creature uid not below next uid"),
+    ] {
+        assert_eq!(
+            load_err(&uid_payload(0, next_uid, uids)),
+            Some(LoadError::Invalid(reason)),
+            "next_uid {next_uid}, uids {uids:?}"
+        );
+    }
+}
+
+/// A snapshot can hold a counter at the top of its range. The tick wraps and the uid counter stops.
+#[test]
+fn counters_at_the_top_of_their_range_do_not_panic_or_wrap_a_uid() {
+    let last = u32::MAX - 1;
+    let mut w = World::load(&seal(&uid_payload(u32::MAX, last, &[1, 2]))).expect("load");
+    w.run(2);
+    assert_eq!(w.tick, 1);
+    w.spawn_drifters(10);
+    assert_eq!((w.creatures.slots.count(), w.next_uid), (3, u32::MAX));
+    assert_eq!(w.creatures.uid[2], last);
+    World::load(&w.save()).expect("the world still loads");
 }
 
 #[test]

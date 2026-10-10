@@ -28,8 +28,8 @@ one before it ships, because what is learned from playing a milestone changes th
 The empty game, wired end to end.
 
 - Project scaffold under `tidepool/` with its own build, test, lint, and type gates.
-- Simulation core skeleton: seeded RNG, entity pool with generation ids, spatial hash, tick loop, state
-  hash. Circles that drift.
+- Simulation core skeleton: seeded RNG, entity pool with a `uid` from a birth counter, spatial hash,
+  tick loop, state hash. Circles that drift.
 - Simulation runs in a worker. The page draws what the worker sends.
 - Headless runner with the same core, for gates and probes.
 - A checksummed snapshot, with a test that save, load, and run on equals an unbroken run.

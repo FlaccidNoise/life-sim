@@ -92,3 +92,22 @@ test('a loaded world reports the size in the snapshot, not the size in the optio
   expect(b.worldW).toBe(1536);
   expect(b.worldH).toBe(1024);
 });
+
+test('a module with another ABI version is refused', () => {
+  // A module written by hand. It exports `memory` and a `tp_abi_version` that returns 99.
+  const name = (s: string) => [s.length, ...new TextEncoder().encode(s)];
+  const section = (id: number, body: number[]) => [id, body.length, ...body];
+  const other = new WebAssembly.Module(
+    new Uint8Array([
+      ...[0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00], // magic and version
+      ...section(1, [1, 0x60, 0, 1, 0x7f]), // type 0: () -> i32
+      ...section(3, [1, 0]), // function 0 has type 0
+      ...section(5, [1, 0, 1]), // one memory of 1 page
+      ...section(7, [2, ...name('tp_abi_version'), 0, 0, ...name('memory'), 2, 0]),
+      ...section(10, [1, 5, 0, 0x41, 0xe3, 0x00, 0x0b]), // body: i32.const 99
+    ]),
+  );
+  const make = () => createSim(other, { seed: 1, worldW: 1536, worldH: 1024 });
+  expect(make).toThrow(SimError);
+  expect(make).toThrow(`ABI version 99 and this build needs ${P.ABI_VERSION}`);
+});
