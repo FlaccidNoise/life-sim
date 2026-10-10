@@ -53,8 +53,8 @@ impl Creatures {
         f32s(w, &self.radius);
     }
 
-    /// Reads what `save` wrote. The slot list must be strictly ascending and below capacity, and
-    /// every field must have one value per listed slot.
+    /// Reads what `save` wrote. The slot list must be strictly ascending and below capacity, every
+    /// field must have one value per listed slot, and every uid must be above 0 and unique.
     pub fn load(r: &mut Reader) -> Result<Creatures, LoadError> {
         let live = r.u32s()?;
         if live.windows(2).any(|p| p[0] >= p[1]) {
@@ -84,6 +84,14 @@ impl Creatures {
         };
         let uid = r.u32s()?;
         sized(uid.len())?;
+        let mut sorted = uid.clone();
+        sorted.sort_unstable();
+        if sorted.first() == Some(&0) {
+            return Err(LoadError::Invalid("creature uid of 0"));
+        }
+        if sorted.windows(2).any(|p| p[0] == p[1]) {
+            return Err(LoadError::Invalid("creature uid repeats"));
+        }
         for (&s, u) in live.iter().zip(uid) {
             c.uid[s as usize] = u;
         }

@@ -80,7 +80,7 @@ tidepool/
   spikes/           throwaway measurements. Never imported.
 ```
 
-Dependency rule, enforced by lint:
+Dependency rule, enforced by ESLint for `src/` and by the crate count in `make check` for the crates:
 
 - `crates/sim` imports nothing.
 - `crates/headless` imports `sim`.
@@ -199,8 +199,8 @@ Rules:
   5-level mip chain in `RGBA16F`.
 - Appearance that does not change within a life (outline, parts, hue) is sent once per `uid`. Per-frame
   data is position, heading, energy, and flags. M0 and M1 send one fixed record and do not need the split.
-- `webglcontextlost` shows a message and `webglcontextrestored` rebuilds. A device with no WebGL2 gets a
-  plain explanation, not a blank page.
+- `webglcontextlost` shows the error panel with a Reload button. A rebuild on `webglcontextrestored` is
+  not built yet. A device with no WebGL2 gets a plain explanation, not a blank page.
 
 ## 9. UI
 
@@ -215,7 +215,7 @@ view are built before its normal state.
 | Command | Purpose | Fails when |
 |---|---|---|
 | `run` | Run N ticks from a seed. Print the state hash and counts. | Never |
-| `bench` | Ticks per second at the reference world. | Below the floor in §2 |
+| `bench` | Ticks per second of the native build. For probes and a quick reading. | Below `--floor` |
 | `gate-health` | 12,000 ticks on 3 seeds, one at a time. | Any seed leaves its bands |
 | `probe-*` | Named measurements. Output goes to `docs/findings/`. | Never |
 | `bake` | Run long, pass the health gate, write the shipped snapshot. | Gate fails |
@@ -223,8 +223,13 @@ view are built before its normal state.
 Every gate is proven on a known-bad input before it counts. The proof and its output are recorded in
 `docs/gates.md`. A gate that has not rejected something is not a gate.
 
-`make check` runs format, Clippy, Rust tests, the WASM build, type check, ESLint, and Vitest.
-`make gates` runs `bench` and `gate-health`. CI runs both on every push that touches `tidepool/`.
+`scripts/bench-wasm.mjs` is the gate for the floor in §2. It times the `.wasm` in Node, because §2
+defines the floor for WASM. It takes the same flags as `bench` and prints the same lines.
+
+`make check` runs the crate count, format for Rust and TypeScript, Clippy, Rust tests, the WASM build,
+type check, ESLint, and Vitest. `make gates` runs `bench` and `scripts/bench-wasm.mjs`. Task 16 adds
+`gate-health` to `make gates`. CI runs `make check` and both benches at a floor of 800 on every push that
+touches `tidepool/`.
 
 ## 11. Later systems
 

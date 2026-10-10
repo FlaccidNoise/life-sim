@@ -1,3 +1,6 @@
+// Tests run native only, so a banned float method is safe here.
+#![allow(clippy::disallowed_methods)]
+
 use tidepool_sim::world::World;
 
 fn hash_after(seed: u32, ticks: u32) -> u32 {

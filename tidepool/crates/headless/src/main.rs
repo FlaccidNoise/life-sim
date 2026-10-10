@@ -23,7 +23,7 @@ fn world_size(flag: &str, v: Option<&str>) -> (f32, f32) {
     let (w, h) = (value(flag, ws), value(flag, hs));
     if !size_ok(w, h) {
         usage(&format!(
-            "--world needs two numbers above 0 and at most {MAX_WORLD_SIZE}, like 1536x1024"
+            "--world needs two numbers from 1 to {MAX_WORLD_SIZE}, like 1536x1024"
         ));
     }
     (w, h)

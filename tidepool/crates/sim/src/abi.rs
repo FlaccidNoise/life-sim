@@ -34,7 +34,7 @@ pub extern "C" fn tp_abi_version() -> u32 {
 pub extern "C" fn tp_new(seed: u32, w: f32, h: f32) -> *mut World {
     if !world::size_ok(w, h) {
         return fail(format!(
-            "world size {w} by {h} is not allowed: each side must be above 0 and at most {}",
+            "world size {w} by {h} is not allowed: each side must be at least 1 and at most {}",
             world::MAX_WORLD_SIZE
         ));
     }
@@ -219,6 +219,8 @@ mod tests {
     fn a_bad_world_size_gives_null_and_a_message() {
         for (w, h) in [
             (0.0, 1024.0),
+            (f32::from_bits(1), 1024.0),
+            (1536.0, 0.5),
             (1536.0, -1.0),
             (f32::NAN, 1024.0),
             (1536.0, f32::INFINITY),

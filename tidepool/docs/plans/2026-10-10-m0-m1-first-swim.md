@@ -713,7 +713,8 @@ fn overlapping_drifters_separate() {
 }
 ```
 
-(`hypot` is not on the banned list and is used only in the test.)
+(`hypot` is banned in the core. Integration test files run native only and start with
+`#![allow(clippy::disallowed_methods)]`.)
 
 - [ ] Run `cargo test --workspace`. Expect: the three new tests fail to compile or fail.
 - [ ] Implement. Add `pub grid: Grid` to `World`.
@@ -3067,7 +3068,7 @@ fn creatures_think_on_alternate_ticks() {
 }
 ```
 
-(`powi` is not banned and is used only in the test.)
+(`powi` is banned in the core. This test file starts with `#![allow(clippy::disallowed_methods)]`.)
 
 Add to `crates/sim/tests/snapshot.rs`: the 1,500 + 1,500 round trip must still pass. It now covers
 activations.
