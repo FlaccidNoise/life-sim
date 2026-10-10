@@ -7,7 +7,8 @@ you. You can leave your body at any time and watch or change the whole simulatio
 
 It is a ground-up rebuild of the simulation in the repo root.
 
-**Status:** planned, not built. Start at `docs/plans/2026-10-10-m0-m1-first-swim.md`.
+**Status:** M0 (foundation) is built. M1 starts at Task 10 of `docs/plans/2026-10-10-m0-m1-first-swim.md`.
+Run `make dev` to see it, `make check` to test it, and `make gates` to measure it.
 
 | Document | What it holds |
 |---|---|

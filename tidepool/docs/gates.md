@@ -1,7 +1,7 @@
 # Gates
 
 A gate counts only after it has rejected a known-bad input. Each row records the bad input and the
-output seen. All proofs ran on 2026-10-10.
+output seen. All proofs ran on 2026-10-10, except the CI row, which has no proof yet.
 
 | Gate | Command | Bad input used to prove it | Output seen | Date |
 |---|---|---|---|---|
@@ -10,6 +10,7 @@ output seen. All proofs ran on 2026-10-10.
 | Snapshot round trip | `cargo test --test snapshot` | The `vy` line removed from both `Creatures::save` and `Creatures::load` in `crates/sim/src/creature.rs` | `load_then_run_equals_unbroken_run ... FAILED`, ``assertion `left == right` failed``, `left: 865352771`, `right: 4132115202` | 2026-10-10 |
 | Native equals WASM | `pnpm exec vitest run tests/determinism.test.ts` | `#[cfg(target_arch = "wasm32")] { self.creatures.vx[0] += 1.0e-6; }` added to `World::tick`, then `make wasm` | All 3 seeds fail. Seed 1: `AssertionError: expected 3869756312 to be 1603536447 // Object.is equality` | 2026-10-10 |
 | Throughput | `make gates` (runs `target/release/tidepool-headless bench`) | `bench --floor 1000000000` | `bench creatures=1500 median_tps=37372 floor=1000000000 FAIL`, exit 1 | 2026-10-10 |
+| CI | `.github/workflows/tidepool.yml` runs `make check` and `bench --floor 800` | Not proven yet: the workflow has not run. First push runs it. | Not proven yet: the workflow has not run. First push runs it. | Not run |
 
 ## Notes
 
@@ -21,6 +22,10 @@ output seen. All proofs ran on 2026-10-10.
   real reading. The floor is 2,400 ticks per second at 1,500 creatures (`architecture.md` section 2).
 - **Throughput, void run.** `bench --creatures 6000 --runs 2` fills the 4,096-slot pool, so the mean
   alive count is 4,096. That is below 80% of 6,000. The gate prints `VOID: population fell` and exits 1.
+- **CI.** The workflow is not proven. Nobody has pushed it, so it has never run. Treat it as untested until
+  the first push passes and a deliberately bad commit makes it fail. CI uses a floor of 800 ticks per second,
+  a third of the real floor, because shared runners are slower than the reference machine by an unknown
+  factor. `make gates` enforces the real floor on the reference machine.
 
 ## Throughput readings
 
