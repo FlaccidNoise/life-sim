@@ -50,6 +50,10 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
 - 2026-10-10: The throughput gate times the `.wasm` in Node, because the floor in §2 is defined for
   WASM. The native bench stays for probes. Found by the M0 audit: native read 1.46 times WASM.
   → `../gates.md`
+- 2026-10-10: The throughput benches time the default world after 12,000 ticks of settling, not a
+  seeded 3072 by 1536 world. The seeded world was an estimate from before the ecology existed and does
+  not hold its population. The floor and the reference population of 1,500 do not change.
+  → `../gates.md`, `../findings/m1-tuning.md`
 
 ## Process
 

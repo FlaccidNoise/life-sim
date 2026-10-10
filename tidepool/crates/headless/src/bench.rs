@@ -2,26 +2,29 @@ use std::time::{Duration, Instant};
 
 use tidepool_sim::world::World;
 
-use crate::{usage, value, world_size};
+use crate::{usage, value, world_size, FOUNDERS, WORLD};
 
 /// Ticks between two population samples. The sample is outside the timed section.
 const CHUNK: u32 = 100;
-/// A run whose mean alive count is below this share of `--creatures` is void.
+/// A run whose mean alive count is below this share of `--reference` is void.
 const MIN_ALIVE_SHARE: f64 = 0.8;
 
+/// `bench`. Settles the default world once, then times each run from a snapshot of it, so every
+/// run does the same work.
 pub fn bench(args: &[String]) {
-    let (mut creatures, mut plants) = (1500u32, 3000u32);
-    let (mut ticks, mut warmup, mut runs) = (2000u32, 200u32, 5u32);
-    let (mut w, mut h) = (3072.0f32, 1536.0f32);
-    let mut floor = 2400.0f64;
+    let (mut creatures, mut plants) = FOUNDERS;
+    let (mut settle, mut ticks, mut runs) = (12000u32, 2000u32, 5u32);
+    let (mut w, mut h) = WORLD;
+    let (mut reference, mut floor) = (1500u32, 2400.0f64);
     let mut it = args.iter().map(String::as_str);
     while let Some(flag) = it.next() {
         match flag {
             "--creatures" => creatures = value(flag, it.next()),
             "--plants" => plants = value(flag, it.next()),
+            "--settle" => settle = value(flag, it.next()),
             "--ticks" => ticks = value(flag, it.next()),
-            "--warmup" => warmup = value(flag, it.next()),
             "--runs" => runs = value(flag, it.next()),
+            "--reference" => reference = value(flag, it.next()),
             "--floor" => floor = value(flag, it.next()),
             "--world" => (w, h) = world_size(flag, it.next()),
             _ => usage(&format!("unknown flag {flag}")),
@@ -31,11 +34,20 @@ pub fn bench(args: &[String]) {
         usage("--creatures, --ticks, and --runs need a value above 0");
     }
 
+    let mut world = World::new(1, w, h);
+    world.seed_founders(creatures, plants);
+    world.run(settle);
+    println!(
+        "settled tick={} creatures={} plants={}",
+        world.tick,
+        world.creatures.slots.count(),
+        world.plants.slots.count()
+    );
+    let snapshot = world.save();
+
     let (mut tps, mut alive_means) = (Vec::new(), Vec::new());
     for run in 1..=runs {
-        let mut world = World::new(1, w, h);
-        world.seed_founders(creatures, plants);
-        world.run(warmup);
+        let mut world = World::load(&snapshot).expect("a snapshot that this run saved loads");
         let (mut timed, mut alive_sum, mut chunks) = (Duration::ZERO, 0.0f64, 0u32);
         let mut left = ticks;
         while left > 0 {
@@ -50,7 +62,7 @@ pub fn bench(args: &[String]) {
         let alive = alive_sum / f64::from(chunks);
         let run_tps = f64::from(ticks) / timed.as_secs_f64();
         println!("run {run} creatures={alive:.0} tps={run_tps:.0}");
-        if alive < MIN_ALIVE_SHARE * f64::from(creatures) {
+        if alive < MIN_ALIVE_SHARE * f64::from(reference) {
             println!("VOID: population fell");
             std::process::exit(1);
         }

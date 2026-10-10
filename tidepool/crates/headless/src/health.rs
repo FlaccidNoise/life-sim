@@ -6,11 +6,7 @@ use tidepool_sim::params::id;
 use tidepool_sim::stats::STAT_MAX_GENERATION;
 use tidepool_sim::world::World;
 
-use crate::{param, usage, value};
-
-/// The default world: 1536 by 1024, 400 founder creatures, 1,200 founder plants.
-const WORLD: (f32, f32) = (1536.0, 1024.0);
-const FOUNDERS: (u32, u32) = (400, 1200);
+use crate::{param, usage, value, FOUNDERS, WORLD};
 
 // The bands of the gate. `docs/gates.md` holds the table.
 const CREATURES: (u32, u32) = (150, 3000);

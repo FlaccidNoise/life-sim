@@ -29,6 +29,10 @@ The skip length is decided in M5.
 **The throughput gate is still void.** The bench world holds a mean of 425 creatures and the gate
 needs 1,200. Trial 5 shows that no food supply passes both gates. See "The bench" below.
 
+**Resolved after this task.** The benches now time the default world after 12,000 ticks of settling, and
+`make gates` exits 0 (`gates.md`, "Throughput bench"). The paragraph above and "The bench" below record
+what the seeded bench world did. They are kept as the evidence for that decision.
+
 ## Protocol
 
 - A **trial** is `tidepool-headless gate-health` on seeds 1, 2, 3 at 12,000 ticks, one seed after

@@ -15,8 +15,9 @@ creature among creatures that each run an evolved neural network. It shares no c
 ## Status
 
 M0 (foundation) is built: the Rust core, the C ABI, the worker host, the WebGL2 page, `make check`,
-`make gates`, and a CI workflow. The CI workflow has not run yet, because nothing is pushed. M1 starts at
-Task 10 of `docs/plans/2026-10-10-m0-m1-first-swim.md`.
+`make gates`, and a CI workflow. The CI workflow has not run yet, because nothing is pushed. The M1
+simulation and page are built. The M1 exit audit is next: Task 20 of
+`docs/plans/2026-10-10-m0-m1-first-swim.md`.
 
 ## Commands
 
@@ -25,7 +26,7 @@ Run from `tidepool/`. If `cargo` is not found, run `. "$HOME/.cargo/env"`.
 | Command | Does |
 |---|---|
 | `make check` | Crate count, format (Rust and TypeScript), Clippy, Rust tests, WASM build, type check, ESLint, Vitest |
-| `make gates` | Native bench, then the throughput gate (`scripts/bench-wasm.mjs`). Task 16 adds the health gate |
+| `make gates` | Native bench, the throughput gate (`scripts/bench-wasm.mjs`), then the health gate (`gate-health`) |
 | `make dev` | Build the WASM and start the dev server |
 
 ## Gotchas

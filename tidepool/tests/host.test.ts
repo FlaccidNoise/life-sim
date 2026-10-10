@@ -135,11 +135,34 @@ test('bench replies and does not advance the main world', () => {
   r.host.handle({ type: 'init', seed: 1 });
   // Too few ticks for a founder to feed up to a bud or to starve, so the count is the founders. A
   // founder starts at half of its capacity, buds at 0.8, and its mouth takes about 1% per tick.
-  r.host.handle({ type: 'bench', ticks: 10 });
+  r.host.handle({ type: 'bench', settle: 0, ticks: 10 });
   const b = r.of('benchResult')[0];
   expect(b?.ticks).toBe(10);
-  expect(b?.creatures).toBe(1500);
+  expect(b?.creatures).toBe(P.FOUNDER_CREATURES);
   expect(r.of('frame').length).toBe(0);
+});
+
+test('a bench runs its settle ticks first and does not time them', () => {
+  // Each tick of a world costs 1 ms of the fake clock. `ended` is the tick of the bench world when
+  // the host frees it.
+  let ended = -1;
+  const r = rig({
+    wrap: (sim) => ({
+      ...sim,
+      tick: (n) => {
+        r.jump(n);
+        sim.tick(n);
+      },
+      free: () => {
+        ended = sim.tickCount();
+        sim.free();
+      },
+    }),
+  });
+  r.host.handle({ type: 'init', seed: 1 });
+  r.host.handle({ type: 'bench', settle: 30, ticks: 10 });
+  expect(ended).toBe(40);
+  expect(r.of('benchResult')[0]).toMatchObject({ ticks: 10, millis: 10 });
 });
 
 test('the time a bench takes is not owed to the main world', () => {
@@ -148,7 +171,7 @@ test('the time a bench takes is not owed to the main world', () => {
   r.advance(100);
   expect(r.lastTick()).toBe(2);
   r.drift(5000);
-  r.host.handle({ type: 'bench', ticks: 200 });
+  r.host.handle({ type: 'bench', settle: 0, ticks: 200 });
   r.drift(0);
   expect(r.of('benchResult')[0]?.millis).toBe(5000);
   r.advance(10);

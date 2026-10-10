@@ -1,17 +1,19 @@
 // The throughput gate. It times `tp_tick` of the built `.wasm` in Node, which is what the floor in
-// docs/architecture.md section 2 names. Flags, defaults, and output follow the native bench in
+// docs/architecture.md section 2 names. It settles the default world once, then times each run from
+// a snapshot of it. Flags, defaults, and output follow the native bench in
 // crates/headless/src/bench.rs. Exit 0 on PASS, 1 on FAIL or a void run, 2 on a usage error.
 
 import { readFileSync } from 'node:fs';
 
 const USAGE =
-  'usage: node scripts/bench-wasm.mjs [--creatures <u32>] [--plants <u32>] [--world <W>x<H>] [--ticks <u32>] [--warmup <u32>] [--runs <u32>] [--floor <n>]';
+  'usage: node scripts/bench-wasm.mjs [--creatures <u32>] [--plants <u32>] [--world <W>x<H>] [--settle <u32>] [--ticks <u32>] [--runs <u32>] [--reference <u32>] [--floor <n>]';
 // Ticks between two population samples. The sample is outside the timed section.
 const CHUNK = 100;
-// A run whose mean alive count is below this share of `--creatures` is void.
+// A run whose mean alive count is below this share of `--reference` is void.
 const MIN_ALIVE_SHARE = 0.8;
-// Key of `tp_stat` in crates/sim/src/abi.rs.
+// Keys of `tp_stat`: the `STAT_` constants in crates/sim/src/stats.rs.
 const STAT_CREATURES = 0;
+const STAT_PLANTS = 1;
 
 function usage(problem) {
   console.error(`error: ${problem}\n${USAGE}`);
@@ -29,16 +31,19 @@ function float(flag, v) {
   return n;
 }
 
-let [creatures, plants, ticks, warmup, runs, floor] = [1500, 3000, 2000, 200, 5, 2400];
-let [w, h] = [3072, 1536];
+// The default world, as in crates/headless/src/main.rs.
+let [creatures, plants] = [400, 1200];
+let [w, h] = [1536, 1024];
+let [settle, ticks, runs, reference, floor] = [12000, 2000, 5, 1500, 2400];
 const args = process.argv.slice(2);
 for (let i = 0; i < args.length; i += 2) {
   const [flag, v] = [args[i], args[i + 1]];
   if (flag === '--creatures') creatures = u32(flag, v);
   else if (flag === '--plants') plants = u32(flag, v);
+  else if (flag === '--settle') settle = u32(flag, v);
   else if (flag === '--ticks') ticks = u32(flag, v);
-  else if (flag === '--warmup') warmup = u32(flag, v);
   else if (flag === '--runs') runs = u32(flag, v);
+  else if (flag === '--reference') reference = u32(flag, v);
   else if (flag === '--floor') floor = float(flag, v);
   else if (flag === '--world') {
     const sides = (v ?? '').split('x');
@@ -61,16 +66,37 @@ try {
 }
 const x = new WebAssembly.Instance(new WebAssembly.Module(bytes), {}).exports;
 
+// A new view of `memory.buffer` on each call: a call that grows memory detaches every older view.
+const wasmBytes = (ptr, len) => new Uint8Array(x.memory.buffer, ptr >>> 0, len >>> 0);
+const lastError = () => new TextDecoder().decode(wasmBytes(x.tp_error_ptr(), x.tp_error_len()));
+
+const settled = x.tp_new(1, w, h);
+if (settled === 0) usage(lastError());
+x.tp_seed_founders(settled, creatures, plants);
+x.tp_tick(settled, settle);
+console.log(
+  `settled tick=${x.tp_tick_count(settled) >>> 0} creatures=${x.tp_stat(settled, STAT_CREATURES)} plants=${x.tp_stat(settled, STAT_PLANTS)}`,
+);
+// A copy: the core's buffer is valid only until the next `tp_save` or `tp_free`.
+const snapshotLen = x.tp_save(settled) >>> 0;
+const snapshot = wasmBytes(x.tp_save_ptr(settled), snapshotLen).slice();
+x.tp_free(settled);
+
 const tps = [];
 const aliveMeans = [];
 for (let run = 1; run <= runs; run++) {
-  const world = x.tp_new(1, w, h);
-  if (world === 0) {
-    const reason = new Uint8Array(x.memory.buffer, x.tp_error_ptr(), x.tp_error_len());
-    usage(new TextDecoder().decode(reason));
+  const ptr = x.tp_alloc(snapshotLen) >>> 0;
+  if (ptr === 0) {
+    console.error(`error: the core has no memory for a snapshot of ${snapshotLen} bytes`);
+    process.exit(2);
   }
-  x.tp_seed_founders(world, creatures, plants);
-  x.tp_tick(world, warmup);
+  wasmBytes(ptr, snapshotLen).set(snapshot);
+  const world = x.tp_load(ptr, snapshotLen);
+  x.tp_dealloc(ptr, snapshotLen);
+  if (world === 0) {
+    console.error(`error: ${lastError()}`);
+    process.exit(2);
+  }
   let [timedMillis, aliveSum, chunks] = [0, 0, 0];
   for (let left = ticks; left > 0;) {
     const n = Math.min(left, CHUNK);
@@ -85,7 +111,7 @@ for (let run = 1; run <= runs; run++) {
   const alive = aliveSum / chunks;
   const runTps = (ticks / timedMillis) * 1000;
   console.log(`run ${run} creatures=${alive.toFixed(0)} tps=${runTps.toFixed(0)}`);
-  if (alive < MIN_ALIVE_SHARE * creatures) {
+  if (alive < MIN_ALIVE_SHARE * reference) {
     console.log('VOID: population fell');
     process.exit(1);
   }
