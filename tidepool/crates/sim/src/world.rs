@@ -1,8 +1,14 @@
 //! The world: every piece of simulation state, the tick, and the state hash.
 
 use crate::creature::Creatures;
+use crate::grid::Grid;
 use crate::rng::Rng;
 use crate::snapshot::{crc32, Writer};
+
+/// Largest sum of two radii. Sets the neighbour search box.
+const BODY_REACH: f32 = 16.0;
+/// Velocity change per unit of overlap, per unit of distance.
+const REPEL: f32 = 0.2;
 
 pub struct World {
     pub tick: u32,
@@ -12,6 +18,8 @@ pub struct World {
     /// Starts at 1. 0 means none.
     pub next_uid: u32,
     pub rng_spawn: Rng,
+    /// Scratch. Rebuilt every tick, never saved.
+    pub grid: Grid,
 }
 
 impl World {
@@ -24,6 +32,7 @@ impl World {
             creatures: Creatures::default(),
             next_uid: 1,
             rng_spawn: root.fork(1),
+            grid: Grid::new(w, h),
         }
     }
 
@@ -45,6 +54,34 @@ impl World {
 
     pub fn tick(&mut self) {
         let c = &mut self.creatures;
+        self.grid.rebuild(&c.slots, &c.x, &c.y);
+        for s in 0..c.slots.high_water() as usize {
+            if !c.slots.is_alive(s as u32) {
+                continue;
+            }
+            let (px, py, ri) = (c.x[s], c.y[s], c.radius[s]);
+            let (mut fx, mut fy) = (0.0f32, 0.0f32);
+            self.grid.for_each_in_box(
+                px - BODY_REACH,
+                py - BODY_REACH,
+                px + BODY_REACH,
+                py + BODY_REACH,
+                |j| {
+                    let j = j as usize;
+                    let (dx, dy) = (px - c.x[j], py - c.y[j]);
+                    let rs = ri + c.radius[j];
+                    let d2 = dx * dx + dy * dy;
+                    if d2 < rs * rs && d2 > 0.0 {
+                        let d = d2.sqrt();
+                        let f = (rs - d) / d * REPEL;
+                        fx += dx * f;
+                        fy += dy * f;
+                    }
+                },
+            );
+            c.vx[s] += fx;
+            c.vy[s] += fy;
+        }
         for s in 0..c.slots.high_water() as usize {
             if !c.slots.is_alive(s as u32) {
                 continue;
