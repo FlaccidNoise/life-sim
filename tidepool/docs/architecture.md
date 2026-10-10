@@ -174,10 +174,10 @@ The full list for M0 and M1 is in the plan.
 
 Messages are plain objects with a `type` field, declared in `src/protocol.ts`.
 
-- Page to worker: `init`, `view`, `input`, `possess`, `release`, `speed`, `param`, `recycle`, `bench`.
-  Later: `skip`, `save`, `load`, god tools.
-- Worker to page: `ready`, `frame`, `stats`, `died`, `benchResult`, `error`. Later: `skipProgress`,
-  `skipReport`.
+- Page to worker: `init`, `view`, `input`, `possessAt`, `possess`, `release`, `speed`, `param`,
+  `recycle`, `bench`. Later: `skip`, `save`, `load`, god tools.
+- Worker to page: `ready`, `frame`, `stats`, `possessed`, `died`, `benchResult`, `error`. Later:
+  `skipProgress`, `skipReport`.
 
 Rules:
 

@@ -88,7 +88,7 @@ mod tests {
     #[test]
     fn box_query_matches_brute_force() {
         let mut w = crate::world::World::new(5, 1536.0, 1024.0);
-        w.spawn_drifters(800);
+        w.seed_founders(800, 0);
         w.grid
             .rebuild(&w.creatures.slots, &w.creatures.x, &w.creatures.y);
         let (qx, qy, r) = (700.0f32, 500.0f32, 60.0f32);
@@ -119,7 +119,7 @@ mod tests {
     #[test]
     fn box_query_clamps_at_world_edges() {
         let mut w = crate::world::World::new(5, 1536.0, 1024.0);
-        w.spawn_drifters(200);
+        w.seed_founders(200, 0);
         w.grid
             .rebuild(&w.creatures.slots, &w.creatures.x, &w.creatures.y);
         let mut n = 0;
@@ -145,7 +145,7 @@ mod tests {
     #[test]
     fn box_query_with_swapped_or_nan_corners_is_empty() {
         let mut w = crate::world::World::new(5, 1536.0, 1024.0);
-        w.spawn_drifters(800);
+        w.seed_founders(800, 0);
         w.grid
             .rebuild(&w.creatures.slots, &w.creatures.x, &w.creatures.y);
         let mut n = 0;

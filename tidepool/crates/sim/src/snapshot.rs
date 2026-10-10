@@ -2,7 +2,7 @@
 //! of what the writer produced.
 
 pub const MAGIC: [u8; 4] = *b"TDPL";
-pub const FORMAT_VERSION: u32 = 1;
+pub const FORMAT_VERSION: u32 = 2;
 /// Magic, version, payload length, and checksum.
 const ENVELOPE_BYTES: usize = 16;
 
@@ -32,6 +32,10 @@ impl Writer {
 
     pub fn f32(&mut self, v: f32) {
         self.u32(v.to_bits());
+    }
+
+    pub fn u64(&mut self, v: u64) {
+        self.bytes.extend_from_slice(&v.to_le_bytes());
     }
 
     /// Length prefix, then values.
@@ -94,6 +98,11 @@ impl<'a> Reader<'a> {
 
     pub fn f32(&mut self) -> Result<f32, LoadError> {
         Ok(f32::from_bits(self.u32()?))
+    }
+
+    pub fn u64(&mut self) -> Result<u64, LoadError> {
+        let (lo, hi) = (self.u32()?, self.u32()?);
+        Ok(lo as u64 | (hi as u64) << 32)
     }
 
     pub fn u32s(&mut self) -> Result<Vec<u32>, LoadError> {
@@ -198,12 +207,14 @@ mod tests {
         let mut w = Writer::new();
         w.u32(7);
         w.f32(-0.5);
+        w.u64(u64::MAX - 1);
         w.u32s(&[1, u32::MAX]);
         w.f32s(&[1.5, f32::MIN]);
         w.u16s(&[2, u16::MAX]);
         w.u8s(&[3, u8::MAX]);
         let mut r = Reader::new(&w.bytes);
         assert_eq!((r.u32(), r.f32()), (Ok(7), Ok(-0.5)));
+        assert_eq!(r.u64(), Ok(u64::MAX - 1));
         assert_eq!(r.u32s(), Ok(vec![1, u32::MAX]));
         assert_eq!(r.f32s(), Ok(vec![1.5, f32::MIN]));
         assert_eq!(r.u16s(), Ok(vec![2, u16::MAX]));

@@ -47,15 +47,12 @@ impl Rng {
         Rng(mix(self.0 ^ mix(tag.wrapping_add(GOLDEN))))
     }
 
-    /// The low word, then the high word.
     pub fn save(&self, w: &mut Writer) {
-        w.u32(self.0 as u32);
-        w.u32((self.0 >> 32) as u32);
+        w.u64(self.0);
     }
 
     pub fn load(r: &mut Reader) -> Result<Rng, LoadError> {
-        let (lo, hi) = (r.u32()?, r.u32()?);
-        Ok(Rng(lo as u64 | (hi as u64) << 32))
+        Ok(Rng(r.u64()?))
     }
 }
 

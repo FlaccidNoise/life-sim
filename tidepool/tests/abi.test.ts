@@ -17,11 +17,12 @@ test('frame layout constants match the module', () => {
   expect(n('tp_frame_header_words')).toBe(P.FRAME_HEADER_WORDS);
   expect(n('tp_frame_creature_stride')).toBe(P.CREATURE_STRIDE);
   expect(n('tp_frame_plant_stride')).toBe(P.PLANT_STRIDE);
+  expect(n('tp_heir_stride')).toBe(P.HEIR_STRIDE);
 });
 
 test('a frame of the whole world holds every creature', () => {
   const sim = fresh();
-  sim.spawnDrifters(300);
+  sim.seedFounders(300, 0);
   sim.tick(10);
   const buf = new ArrayBuffer(4 * (P.FRAME_HEADER_WORDS + 300 * P.CREATURE_STRIDE));
   const words = sim.writeFrame(0, 0, 1536, 1024, buf);
@@ -37,6 +38,9 @@ test('a frame of the whole world holds every creature', () => {
     expect(f.f32[o + P.C_X]).toBeGreaterThanOrEqual(0);
     expect(f.f32[o + P.C_X]).toBeLessThanOrEqual(1536);
     expect(f.f32[o + P.C_LENGTH]).toBeGreaterThan(0);
+    expect(f.f32[o + P.C_WIDTH]).toBeLessThan(f.f32[o + P.C_LENGTH] ?? 0);
+    expect(f.f32[o + P.C_ENERGY]).toBeCloseTo(0.5, 5);
+    expect(f.u32[o + P.C_FLAGS]).toBe(0);
     uids.add(f.u32[o + P.C_UID] ?? 0);
   }
   expect(uids.size).toBe(300);
@@ -45,7 +49,7 @@ test('a frame of the whole world holds every creature', () => {
 
 test('a small view holds fewer creatures and only ones near it', () => {
   const sim = fresh();
-  sim.spawnDrifters(1000);
+  sim.seedFounders(1000, 0);
   sim.tick(1);
   const buf = new ArrayBuffer(4 * (P.FRAME_HEADER_WORDS + 1000 * P.CREATURE_STRIDE));
   sim.writeFrame(400, 300, 600, 500, buf);
@@ -61,13 +65,13 @@ test('a small view holds fewer creatures and only ones near it', () => {
 
 test('writeFrame reports a buffer that is too small', () => {
   const sim = fresh();
-  sim.spawnDrifters(300);
+  sim.seedFounders(300, 0);
   expect(sim.writeFrame(0, 0, 1536, 1024, new ArrayBuffer(64))).toBe(-1);
 });
 
 test('save then load gives the same hash and the same future', () => {
   const a = fresh();
-  a.spawnDrifters(300);
+  a.seedFounders(300, 0);
   a.tick(200);
   const b = createSim(module, { seed: 0, worldW: 1536, worldH: 1024, snapshot: a.save() });
   expect(b.hash()).toBe(a.hash());
@@ -78,7 +82,7 @@ test('save then load gives the same hash and the same future', () => {
 
 test('a corrupt snapshot throws SimError with the reason', () => {
   const a = fresh();
-  a.spawnDrifters(50);
+  a.seedFounders(50, 0);
   const snap = a.save();
   snap[snap.length >> 1] = (snap[snap.length >> 1] ?? 0) ^ 0x40;
   expect(() => createSim(module, { seed: 0, worldW: 1536, worldH: 1024, snapshot: snap })).toThrow(
@@ -110,4 +114,120 @@ test('a module with another ABI version is refused', () => {
   const make = () => createSim(other, { seed: 1, worldW: 1536, worldH: 1024 });
   expect(make).toThrow(SimError);
   expect(make).toThrow(`ABI version 99 and this build needs ${P.ABI_VERSION}`);
+});
+
+test('the parameter table reads and writes through the ABI', () => {
+  const sim = fresh();
+  const params = sim.params();
+  expect(params.map((p) => p.index)).toEqual(params.map((_, i) => i));
+  expect(new Set(params.map((p) => p.name)).size).toBe(params.length);
+  const repel = params.find((p) => p.name === 'repel');
+  if (!repel) throw new Error('no parameter repel');
+  sim.setParam(repel.index, 0.5);
+  expect(sim.params()[repel.index]?.value).toBeCloseTo(0.5, 6);
+  // A value outside the range is clamped.
+  sim.setParam(repel.index, 99);
+  expect(sim.params()[repel.index]?.value).toBe(repel.max);
+});
+
+test('a parameter index out of range reads as 0 and writes nothing', () => {
+  const sim = fresh();
+  const before = sim.hash();
+  sim.setParam(sim.params().length, 1);
+  sim.setParam(0xffffffff, 1);
+  expect(sim.hash()).toBe(before);
+  const x = new WebAssembly.Instance(module, {}).exports as Record<string, (i: number) => number>;
+  const count = x.tp_param_count?.(0) ?? 0;
+  for (const name of ['tp_param_default', 'tp_param_min', 'tp_param_max', 'tp_param_name_len']) {
+    expect(x[name]?.(count)).toBe(0);
+  }
+  expect(x.tp_param_name_ptr?.(count)).toBe(0);
+});
+
+test('a parameter change changes the future', () => {
+  const [a, b] = [fresh(), fresh()];
+  const repel = a.params().find((p) => p.name === 'repel');
+  if (!repel) throw new Error('no parameter repel');
+  b.setParam(repel.index, 0);
+  for (const sim of [a, b]) {
+    sim.seedFounders(1000, 0);
+    sim.tick(50);
+  }
+  expect(b.hash()).not.toBe(a.hash());
+});
+
+test('pick, possess, input, and release go through the ABI', () => {
+  const sim = fresh();
+  sim.seedFounders(300, 0);
+  const buf = new ArrayBuffer(4 * (P.FRAME_HEADER_WORDS + 300 * P.CREATURE_STRIDE));
+  sim.writeFrame(0, 0, 1536, 1024, buf);
+  let f = P.viewFrame(buf);
+  const o = f.creatureBase;
+  const [x, y, uid, slot] = [
+    f.f32[o + P.C_X],
+    f.f32[o + P.C_Y],
+    f.u32[o + P.C_UID],
+    f.u32[o + P.C_SLOT],
+  ];
+  expect(sim.pick(x ?? 0, y ?? 0, 2)).toBe(uid);
+  expect(sim.pick(-5000, -5000, 2)).toBe(0);
+  expect(sim.possess(0)).toBe(false);
+  expect(sim.possess(uid ?? 0)).toBe(true);
+  expect(sim.possessed()).toBe(uid);
+  expect(sim.deathCause()).toBe(0);
+
+  sim.input(true, 1, -1);
+  sim.tick(1);
+  sim.writeFrame(0, 0, 1536, 1024, buf);
+  f = P.viewFrame(buf);
+  expect(f.possessedSlot).toBe(slot);
+  expect(f.brainDriving).toBe(false);
+  let flagged = 0;
+  for (let i = 0; i < f.creatureCount; i++) {
+    const r = f.creatureBase + i * P.CREATURE_STRIDE;
+    const flags = f.u32[r + P.C_FLAGS] ?? 0;
+    if (f.u32[r + P.C_UID] === uid) {
+      expect(flags).toBe(P.FLAG_LINEAGE | P.FLAG_POSSESSED);
+      flagged++;
+    } else expect(flags).toBe(0);
+  }
+  expect(flagged).toBe(1);
+
+  sim.release();
+  expect(sim.possessed()).toBe(0);
+  sim.writeFrame(0, 0, 1536, 1024, buf);
+  expect(P.viewFrame(buf).possessedSlot).toBe(P.NO_SLOT);
+});
+
+test('heirs are the marked creatures, read through the ABI', () => {
+  const sim = fresh();
+  sim.seedFounders(300, 0);
+  expect(sim.heirs()).toEqual([]);
+  const uids = [10, 20, 30];
+  for (const uid of uids) expect(sim.possess(uid)).toBe(true);
+  sim.release();
+  const heirs = sim.heirs();
+  expect(heirs.map((h) => h.uid).sort((a, b) => a - b)).toEqual(uids);
+  for (const h of heirs) {
+    expect(sim.pick(h.x, h.y, 0.5)).toBe(h.uid);
+    expect(h.slot).toBe(h.uid - 1); // founders fill slots in uid order
+    expect(h.energy01).toBeCloseTo(0.5, 5);
+    expect(h.generation).toBe(0);
+    expect(h.hue).toBeGreaterThanOrEqual(0);
+    expect(h.hue).toBeLessThan(1);
+  }
+});
+
+test('a call after free does nothing', () => {
+  const sim = fresh();
+  sim.seedFounders(10, 0);
+  sim.free();
+  sim.seedFounders(10, 0);
+  sim.setParam(0, 1);
+  sim.input(true, 1, 1);
+  sim.release();
+  expect(sim.possess(1)).toBe(false);
+  expect([sim.pick(0, 0, 9999), sim.possessed(), sim.deathCause()]).toEqual([0, 0, 0]);
+  expect(sim.heirs()).toEqual([]);
+  expect(sim.params()[0]?.value).toBe(0);
 });

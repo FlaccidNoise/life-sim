@@ -10,13 +10,15 @@ const CHUNK: u32 = 100;
 const MIN_ALIVE_SHARE: f64 = 0.8;
 
 pub fn bench(args: &[String]) {
-    let (mut creatures, mut ticks, mut warmup, mut runs) = (1500u32, 2000u32, 200u32, 5u32);
+    let (mut creatures, mut plants) = (1500u32, 3000u32);
+    let (mut ticks, mut warmup, mut runs) = (2000u32, 200u32, 5u32);
     let (mut w, mut h) = (3072.0f32, 1536.0f32);
     let mut floor = 2400.0f64;
     let mut it = args.iter().map(String::as_str);
     while let Some(flag) = it.next() {
         match flag {
             "--creatures" => creatures = value(flag, it.next()),
+            "--plants" => plants = value(flag, it.next()),
             "--ticks" => ticks = value(flag, it.next()),
             "--warmup" => warmup = value(flag, it.next()),
             "--runs" => runs = value(flag, it.next()),
@@ -32,7 +34,7 @@ pub fn bench(args: &[String]) {
     let (mut tps, mut alive_means) = (Vec::new(), Vec::new());
     for run in 1..=runs {
         let mut world = World::new(1, w, h);
-        world.spawn_drifters(creatures);
+        world.seed_founders(creatures, plants);
         world.run(warmup);
         let (mut timed, mut alive_sum, mut chunks) = (Duration::ZERO, 0.0f64, 0u32);
         let mut left = ticks;
