@@ -1,11 +1,41 @@
 // Page wiring: the worker, the renderer, the camera, and the overlay.
 
 import { h, render } from 'preact';
-import { TICK_HZ, viewFrame, type FrameView, type FromWorker, type ToWorker } from '../protocol';
+import {
+  TICK_HZ,
+  viewFrame,
+  type FrameView,
+  type FromWorker,
+  type ParamInfo,
+  type ToWorker,
+} from '../protocol';
 import { createRenderer, type Renderer } from '../render/renderer';
 import { App } from '../ui/App';
-import { benchText, errorText, ready, stats } from '../ui/state';
-import { clampToWorld, fitWorld, pan, viewRect, zoomAt, type Camera } from './camera';
+import { benchText, brainDriving, errorText, hint, mode, ready, stats } from '../ui/state';
+import {
+  PLAY_SCALE,
+  SCALE_MAX,
+  SCALE_MIN,
+  clampToWorld,
+  fitWorld,
+  follow,
+  pan,
+  screenToWorld,
+  viewRect,
+  zoomAt,
+  type Camera,
+} from './camera';
+import {
+  inputToSend,
+  keyOf,
+  manualNow,
+  possessedBody,
+  steerFromKeys,
+  steerToward,
+  type Body,
+  type Keys,
+  type Steer,
+} from './input';
 
 const TICK_MS = 1000 / TICK_HZ;
 const BENCH_TICKS = 2000;
@@ -13,6 +43,10 @@ const SKIP_TICKS = 24000; // the time-skip target, docs/architecture.md section 
 const DRAG_SLOP = 4; // CSS pixels. A press that moves less than this is a click.
 const WHEEL_ZOOM = 0.0015; // the zoom exponent per wheel pixel
 const PINCH_WHEEL_ZOOM = 0.01; // a trackpad pinch is a wheel event with ctrlKey and small steps
+const PICK_RADIUS = 24; // CSS pixels around a click in which a creature is picked
+const HINT_MS = 1500;
+const DIED_HINT_MS = 3000;
+const LATENCY_SAMPLES = 20;
 
 interface PointerHandlers {
   /** The pointers moved their centre by this many CSS pixels. */
@@ -21,6 +55,19 @@ interface PointerHandlers {
   zoom(sx: number, sy: number, factor: number): void;
   /** A press that ended and did not drag. */
   click(sx: number, sy: number): void;
+  /** The centre of the pointers that are down, or null when none is. */
+  hold(at: { x: number; y: number } | null): void;
+}
+
+const inText = (target: EventTarget | null): boolean =>
+  target instanceof HTMLElement &&
+  (target.isContentEditable || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA');
+
+function median(values: number[]): number | null {
+  const s = [...values].sort((a, b) => a - b);
+  const a = s[(s.length - 1) >> 1];
+  const b = s[s.length >> 1];
+  return a === undefined || b === undefined ? null : (a + b) / 2;
 }
 
 /**
@@ -43,17 +90,20 @@ function bindPointer(canvas: HTMLCanvasElement, on: PointerHandlers): void {
     for (const p of down.values()) spread += Math.hypot(p.x - x, p.y - y) / down.size;
     return { x, y, spread };
   };
+  const hold = (): void => on.hold(down.size > 0 ? gesture() : null);
 
   canvas.addEventListener('pointerdown', (e) => {
     if (down.size === 0) pressed = { x: e.clientX, y: e.clientY };
     dragged = down.size > 0;
     down.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    hold();
   });
   canvas.addEventListener('pointermove', (e) => {
     if (!down.has(e.pointerId)) return;
     // The button came up outside the window, so no `pointerup` arrived.
     if (e.buttons === 0) {
       down.delete(e.pointerId);
+      hold();
       return;
     }
     const before = gesture();
@@ -62,11 +112,17 @@ function bindPointer(canvas: HTMLCanvasElement, on: PointerHandlers): void {
     dragged ||= Math.hypot(e.clientX - pressed.x, e.clientY - pressed.y) > DRAG_SLOP;
     on.drag(after.x - before.x, after.y - before.y);
     if (before.spread > 0) on.zoom(after.x, after.y, after.spread / before.spread);
+    on.hold(after);
   });
   canvas.addEventListener('pointerup', (e) => {
-    if (down.delete(e.pointerId) && down.size === 0 && !dragged) on.click(e.clientX, e.clientY);
+    const was = down.delete(e.pointerId);
+    hold();
+    if (was && down.size === 0 && !dragged) on.click(e.clientX, e.clientY);
   });
-  canvas.addEventListener('pointercancel', (e) => down.delete(e.pointerId));
+  canvas.addEventListener('pointercancel', (e) => {
+    down.delete(e.pointerId);
+    hold();
+  });
   canvas.addEventListener(
     'wheel',
     (e) => {
@@ -93,12 +149,45 @@ function start(): void {
   let cam: Camera = { x: 0, y: 0, scale: 1 };
   let cssW = 1;
   let cssH = 1;
+  let params: ParamInfo[] = [];
+  let possessedUid = 0;
+  let body: Body | null = null; // the possessed creature as drawn, when the frame holds it
+  let prev: FrameView | null = null;
+  let cur: FrameView | null = null;
+  const latencies: number[] = []; // milliseconds from a press to the first frame drawn with it
   if (import.meta.env.DEV) {
     const handle = {
       stats,
       errorText,
       get camera(): Camera {
         return cam;
+      },
+      get mode(): 'watch' | 'play' {
+        return mode.peek();
+      },
+      get brainDriving(): boolean {
+        return brainDriving.peek();
+      },
+      get possessedUid(): number {
+        return possessedUid;
+      },
+      get body(): Body | null {
+        return body;
+      },
+      get frame(): FrameView | null {
+        return cur;
+      },
+      get inputLatencyMs(): number | null {
+        return median(latencies);
+      },
+      setParam(name: string, value: number): void {
+        const param = params.find((p) => p.name === name);
+        if (!param) {
+          throw new Error(
+            `no parameter is named ${name}. Fix: use one of ${params.map((p) => p.name).join(', ')}.`,
+          );
+        }
+        send({ type: 'param', index: param.index, value });
       },
     };
     Object.assign(window, { __tidepool: handle });
@@ -138,22 +227,85 @@ function start(): void {
     cam = inWorld(cam);
   };
 
-  // Watch: the player moves the camera. Task 18 adds Play, where the camera follows the body.
-  const mode = 'watch' as 'watch' | 'play';
+  // Watch: the player moves the camera. Play: the camera follows the body, and the keys and a held
+  // pointer steer it.
+  const keys: Keys = { up: false, left: false, right: false };
+  let held: { x: number; y: number } | null = null; // the pointer that is down, in CSS pixels
+  let playScale = PLAY_SCALE; // the scale the camera goes to in Play. The wheel moves it.
+  // Where the camera goes in Play while no frame holds the body: the point of the pick, then the
+  // place where the body was last seen.
+  let seenAt = { x: 0, y: 0 };
+  let picking = false; // a `possessAt` has no answer yet
+  let posted: Steer | null = null; // the last `input` posted in this possession
+  let lastActive = -Infinity; // the time of the last frame with a key or a pointer down
+  let pressedAt: number | null = null; // a press that took over from the brain, not yet drawn
+
+  // The worker dropped its held input: it does so on every possess, on release, and on death.
+  const forget = (): void => {
+    posted = null;
+    lastActive = -Infinity;
+    pressedAt = null;
+  };
+  const watch = (): void => {
+    mode.value = 'watch';
+    possessedUid = 0;
+    forget();
+  };
+  let hintTimer: ReturnType<typeof setTimeout> | undefined;
+  const flash = (text: string, ms: number): void => {
+    hint.value = text;
+    clearTimeout(hintTimer);
+    hintTimer = setTimeout(() => (hint.value = null), ms);
+  };
+  // A key or a pointer went down. A press that ends before the next frame still takes over. A press
+  // while the brain drives starts a latency sample, and the frame loop ends it.
+  const pressed = (): void => {
+    if (mode.peek() !== 'play') return;
+    lastActive = performance.now();
+    if (brainDriving.peek()) pressedAt ??= lastActive;
+  };
+  const dropKeys = (): void => {
+    keys.up = keys.left = keys.right = false;
+  };
+
   bindPointer(canvas, {
     drag(dx, dy) {
-      if (mode === 'watch') cam = inWorld(pan(cam, dx, dy));
+      if (mode.peek() === 'watch') cam = inWorld(pan(cam, dx, dy));
     },
     zoom(sx, sy, factor) {
-      if (mode === 'watch') cam = inWorld(zoomAt(cam, cssW, cssH, sx, sy, factor));
+      if (mode.peek() === 'watch') cam = inWorld(zoomAt(cam, cssW, cssH, sx, sy, factor));
+      else playScale = Math.min(Math.max(playScale * factor, SCALE_MIN), SCALE_MAX);
     },
-    click() {
-      // Task 18: possess the creature under the click.
+    click(sx, sy) {
+      if (mode.peek() !== 'watch' || !world) return;
+      const at = screenToWorld(cam, cssW, cssH, sx, sy);
+      picking = true;
+      seenAt = at;
+      send({ type: 'possessAt', x: at.x, y: at.y, radius: PICK_RADIUS / cam.scale });
+    },
+    hold(at) {
+      if (at && !held) pressed();
+      held = at;
     },
   });
+  window.addEventListener('keydown', (e) => {
+    // A shortcut is not steering, and macOS sends no `keyup` for a key pressed with Command.
+    if (inText(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.code === 'Escape' && mode.peek() === 'play') {
+      send({ type: 'release' });
+      watch();
+    }
+    const key = keyOf(e.code);
+    if (!key) return;
+    pressed();
+    keys[key] = true;
+  });
+  window.addEventListener('keyup', (e) => {
+    const key = keyOf(e.code);
+    if (key) keys[key] = false;
+  });
+  window.addEventListener('blur', dropKeys);
 
-  let prev: FrameView | null = null;
-  let cur: FrameView | null = null;
   let arrival = 0;
 
   worker.onerror = (e) => fail(e.message || 'The simulation worker did not load.');
@@ -162,6 +314,7 @@ function start(): void {
     switch (msg.type) {
       case 'ready':
         world = { w: msg.worldW, h: msg.worldH };
+        params = msg.params;
         // The whole world, or as much of it as the scale limits allow, about the screen centre.
         cam = inWorld(
           zoomAt(fitWorld(world.w, world.h, cssW, cssH), cssW, cssH, cssW / 2, cssH / 2, 1),
@@ -175,6 +328,25 @@ function start(): void {
         prev = cur;
         cur = viewFrame(msg.buffer);
         arrival = performance.now();
+        brainDriving.value = cur.brainDriving;
+        break;
+      case 'possessed':
+        if (msg.uid !== 0) {
+          possessedUid = msg.uid;
+          forget();
+          playScale = PLAY_SCALE;
+          hint.value = null;
+          mode.value = 'play';
+        } else if (picking) {
+          flash('Nothing there.', HINT_MS);
+        }
+        picking = false;
+        break;
+      case 'died':
+        // Task 19 puts the death overlay here. Until then the world runs on: the worker paused it.
+        watch();
+        flash('You died.', DIED_HINT_MS);
+        resume();
         break;
       case 'stats':
         stats.value = {
@@ -202,9 +374,12 @@ function start(): void {
 
   layout();
   window.addEventListener('resize', layout);
-  document.addEventListener('visibilitychange', () =>
-    send({ type: 'speed', ticksPerSecond: document.hidden ? 0 : TICK_HZ }),
-  );
+  // A `speed` message also ends the pause that follows the death of the possessed creature.
+  const resume = (): void => send({ type: 'speed', ticksPerSecond: document.hidden ? 0 : TICK_HZ });
+  document.addEventListener('visibilitychange', () => {
+    dropKeys();
+    resume();
+  });
 
   let raf = 0;
   stop = () => {
@@ -214,8 +389,49 @@ function start(): void {
   let drawn = 0;
   let countedFrom = performance.now();
   let sent = { x0: NaN, y0: NaN, x1: NaN, y1: NaN }; // the view the worker has
+  let lastFrame = performance.now();
   const frame = (now: number): void => {
     raf = requestAnimationFrame(frame);
+    const dt = Math.max(now - lastFrame, 0) / 1000;
+    lastFrame = now;
+    const alpha = Math.min(Math.max((now - arrival) / TICK_MS, 0), 1);
+    body = cur ? possessedBody(prev, cur, alpha) : null;
+    if (mode.peek() === 'play') {
+      // Zoom about the body, then slide it to the centre. A plain `follow` zooms about the centre,
+      // which throws a body near the edge off the screen and out of the next frames. While no
+      // frame holds the body, the camera only slides.
+      if (body) {
+        const { scale } = follow(cam, body.x, body.y, playScale, dt);
+        const sx = (body.x - cam.x) * cam.scale + cssW / 2;
+        const sy = (body.y - cam.y) * cam.scale + cssH / 2;
+        cam = zoomAt(cam, cssW, cssH, sx, sy, scale / cam.scale);
+        seenAt = body;
+      }
+      cam = inWorld(follow(cam, seenAt.x, seenAt.y, cam.scale, dt));
+      // Keys win over a held pointer.
+      let { thrust, turn, active } = steerFromKeys(keys);
+      if (!active && held && body) {
+        const at = screenToWorld(cam, cssW, cssH, held.x, held.y);
+        ({ thrust, turn } = steerToward(body.x, body.y, body.heading, body.length, at.x, at.y));
+        active = true;
+      }
+      if (active) lastActive = now;
+      const out = inputToSend(posted, {
+        manual: active || manualNow(lastActive, now),
+        thrust,
+        turn,
+      });
+      if (out) {
+        posted = out;
+        send({ type: 'input', ...out });
+      }
+      // The first frame drawn in which the player's input moved the body.
+      if (pressedAt !== null && cur && alpha > 0 && body && !cur.brainDriving) {
+        latencies.push(performance.now() - pressedAt);
+        if (latencies.length > LATENCY_SAMPLES) latencies.shift();
+        pressedAt = null;
+      }
+    }
     const view = viewRect(cam, cssW, cssH);
     if (
       world &&
@@ -224,10 +440,7 @@ function start(): void {
       sent = view;
       send({ type: 'view', ...view });
     }
-    if (cur) {
-      const alpha = Math.min(Math.max((now - arrival) / TICK_MS, 0), 1);
-      renderer.draw(prev, cur, alpha, cam, now / 1000);
-    }
+    if (cur) renderer.draw(prev, cur, alpha, cam, now / 1000);
     drawn++;
     if (now - countedFrom >= 1000) {
       stats.value = { ...stats.peek(), fps: Math.round((drawn * 1000) / (now - countedFrom)) };
