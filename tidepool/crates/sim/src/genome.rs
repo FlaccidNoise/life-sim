@@ -1,6 +1,7 @@
 //! What a creature inherits: six body genes, a hue, and a brain.
 
 use crate::brain::{self, MAX_NEURONS, N_IN, N_OUT};
+use crate::params::{id, Params};
 use crate::rng::Rng;
 use crate::snapshot::{LoadError, Reader, Writer};
 
@@ -46,6 +47,22 @@ pub const GENE_RANGE: [(f32, f32); 6] = [
 pub const GENE_DEFAULT: [f32; 6] = [12.0, 0.5, 0.6, 0.4, 0.6, 0.5];
 /// How far a founder's body gene sits from its default, as a share of the gene's range.
 const FOUNDER_SIGMA: f32 = 0.05;
+/// The largest size of a brain weight or bias. `math::act` is flat past 3, so a larger number
+/// only hides later mutations.
+const WEIGHT_LIMIT: f32 = 8.0;
+/// The step of an alpha that mutates. An alpha has a fixed range, so its step is not a parameter.
+const ALPHA_SIGMA: f32 = 0.1;
+/// An alpha of 1 follows its input at once. One at the low end still moves, slowly.
+const ALPHA_RANGE: (f32, f32) = (0.05, 1.0);
+
+/// With chance `rate`, `v` moved by `gauss * step` and held in `[lo, hi]`. If not, `v` as it is.
+fn nudged(v: f32, rng: &mut Rng, rate: f32, step: f32, (lo, hi): (f32, f32)) -> f32 {
+    if rng.unit() < rate {
+        (v + rng.gauss() * step).clamp(lo, hi)
+    } else {
+        v
+    }
+}
 
 /// The smallest brain: no hidden neurons and no connections. Its outputs rest at 0.
 impl Default for BrainGenome {
@@ -145,6 +162,44 @@ impl Genome {
             hue,
             brain: brain::starter(rng),
         }
+    }
+
+    /// Each of the 6 body genes: with chance mut_rate, add gauss * mut_sigma * (max - min), clamp.
+    /// Hue: add gauss * hue_sigma, wrap into [0, 1).
+    /// Each brain weight, bias: with chance mut_weight_rate, add gauss * mut_weight_sigma.
+    /// Each alpha: with chance mut_weight_rate, add gauss * 0.1, clamp to [0.05, 1].
+    /// Weights and biases are clamped to [-8, 8]. Structure and history ids do not change in M1.
+    ///
+    /// Draws in this order: the body genes, the hue, the weights, the biases, the alphas.
+    pub fn mutated(&self, rng: &mut Rng, p: &Params) -> Genome {
+        let mut g = self.clone();
+        let (rate, sigma) = (p.get(id::MUT_RATE), p.get(id::MUT_SIGMA));
+        let genes = [
+            &mut g.len,
+            &mut g.wid,
+            &mut g.flagellum,
+            &mut g.cilia,
+            &mut g.filter,
+            &mut g.chemo,
+        ];
+        for (gene, (lo, hi)) in genes.into_iter().zip(GENE_RANGE) {
+            *gene = nudged(*gene, rng, rate, sigma * (hi - lo), (lo, hi));
+        }
+        let hue = g.hue + rng.gauss() * p.get(id::HUE_SIGMA);
+        // A hue just below 0 rounds up to exactly 1. The `%` sends that to 0.
+        g.hue = (hue - hue.floor()) % 1.0;
+        let (rate, sigma) = (p.get(id::MUT_WEIGHT_RATE), p.get(id::MUT_WEIGHT_SIGMA));
+        let limit = (-WEIGHT_LIMIT, WEIGHT_LIMIT);
+        for conn in &mut g.brain.conns {
+            conn.weight = nudged(conn.weight, rng, rate, sigma, limit);
+        }
+        for bias in &mut g.brain.bias {
+            *bias = nudged(*bias, rng, rate, sigma, limit);
+        }
+        for alpha in &mut g.brain.alpha {
+            *alpha = nudged(*alpha, rng, rate, ALPHA_SIGMA, ALPHA_RANGE);
+        }
+        g
     }
 
     pub fn save(&self, w: &mut Writer) {
