@@ -34,3 +34,19 @@ fn drifters_stay_inside_the_world() {
         }
     }
 }
+
+#[test]
+fn overlapping_drifters_separate() {
+    let mut w = World::new(1, 1536.0, 1024.0);
+    w.spawn_drifters(2);
+    for s in 0..2 {
+        w.creatures.x[s] = 500.0 + s as f32;
+        w.creatures.y[s] = 500.0;
+        w.creatures.vx[s] = 0.0;
+        w.creatures.vy[s] = 0.0;
+        w.creatures.radius[s] = 6.0;
+    }
+    w.run(200);
+    let d = (w.creatures.x[0] - w.creatures.x[1]).hypot(w.creatures.y[0] - w.creatures.y[1]);
+    assert!(d >= 11.0, "distance {d}");
+}
