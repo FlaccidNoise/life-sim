@@ -5,7 +5,7 @@ use crate::grid::Grid;
 use crate::rng::Rng;
 use crate::snapshot::{self, crc32, LoadError, Reader, Writer};
 
-/// Largest `w` or `h` that `load` accepts. Bounds the grid that a snapshot can make `load` allocate.
+/// Largest `w` or `h` of a world. Bounds the grid that a caller or a snapshot can make it allocate.
 pub const MAX_WORLD_SIZE: f32 = 65536.0;
 /// Largest sum of two radii. Sets the neighbour search box.
 const BODY_REACH: f32 = 16.0;
@@ -22,10 +22,22 @@ pub struct World {
     pub rng_spawn: Rng,
     /// Scratch. Rebuilt every tick, never saved.
     pub grid: Grid,
+    /// Scratch. The last frame that `frame::write` made. Never saved.
+    pub frame: Vec<u32>,
+    /// Scratch. The last snapshot that `tp_save` made. Never saved.
+    pub save_buf: Vec<u8>,
+}
+
+/// True when both sides are above 0 and at most `MAX_WORLD_SIZE`. False for NaN and infinity.
+pub fn size_ok(w: f32, h: f32) -> bool {
+    let in_range = |v: f32| v > 0.0 && v <= MAX_WORLD_SIZE;
+    in_range(w) && in_range(h)
 }
 
 impl World {
+    /// The caller checks `size_ok(w, h)` first.
     pub fn new(seed: u32, w: f32, h: f32) -> World {
+        debug_assert!(size_ok(w, h));
         let root = Rng::new(seed as u64);
         World {
             tick: 0,
@@ -35,6 +47,8 @@ impl World {
             next_uid: 1,
             rng_spawn: root.fork(1),
             grid: Grid::new(w, h),
+            frame: Vec::new(),
+            save_buf: Vec::new(),
         }
     }
 
@@ -134,9 +148,7 @@ impl World {
         let mut r = Reader::new(snapshot::open(bytes)?);
         let tick = r.u32()?;
         let (w, h) = (r.f32()?, r.f32()?);
-        // False for NaN and infinity too.
-        let in_range = |v: f32| v > 0.0 && v <= MAX_WORLD_SIZE;
-        if !in_range(w) || !in_range(h) {
+        if !size_ok(w, h) {
             return Err(LoadError::Invalid("world size"));
         }
         let next_uid = r.u32()?;
@@ -151,6 +163,8 @@ impl World {
             next_uid,
             rng_spawn,
             grid: Grid::new(w, h),
+            frame: Vec::new(),
+            save_buf: Vec::new(),
         })
     }
 }
