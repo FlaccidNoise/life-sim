@@ -32,3 +32,57 @@ export function screenToWorld(
 export function fitWorld(worldW: number, worldH: number, cssW: number, cssH: number): Camera {
   return { x: worldW / 2, y: worldH / 2, scale: Math.min(cssW / worldW, cssH / worldH) };
 }
+
+export const SCALE_MIN = 0.4; // the whole world fits a laptop screen
+export const SCALE_MAX = 12;
+export const PLAY_SCALE = 4; // a 12-unit body is 48 CSS pixels long
+
+/** Multiplies the scale by `factor`, inside the limits. The world point under (sx, sy) stays there. */
+export function zoomAt(
+  cam: Camera,
+  cssW: number,
+  cssH: number,
+  sx: number,
+  sy: number,
+  factor: number,
+): Camera {
+  const scale = Math.min(Math.max(cam.scale * factor, SCALE_MIN), SCALE_MAX);
+  const p = screenToWorld(cam, cssW, cssH, sx, sy);
+  return { x: p.x - (sx - cssW / 2) / scale, y: p.y - (sy - cssH / 2) / scale, scale };
+}
+
+/** Moves the world with a drag of (dxCss, dyCss) CSS pixels. */
+export function pan(cam: Camera, dxCss: number, dyCss: number): Camera {
+  return { x: cam.x - dxCss / cam.scale, y: cam.y - dyCss / cam.scale, scale: cam.scale };
+}
+
+/** Moves the camera toward the target by the fraction 1 - exp(-6 * dt). `dt` in seconds. */
+export function follow(
+  cam: Camera,
+  targetX: number,
+  targetY: number,
+  targetScale: number,
+  dt: number,
+): Camera {
+  const k = 1 - Math.exp(-6 * dt);
+  return {
+    x: cam.x + (targetX - cam.x) * k,
+    y: cam.y + (targetY - cam.y) * k,
+    scale: cam.scale + (targetScale - cam.scale) * k,
+  };
+}
+
+/** Keeps the view inside the world. On an axis where the view is larger, centres the world. */
+export function clampToWorld(
+  cam: Camera,
+  worldW: number,
+  worldH: number,
+  cssW: number,
+  cssH: number,
+): Camera {
+  const axis = (c: number, world: number, css: number): number => {
+    const half = css / (2 * cam.scale);
+    return half * 2 >= world ? world / 2 : Math.min(Math.max(c, half), world - half);
+  };
+  return { x: axis(cam.x, worldW, cssW), y: axis(cam.y, worldH, cssH), scale: cam.scale };
+}
