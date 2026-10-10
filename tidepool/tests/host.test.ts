@@ -133,9 +133,10 @@ test('a corrupt snapshot becomes an error message', () => {
 test('bench replies and does not advance the main world', () => {
   const r = rig();
   r.host.handle({ type: 'init', seed: 1 });
-  r.host.handle({ type: 'bench', ticks: 200 });
+  // Too few ticks for a founder to feed up to a bud or to starve, so the count is the founders.
+  r.host.handle({ type: 'bench', ticks: 50 });
   const b = r.of('benchResult')[0];
-  expect(b?.ticks).toBe(200);
+  expect(b?.ticks).toBe(50);
   expect(b?.creatures).toBe(1500);
   expect(r.of('frame').length).toBe(0);
 });
@@ -387,9 +388,54 @@ test('death pauses the world, posts the cause and heirs, and possessing an heir 
   const tickAtDeath = r.lastTick();
   r.advance(1000);
   expect(r.lastTick()).toBe(tickAtDeath); // paused
-  // The only marked creature besides the player is the first one possessed. Nothing buds yet.
-  expect(died?.heirs.length).toBeLessThanOrEqual(1);
+  // The marked creatures besides the player: the first one possessed, and the children of the two.
+  expect(died?.heirs.length).toBeLessThanOrEqual(5);
   r.host.handle({ type: 'speed', ticksPerSecond: P.TICK_HZ });
   r.advance(100);
   expect(r.lastTick()).toBeGreaterThan(tickAtDeath);
+});
+
+// Seed 1, with the default parameters. Creatures steer by noise, so most founders starve before
+// tick 2,000. Founder 252 is one of the 5 whose line has a member younger than 600 ticks then. If
+// a change to the rules empties that line, pick the founder again: mark one, run 2,000 ticks, cut
+// the lifespan to 600, and take a founder whose marked line outlives the cut.
+test('picking an heir resumes the world in that body', () => {
+  const r = rig({ recycle: true });
+  r.host.handle({ type: 'init', seed: 1 });
+  r.host.handle({ type: 'possess', uid: 252 });
+  r.host.handle({ type: 'release' });
+  r.advance(100_000); // 2,000 ticks: the line buds marked children
+  expect(r.of('died')).toEqual([]);
+
+  // The body the player dies in: a founder outside the line. It is older than the new lifespan.
+  const f = frameOf(r);
+  let body = 0;
+  for (let i = 0; i < f.creatureCount && body === 0; i++) {
+    const o = f.creatureBase + i * P.CREATURE_STRIDE;
+    const [uid, flags] = [f.u32[o + P.C_UID] ?? 0, f.u32[o + P.C_FLAGS] ?? 0];
+    if (uid <= P.FOUNDER_CREATURES && (flags & P.FLAG_LINEAGE) === 0) body = uid;
+  }
+  if (body === 0) throw new Error('no founder outside the marked line is alive at tick 2,000');
+  r.host.handle({ type: 'possess', uid: body });
+  expect(r.of('possessed').at(-1)?.uid).toBe(body);
+  const lifespan = r.of('ready')[0]?.params.find((p) => p.name === 'lifespan');
+  if (!lifespan) throw new Error('no parameter lifespan');
+  r.host.handle({ type: 'param', index: lifespan.index, value: 600 });
+  r.advance(1000);
+  const died = r.of('died');
+  expect(died.length).toBe(1);
+  expect(died[0]?.cause).toBe('old age');
+  const tickAtDeath = r.lastTick();
+
+  const heirs = died[0]?.heirs ?? [];
+  expect(heirs.length).toBeGreaterThanOrEqual(1);
+  expect(heirs.length).toBeLessThanOrEqual(5);
+  const energy = heirs.map((h) => h.energy01);
+  expect(energy).toEqual([...energy].sort((a, b) => b - a));
+
+  const heir = heirs[0]?.uid ?? 0;
+  r.host.handle({ type: 'possess', uid: heir });
+  expect(r.of('possessed').at(-1)?.uid).toBe(heir);
+  r.advance(500);
+  expect(r.lastTick()).toBeGreaterThan(tickAtDeath); // no `speed` message was sent
 });

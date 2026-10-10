@@ -28,6 +28,23 @@ fn load_then_run_equals_unbroken_run() {
     assert_eq!(resumed.state_hash(), world_at(2000).state_hash());
 }
 
+/// The save falls between births: `world_at` has 44 by tick 1,500 and 86 by tick 3,000. So the
+/// genomes of the born, the cooldowns of their parents, and `rng_mutate` are all in the round trip.
+#[test]
+fn load_then_run_equals_unbroken_run_across_births() {
+    let saved = world_at(1500);
+    let births_at_save = saved.stat(STAT_BIRTHS);
+    let mut resumed = World::load(&saved.save()).expect("load");
+    resumed.run(1500);
+    let unbroken = world_at(3000);
+    assert!(births_at_save > 0.0, "no births before the save");
+    assert!(
+        unbroken.stat(STAT_BIRTHS) > births_at_save,
+        "no births after the save"
+    );
+    assert_eq!(resumed.state_hash(), unbroken.state_hash());
+}
+
 #[test]
 fn load_gives_the_same_hash_immediately() {
     let w = world_at(300);
