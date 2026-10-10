@@ -1,7 +1,7 @@
 use std::process::exit;
 use std::str::FromStr;
 
-use tidepool_sim::world::World;
+use tidepool_sim::world::{size_ok, World, MAX_WORLD_SIZE};
 
 const USAGE: &str =
     "usage: tidepool-headless run --seed <u32> --ticks <u32> --creatures <u32> [--world <W>x<H>]";
@@ -28,8 +28,10 @@ fn run(args: &[String]) {
             "--world" => {
                 let (ws, hs) = it.next().and_then(|s| s.split_once('x')).unzip();
                 (w, h) = (value(flag, ws), value(flag, hs));
-                if !(w > 0.0 && h > 0.0 && w.is_finite() && h.is_finite()) {
-                    usage("--world needs two positive finite numbers, like 1536x1024");
+                if !size_ok(w, h) {
+                    usage(&format!(
+                        "--world needs two numbers above 0 and at most {MAX_WORLD_SIZE}, like 1536x1024"
+                    ));
                 }
             }
             _ => usage(&format!("unknown flag {flag}")),

@@ -59,11 +59,18 @@ impl Grid {
     /// Calls f(slot) for every entry in the cells that the box [x0,x1] x [y0,y1] touches.
     /// Rows are contiguous in `sorted`, so each row is one run. Order is deterministic.
     pub fn for_each_in_box(&self, x0: f32, y0: f32, x1: f32, y1: f32, mut f: impl FnMut(u32)) {
-        if x1 < 0.0 || y1 < 0.0 || x0 > self.gw as f32 * CELL || y0 > self.gh as f32 * CELL {
+        // The first test is false for NaN and for a box with its corners swapped.
+        if !(x0 <= x1 && y0 <= y1)
+            || x1 < 0.0
+            || y1 < 0.0
+            || x0 > self.gw as f32 * CELL
+            || y0 > self.gh as f32 * CELL
+        {
             return;
         }
-        let cx0 = ((x0 / CELL) as i32).max(0) as usize;
-        let cy0 = ((y0 / CELL) as i32).max(0) as usize;
+        // A box that starts at `x == w` reads the last column, where `cell_of` puts that creature.
+        let cx0 = (((x0 / CELL) as i32).max(0) as usize).min(self.gw - 1);
+        let cy0 = (((y0 / CELL) as i32).max(0) as usize).min(self.gh - 1);
         let cx1 = ((x1 / CELL) as usize).min(self.gw - 1);
         let cy1 = ((y1 / CELL) as usize).min(self.gh - 1);
         for cy in cy0..=cy1 {
@@ -119,5 +126,33 @@ mod tests {
         w.grid
             .for_each_in_box(-500.0, -500.0, 5000.0, 5000.0, |_| n += 1);
         assert_eq!(n, 200);
+    }
+
+    #[test]
+    fn box_query_on_the_far_edge_finds_a_creature_on_that_edge() {
+        let mut slots = crate::pool::Slots::new(2);
+        slots.alloc();
+        slots.alloc();
+        let (x, y) = ([1536.0, 700.0], [500.0, 1024.0]);
+        let mut grid = super::Grid::new(1536.0, 1024.0);
+        grid.rebuild(&slots, &x, &y);
+        let mut got: Vec<u32> = Vec::new();
+        grid.for_each_in_box(1536.0, 484.0, 1552.0, 516.0, |s| got.push(s));
+        grid.for_each_in_box(684.0, 1024.0, 716.0, 1040.0, |s| got.push(s));
+        assert_eq!(got, [0, 1]);
+    }
+
+    #[test]
+    fn box_query_with_swapped_or_nan_corners_is_empty() {
+        let mut w = crate::world::World::new(5, 1536.0, 1024.0);
+        w.spawn_drifters(800);
+        w.grid
+            .rebuild(&w.creatures.slots, &w.creatures.x, &w.creatures.y);
+        let mut n = 0;
+        w.grid
+            .for_each_in_box(900.0, 0.0, 100.0, 1024.0, |_| n += 1);
+        w.grid
+            .for_each_in_box(0.0, 0.0, f32::NAN, 1024.0, |_| n += 1);
+        assert_eq!(n, 0);
     }
 }
