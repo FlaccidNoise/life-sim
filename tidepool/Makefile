@@ -29,5 +29,5 @@ check: wasm headless ## Every fast gate
 	pnpm exec eslint .
 	pnpm exec vitest run
 
-gates: headless ## Throughput and health gates (tasks 6 and 16 add the commands)
-	@echo "no gates yet"
+gates: headless ## Throughput and health gates (task 16 adds the health gate)
+	$(HEADLESS) bench
