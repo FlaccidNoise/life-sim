@@ -57,3 +57,24 @@ export function viewFrame(buffer: ArrayBuffer): FrameView {
     plantBase: FRAME_HEADER_WORDS + creatureCount * CREATURE_STRIDE,
   };
 }
+
+export const WORLD_W = 1536;
+export const WORLD_H = 1024;
+export const M0_DRIFTERS = 1500;
+export const FRAME_POOL = 3;
+export const MAX_FRAME_BYTES =
+  4 * (FRAME_HEADER_WORDS + 4096 * CREATURE_STRIDE + 8192 * PLANT_STRIDE);
+
+export type ToWorker =
+  | { type: 'init'; seed: number; snapshot?: ArrayBuffer }
+  | { type: 'view'; x0: number; y0: number; x1: number; y1: number }
+  | { type: 'speed'; ticksPerSecond: number } // 0 pauses. TICK_HZ is normal.
+  | { type: 'recycle'; buffer: ArrayBuffer }
+  | { type: 'bench'; ticks: number };
+
+export type FromWorker =
+  | { type: 'ready'; abi: number; worldW: number; worldH: number }
+  | { type: 'frame'; buffer: ArrayBuffer }
+  | { type: 'stats'; tick: number; creatures: number; plants: number; tickMicros: number }
+  | { type: 'benchResult'; ticks: number; millis: number; creatures: number }
+  | { type: 'error'; message: string };

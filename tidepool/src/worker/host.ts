@@ -1,0 +1,153 @@
+// The worker's message handling and fixed-step tick loop. It has no globals: the clock, the timer,
+// `postMessage`, and the sim factory arrive through `HostDeps`, so tests drive it with a fake clock.
+
+import {
+  FRAME_POOL,
+  M0_DRIFTERS,
+  MAX_FRAME_BYTES,
+  TICK_HZ,
+  type FromWorker,
+  type ToWorker,
+} from '../protocol';
+import type { Sim } from './wasm';
+
+export interface HostDeps {
+  now(): number; // milliseconds
+  post(msg: FromWorker, transfer?: Transferable[]): void;
+  every(ms: number, fn: () => void): () => void; // returns cancel
+  makeSim(opts: { seed: number; snapshot?: Uint8Array }): Sim; // throws SimError
+}
+export interface Host {
+  handle(msg: ToWorker): void;
+}
+
+const STEP_MS = 10;
+const MAX_TICKS_PER_STEP = 5;
+const STATS_EVERY = 10; // ticks
+const BENCH_SEED = 1;
+// Keys of `tp_stat` in crates/sim/src/abi.rs.
+const STAT_CREATURES = 0;
+const STAT_PLANTS = 1;
+
+export function createHost(deps: HostDeps): Host {
+  let sim: Sim | undefined;
+  let stop = (): void => {};
+  let view = { x0: 0, y0: 0, x1: 0, y1: 0 };
+  let ticksPerSecond = TICK_HZ;
+  let last = 0; // the time of the previous step
+  let owed = 0; // milliseconds of world time that have not run yet
+  // Since the last `stats` message.
+  let tickMillis = 0;
+  let timedTicks = 0;
+  const pool: ArrayBuffer[] = [];
+
+  // Every `error` message is final: the loop does not run after one.
+  const fail = (e: unknown): void => {
+    stop();
+    deps.post({ type: 'error', message: e instanceof Error ? e.message : String(e) });
+  };
+
+  const step = (sim: Sim): void => {
+    const now = deps.now();
+    const elapsed = now - last;
+    last = now;
+    if (!(ticksPerSecond > 0)) {
+      owed = 0;
+      return;
+    }
+    owed += elapsed;
+    const period = 1000 / ticksPerSecond;
+    let ran = 0;
+    for (; owed >= period && ran < MAX_TICKS_PER_STEP; ran++) {
+      owed -= period;
+      const start = deps.now();
+      sim.tick(1);
+      tickMillis += deps.now() - start;
+      timedTicks++;
+      const tick = sim.tickCount();
+      if (tick % STATS_EVERY === 0) {
+        deps.post({
+          type: 'stats',
+          tick,
+          creatures: sim.stat(STAT_CREATURES),
+          plants: sim.stat(STAT_PLANTS),
+          tickMicros: (tickMillis * 1000) / timedTicks,
+        });
+        tickMillis = 0;
+        timedTicks = 0;
+      }
+    }
+    // A stall: the world runs late instead of running fast to catch up.
+    if (owed >= period) owed = 0;
+    if (ran === 0) return;
+    const buffer = pool.pop();
+    if (!buffer) return;
+    if (sim.writeFrame(view.x0, view.y0, view.x1, view.y1, buffer) < 0) {
+      throw new Error(
+        `a frame of the view is larger than ${MAX_FRAME_BYTES} bytes. Fix: raise MAX_FRAME_BYTES in src/protocol.ts.`,
+      );
+    }
+    deps.post({ type: 'frame', buffer }, [buffer]);
+  };
+
+  const init = (msg: Extract<ToWorker, { type: 'init' }>): void => {
+    if (sim) throw new Error('got a second `init`. Fix: make a new worker for a new world.');
+    const made = deps.makeSim(
+      msg.snapshot
+        ? { seed: msg.seed, snapshot: new Uint8Array(msg.snapshot) }
+        : { seed: msg.seed },
+    );
+    if (!msg.snapshot) made.spawnDrifters(M0_DRIFTERS);
+    sim = made;
+    view = { x0: 0, y0: 0, x1: made.worldW, y1: made.worldH };
+    deps.post({ type: 'ready', abi: made.abi, worldW: made.worldW, worldH: made.worldH });
+    for (let i = 0; i < FRAME_POOL; i++) pool.push(new ArrayBuffer(MAX_FRAME_BYTES));
+    last = deps.now();
+    stop = deps.every(STEP_MS, () => {
+      try {
+        step(made);
+      } catch (e) {
+        fail(e);
+      }
+    });
+  };
+
+  const bench = (ticks: number): void => {
+    const world = deps.makeSim({ seed: BENCH_SEED });
+    world.spawnDrifters(M0_DRIFTERS);
+    const start = deps.now();
+    world.tick(ticks);
+    const millis = deps.now() - start;
+    deps.post({ type: 'benchResult', ticks, millis, creatures: world.stat(STAT_CREATURES) });
+    world.free();
+    // The time the bench took is not owed to the main world.
+    last = deps.now();
+  };
+
+  return {
+    handle(msg) {
+      try {
+        if (msg.type === 'init') return init(msg);
+        if (!sim) {
+          throw new Error(`got \`${msg.type}\` before \`init\`. Fix: send \`init\` first.`);
+        }
+        switch (msg.type) {
+          case 'view':
+            view = msg;
+            break;
+          case 'speed':
+            ticksPerSecond = msg.ticksPerSecond;
+            break;
+          case 'recycle':
+            if (msg.buffer.byteLength === MAX_FRAME_BYTES) pool.push(msg.buffer);
+            break;
+          case 'bench':
+            bench(msg.ticks);
+            break;
+        }
+      } catch (e) {
+        fail(e);
+      }
+    },
+  };
+}
