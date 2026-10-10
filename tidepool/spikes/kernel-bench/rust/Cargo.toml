@@ -1,0 +1,20 @@
+[package]
+name = "kernel-bench"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+par = ["dep:rayon"] # stretch variant only; the core variants build with no crates
+
+[dependencies]
+rayon = { version = "1", optional = true }
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"

@@ -1,0 +1,150 @@
+# Tidepool — Roadmap
+
+Every milestone ends with something you can open in a browser and play. Each adds one system.
+Design: `design.md`. Build rules and interfaces: `architecture.md`.
+
+M0 and M1 have a task-level plan: `plans/2026-10-10-m0-m1-first-swim.md`. Only the next milestone
+has one. Each later milestone gets its plan when the
+one before it ships, because what is learned from playing a milestone changes the next one.
+
+## Rules for every milestone
+
+1. **Playable exit.** The exit check is a person playing the build, plus the gates below. Tests passing
+   with a world that looks dead is a failed milestone.
+2. **Health gate.** Any change to simulation rules or constants runs the headless health gate: 12,000
+   ticks or more, 3 seeds or more, one run at a time, paired with a baseline run of the same protocol.
+   6,000-tick readings were wrong in both directions on the draft.
+3. **Throughput gate.** Headless ticks per second at the reference population must stay above the budget
+   in `architecture.md`. It is a test, and it fails the build.
+4. **A feature that fails its measurement is deleted.** Keep the note in `docs/findings/`, not the code.
+   No off-by-default flags for dead features.
+5. **Mechanism fires is not evolution uses it is not it helps.** Claim only the one that was measured. A
+   fresh-context reviewer checks each milestone's claims against its probes.
+
+## Milestones
+
+### M0 — Foundation
+
+The empty game, wired end to end.
+
+- Project scaffold under `tidepool/` with its own build, test, lint, and type gates.
+- Simulation core skeleton: seeded RNG, entity pool with generation ids, spatial hash, tick loop, state
+  hash. Circles that drift.
+- Simulation runs in a worker. The page draws what the worker sends.
+- Headless runner with the same core, for gates and probes.
+- A checksummed snapshot, with a test that save, load, and run on equals an unbroken run.
+- Determinism test, throughput test, and a proof that each gate rejects a known-bad change.
+- An in-page benchmark, to read the time-skip budget on a real laptop and phone.
+
+Exit: open the page, see moving dots at 60 fps, with the sim in a worker. `make check` is green and each
+gate has been seen to fail on a bad input.
+
+### M1 — First swim
+
+The smallest world you can live in.
+
+- Rigid body with thrust and torque. Cilia and one rear Flagellum. A Filter mouth.
+- Plants as simple rooted entities with a reserve and a per-bite fraction.
+- Energy: intake with a satiation stop, upkeep, movement cost, growth from juvenile to adult.
+- Budding with mutation of body numbers. Old age.
+- A small fixed-shape starter brain so NPCs forage. A Chemoreceptor reading plant scent.
+- Click a creature to possess it. Keyboard, mouse, and touch steering. Camera follow.
+- Release the controls and the brain drives.
+- On death, choose a living descendant. No time-skip yet.
+
+Exit: a stranger can swim, eat, bud, die, and continue as a descendant with no instructions. The world
+stays alive at 12,000 ticks on 3 seeds.
+
+### M2 — Bodies
+
+Looks and function become one thing.
+
+- The variable-length part list, history ids, and the add, remove, and duplicate mutations.
+- Life-history genes: maturity age, old age, brood size against egg size. They are world parameters in
+  M1.
+- Part costs: build energy, upkeep, mass.
+- Eye and Fin. The view cone: the player sees what the eyes see.
+- The genome-driven creature renderer: membrane, visible parts, motion.
+
+Exit: after a long headless run, creatures in one world visibly differ in body plan, and the difference
+changes how they move and what they see. Part count does not collapse to the minimum (risk R1).
+
+### M3 — Minds
+
+- Variable-topology recurrent brains. Inputs and outputs come from parts.
+- Brain upkeep. Mutations that add and remove neurons and connections.
+- Mixing: mate contact, the `accept mate` output, crossover by history id, the mate-choice overlay.
+- Brain viewer, first version: live graph, part-grouped inputs, strongest path in words.
+
+Exit: brains in a long-run world differ in shape and are not all minimal (risk R1). A player can watch
+their own brain while they play, let go, and see it take over.
+
+### M4 — Teeth
+
+- Jaw, Spike, Shell plate, Toxin gland. Abilities: dash, lunge, toxin cloud.
+- Contact rules with facing and defended arcs. Energy-conserving transfers.
+- Corpses become debris. Debris is food for Filter mouths.
+- The death freeze and death card.
+
+Exit: predators and prey coexist at 12,000 ticks on 3 seeds (risks R2, R4, R5). Being hunted by
+something that learned to dash is frightening and its cause is always shown.
+
+### M5 — Deep time
+
+- Headless fast-forward in the worker, with progress streamed to the page.
+- The save format: versioned, checksummed, last-good backup, export and import.
+- The world resumes where the player left it.
+- The skip montage, the skip report, the heir picker with candidates that differ.
+- Bottleneck stop. Lineage tree in the core. Chronicle, first version.
+
+Exit: die, watch generations pass in seconds, read what changed, and return to a world that is visibly
+different. Close the tab, reopen it, and the same world is there.
+
+### M6 — The column
+
+- The tall world: light falling with depth, rock shelves with gaps, four zones.
+- Debris sinks. Vents on the floor. Chloroplast, Photophore, Lateral line.
+- Plant genomes: growth rate, seed range, light need. Plants do not evolve before this.
+- Eyes need light. Scent trails and movement ripples are drawn for the player.
+- Sunlit-to-abyss lighting: caustics, fog, bloom.
+
+Exit: each zone holds a different community after a long run. A sighted shallow-water body is nearly
+blind in the abyss, and the player feels it. No zone is an empty screen (risk R10).
+
+### M7 — Watch
+
+- Inspector, charts, overlays, column minimap, time bar.
+- God tools. The Lab panel.
+- Rival lineage detection and naming. The full chronicle.
+
+Exit: every number and field in the simulation can be seen and changed from the page, and it looks like
+a game, not a debug panel.
+
+### M8 — Ship
+
+- The creature art pass and animation cues that show intent: wind-up, flinch, lunge.
+- Generative audio.
+- Touch polish and phone performance.
+- The baked world and the first-minute flow.
+- Deploy to Netlify. A performance pass on a mid-range laptop and a real phone.
+
+Exit: the 60-second test. A person who has never seen it opens the link on a phone and on a laptop, and
+within a minute has possessed a creature, let go of it, and understood that everything is alive.
+
+### Later
+
+- Within-life learning as a Lab toggle, with a new rule.
+- Share a creature or a world by link. Gamepad. An endgame.
+
+## Order of risk
+
+The roadmap front-loads what could sink the project.
+
+| Risk | First answered in |
+|---|---|
+| Time-skip throughput (R12) | M0, as a failing test from day one |
+| Steering feel | M1 |
+| Traits stripped, minimal brains (R1) | M2 for parts, M3 for brains |
+| Predators persist (R2 to R5) | M4 |
+| One skip changes something visible | M1, as a first read by probe. M5 proves or kills it. |
+| Skip is legible and worth it | M5 |
