@@ -64,8 +64,6 @@ pub struct World {
     pub rng_mutate: Rng,
     /// The fertility map, founder plants, and seeding.
     pub rng_plants: Rng,
-    /// The wander stub. Task 15 deletes it.
-    pub rng_wander: Rng,
     /// Scratch. Rebuilt every tick, never saved.
     pub grid: Grid,
     /// Scratch. Never saved.
@@ -96,7 +94,7 @@ impl World {
             creatures: Creatures::default(),
             genomes: vec![Genome::default(); MAX_CREATURES as usize],
             next_uid: 1,
-            next_history: 1,
+            next_history: brain::STARTER_CONNS + 1,
             plants: Plants::new(w, h),
             fertility: Fertility::new(w, h),
             scent: Field::new(w, h),
@@ -106,7 +104,6 @@ impl World {
             rng_spawn: root.fork(1),
             rng_mutate: root.fork(2),
             rng_plants: root.fork(3),
-            rng_wander: root.fork(4),
             grid: Grid::new(w, h),
             motor: Motor::default(),
             frame: Vec::new(),
@@ -244,7 +241,6 @@ impl World {
         self.rng_spawn.save(&mut w);
         self.rng_mutate.save(&mut w);
         self.rng_plants.save(&mut w);
-        self.rng_wander.save(&mut w);
         self.params.save(&mut w);
         self.creatures.save(&mut w);
         let c = &self.creatures;
@@ -292,7 +288,6 @@ impl World {
         world.rng_spawn = Rng::load(&mut r)?;
         world.rng_mutate = Rng::load(&mut r)?;
         world.rng_plants = Rng::load(&mut r)?;
-        world.rng_wander = Rng::load(&mut r)?;
         world.params = Params::load(&mut r)?;
         world.creatures = Creatures::load(&mut r)?;
         // A dead slot holds uid 0, so this reads live uids only.
