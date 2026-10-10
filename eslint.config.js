@@ -6,6 +6,7 @@ export default tseslint.config(
   {
     ignores: [
       'dist',
+      'tidepool',
       'coverage',
       'node_modules',
       '.claude/worktrees', // transient git worktrees (other branches) — never lint these copies
