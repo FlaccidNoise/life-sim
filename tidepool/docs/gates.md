@@ -1,7 +1,7 @@
 # Gates
 
 A gate counts only after it has rejected a known-bad input. Each row records the bad input and the
-output seen. All proofs ran on 2026-10-10, except the CI row, which has no proof yet.
+output seen. All proofs ran on 2026-10-10, except the CI row, which has passed once and has no failure proof yet.
 
 | Gate | Command | Bad input used to prove it | Output seen | Date |
 |---|---|---|---|---|
@@ -18,7 +18,7 @@ output seen. All proofs ran on 2026-10-10, except the CI row, which has no proof
 | Throughput, native | `make gates` (runs `target/release/tidepool-headless bench`) | `bench --floor 1000000000`, and `bench --reference 5000` | `bench creatures=1539 median_tps=4430 floor=1000000000 FAIL`, exit 1. `VOID: population fell`, exit 1. The full output is in "Throughput bench" below. | 2026-10-10 |
 | Throughput, WASM in Node | `make gates` (runs `node scripts/bench-wasm.mjs`) | `node scripts/bench-wasm.mjs --floor 1000000000`, and `--reference 5000` | `bench-wasm creatures=1539 median_tps=3761 floor=1000000000 FAIL`, exit 1. `VOID: population fell`, exit 1. The full output is in "Throughput bench" below. | 2026-10-10 |
 | Health | `make gates` (runs `target/release/tidepool-headless gate-health`) | `gate-health --param plant_growth=0`, and `gate-health --param basal=0.01` | Both: every seed `FAIL`, `gate-health 0/3 FAIL`, exit 1. The full output is in "Health gate" below. | 2026-10-10 |
-| CI | `.github/workflows/tidepool.yml` runs `make check`, `bench --floor 800`, `scripts/bench-wasm.mjs --floor 800`, and `gate-health` | Not proven yet: the workflow has not run. First push runs it. | Not proven yet: the workflow has not run. First push runs it. | Not run |
+| CI | `.github/workflows/tidepool.yml` runs `make check`, `bench --floor 800`, `scripts/bench-wasm.mjs --floor 800`, and `gate-health` | **Not proven yet.** The workflow passed its first run, on the side branch `tidepool-ci`. No bad commit has been pushed to see it fail. M2 Task 1 does that. | First run, 2026-10-11, x86-64 runner, 1 minute 54 seconds: every step passed. Native 2,360 and WASM 1,882 ticks per second at 1,539 creatures. The three health rows equal the reference machine's rows digit for digit. | 2026-10-11, pass only |
 
 ## Notes
 
@@ -43,10 +43,14 @@ output seen. All proofs ran on 2026-10-10, except the CI row, which has no proof
 - **Throughput, void run.** A run is void when its mean alive count over the timed ticks is below 80%
   of `--reference` (1,500, so 1,200). The bench prints `VOID: population fell` and exits 1. The rule
   reads `--reference`, not `--creatures`: the founders are 400 and the settled world holds more.
-- **CI.** The workflow is not proven. Nobody has pushed it, so it has never run. Treat it as untested until
-  the first push passes and a deliberately bad commit makes it fail. CI uses a floor of 800 ticks per second,
-  a third of the real floor, because shared runners are slower than the reference machine by an unknown
-  factor. `make gates` enforces the real floor on the reference machine.
+- **CI.** The workflow has passed once and has rejected nothing, so it is not a proven gate yet. The
+  first run was on 2026-10-11 on the side branch `tidepool-ci` (run 38177642801). It answered the four
+  open points of the M1 audit: `pnpm/action-setup@v4` installs the pinned pnpm, pnpm 11 runs on Node 22,
+  the runner clears the floor of 800 (WASM 1,882, native 2,360, about half of the reference machine),
+  and the native build on x86-64 gives the hashes of the `.wasm` (`tests/determinism.test.ts` passed,
+  and the health rows match the aarch64 rows to the digit). Still to do: push a deliberately bad commit
+  to a side branch and see the run fail. `make gates` enforces the real floor of 2,400 on the
+  reference machine.
 - **Known, not a gate.** M0 drifters gain energy on a long run: the audit measured a mean speed of 0.76
   units per tick at tick 0 and 48 at tick 72,000. Task 10 and Task 11 replace the M0 motion.
 

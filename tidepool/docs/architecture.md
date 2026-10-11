@@ -268,11 +268,12 @@ Rules for the orchestrator:
 
 ## 13. Not confirmed
 
+Confirmed on 2026-10-11 and removed from this list: the native build on x86-64 gives the hashes of the
+`.wasm`. The first CI run passed `tests/determinism.test.ts` on an x86-64 runner, and its health rows
+equal the aarch64 rows to the digit (`gates.md`, CI note).
+
 - The throughput floor on any machine other than the reference machine. The `?bench` page reads it. The
   owner has not run it on a phone or a mid-range laptop yet.
-- Bit-identical native and WASM results on x86-64. On the reference machine (aarch64) the native build
-  and the `.wasm` give the same state hash at 2,000 ticks in every test run, and at 12,000 and 36,000
-  ticks in the M1 audit. CI builds on x86-64 and has never run.
 - That one time-skip changes what a player sees. M1 measured about 11 generations per skip, and body
   size at the floor of its range after the first skip (`findings/m1-skip-drift.md`).
 - Netlify building Rust.
