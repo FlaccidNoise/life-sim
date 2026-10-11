@@ -565,3 +565,23 @@ test('picking an heir resumes the world in that body', () => {
   r.advance(500);
   expect(r.lastTick()).toBeGreaterThan(tickAtDeath); // no `speed` message was sent
 });
+
+test('a body that already has a child leaves that child among its heirs', () => {
+  const m = mortal();
+  const r = rig({ recycle: true, wrap: m.wrap });
+  r.host.handle({ type: 'init', seed: 1, params: [{ name: 'bud_at', value: 0.2 }] });
+  r.advance(1000); // 20 ticks
+  const f = frameOf(r);
+  // A body that budded a short time ago has a child (the frame flags a bud for 40 ticks), and
+  // nobody is marked yet.
+  const parent = Array.from({ length: f.creaturesAlive }, (_, i) => {
+    const o = f.creatureBase + i * P.CREATURE_STRIDE;
+    return { uid: f.u32[o + P.C_UID] ?? 0, flags: f.u32[o + P.C_FLAGS] ?? 0 };
+  }).find((c) => (c.flags & P.FLAG_BUDDED) !== 0);
+  expect(parent).toBeDefined();
+  r.host.handle({ type: 'possess', uid: parent?.uid ?? 0 });
+  m.die(1);
+  r.advance(100);
+  const heirs = r.of('died')[0]?.heirs ?? [];
+  expect(heirs.some((h) => h.uid !== parent?.uid)).toBe(true);
+});

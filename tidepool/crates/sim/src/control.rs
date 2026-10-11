@@ -57,13 +57,29 @@ impl World {
         best
     }
 
-    /// Sets the lineage mark on the creature and clears `death_cause` and `buds`. The new body
-    /// starts with its brain driving. False if the uid is not alive.
+    /// Sets the lineage mark on the creature and on every living creature that descends from it
+    /// through living parents, and clears `death_cause` and `buds`. A descendant behind a dead
+    /// parent gets no mark. The new body starts with its brain driving. False if the uid is not
+    /// alive. It scans the whole pool, so it is for the player's click, never per tick.
     pub fn possess(&mut self, uid: u32) -> bool {
         let Some(slot) = self.slot_of(uid) else {
             return false;
         };
-        self.creatures.mark[slot as usize] |= MARK_LINEAGE;
+        let c = &mut self.creatures;
+        // A parent has a lower uid than its child, so one pass in uid order sees each parent first.
+        let mut live: Vec<(u32, usize)> = (0..c.slots.high_water() as usize)
+            .filter(|&s| c.slots.is_alive(s as u32))
+            .map(|s| (c.uid[s], s))
+            .collect();
+        live.sort_unstable();
+        let mut line = vec![uid];
+        for (u, s) in live {
+            if u > uid && line.binary_search(&c.parent[s]).is_ok() {
+                line.push(u);
+                c.mark[s] |= MARK_LINEAGE;
+            }
+        }
+        c.mark[slot as usize] |= MARK_LINEAGE;
         self.control.possessed = uid;
         self.control.possessed_slot = slot;
         self.control.death_cause = CAUSE_NONE;

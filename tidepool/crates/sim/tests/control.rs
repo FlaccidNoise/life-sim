@@ -1,5 +1,7 @@
 use tidepool_sim::control::{CAUSE_NONE, CAUSE_STARVED, HEIR_STRIDE, MAX_HEIRS};
-use tidepool_sim::world::World;
+use tidepool_sim::creature::MARK_LINEAGE;
+use tidepool_sim::genome::Genome;
+use tidepool_sim::world::{SpawnAt, World};
 
 fn world() -> World {
     let mut w = World::new(4, 1536.0, 1024.0);
@@ -148,4 +150,74 @@ fn an_heir_record_holds_the_documented_fields_and_there_are_at_most_five() {
     assert_eq!((h[2], h[3]), (c.x[7].to_bits(), c.y[7].to_bits()));
     assert!((f32::from_bits(h[4]) - 0.5 * 1.35).abs() < 1e-5);
     assert_eq!(h[6], c.hue[7].to_bits());
+}
+
+/// Spawns a creature with the given parent uid. Returns its uid.
+fn spawn_child(w: &mut World, parent: u32) -> u32 {
+    let at = SpawnAt {
+        x: 500.0,
+        y: 500.0,
+        heading: 0.0,
+        growth: 1.0,
+        energy01: 0.5,
+        parent,
+        generation: 0,
+        mark: 0,
+    };
+    let slot = w.spawn(Genome::default(), at).expect("slot");
+    w.creatures.uid[slot as usize]
+}
+
+fn marked(w: &World, uid: u32) -> u8 {
+    w.creatures.mark[w.slot_of(uid).unwrap() as usize] & MARK_LINEAGE
+}
+
+#[test]
+fn a_child_born_before_the_possession_is_an_heir() {
+    let mut w = World::new(1, 512.0, 512.0);
+    let a = spawn_child(&mut w, 0);
+    let child = spawn_child(&mut w, a);
+    let grandchild = spawn_child(&mut w, child);
+    let stranger = spawn_child(&mut w, 0);
+    assert!(w.possess(a));
+    assert_eq!(
+        (
+            marked(&w, child),
+            marked(&w, grandchild),
+            marked(&w, stranger)
+        ),
+        (1, 1, 0)
+    );
+    assert_eq!(w.write_heirs(), 3);
+}
+
+#[test]
+fn a_descendant_behind_a_dead_parent_is_not_marked() {
+    let mut w = World::new(1, 512.0, 512.0);
+    let a = spawn_child(&mut w, 0);
+    let child = spawn_child(&mut w, a);
+    let grandchild = spawn_child(&mut w, child);
+    w.kill(w.slot_of(child).unwrap(), CAUSE_STARVED);
+    assert!(w.possess(a));
+    assert_eq!((marked(&w, a), marked(&w, grandchild)), (1, 0));
+}
+
+#[test]
+fn possessing_a_child_does_not_mark_its_parent_or_its_sibling() {
+    let mut w = World::new(1, 512.0, 512.0);
+    let parent = spawn_child(&mut w, 0);
+    let (child, sibling) = (spawn_child(&mut w, parent), spawn_child(&mut w, parent));
+    assert!(w.possess(child));
+    assert_eq!(
+        (marked(&w, child), marked(&w, parent), marked(&w, sibling)),
+        (1, 0, 0)
+    );
+}
+
+#[test]
+fn possess_sets_buds_to_zero() {
+    let mut w = world();
+    w.control.buds = 4;
+    assert!(w.possess(w.creatures.uid[3]));
+    assert_eq!(w.control.buds, 0);
 }
