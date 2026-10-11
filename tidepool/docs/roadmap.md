@@ -3,8 +3,8 @@
 Every milestone ends with something you can open in a browser and play. Each adds one system.
 Design: `design.md`. Build rules and interfaces: `architecture.md`.
 
-M0 and M1 have a task-level plan: `plans/2026-10-10-m0-m1-first-swim.md`. Only the next milestone
-has one. Each later milestone gets its plan when the
+M0 and M1 have a task-level plan: `plans/2026-10-10-m0-m1-first-swim.md`. M2 has one too:
+`plans/2026-10-11-m2-bodies.md`. Only the next milestone has one. Each later milestone gets its plan when the
 one before it ships, because what is learned from playing a milestone changes the next one.
 
 ## Rules for every milestone
@@ -42,7 +42,9 @@ gate has been seen to fail on a bad input.
 ### M1 — First swim (built 2026-10-10, owner check open)
 
 Status: every gate passes and a fresh-context audit found nothing that blocks the exit. The first half of
-the exit line below needs a person and is not done. `findings/m1-exit.md` has the record.
+the exit line below is not met: on 2026-10-11 the owner swam and died and could not continue as a
+descendant. `findings/m1-exit.md` has the record. The M2 plan carries the fixes, and its exit check
+closes this half.
 
 The smallest world you can live in.
 

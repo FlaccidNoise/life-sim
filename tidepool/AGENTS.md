@@ -14,11 +14,12 @@ creature among creatures that each run an evolved neural network. It shares no c
 
 ## Status
 
-M0 (foundation) and M1 (first swim) are built and audited. `make check` and `make gates` exit 0. The
-CI workflow has not run yet, because nothing is pushed. What remains of M1 is the owner's part of the
-exit: the play check and the `?bench` readings on a phone and a laptop. `docs/findings/m1-exit.md`
-lists them, with the open problems and the five rule questions that the owner decides. The next plan
-is M2 (Bodies). It is not written yet: it is written from what M1 measured.
+M0 (foundation) and M1 (first swim) are built, audited, and pushed. `make check` and `make gates` exit 0,
+and CI has passed on `main`. One half of the M1 exit is not met: the owner swam and died and could not
+continue as a descendant (`docs/findings/m1-exit.md`). The owner decided the five rule questions on
+2026-10-11 (`docs/decisions/INDEX.md`). The plan for M2 (Bodies) is
+`docs/plans/2026-10-11-m2-bodies.md`. **It is a draft until the owner approves it. Build nothing from it
+before that.**
 
 ## Commands
 
