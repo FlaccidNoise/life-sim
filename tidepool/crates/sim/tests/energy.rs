@@ -1,5 +1,9 @@
+// `powf` is what `pow075` is checked against. This file runs native only.
+#![allow(clippy::disallowed_methods)]
+
 use tidepool_sim::control::{CAUSE_OLD_AGE, CAUSE_STARVED};
-use tidepool_sim::genome::{Genome, KIND_CHEMO, KIND_CILIA, KIND_FILTER, KIND_FLAGELLUM};
+use tidepool_sim::genome::{Genome, KIND_CHEMO, KIND_CILIA, KIND_EYE, KIND_FILTER, KIND_FLAGELLUM};
+use tidepool_sim::math::pow075;
 use tidepool_sim::params::id;
 use tidepool_sim::rng::Rng;
 use tidepool_sim::world::{SpawnAt, World};
@@ -266,4 +270,155 @@ fn energy_never_passes_capacity() {
             assert!(w.creatures.energy[s] <= cap + 1e-3 && w.creatures.energy[s] > 0.0);
         }
     }
+}
+
+#[test]
+fn pow075_is_within_1e_4_of_powf() {
+    for x in [0.5f32, 1.0, 11.5, 72.0, 500.0] {
+        assert!((pow075(x) - x.powf(0.75)).abs() / x.powf(0.75) < 1e-4);
+    }
+    assert_eq!((pow075(0.0), pow075(-4.0)), (0.0, 0.0));
+}
+
+/// What one resting adult loses in 100 ticks with no brain upkeep. `still` stops every force, so
+/// the body pays no move cost. `setup` sets the parameters under test and `edit` the body.
+fn resting_loss(setup: impl FnOnce(&mut World), edit: impl FnOnce(&mut Genome)) -> f32 {
+    let mut w = empty();
+    still(&mut w);
+    w.params.set(id::NEURON_UPKEEP, 0.0);
+    w.params.set(id::CONN_UPKEEP, 0.0);
+    setup(&mut w);
+    let c = add(&mut w, 500.0, 1.0, 0.9, edit);
+    let before = w.creatures.energy[c];
+    w.run(100);
+    before - w.creatures.energy[c]
+}
+
+/// The founder is the reference body: the two curves meet at its mass.
+#[test]
+fn the_founder_pays_the_same_upkeep_on_both_curves() {
+    let loss = |curve: f32| resting_loss(|w| w.params.set(id::UPKEEP_CURVE, curve), |_| {});
+    let (line, curve) = (loss(0.0), loss(1.0));
+    assert!(line > 1.0, "the loss {line} is too small to test");
+    assert!((curve / line - 1.0).abs() < 1e-3, "{curve} against {line}");
+}
+
+/// A length of 6 gives an area of 18, a quarter of the founder's 72.
+#[test]
+fn a_small_body_pays_more_per_unit_of_mass_on_the_curve() {
+    let loss =
+        |curve: f32| resting_loss(|w| w.params.set(id::UPKEEP_CURVE, curve), |g| g.len = 6.0);
+    let ratio = loss(1.0) / loss(0.0);
+    let expected = (72.0f32 / 18.0).powf(0.25);
+    assert!((ratio / expected - 1.0).abs() < 0.01, "ratio {ratio}");
+}
+
+/// Rule P1. The founder with an eye of size 1 has a part sum of `2.1 + eye_cost`. Upkeep per unit
+/// of mass is `basal + part_upkeep * part_sum`, and `part_mass` makes that body heavier than the
+/// founder by `(1 + part_mass * 3.1) / (1 + part_mass * 2.1)`.
+#[test]
+fn an_eye_and_the_mass_of_parts_cost_upkeep() {
+    let loss = |eye_cost: f32, part_mass: f32| {
+        resting_loss(
+            |w| {
+                w.params.set(id::EYE_COST, eye_cost);
+                w.params.set(id::PART_MASS, part_mass);
+            },
+            |g| g.set_size(KIND_EYE, 1.0),
+        )
+    };
+    let (blind, eyed, heavy) = (loss(0.0, 0.0), loss(1.0, 0.0), loss(1.0, 0.1));
+    let w = empty();
+    let per_mass = |parts: f32| w.params.get(id::BASAL) + w.params.get(id::PART_UPKEEP) * parts;
+    let for_eye = per_mass(3.1) / per_mass(2.1);
+    assert!((eyed / blind / for_eye - 1.0).abs() < 0.01, "eye {eyed}");
+    assert!(
+        (heavy / eyed / (1.31 / 1.21) - 1.0).abs() < 0.01,
+        "mass {heavy}"
+    );
+}
+
+/// What one hungry adult of the given length takes in one tick from a plant of the given reserve
+/// under it.
+fn one_tick_of_intake(len: f32, reserve: f32, setup: impl FnOnce(&mut World)) -> f64 {
+    let mut w = empty();
+    still(&mut w);
+    no_upkeep(&mut w);
+    setup(&mut w);
+    add(&mut w, 500.0, 1.0, 0.1, |g| g.len = len);
+    plant_at(&mut w, 500.0, reserve);
+    w.tick();
+    w.stats.eaten
+}
+
+/// The plant gives all it holds, so the mouth is the limit.
+#[test]
+fn the_mouth_follows_area_at_intake_curve_1() {
+    let share = |curve: f32| {
+        let intake = |len: f32| {
+            one_tick_of_intake(len, 20.0, |w| {
+                w.params.set(id::BITE_FRACTION, 1.0);
+                w.params.set(id::INTAKE_CURVE, curve);
+            })
+        };
+        intake(6.0) / intake(12.0)
+    };
+    assert!((share(0.0) - 0.5).abs() < 1e-4, "length: {}", share(0.0));
+    assert!((share(1.0) - 0.25).abs() < 1e-4, "area: {}", share(1.0));
+}
+
+/// The largest body has a mouth of 2.3 a tick on the area curve. The bite is still 5% of 4.
+#[test]
+fn a_plant_still_limits_a_large_mouth() {
+    let taken = one_tick_of_intake(24.0, 4.0, |w| {
+        w.params.set(id::INTAKE_CURVE, 1.0);
+        w.params.set(id::BITE_FRACTION, 0.05);
+    });
+    assert!((taken - 0.2).abs() < 1e-5, "took {taken}");
+}
+
+/// The `lifespan` parameter is 4800. Upkeep is times `1 + old_cost * (old / lifespan - 1)`.
+#[test]
+fn a_long_life_costs_more_per_tick() {
+    let mut w = empty();
+    still(&mut w);
+    w.params.set(id::OLD_COST, 0.5);
+    let bodies = [(300.0, 2400.0), (600.0, 4800.0), (900.0, 9600.0)]
+        .map(|(x, old)| add(&mut w, x, 1.0, 0.9, |g| g.old = old));
+    let before = bodies.map(|c| w.creatures.energy[c]);
+    w.run(100);
+    let [short, middle, long] = [0, 1, 2].map(|i| before[i] - w.creatures.energy[bodies[i]]);
+    assert!(middle > 1.0, "the loss {middle} is too small to test");
+    assert!((short / middle - 0.75).abs() < 0.0075, "short {short}");
+    assert!((long / middle - 1.5).abs() < 0.015, "long {long}");
+}
+
+/// Two worlds with one lone adult in each. The player holds full thrust, and thrust is the only
+/// cost.
+#[test]
+fn thrust_costs_the_same_per_unit_of_mass_at_motor_curve_1() {
+    let loss_per_area = |len: f32| {
+        let mut w = empty();
+        for k in [
+            id::BASAL,
+            id::PART_UPKEEP,
+            id::NEURON_UPKEEP,
+            id::CONN_UPKEEP,
+        ] {
+            w.params.set(k, 0.0);
+        }
+        w.params.set(id::MOTOR_CURVE, 1.0);
+        let c = add(&mut w, 500.0, 1.0, 0.9, |g| g.len = len);
+        assert!(w.possess(w.creatures.uid[c]));
+        w.input(true, 1.0, 0.0);
+        let before = w.creatures.energy[c];
+        w.run(50);
+        (before - w.creatures.energy[c]) / w.creatures.area(c)
+    };
+    let (small, large) = (loss_per_area(8.0), loss_per_area(20.0));
+    assert!(small > 0.01, "the loss {small} is too small to test");
+    assert!(
+        (small / large - 1.0).abs() < 0.02,
+        "{small} against {large}"
+    );
 }
