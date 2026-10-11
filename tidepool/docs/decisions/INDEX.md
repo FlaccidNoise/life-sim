@@ -64,6 +64,10 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
   newborns that starve as juveniles and the share that reach a first bud. Rejected: a cost that scales
   with mass, and a cost that scales with growth. → `../findings/m1-audit.md` "Findings that need a rule
   change" 5, `../design.md` risk R1
+- 2026-10-11: **The M2 plan is approved with seven differences from the roadmap and the design:** no
+  maturity-age gene, brood size is not a gene, eyes feed four fixed brain inputs until M3, three part
+  kinds ignore their place, parts ride in every frame record, gene ranges stay constants, and no taper
+  gene or part-type mutation. → `../plans/2026-10-11-m2-bodies.md`
 
 ## Architecture
 
