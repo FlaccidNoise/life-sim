@@ -39,6 +39,16 @@ pub fn act(x: f32) -> f32 {
     x * (27.0 + x2) / (27.0 + 9.0 * x2)
 }
 
+/// `x` to the power 3/4, by two square roots. 0 for `x <= 0`.
+pub fn pow075(x: f32) -> f32 {
+    if x > 0.0 {
+        let root = x.sqrt();
+        root * root.sqrt()
+    } else {
+        0.0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
