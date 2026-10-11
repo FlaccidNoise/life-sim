@@ -145,7 +145,7 @@ table! {
     /// Side drag added per unit fin.
     FIN_GRIP "fin_grip" 0.3 0.0 0.6;
     /// Upkeep added for a life longer than `lifespan`.
-    OLD_COST "old_cost" 0.0 0.0 2.0;
+    OLD_COST "old_cost" 0.0 0.0 1.0;
     /// Most children in one bud.
     BROOD_MAX "brood_max" 1.0 1.0 8.0;
     /// Share of its capacity that a parent keeps after a bud, so that a bud cannot starve it.
