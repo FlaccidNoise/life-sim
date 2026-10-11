@@ -269,6 +269,37 @@ fn a_child_of_negative_growth_or_length_is_not_made() {
 }
 
 #[test]
+fn the_children_of_a_brood_are_born_apart() {
+    let mut w = World::new(1, 1536.0, 1024.0);
+    quiet(&mut w);
+    w.params.set(id::BROOD_MAX, 4.0);
+    let p = fed_adult(&mut w, 0);
+    w.tick();
+    let (c, brood) = (&w.creatures, children(&w, p));
+    assert!(brood.len() >= 3, "a brood of {}", brood.len());
+    for (i, &a) in brood.iter().enumerate() {
+        // The M1 distance: the two bodies just touch.
+        let (dx, dy) = (c.x[a] - c.x[p], c.y[a] - c.y[p]);
+        let far = (dx * dx + dy * dy).sqrt();
+        assert!(
+            (far - c.radius(p) - c.radius(a)).abs() < 1e-3,
+            "child {i} at {far}"
+        );
+        for &b in &brood[..i] {
+            assert_ne!(
+                (c.x[a], c.y[a]),
+                (c.x[b], c.y[b]),
+                "two children on one point"
+            );
+        }
+    }
+    // The first child is where M1 put its one child, bit for bit.
+    let behind = c.radius(p) + c.radius(brood[0]);
+    let m1 = (c.x[p] - c.hc[p] * behind, c.y[p] - c.hs[p] * behind);
+    assert_eq!((c.x[brood[0]], c.y[brood[0]]), m1);
+}
+
+#[test]
 fn the_possessed_body_counts_its_buds() {
     let mut w = World::new(1, 1536.0, 1024.0);
     quiet(&mut w);
@@ -349,10 +380,13 @@ fn mutation_changes_a_body_gene_the_hue_and_a_brain_weight() {
 /// negative mass would pay its parent. Neither panics, and the world with the wild children saves and loads.
 #[test]
 fn a_wild_genome_buds_or_does_not_without_panic() {
-    for wild in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY, 1e30, -1e30] {
+    let wilds = [f32::NAN, f32::INFINITY, f32::NEG_INFINITY, 1e30, -1e30];
+    // With `part_mass` above 0 the parts of a child are in its price.
+    for (wild, part_mass) in wilds.into_iter().flat_map(|v| [(v, 0.0), (v, 0.3)]) {
         for (rate, wild_size) in [(0.0, false), (1.0, false), (0.0, true), (1.0, true)] {
             let mut w = World::new(1, 1536.0, 1024.0);
             quiet(&mut w);
+            w.params.set(id::PART_MASS, part_mass);
             w.params.set(id::MUT_RATE, rate);
             w.params.set(id::MUT_WEIGHT_RATE, rate);
             let p = fed_adult(&mut w, 0);
@@ -370,10 +404,13 @@ fn a_wild_genome_buds_or_does_not_without_panic() {
             // Mutation clamps a size gene into its range, so only a wild size that did not mutate
             // is sure to stop the bud.
             let births = w.stat(STAT_BIRTHS);
-            assert!(births > 0.0 || wild_size, "{wild} {rate}: no bud");
+            assert!(
+                births > 0.0 || wild_size,
+                "{wild} {rate} {part_mass}: no bud"
+            );
             assert!(
                 births == 0.0 || !wild_size || rate > 0.0,
-                "{wild} {rate}: a child with a wild size"
+                "{wild} {rate} {part_mass}: a child with a wild size"
             );
             World::load(&w.save()).expect("the world still loads");
         }
