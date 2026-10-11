@@ -274,3 +274,217 @@ fn a_full_genome_loads_as_it_was_saved() {
     );
     assert_eq!(loaded.brain.conns.len(), g.brain.conns.len());
 }
+
+const M2_RATES: [usize; 5] = [
+    id::MUT_SHAPE_RATE,
+    id::MUT_LIFE_RATE,
+    id::MUT_PART_REMOVE,
+    id::MUT_PART_DUP,
+    id::MUT_PART_ADD,
+];
+
+/// A founder with an eye, so that the genome has a part that reads `extra`.
+fn eyed_founder(rng: &mut Rng) -> Genome {
+    let mut p = Params::new();
+    p.set(id::FOUNDER_EYE, 0.3);
+    Genome::founder(rng, &p)
+}
+
+fn saved(g: &Genome) -> Vec<u8> {
+    let mut w = Writer::new();
+    g.save(&mut w);
+    w.bytes
+}
+
+#[test]
+fn with_every_m2_rate_at_0_a_mutation_makes_the_m1_draws_and_no_more() {
+    let g = eyed_founder(&mut Rng::new(7));
+    let (mut default_rng, mut zero_rng, mut on_rng) = (Rng::new(11), Rng::new(11), Rng::new(11));
+    let (mut zero, mut on) = (Params::new(), Params::new());
+    for k in M2_RATES {
+        zero.set(k, 0.0);
+        on.set(k, 1.0);
+    }
+    let by_default = g.mutated(&mut default_rng, &Params::new(), &mut 100);
+    let by_zero = g.mutated(&mut zero_rng, &zero, &mut 100);
+    assert_eq!(saved(&by_default), saved(&by_zero));
+    assert_eq!(default_rng.0, zero_rng.0);
+
+    // With the M1 rates at 0 too, the count of draws is known: one for each body gene and each
+    // brain number, and four for the hue.
+    let mut still = zero.clone();
+    still.set(id::MUT_RATE, 0.0);
+    still.set(id::MUT_WEIGHT_RATE, 0.0);
+    let (mut still_rng, mut counted) = (Rng::new(11), Rng::new(11));
+    g.mutated(&mut still_rng, &still, &mut 100);
+    let brain = &g.brain;
+    let brain_draws = brain.conns.len() + brain.bias.len() + brain.alpha.len();
+    for _ in 0..2 + g.parts.len() + 4 + brain_draws {
+        counted.next_u64();
+    }
+    assert_eq!(still_rng.0, counted.0);
+
+    // With the groups on, the generator goes further and every M1 gene is as it was: each new
+    // draw comes after every M1 draw. No part is lost here, so the five sizes line up.
+    on.set(id::MUT_PART_REMOVE, 0.0);
+    let by_on = g.mutated(&mut on_rng, &on, &mut 100);
+    assert_ne!(on_rng.0, default_rng.0);
+    let m1 = |g: &Genome| {
+        let sizes: Vec<f32> = g.parts[..5].iter().map(|x| x.size).collect();
+        let weights: Vec<f32> = g.brain.conns.iter().map(|c| c.weight).collect();
+        let (bias, alpha) = (g.brain.bias.clone(), g.brain.alpha.clone());
+        (g.len, g.wid, g.hue, sizes, weights, bias, alpha)
+    };
+    assert_eq!(m1(&by_on), m1(&by_default));
+}
+
+#[test]
+fn mutation_changes_a_gene() {
+    let p = Params::new();
+    let mut rng = Rng::new(3);
+    let start = Genome::founder(&mut rng, &p);
+    let mut g = start.clone();
+    for _ in 0..100 {
+        g = g.mutated(&mut rng, &p, &mut 100);
+    }
+    let sizes = |g: &Genome| g.parts.iter().map(|x| x.size).collect::<Vec<_>>();
+    assert_ne!(g.len, start.len);
+    assert_ne!(sizes(&g), sizes(&start));
+}
+
+#[test]
+fn add_puts_a_small_new_part_on_the_end_with_a_new_id() {
+    let mut p = Params::new();
+    p.set(id::MUT_PART_ADD, 1.0);
+    let mut rng = Rng::new(5);
+    let g = Genome::founder(&mut rng, &p);
+    let ids = |g: &Genome| g.parts[..4].iter().map(|x| x.history).collect::<Vec<_>>();
+    let mut kinds = [false; KINDS as usize + 1];
+    for _ in 0..64 {
+        let mut next_history = 100;
+        let child = g.mutated(&mut rng, &p, &mut next_history);
+        assert_eq!(child.parts.len(), 5);
+        let new = &child.parts[4];
+        assert!((1..=KINDS).contains(&new.kind));
+        // A new Filter is held at 0.2, the least size of a Filter.
+        let (lo, hi) = SIZE_RANGE[new.kind as usize];
+        assert_eq!(new.size, p.get(id::PART_NEW_SIZE).clamp(lo, hi));
+        assert!((0.0..1.0).contains(&new.anchor) && (0.0..1.0).contains(&new.extra));
+        assert_eq!((new.history, next_history), (100, 101));
+        assert_eq!(ids(&child), ids(&g));
+        kinds[new.kind as usize] = true;
+    }
+    // Every kind comes up.
+    assert_eq!(kinds, [false, true, true, true, true, true, true]);
+}
+
+#[test]
+fn a_full_genome_takes_no_more_parts() {
+    let mut p = Params::new();
+    p.set(id::MUT_PART_ADD, 1.0);
+    p.set(id::MUT_PART_DUP, 1.0);
+    let mut rng = Rng::new(5);
+    let mut g = Genome::founder(&mut rng, &p);
+    let mut next_history = 100;
+    // Each birth copies one part and adds one, until the list is full.
+    for _ in 0..4 {
+        g = g.mutated(&mut rng, &p, &mut next_history);
+    }
+    assert_eq!((g.parts.len(), next_history), (MAX_PART_GENES, 108));
+    let child = g.mutated(&mut rng, &p, &mut next_history);
+    assert_eq!((child.parts.len(), next_history), (MAX_PART_GENES, 108));
+    assert_eq!(child.parts.last().map(|x| x.history), Some(107));
+}
+
+#[test]
+fn remove_takes_one_part_and_an_empty_list_stays_empty() {
+    let mut p = Params::new();
+    p.set(id::MUT_PART_REMOVE, 1.0);
+    // So that a part that stays is equal to the parent's.
+    p.set(id::MUT_RATE, 0.0);
+    let mut rng = Rng::new(5);
+    let founder = Genome::founder(&mut rng, &p);
+    // The slot in `parent` of the one part that `child` lacks, with the others in their order.
+    let gone = |parent: &Genome, child: &Genome| {
+        let mut slots = (0..parent.parts.len()).filter(|&i| {
+            let mut rest = parent.parts.clone();
+            rest.remove(i);
+            rest == child.parts
+        });
+        slots.next().expect("the parent's list less one part")
+    };
+    let mut g = founder.clone();
+    for left in (0..4).rev() {
+        let child = g.mutated(&mut rng, &p, &mut 100);
+        assert_eq!(child.parts.len(), left);
+        gone(&g, &child);
+        g = child;
+    }
+    assert!(g.mutated(&mut rng, &p, &mut 100).parts.is_empty());
+    // The choice is even: each of the four goes in some birth.
+    let mut lost = [false; 4];
+    for _ in 0..64 {
+        lost[gone(&founder, &founder.mutated(&mut rng, &p, &mut 100))] = true;
+    }
+    assert_eq!(lost, [true; 4]);
+}
+
+#[test]
+fn duplicate_copies_kind_size_and_extra_under_a_new_id() {
+    let mut p = Params::new();
+    p.set(id::MUT_PART_DUP, 1.0);
+    let mut rng = Rng::new(5);
+    let g = eyed_founder(&mut rng);
+    let mut kinds = [false; KINDS as usize + 1];
+    let mut moved = false;
+    for _ in 0..64 {
+        let mut next_history = 100;
+        let child = g.mutated(&mut rng, &p, &mut next_history);
+        assert_eq!(child.parts.len(), 6);
+        let (old, copy) = (&child.parts[..5], &child.parts[5]);
+        assert_eq!((copy.history, next_history), (100, 101));
+        // The copy is of the part as this birth left it. This founder has one part of each kind.
+        let from = old.iter().find(|x| x.kind == copy.kind).expect("a source");
+        assert_eq!((copy.size, copy.extra), (from.size, from.extra));
+        assert!((0.0..=1.0).contains(&copy.anchor));
+        moved |= copy.anchor != from.anchor;
+        let ids: Vec<u32> = old.iter().map(|x| x.history).collect();
+        assert_eq!(ids, [58, 59, 60, 61, 62]);
+        kinds[copy.kind as usize] = true;
+    }
+    assert!(moved, "no copy moved along the outline");
+    // Each of the five parts is copied in some birth. The founder has no Fin.
+    assert_eq!(kinds, [false, true, true, true, true, false, true]);
+    // With no part there is nothing to copy.
+    let mut bare = Genome::default();
+    bare.parts.clear();
+    let mut next_history = 100;
+    let child = bare.mutated(&mut rng, &p, &mut next_history);
+    assert_eq!((child.parts.len(), next_history), (0, 100));
+}
+
+#[test]
+fn shape_and_life_genes_move_and_stay_in_range() {
+    let mut p = Params::new();
+    p.set(id::MUT_SHAPE_RATE, 1.0);
+    p.set(id::MUT_LIFE_RATE, 1.0);
+    let mut rng = Rng::new(5);
+    let start = eyed_founder(&mut rng);
+    let mut g = start.clone();
+    for _ in 0..200 {
+        g = g.mutated(&mut rng, &p, &mut 100);
+        for part in &g.parts {
+            assert!((0.0..=1.0).contains(&part.anchor));
+            assert!((0.0..=1.0).contains(&part.extra));
+        }
+        assert!((EGG_RANGE.0..=EGG_RANGE.1).contains(&g.egg));
+        assert!((OLD_RANGE.0..=OLD_RANGE.1).contains(&g.old));
+    }
+    let anchors = |g: &Genome| g.parts.iter().map(|x| x.anchor).collect::<Vec<_>>();
+    let extras = |g: &Genome| g.parts.iter().map(|x| x.extra).collect::<Vec<_>>();
+    assert_ne!(anchors(&g), anchors(&start));
+    assert!(g.egg != start.egg && g.old != start.old);
+    // Only an eye reads `extra`, and only an eye's `extra` moves.
+    assert_eq!(extras(&g)[..4], extras(&start)[..4]);
+    assert_ne!(extras(&g)[4], extras(&start)[4]);
+}
