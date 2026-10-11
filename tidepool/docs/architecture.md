@@ -268,7 +268,12 @@ Rules for the orchestrator:
 
 ## 13. Not confirmed
 
-- The throughput floor on any machine other than the reference machine.
-- Bit-identical native and WASM results. M0 tests it.
+- The throughput floor on any machine other than the reference machine. The `?bench` page reads it. The
+  owner has not run it on a phone or a mid-range laptop yet.
+- Bit-identical native and WASM results on x86-64. On the reference machine (aarch64) the native build
+  and the `.wasm` give the same state hash at 2,000 ticks in every test run, and at 12,000 and 36,000
+  ticks in the M1 audit. CI builds on x86-64 and has never run.
+- That one time-skip changes what a player sees. M1 measured about 11 generations per skip, and body
+  size at the floor of its range after the first skip (`findings/m1-skip-drift.md`).
 - Netlify building Rust.
 - `tech-feasibility.md` lists 16 more open items for later milestones.

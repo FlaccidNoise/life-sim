@@ -28,6 +28,12 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
 - 2026-10-09: One tall continuous world with four zones. → `../design.md` §7
 - 2026-10-10: A Filter mouth eats on contact with no brain output. The draft measured brain-gated
   eating at 2.7 times fewer creatures. → `../plans/2026-10-10-m0-m1-first-swim.md` Task 13
+- 2026-10-10: The M1 defaults are tuned against the health gate: `plant_growth` 0.02 and `intake_rate`
+  0.08. Every other default is still arithmetic. Found in 5 of the 12 trials allowed.
+  → `../findings/m1-tuning.md`
+- 2026-10-10: Five rule questions from the M1 audit are open and are the owner's to decide: grazing that
+  follows scent, who counts as an heir, bodies at the gene floor, a push that ignores mass, and flat
+  brain upkeep. No rule was changed for them in M1. → `../findings/m1-exit.md`
 
 ## Architecture
 
@@ -54,6 +60,11 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
   seeded 3072 by 1536 world. The seeded world was an estimate from before the ecology existed and does
   not hold its population. The floor and the reference population of 1,500 do not change.
   → `../gates.md`, `../findings/m1-tuning.md`
+- 2026-10-10: A world side is at most 16,384 units. The scent field has 8-unit cells, so a larger bound
+  let a crafted snapshot allocate about 512 MB. → `../../crates/sim/src/world.rs` (`MAX_WORLD_SIZE`)
+- 2026-10-10: The fertility map is made when the founders are seeded, not when the world is made, so
+  that `fert_blobs` and `fert_radius` set through `--param` take effect.
+  → `../../crates/sim/src/world.rs` (`seed_founders`)
 
 ## Process
 
