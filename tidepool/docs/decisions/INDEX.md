@@ -35,6 +35,13 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
   follows scent, who counts as an heir, bodies at the gene floor, a push that ignores mass, and flat
   brain upkeep. No rule was changed for them in M1. → `../findings/m1-exit.md`
 
+- 2026-10-11: **Scent grazing that thins the world is fixed with numbers first, inside the M2 retune, not
+  with a rule change now.** M2 changes what a body costs and eats, so it retunes anyway. Order: a probe
+  counts plant deaths by cause with the sense on and off, then one trial of `bite_fraction`, then one of
+  `plant_seed_range`, each read at 36,000 ticks against a sense-off pair. If the two trials do not close
+  the gap, the fallback is a rule: a bite cannot take a plant under `plant_death_reserve`.
+  → `../findings/m1-exit.md` problem 2, `../findings/m1-audit.md` finding F2
+
 ## Architecture
 
 - 2026-10-10: **The simulation core is Rust compiled to WebAssembly with SIMD.** Measured 2.0 to 2.6
