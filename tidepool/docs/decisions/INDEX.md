@@ -46,6 +46,11 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
   only. A descendant behind a dead parent is missed until M5 builds the lineage tree. A body the player
   left stays an heir, and the heirs of a death stay every marked creature. Built in M2.
   → `../design.md` §5.6, `../findings/m1-audit.md` finding F5
+- 2026-10-11: **Body size gets a real tradeoff in M2.** Upkeep grows slower than mass. Intake scales with
+  the mouth part, and the mouth scales with the area of the body, not its length. A small body stays
+  cheaper to build and faster to its first bud. Judged at 36,000 ticks on 3 seeds: mean length away from
+  both walls of its range, and a spread that does not collapse. Rejected: pinning the size genes, and
+  waiting for predation in M4. → `../findings/m1-exit.md` problem 1, `../findings/m1-skip-drift.md`
 
 ## Architecture
 
