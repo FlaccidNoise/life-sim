@@ -2,7 +2,9 @@
 #![allow(clippy::disallowed_methods)]
 
 use tidepool_sim::control::{CAUSE_OLD_AGE, CAUSE_STARVED};
-use tidepool_sim::genome::{Genome, KIND_CHEMO, KIND_CILIA, KIND_EYE, KIND_FILTER, KIND_FLAGELLUM};
+use tidepool_sim::genome::{
+    Genome, KIND_CHEMO, KIND_CILIA, KIND_EYE, KIND_FILTER, KIND_FIN, KIND_FLAGELLUM,
+};
 use tidepool_sim::math::pow075;
 use tidepool_sim::params::id;
 use tidepool_sim::rng::Rng;
@@ -336,6 +338,39 @@ fn an_eye_and_the_mass_of_parts_cost_upkeep() {
         (heavy / eyed / (1.31 / 1.21) - 1.0).abs() < 0.01,
         "mass {heavy}"
     );
+}
+
+/// Two fed juveniles with the same length and width genes at the same growth, with no upkeep. One
+/// has the reference parts and one has a fin of 1 as well. Each takes one step of growth and pays
+/// `build_cost` for the mass that the step adds, parts and all.
+#[test]
+fn growth_pays_for_the_mass_of_the_parts() {
+    let mut w = empty();
+    still(&mut w);
+    no_upkeep(&mut w);
+    w.params.set(id::PART_MASS, 0.3);
+    let (part_mass, eye_cost) = (w.params.get(id::PART_MASS), w.params.get(id::EYE_COST));
+    let bodies = [
+        add(&mut w, 400.0, 0.4, 0.9, |_| {}),
+        add(&mut w, 800.0, 0.4, 0.9, |g| g.set_size(KIND_FIN, 1.0)),
+    ];
+    let c = &w.creatures;
+    let before = bodies.map(|s| (c.energy[s], c.mass(s, part_mass, eye_cost)));
+    w.tick();
+    let c = &w.creatures;
+    let [plain, finned] = [0, 1].map(|i| {
+        let (s, (energy, mass)) = (bodies[i], before[i]);
+        assert!(c.growth[s] > 0.4, "body {i} did not grow");
+        let paid = energy - c.energy[s];
+        let cost = w.params.get(id::BUILD_COST) * (c.mass(s, part_mass, eye_cost) - mass);
+        assert!(cost > 0.01, "the cost {cost} is too small to test");
+        assert!(
+            (paid - cost).abs() < 1e-4,
+            "body {i} paid {paid} for {cost}"
+        );
+        paid
+    });
+    assert!(finned > plain, "{finned} against {plain}");
 }
 
 /// What one hungry adult of the given length takes in one tick from a plant of the given reserve
