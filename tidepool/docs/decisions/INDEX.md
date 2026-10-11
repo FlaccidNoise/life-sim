@@ -31,9 +31,10 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
 - 2026-10-10: The M1 defaults are tuned against the health gate: `plant_growth` 0.02 and `intake_rate`
   0.08. Every other default is still arithmetic. Found in 5 of the 12 trials allowed.
   → `../findings/m1-tuning.md`
-- 2026-10-10: Five rule questions from the M1 audit are open and are the owner's to decide: grazing that
-  follows scent, who counts as an heir, bodies at the gene floor, a push that ignores mass, and flat
-  brain upkeep. No rule was changed for them in M1. → `../findings/m1-exit.md`
+- 2026-10-10: Five rule questions from the M1 audit are the owner's to decide: grazing that follows
+  scent, who counts as an heir, bodies at the gene floor, a push that ignores mass, and flat brain
+  upkeep. No rule was changed for them in M1. The owner decided all five on 2026-10-11: see the five
+  entries below. → `../findings/m1-exit.md`
 
 - 2026-10-11: **Scent grazing that thins the world is fixed with numbers first, inside the M2 retune, not
   with a rule change now.** M2 changes what a body costs and eats, so it retunes anyway. Order: a probe
@@ -56,6 +57,13 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
   the size tradeoff. Built in M2 with the size rules. Measured before and after on the same seeds:
   throughput at the gate, the share of newborns that starve as juveniles, and the speed a possessed
   adult keeps in a crowd. → `../findings/m1-audit.md` "Findings that need a rule change" 4
+- 2026-10-11: **Brain upkeep stays a fixed cost per neuron and per connection in M2.** Its two numbers are
+  part of the M2 retune. The rule is decided in M3, when brains can change shape and evolution can
+  answer it. A fixed cost per body favours a large body and a large egg, which is what makes the M2
+  egg-size gene a real choice. The health gate reports two new measures with no band: the share of
+  newborns that starve as juveniles and the share that reach a first bud. Rejected: a cost that scales
+  with mass, and a cost that scales with growth. → `../findings/m1-audit.md` "Findings that need a rule
+  change" 5, `../design.md` risk R1
 
 ## Architecture
 
