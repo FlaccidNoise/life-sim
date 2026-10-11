@@ -51,6 +51,11 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
   cheaper to build and faster to its first bud. Judged at 36,000 ticks on 3 seeds: mean length away from
   both walls of its range, and a spread that does not collapse. Rejected: pinning the size genes, and
   waiting for predation in M4. → `../findings/m1-exit.md` problem 1, `../findings/m1-skip-drift.md`
+- 2026-10-11: **The push between two bodies is split by mass.** The lighter body moves more, and two
+  equal bodies move as they do now. A heavy body holds its place on a plant, which is one more side of
+  the size tradeoff. Built in M2 with the size rules. Measured before and after on the same seeds:
+  throughput at the gate, the share of newborns that starve as juveniles, and the speed a possessed
+  adult keeps in a crowd. → `../findings/m1-audit.md` "Findings that need a rule change" 4
 
 ## Architecture
 
