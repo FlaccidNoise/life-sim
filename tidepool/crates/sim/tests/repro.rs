@@ -1,3 +1,4 @@
+use tidepool_sim::frame::{self, CREATURE_STRIDE, FLAG_BUDDED, HEADER_WORDS};
 use tidepool_sim::genome::{
     Genome, KIND_CHEMO, KIND_CILIA, KIND_FILTER, KIND_FLAGELLUM, LEN_RANGE, SIZE_RANGE, WID_RANGE,
 };
@@ -28,8 +29,14 @@ fn genes(g: &Genome) -> [f32; 6] {
 }
 
 fn fed_adult(w: &mut World, mark: u8) -> usize {
+    let egg = w.params.get(id::BIRTH_GROWTH);
+    adult_with_egg(w, mark, egg)
+}
+
+/// A fed adult of capacity 72 with the given `egg` gene.
+fn adult_with_egg(w: &mut World, mark: u8, egg: f32) -> usize {
     let mut g = Genome::founder(&mut Rng::new(1), &w.params);
-    (g.len, g.wid) = (12.0, 0.5);
+    (g.len, g.wid, g.egg) = (12.0, 0.5, egg);
     let at = SpawnAt {
         x: 700.0,
         y: 500.0,
@@ -55,6 +62,23 @@ fn quiet(w: &mut World) {
     ] {
         w.params.set(k, 0.0);
     }
+}
+
+/// The live slots whose parent is the creature in slot `p`.
+fn children(w: &World, p: usize) -> Vec<usize> {
+    let c = &w.creatures;
+    (0..c.slots.high_water() as usize)
+        .filter(|&s| c.slots.is_alive(s as u32) && c.parent[s] == c.uid[p])
+        .collect()
+}
+
+/// The flags of the creature in `slot`, from a frame of the whole world.
+fn flags(w: &mut World, slot: usize) -> u32 {
+    frame::write(w, 0.0, 0.0, 1536.0, 1024.0);
+    let records = w.frame[HEADER_WORDS as usize..].chunks(CREATURE_STRIDE as usize);
+    // Word 8 of a record is the slot and word 9 is the flags.
+    let mut records = records.take(w.frame[1] as usize);
+    records.find(|r| r[8] == slot as u32).expect("in the frame")[9]
 }
 
 #[test]
@@ -129,6 +153,154 @@ fn a_full_pool_stops_budding_without_losing_energy() {
     assert_eq!(w.creatures.slots.count(), 4096);
     assert_eq!(w.stat(STAT_BIRTHS), 0.0);
     assert!((w.creatures.energy.iter().sum::<f32>() - before).abs() < 1.0);
+}
+
+#[test]
+fn brood_max_1_is_the_m1_bud() {
+    let mut w = World::new(1, 1536.0, 1024.0);
+    quiet(&mut w);
+    w.params.set(id::BROOD_MAX, 1.0);
+    // An egg this small costs 4.5, and the parent holds 50.4 above its reserve.
+    let p = adult_with_egg(&mut w, 0, 0.25);
+    let before = w.creatures.energy[p];
+    w.tick();
+    assert_eq!(children(&w, p), [1]);
+    assert_eq!(w.stat(STAT_BIRTHS), 1.0);
+    let c = &w.creatures;
+    let cost = (w.params.get(id::BUILD_COST) + w.params.get(id::CHILD_ENERGY)) * c.area(1);
+    assert!((before - c.energy[p] - cost).abs() < 1e-3);
+}
+
+#[test]
+fn a_small_egg_gives_a_larger_brood_than_a_large_egg() {
+    let mut w = World::new(1, 1536.0, 1024.0);
+    quiet(&mut w);
+    w.params.set(id::BROOD_MAX, 8.0);
+    let small = adult_with_egg(&mut w, 0, 0.25);
+    let large = adult_with_egg(&mut w, 0, 0.6);
+    w.tick();
+    let (small, large) = (children(&w, small).len(), children(&w, large).len());
+    assert!(
+        small > large,
+        "{small} from the small egg, {large} from the large"
+    );
+    assert!(large >= 1);
+}
+
+#[test]
+fn a_brood_conserves_energy() {
+    let mut w = World::new(1, 1536.0, 1024.0);
+    quiet(&mut w);
+    w.params.set(id::BROOD_MAX, 8.0);
+    // The parts of a child weigh something, so its mass is not its area.
+    w.params.set(id::PART_MASS, 0.1);
+    let p = fed_adult(&mut w, 0);
+    let before = w.creatures.energy[p];
+    w.tick();
+    let brood = children(&w, p);
+    assert!(brood.len() > 1, "a brood of {}", brood.len());
+    let (c, build_cost) = (&w.creatures, w.params.get(id::BUILD_COST));
+    let (part_mass, eye_cost) = (w.params.get(id::PART_MASS), w.params.get(id::EYE_COST));
+    let paid: f32 = brood
+        .iter()
+        .map(|&s| build_cost * c.mass(s, part_mass, eye_cost) + c.energy[s])
+        .sum();
+    assert!(brood
+        .iter()
+        .any(|&s| c.mass(s, part_mass, eye_cost) != c.area(s)));
+    assert!((before - c.energy[p] - paid).abs() < 1e-3);
+}
+
+#[test]
+fn a_parent_keeps_its_reserve() {
+    // A child costs 11.52 and the parent holds 68.4 of a capacity of 72.
+    for (reserve, brood) in [(0.25, 4), (0.5, 2), (0.9, 0)] {
+        let mut w = World::new(1, 1536.0, 1024.0);
+        quiet(&mut w);
+        w.params.set(id::BROOD_MAX, 8.0);
+        w.params.set(id::PARENT_RESERVE, reserve);
+        w.params.set(id::MUT_RATE, 0.0);
+        let p = fed_adult(&mut w, 0);
+        w.tick();
+        assert_eq!(children(&w, p).len(), brood, "reserve {reserve}");
+        let left = w.creatures.energy[p];
+        assert!(left >= reserve * 72.0, "reserve {reserve}: {left} left");
+        // The brood stopped at the child that the parent could not pay for.
+        assert!(
+            left - 11.52 < reserve * 72.0,
+            "reserve {reserve}: {left} left"
+        );
+    }
+}
+
+#[test]
+fn a_child_is_born_at_its_parents_egg_size() {
+    for egg in [0.25, 0.6] {
+        let mut w = World::new(1, 1536.0, 1024.0);
+        quiet(&mut w);
+        w.params.set(id::BROOD_MAX, 2.0);
+        let p = adult_with_egg(&mut w, 0, egg);
+        w.tick();
+        let brood = children(&w, p);
+        assert!(!brood.is_empty(), "egg {egg}: no child");
+        for s in brood {
+            assert_eq!(w.creatures.growth[s], egg);
+            assert_eq!(w.creatures.length(s), w.genomes[s].len * egg);
+        }
+    }
+}
+
+/// A snapshot can hold any gene. A child of negative growth or of negative length has a positive
+/// area, so the sign of the area does not stop it.
+#[test]
+fn a_child_of_negative_growth_or_length_is_not_made() {
+    for (egg, len) in [(-0.4, 12.0), (0.0, 12.0), (f32::NAN, 12.0), (0.4, -12.0)] {
+        let mut w = World::new(1, 1536.0, 1024.0);
+        quiet(&mut w);
+        w.params.set(id::MUT_RATE, 0.0);
+        let p = adult_with_egg(&mut w, 0, egg);
+        // The body of the parent stays as it was expressed. Its children get this length.
+        w.genomes[p].len = len;
+        let before = w.creatures.energy[p];
+        w.run(3);
+        assert_eq!(w.stat(STAT_BIRTHS), 0.0, "egg {egg}, length {len}");
+        assert_eq!(w.creatures.energy[p], before, "egg {egg}, length {len}");
+    }
+}
+
+#[test]
+fn the_possessed_body_counts_its_buds() {
+    let mut w = World::new(1, 1536.0, 1024.0);
+    quiet(&mut w);
+    w.params.set(id::BROOD_MAX, 2.0);
+    let p = fed_adult(&mut w, 0);
+    // A second parent, which nobody holds. Its buds do not count.
+    let other = fed_adult(&mut w, 0);
+    assert!(w.possess(w.creatures.uid[p]));
+    w.tick();
+    assert_eq!(w.control.buds, 2);
+    for s in [p, other] {
+        w.creatures.energy[s] = 0.95 * 72.0;
+    }
+    w.run(201);
+    assert_eq!(w.stat(STAT_BIRTHS), 8.0);
+    assert_eq!(w.control.buds, 4);
+    assert!(w.possess(w.creatures.uid[other]));
+    assert_eq!(w.control.buds, 0);
+}
+
+#[test]
+fn a_body_that_just_budded_carries_the_flag() {
+    let mut w = World::new(1, 1536.0, 1024.0);
+    quiet(&mut w);
+    let p = fed_adult(&mut w, 0);
+    assert_eq!(flags(&mut w, p) & FLAG_BUDDED, 0);
+    w.tick();
+    assert_eq!(children(&w, p), [1]);
+    assert_eq!(flags(&mut w, p) & FLAG_BUDDED, FLAG_BUDDED);
+    assert_eq!(flags(&mut w, 1) & FLAG_BUDDED, 0, "the newborn did not bud");
+    w.run(41);
+    assert_eq!(flags(&mut w, p) & FLAG_BUDDED, 0);
 }
 
 #[test]

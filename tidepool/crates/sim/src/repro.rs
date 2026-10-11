@@ -1,9 +1,11 @@
-//! Budding. A fed adult splits off a small child with a mutated genome and its parent's mark. The
-//! parent's `egg` gene is the growth of the child.
+//! Budding. A fed adult splits off a brood of small children, each with a mutated genome and its
+//! parent's mark. The parent's `egg` gene is the growth of a child, so a small egg gives a large
+//! brood.
 //!
-//! The parent pays for the child's body and for the child's first energy, so a bud moves energy
+//! The parent pays for each child's body and for each child's first energy, so a bud moves energy
 //! and makes none.
 
+use crate::creature::heft;
 use crate::genome::Genome;
 use crate::params::id;
 use crate::snapshot::{LoadError, Reader, Writer};
@@ -14,13 +16,16 @@ use crate::world::{SpawnAt, World};
 const HEADING_JITTER: f32 = 0.5;
 
 /// Each live creature in slot order counts down its cooldown, or buds if it is a fed adult and
-/// can pay. The births are applied after the loop, in the slot order of the parents, so a newborn
-/// does not bud on the tick of its birth.
+/// can pay. One bud makes up to `brood_max` children and stops at the first one that the parent
+/// cannot pay for. The births are applied after the loop, in the slot order of the parents, so a
+/// newborn does not bud on the tick of its birth.
 pub fn step(world: &mut World) {
     let p = &world.params;
     let (bud_at, cooldown) = (p.get(id::BUD_AT), p.get(id::BUD_COOLDOWN) as u32);
     let (parent_reserve, child_energy) = (p.get(id::PARENT_RESERVE), p.get(id::CHILD_ENERGY));
     let (build_cost, per_mass) = (p.get(id::BUILD_COST), p.get(id::ENERGY_PER_MASS));
+    let (part_mass, eye_cost) = (p.get(id::PART_MASS), p.get(id::EYE_COST));
+    let brood_max = p.get(id::BROOD_MAX) as u32;
     let c = &mut world.creatures;
     // A birth needs a free slot and a uid. `World::spawn` never gives out the last uid.
     let free = c.slots.capacity() - c.slots.count();
@@ -38,35 +43,55 @@ pub fn step(world: &mut World) {
         let cap = per_mass * c.area(s);
         // Both tests are false for NaN, so a body with a wild value does not bud.
         let fed_adult = c.growth[s] >= 1.0 && c.energy[s] >= bud_at * cap;
-        if !fed_adult || births.len() >= room {
+        if !fed_adult {
             continue;
         }
-        let child = world.genomes[s].mutated(&mut world.rng_mutate, p, &mut world.next_history);
         let egg = c.egg[s];
-        let (length, width) = (child.len * egg, child.len * child.wid * egg);
-        let mass = length * width;
-        let cost = build_cost * mass + child_energy * per_mass * mass;
-        // A loaded genome can hold any size. A child of negative mass would pay its parent.
-        let can_pay = mass > 0.0 && c.energy[s] - cost >= parent_reserve * cap;
-        if !can_pay {
-            continue;
+        for _ in 0..brood_max {
+            if births.len() >= room {
+                break;
+            }
+            // The genome is drawn before the price is known, as in M1.
+            let child = world.genomes[s].mutated(&mut world.rng_mutate, p, &mut world.next_history);
+            let (length, width) = (child.len * egg, child.len * child.wid * egg);
+            let area = length * width;
+            // With `part_mass` at 0 a part weighs nothing, whatever its size. The product of 0 and
+            // a wild size is NaN.
+            let mass = if part_mass > 0.0 {
+                area * heft(child.part_sum(eye_cost), part_mass)
+            } else {
+                area
+            };
+            let cost = build_cost * mass + child_energy * per_mass * area;
+            // A loaded genome can hold any size and any egg. A child of negative mass would pay
+            // its parent, and two negative sides make a positive area. Every test is false for NaN.
+            let sound = egg > 0.0 && length > 0.0 && width > 0.0 && mass > 0.0;
+            let can_pay = sound && c.energy[s] - cost >= parent_reserve * cap;
+            if !can_pay {
+                break;
+            }
+            c.energy[s] -= cost;
+            c.bud_cooldown[s] = cooldown;
+            let held = &mut world.control;
+            if held.possessed != 0 && held.possessed_slot as usize == s {
+                // A snapshot can hold any count.
+                held.buds = held.buds.saturating_add(1);
+            }
+            // Behind the parent, with the two bodies just touching.
+            let behind = c.radius(s) + (length + width) / 4.0;
+            let at = SpawnAt {
+                x: c.x[s] - c.hc[s] * behind,
+                y: c.y[s] - c.hs[s] * behind,
+                heading: c.heading[s] + world.rng_mutate.gauss() * HEADING_JITTER,
+                growth: egg,
+                energy01: child_energy,
+                parent: c.uid[s],
+                // A snapshot can hold any generation.
+                generation: c.generation[s].saturating_add(1),
+                mark: c.mark[s],
+            };
+            births.push((child, at));
         }
-        c.energy[s] -= cost;
-        c.bud_cooldown[s] = cooldown;
-        // Behind the parent, with the two bodies just touching.
-        let behind = c.radius(s) + (length + width) / 4.0;
-        let at = SpawnAt {
-            x: c.x[s] - c.hc[s] * behind,
-            y: c.y[s] - c.hs[s] * behind,
-            heading: c.heading[s] + world.rng_mutate.gauss() * HEADING_JITTER,
-            growth: egg,
-            energy01: child_energy,
-            parent: c.uid[s],
-            // A snapshot can hold any generation.
-            generation: c.generation[s].saturating_add(1),
-            mark: c.mark[s],
-        };
-        births.push((child, at));
     }
 
     for (child, at) in births {
