@@ -5,7 +5,7 @@
 
 use crate::genome::{BrainGenome, ConnGene};
 use crate::math::act;
-use crate::params::id;
+use crate::params::{id, Params};
 use crate::rng::Rng;
 use crate::snapshot::{LoadError, Reader, Writer};
 use crate::world::World;
@@ -26,15 +26,10 @@ pub const OUT_TURN: usize = 1;
 
 /// Hidden neurons of the starter brain.
 const STARTER_HIDDEN: usize = 4;
-/// Connections of the starter brain: the 3 wired ones, each input to each hidden neuron, and each
-/// hidden neuron to each output. The history ids of a founder are `1..=STARTER_CONNS`.
-pub const STARTER_CONNS: u32 = (3 + N_IN * STARTER_HIDDEN + STARTER_HIDDEN * N_OUT) as u32;
-/// `IN_CONST` to thrust. A founder with no scent swims at `act(0.9)`, 0.73 of its full thrust.
-const STARTER_CRUISE: f32 = 0.9;
-/// `IN_GRAD_SIDE` to turn. A gradient half off to one side gives a turn command of 0.78.
-const STARTER_STEER: f32 = 2.0;
-/// `IN_GRAD_FWD` to thrust. Faster up the gradient, slower down it, and never to a stop.
-const STARTER_SURGE: f32 = 0.5;
+/// The history ids that a founder brain can hold are `1..=STARTER_CONNS`. The starter brain takes
+/// 1 to 39: the 3 wired connections, each input to each hidden neuron, and each hidden neuron to
+/// each output. 40 to 57 are kept for the eye wires.
+pub const STARTER_CONNS: u32 = 57;
 /// The size of the random weights and biases. Small, so the three wired weights lead. Not zero:
 /// the draft showed that evolution never recruits a connection that starts at zero.
 const STARTER_WEIGHT_SIGMA: f32 = 0.1;
@@ -150,17 +145,18 @@ pub(crate) fn thinks(tick: u32, slot: usize, every: u32) -> bool {
     tick.wrapping_add(slot as u32).is_multiple_of(every)
 }
 
-/// The founder brain. Every founder has the same shape and the same history ids
-/// `1..=STARTER_CONNS`: inputs 0 to 6, hidden 7 to 10, thrust 11, turn 12. Three wired weights
-/// make it swim and turn up the scent gradient. Draws the random weights in history order, then
-/// the biases.
-pub fn starter(rng: &mut Rng) -> BrainGenome {
+/// The founder brain. Every founder has the same shape and the same history ids, 1 to 39: inputs
+/// 0 to 6, hidden 7 to 10, thrust 11, turn 12. Three wired weights make it swim and turn up the
+/// scent gradient: `starter_cruise` from `IN_CONST` to thrust, `starter_steer` from `IN_GRAD_SIDE`
+/// to turn, and `starter_surge` from `IN_GRAD_FWD` to thrust. Draws the random weights in history
+/// order, then the biases.
+pub fn starter(rng: &mut Rng, p: &Params) -> BrainGenome {
     let hidden = N_IN..N_IN + STARTER_HIDDEN;
     let (thrust, turn) = (hidden.end + OUT_THRUST, hidden.end + OUT_TURN);
     let mut wires = vec![
-        (IN_CONST, thrust, STARTER_CRUISE),
-        (IN_GRAD_SIDE, turn, STARTER_STEER),
-        (IN_GRAD_FWD, thrust, STARTER_SURGE),
+        (IN_CONST, thrust, p.get(id::STARTER_CRUISE)),
+        (IN_GRAD_SIDE, turn, p.get(id::STARTER_STEER)),
+        (IN_GRAD_FWD, thrust, p.get(id::STARTER_SURGE)),
     ];
     for input in 0..N_IN {
         for h in hidden.clone() {

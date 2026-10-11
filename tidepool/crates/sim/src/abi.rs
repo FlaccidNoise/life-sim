@@ -10,11 +10,12 @@ use std::cell::RefCell;
 use std::ptr::{self, NonNull};
 
 use crate::control::HEIR_STRIDE;
+use crate::creature::MAX_EYES;
 use crate::frame;
 use crate::params::{ParamDef, DEFS};
 use crate::world::{self, World};
 
-pub const ABI_VERSION: u32 = 2;
+pub const ABI_VERSION: u32 = 3;
 
 thread_local! {
     /// Why the last `tp_new` or `tp_load` returned null.
@@ -218,6 +219,18 @@ pub extern "C" fn tp_frame_creature_stride() -> u32 {
 #[no_mangle]
 pub extern "C" fn tp_frame_plant_stride() -> u32 {
     frame::PLANT_STRIDE
+}
+
+/// The part words at the end of a creature record.
+#[no_mangle]
+pub extern "C" fn tp_frame_part_words() -> u32 {
+    frame::PART_WORDS
+}
+
+/// The eye cones that the frame header has room for.
+#[no_mangle]
+pub extern "C" fn tp_frame_max_eyes() -> u32 {
+    MAX_EYES as u32
 }
 
 /// Returns the `u32` words written.

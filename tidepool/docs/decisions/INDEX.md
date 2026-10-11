@@ -99,6 +99,10 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
 - 2026-10-10: The fertility map is made when the founders are seeded, not when the world is made, so
   that `fert_blobs` and `fert_radius` set through `--param` take effect.
   → `../../crates/sim/src/world.rs` (`seed_founders`)
+- 2026-10-11: **Parts ride in every frame record.** A creature record holds 12 packed part words, one
+  for each part gene. `architecture.md` §8 says appearance is sent once per `uid`. The packed list
+  needs no cache on the page and adds about 70 KB to a full frame. The split waits for a measured
+  need. → `../plans/2026-10-11-m2-bodies.md` difference 5, `../../crates/sim/src/frame.rs`
 
 ## Process
 

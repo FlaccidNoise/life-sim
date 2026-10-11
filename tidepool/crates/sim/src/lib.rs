@@ -3,6 +3,7 @@ pub mod brain;
 pub mod control;
 pub mod creature;
 pub mod energy;
+pub mod eye;
 pub mod field;
 pub mod frame;
 pub mod genome;

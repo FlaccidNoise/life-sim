@@ -2,7 +2,7 @@ use std::time::{Duration, Instant};
 
 use tidepool_sim::world::World;
 
-use crate::{usage, value, world_size, FOUNDERS, WORLD};
+use crate::{param, usage, value, world_size, FOUNDERS, WORLD};
 
 /// Ticks between two population samples. The sample is outside the timed section.
 const CHUNK: u32 = 100;
@@ -17,6 +17,7 @@ pub fn bench(args: &[String]) {
     let (mut w, mut h) = WORLD;
     let mut seed = 1u32;
     let (mut reference, mut floor) = (1500u32, 2400.0f64);
+    let mut params = Vec::new();
     let mut it = args.iter().map(String::as_str);
     while let Some(flag) = it.next() {
         match flag {
@@ -29,6 +30,7 @@ pub fn bench(args: &[String]) {
             "--reference" => reference = value(flag, it.next()),
             "--floor" => floor = value(flag, it.next()),
             "--world" => (w, h) = world_size(flag, it.next()),
+            "--param" => params.push(param(flag, it.next())),
             _ => usage(&format!("unknown flag {flag}")),
         }
     }
@@ -37,6 +39,10 @@ pub fn bench(args: &[String]) {
     }
 
     let mut world = World::new(seed, w, h);
+    // Before the founders: the fertility map and the founder genomes read the parameters.
+    for (i, x) in params {
+        world.params.set(i, x);
+    }
     world.seed_founders(creatures, plants);
     world.run(settle);
     println!(

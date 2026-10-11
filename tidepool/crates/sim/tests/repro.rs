@@ -1,11 +1,34 @@
-use tidepool_sim::genome::{Genome, GENE_RANGE};
+use tidepool_sim::genome::{
+    Genome, KIND_CHEMO, KIND_CILIA, KIND_FILTER, KIND_FLAGELLUM, LEN_RANGE, SIZE_RANGE, WID_RANGE,
+};
 use tidepool_sim::params::{id, Params};
 use tidepool_sim::rng::Rng;
 use tidepool_sim::stats::{STAT_BIRTHS, STAT_MAX_GENERATION};
 use tidepool_sim::world::{SpawnAt, World};
 
+const GENE_RANGE: [(f32, f32); 6] = [
+    LEN_RANGE,
+    WID_RANGE,
+    SIZE_RANGE[KIND_FLAGELLUM as usize],
+    SIZE_RANGE[KIND_CILIA as usize],
+    SIZE_RANGE[KIND_FILTER as usize],
+    SIZE_RANGE[KIND_CHEMO as usize],
+];
+
+/// len, wid, and the sizes of the four parts that a founder has.
+fn genes(g: &Genome) -> [f32; 6] {
+    [
+        g.len,
+        g.wid,
+        g.size_of(KIND_FLAGELLUM),
+        g.size_of(KIND_CILIA),
+        g.size_of(KIND_FILTER),
+        g.size_of(KIND_CHEMO),
+    ]
+}
+
 fn fed_adult(w: &mut World, mark: u8) -> usize {
-    let mut g = Genome::founder(&mut Rng::new(1));
+    let mut g = Genome::founder(&mut Rng::new(1), &w.params);
     (g.len, g.wid) = (12.0, 0.5);
     let at = SpawnAt {
         x: 700.0,
@@ -60,7 +83,7 @@ fn budding_conserves_energy() {
     let before = w.creatures.energy[p];
     w.tick();
     let c = 1usize;
-    let built = w.params.get(id::BUILD_COST) * w.creatures.mass(c);
+    let built = w.params.get(id::BUILD_COST) * w.creatures.area(c);
     assert!((before - w.creatures.energy[p] - w.creatures.energy[c] - built).abs() < 1e-3);
 }
 
@@ -112,11 +135,11 @@ fn a_full_pool_stops_budding_without_losing_energy() {
 fn mutation_stays_in_range_and_rate_zero_copies() {
     let p = Params::new();
     let mut rng = Rng::new(3);
-    let mut g = Genome::founder(&mut rng);
+    let mut next_history = 100;
+    let mut g = Genome::founder(&mut rng, &p);
     for _ in 0..10_000 {
-        g = g.mutated(&mut rng, &p);
-        let genes = [g.len, g.wid, g.flagellum, g.cilia, g.filter, g.chemo];
-        for (v, (lo, hi)) in genes.iter().zip(GENE_RANGE) {
+        g = g.mutated(&mut rng, &p, &mut next_history);
+        for (v, (lo, hi)) in genes(&g).iter().zip(GENE_RANGE) {
             assert!(*v >= lo && *v <= hi);
         }
         assert!((0.0..1.0).contains(&g.hue));
@@ -127,8 +150,10 @@ fn mutation_stays_in_range_and_rate_zero_copies() {
     for k in [id::MUT_RATE, id::MUT_WEIGHT_RATE, id::HUE_SIGMA] {
         frozen.set(k, 0.0);
     }
-    let child = g.mutated(&mut rng, &frozen);
+    let child = g.mutated(&mut rng, &frozen, &mut next_history);
     assert_eq!((child.len, child.wid, child.hue), (g.len, g.wid, g.hue));
+    assert_eq!(child.parts, g.parts);
+    assert_eq!((child.egg, child.old), (g.egg, g.old));
     assert_eq!(child.brain.conns.len(), g.brain.conns.len());
 }
 
@@ -136,21 +161,20 @@ fn mutation_stays_in_range_and_rate_zero_copies() {
 fn mutation_changes_a_body_gene_the_hue_and_a_brain_weight() {
     let p = Params::new();
     let mut rng = Rng::new(3);
-    let start = Genome::founder(&mut rng);
+    let start = Genome::founder(&mut rng, &p);
     let mut g = start.clone();
     for _ in 0..100 {
-        g = g.mutated(&mut rng, &p);
+        g = g.mutated(&mut rng, &p, &mut 100);
     }
-    let genes = |g: &Genome| [g.len, g.wid, g.flagellum, g.cilia, g.filter, g.chemo];
     let weights = |g: &Genome| g.brain.conns.iter().map(|c| c.weight).collect::<Vec<_>>();
     assert_ne!(genes(&g), genes(&start), "no body gene changed");
     assert_ne!(g.hue, start.hue, "the hue did not change");
     assert_ne!(weights(&g), weights(&start), "no brain weight changed");
 }
 
-/// `load` does not check the floats of a genome. A parent buds from a genome with wild part genes
-/// and wild brain numbers, and does not bud from one with a wild size: a child of negative mass
-/// would pay its parent. Neither panics, and the world with the wild children saves and loads.
+/// `load` does not check the floats of a genome. A parent buds from a genome with wild part genes,
+/// wild life genes, and wild brain numbers, and does not bud from one with a wild size: a child of
+/// negative mass would pay its parent. Neither panics, and the world with the wild children saves and loads.
 #[test]
 fn a_wild_genome_buds_or_does_not_without_panic() {
     for wild in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY, 1e30, -1e30] {
@@ -161,7 +185,10 @@ fn a_wild_genome_buds_or_does_not_without_panic() {
             w.params.set(id::MUT_WEIGHT_RATE, rate);
             let p = fed_adult(&mut w, 0);
             let g = &mut w.genomes[p];
-            (g.flagellum, g.cilia, g.filter, g.chemo, g.hue) = (wild, wild, wild, wild, wild);
+            for part in &mut g.parts {
+                (part.anchor, part.size, part.extra) = (wild, wild, wild);
+            }
+            (g.egg, g.old, g.hue) = (wild, wild, wild);
             g.brain.bias.fill(wild);
             g.brain.alpha.fill(wild);
             if wild_size {

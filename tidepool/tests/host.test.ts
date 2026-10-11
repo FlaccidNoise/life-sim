@@ -285,6 +285,33 @@ test('ready lists every parameter with its range', () => {
   expect(drag?.max).toBeCloseTo(0.5, 6);
 });
 
+test('init sets the parameters it names before it seeds the founders', () => {
+  const r = rig();
+  r.host.handle({ type: 'init', seed: 1, params: [{ name: 'repel', value: 0.7 }] });
+  expect(r.of('error')).toEqual([]);
+  const repel = r.of('ready')[0]?.params.find((p) => p.name === 'repel');
+  expect(repel?.value).toBeCloseTo(0.7, 6);
+
+  // A parameter that only the founders read: it took effect, so it was set before they were made.
+  const eyed = rig({ recycle: true });
+  eyed.host.handle({ type: 'init', seed: 1, params: [{ name: 'founder_eye', value: 0.2 }] });
+  eyed.advance(100);
+  const f = frameOf(eyed);
+  expect(P.unpackPart(f.u32[f.creatureBase + P.C_PARTS + 4] ?? 0)?.kind).toBe(P.KIND_EYE);
+});
+
+test('init with a parameter name that is not in the table is an error and no world', () => {
+  const r = rig({ recycle: true });
+  r.host.handle({ type: 'init', seed: 1, params: [{ name: 'nope', value: 1 }] });
+  expect(r.of('ready')).toEqual([]);
+  const errors = r.of('error');
+  expect(errors.length).toBe(1);
+  expect(errors[0]?.message).toContain('nope');
+  expect(errors[0]?.message).toContain('drag_fwd'); // it lists the valid names
+  r.advance(100);
+  expect(r.of('frame')).toEqual([]);
+});
+
 test('possessAt on a creature possesses it and the frame says so', () => {
   const r = rig({ recycle: true });
   r.host.handle({ type: 'init', seed: 1 });
@@ -476,12 +503,8 @@ test('a death cause that this build does not know is an error, not a silent paus
 
 test('a death by the rules of the core pauses the world, and `speed` resumes it', () => {
   const r = rig({ recycle: true });
-  r.host.handle({ type: 'init', seed: 1 });
-  const idx = (name: string) => {
-    const p = r.of('ready')[0]?.params.find((q) => q.name === name);
-    if (!p) throw new Error(`no parameter ${name}`);
-    return p.index;
-  };
+  // A founder dies at the age of its `old` gene, which is the `lifespan` at its founding.
+  r.host.handle({ type: 'init', seed: 1, params: [{ name: 'lifespan', value: 600 }] });
   r.advance(100);
   const f = frameOf(r);
   const pos = (i: number) => {
@@ -490,7 +513,6 @@ test('a death by the rules of the core pauses the world, and `speed` resumes it'
   };
   r.host.handle({ type: 'possessAt', ...pos(0) }); // marked by possession: it may outlive the player
   r.host.handle({ type: 'possessAt', ...pos(1) }); // the body the player dies in
-  r.host.handle({ type: 'param', index: idx('lifespan'), value: 600 });
   r.advance(40_000); // 800 ticks: longer than the lifespan
   const died = r.of('died')[0];
   expect(['old age', 'starved']).toContain(died?.cause);
@@ -505,34 +527,27 @@ test('a death by the rules of the core pauses the world, and `speed` resumes it'
   expect(r.lastTick()).toBeGreaterThan(tickAtDeath);
 });
 
-// Seed 1, with the default parameters. 525 creatures are alive at tick 2,000. Founder 88 has 9
-// living descendants then, and 4 of them are younger than 500 ticks. No founder on this seed has
-// more young ones. If a change to the rules or the defaults empties the line, pick the founder
-// again: for each founder count the living descendants younger than 500 ticks at tick 2,000, and
-// take the founder with the most.
+// The rules decide this test, not the path of one seed. Every founder buds on its first tick, lives
+// 600 ticks, and pays no upkeep. So the body buds marked children at once, nothing starves, and the
+// body dies of old age while children that are younger than it are alive.
 test('picking an heir resumes the world in that body', () => {
   const r = rig({ recycle: true });
-  r.host.handle({ type: 'init', seed: 1 });
+  const params = [
+    { name: 'bud_at', value: 0.2 },
+    { name: 'bud_cooldown', value: 0 },
+    { name: 'lifespan', value: 600 },
+    ...['basal', 'part_upkeep', 'neuron_upkeep', 'conn_upkeep', 'move_cost'].map((name) => ({
+      name,
+      value: 0,
+    })),
+  ];
+  r.host.handle({ type: 'init', seed: 1, params });
   r.host.handle({ type: 'possess', uid: 88 });
-  r.host.handle({ type: 'release' });
-  r.advance(100_000); // 2,000 ticks: the line buds marked children
+  // A founder is younger than half a lifespan when the world starts.
+  r.advance(14_000); // 280 ticks
   expect(r.of('died')).toEqual([]);
 
-  // The body the player dies in: a founder outside the line. It is older than the new lifespan.
-  const f = frameOf(r);
-  let body = 0;
-  for (let i = 0; i < f.creatureCount && body === 0; i++) {
-    const o = f.creatureBase + i * P.CREATURE_STRIDE;
-    const [uid, flags] = [f.u32[o + P.C_UID] ?? 0, f.u32[o + P.C_FLAGS] ?? 0];
-    if (uid <= P.FOUNDER_CREATURES && (flags & P.FLAG_LINEAGE) === 0) body = uid;
-  }
-  if (body === 0) throw new Error('no founder outside the marked line is alive at tick 2,000');
-  r.host.handle({ type: 'possess', uid: body });
-  expect(r.of('possessed').at(-1)?.uid).toBe(body);
-  const lifespan = r.of('ready')[0]?.params.find((p) => p.name === 'lifespan');
-  if (!lifespan) throw new Error('no parameter lifespan');
-  r.host.handle({ type: 'param', index: lifespan.index, value: 600 });
-  r.advance(1000);
+  r.advance(17_000); // 620 ticks in all: longer than the lifespan
   const died = r.of('died');
   expect(died.length).toBe(1);
   expect(died[0]?.cause).toBe('old age');

@@ -86,9 +86,9 @@ pub fn step(world: &mut World) {
         let (thrust, turn) = (c.cmd_thrust[s], c.cmd_turn[s]);
         let (hc, hs) = (c.hc[s], c.hs[s]);
         // The force is `drive * length` and the mass is `length * width`.
-        let drive = flag_force * c.flagellum[s] + cilia_force * c.cilia[s];
+        let drive = flag_force * c.flag_push[s] + cilia_force * c.cilia[s];
         let accel = thrust * drive / width;
-        let steer = cilia_torque * c.cilia[s] + flag_torque * c.flagellum[s] * thrust;
+        let steer = cilia_torque * c.cilia[s] + flag_torque * c.flag_push[s] * thrust;
         let a_ang = turn * steer / (2.0 * inertia_k * width * length);
 
         let mut vx = c.vx[s] + hc * accel + motor.push_x[s];

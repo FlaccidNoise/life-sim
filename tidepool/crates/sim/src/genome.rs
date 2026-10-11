@@ -1,7 +1,7 @@
-//! What a creature inherits: six body genes, a hue, and a brain.
+//! What a creature inherits: a body shape, a life history, a hue, a list of parts, and a brain.
 
 use crate::brain::{self, MAX_NEURONS, N_IN, N_OUT};
-use crate::params::{id, Params};
+use crate::params::{id, Params, DEFS};
 use crate::rng::Rng;
 use crate::snapshot::{LoadError, Reader, Writer};
 
@@ -23,30 +23,77 @@ pub struct BrainGenome {
     pub conns: Vec<ConnGene>,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct PartGene {
+    pub kind: u8,
+    /// Where the part sits on the outline: 0 at the nose, 1 at the tail. Exactly 0 or 1 is on the
+    /// midline and makes one part. Any other value makes a mirrored pair.
+    pub anchor: f32,
+    pub size: f32,
+    /// Eye: cone width, 0 to 1. Other kinds do not read it.
+    pub extra: f32,
+    pub history: u32,
+}
+
 #[derive(Clone)]
 pub struct Genome {
     pub len: f32,
     pub wid: f32,
-    pub flagellum: f32,
-    pub cilia: f32,
-    pub filter: f32,
-    pub chemo: f32,
+    /// The growth of a newborn that this body buds.
+    pub egg: f32,
+    /// Ticks until death by old age.
+    pub old: f32,
     pub hue: f32,
+    /// At most `MAX_PART_GENES`.
+    pub parts: Vec<PartGene>,
     pub brain: BrainGenome,
 }
 
-/// len, wid, flagellum, cilia, filter, chemo
-pub const GENE_RANGE: [(f32, f32); 6] = [
-    (6.0, 24.0),
-    (0.3, 0.9),
+pub const MAX_PART_GENES: usize = 12;
+pub const KIND_FLAGELLUM: u8 = 1;
+pub const KIND_CILIA: u8 = 2;
+pub const KIND_FILTER: u8 = 3;
+pub const KIND_CHEMO: u8 = 4;
+pub const KIND_FIN: u8 = 5;
+pub const KIND_EYE: u8 = 6;
+/// Kinds are `1..=KINDS`. 0 means "no part" in a frame.
+pub const KINDS: u8 = 6;
+
+pub const LEN_RANGE: (f32, f32) = (6.0, 24.0);
+pub const WID_RANGE: (f32, f32) = (0.3, 0.9);
+pub const EGG_RANGE: (f32, f32) = (0.2, 0.7);
+pub const OLD_RANGE: (f32, f32) = (1200.0, 9600.0);
+/// By kind. The four M1 kinds keep their M1 ranges.
+pub const SIZE_RANGE: [(f32, f32); 7] = [
+    (0.0, 0.0),
     (0.0, 1.0),
     (0.0, 1.0),
     (0.2, 1.0),
     (0.0, 1.0),
+    (0.0, 1.0),
+    (0.0, 1.0),
 ];
-pub const GENE_DEFAULT: [f32; 6] = [12.0, 0.5, 0.6, 0.4, 0.6, 0.5];
-/// How far a founder's body gene sits from its default, as a share of the gene's range.
-const FOUNDER_SIGMA: f32 = 0.05;
+/// The reference body: the M1 founder. Every M2 rule gives this body the number that M1 gave it.
+pub const LEN_DEFAULT: f32 = 12.0;
+pub const WID_DEFAULT: f32 = 0.5;
+pub const REF_WIDTH: f32 = LEN_DEFAULT * WID_DEFAULT;
+pub const REF_AREA: f32 = LEN_DEFAULT * REF_WIDTH;
+/// The sum of the founder's four part sizes.
+pub const REF_PARTS: f32 = 2.1;
+/// kind, anchor, size. In this order: it is the M1 order of draws.
+pub const FOUNDER_PARTS: [(u8, f32, f32); 4] = [
+    (KIND_FLAGELLUM, 1.0, 0.6),
+    (KIND_CILIA, 0.5, 0.4),
+    (KIND_FILTER, 0.0, 0.6),
+    (KIND_CHEMO, 0.15, 0.5),
+];
+pub const FOUNDER_EYE_ANCHOR: f32 = 0.2;
+pub const FOUNDER_EYE_EXTRA: f32 = 0.4;
+/// Where `set_size` puts a fin on a body that has none.
+const FIN_ANCHOR: f32 = 0.6;
+/// The last history id that a founder holds. Its brain connections take `1..=STARTER_CONNS`, its
+/// four parts take the next four ids, and its eye takes this one.
+pub const FOUNDER_HISTORIES: u32 = brain::STARTER_CONNS + FOUNDER_PARTS.len() as u32 + 1;
 /// The largest size of a brain weight or bias. `math::act` is flat past 3, so a larger number
 /// only hides later mutations.
 const WEIGHT_LIMIT: f32 = 8.0;
@@ -64,6 +111,25 @@ fn nudged(v: f32, rng: &mut Rng, rate: f32, step: f32, (lo, hi): (f32, f32)) -> 
     }
 }
 
+/// The size range of a kind. A kind outside `1..=KINDS` has no size.
+fn size_range(kind: u8) -> (f32, f32) {
+    SIZE_RANGE.get(kind as usize).copied().unwrap_or((0.0, 0.0))
+}
+
+/// The founder part of each M1 kind, with its default size and its history id.
+fn founder_parts() -> Vec<PartGene> {
+    (brain::STARTER_CONNS + 1..)
+        .zip(FOUNDER_PARTS)
+        .map(|(history, (kind, anchor, size))| PartGene {
+            kind,
+            anchor,
+            size,
+            extra: 0.0,
+            history,
+        })
+        .collect()
+}
+
 /// The smallest brain: no hidden neurons and no connections. Its outputs rest at 0.
 impl Default for BrainGenome {
     fn default() -> BrainGenome {
@@ -76,18 +142,17 @@ impl Default for BrainGenome {
     }
 }
 
-/// The default body with hue 0 and the smallest brain.
+/// The reference body with hue 0 and the smallest brain. `egg` and `old` are the defaults of
+/// `birth_growth` and `lifespan`.
 impl Default for Genome {
     fn default() -> Genome {
-        let [len, wid, flagellum, cilia, filter, chemo] = GENE_DEFAULT;
         Genome {
-            len,
-            wid,
-            flagellum,
-            cilia,
-            filter,
-            chemo,
+            len: LEN_DEFAULT,
+            wid: WID_DEFAULT,
+            egg: DEFS[id::BIRTH_GROWTH].default,
+            old: DEFS[id::LIFESPAN].default,
             hue: 0.0,
+            parts: founder_parts(),
             brain: BrainGenome::default(),
         }
     }
@@ -143,47 +208,61 @@ impl BrainGenome {
 }
 
 impl Genome {
-    /// The defaults, each moved by `gauss * FOUNDER_SIGMA * range` and clamped. A random hue.
-    /// `brain::starter(rng)`. Draws in that order.
-    pub fn founder(rng: &mut Rng) -> Genome {
-        let mut genes = GENE_DEFAULT;
-        for (gene, (lo, hi)) in genes.iter_mut().zip(GENE_RANGE) {
-            *gene = (*gene + rng.gauss() * FOUNDER_SIGMA * (hi - lo)).clamp(lo, hi);
+    /// The reference body, with each of len, wid, and the four part sizes moved by
+    /// `gauss * founder_sigma * range` and clamped. A random hue. `brain::starter(rng, p)`. Draws in
+    /// that order, which is the M1 order. `egg` is `birth_growth` and `old` is `lifespan`, with no
+    /// draw. With `founder_eye` above 0 a fifth part follows, an eye of that size, with no draw.
+    pub fn founder(rng: &mut Rng, p: &Params) -> Genome {
+        let sigma = p.get(id::FOUNDER_SIGMA);
+        let mut near = |default: f32, (lo, hi): (f32, f32)| {
+            (default + rng.gauss() * sigma * (hi - lo)).clamp(lo, hi)
+        };
+        let len = near(LEN_DEFAULT, LEN_RANGE);
+        let wid = near(WID_DEFAULT, WID_RANGE);
+        let mut parts = founder_parts();
+        for part in &mut parts {
+            part.size = near(part.size, size_range(part.kind));
         }
-        let [len, wid, flagellum, cilia, filter, chemo] = genes;
+        let eye = p.get(id::FOUNDER_EYE);
+        if eye > 0.0 {
+            parts.push(PartGene {
+                kind: KIND_EYE,
+                anchor: FOUNDER_EYE_ANCHOR,
+                size: eye,
+                extra: FOUNDER_EYE_EXTRA,
+                history: FOUNDER_HISTORIES,
+            });
+        }
         let hue = rng.unit();
         Genome {
             len,
             wid,
-            flagellum,
-            cilia,
-            filter,
-            chemo,
+            egg: p.get(id::BIRTH_GROWTH),
+            old: p.get(id::LIFESPAN),
             hue,
-            brain: brain::starter(rng),
+            parts,
+            brain: brain::starter(rng, p),
         }
     }
 
-    /// Each of the 6 body genes: with chance mut_rate, add gauss * mut_sigma * (max - min), clamp.
+    /// Len, wid, and each part size: with chance mut_rate, add gauss * mut_sigma * (max - min), clamp.
     /// Hue: add gauss * hue_sigma, wrap into [0, 1).
     /// Each brain weight, bias: with chance mut_weight_rate, add gauss * mut_weight_sigma.
     /// Each alpha: with chance mut_weight_rate, add gauss * 0.1, clamp to [0.05, 1].
-    /// Weights and biases are clamped to [-8, 8]. Structure and history ids do not change in M1.
+    /// Weights and biases are clamped to [-8, 8]. Structure and history ids do not change yet, so
+    /// `next_history` is not read.
     ///
-    /// Draws in this order: the body genes, the hue, the weights, the biases, the alphas.
-    pub fn mutated(&self, rng: &mut Rng, p: &Params) -> Genome {
+    /// Draws in this order: len, wid, each part size in gene order, the hue, the weights, the
+    /// biases, the alphas. That is the M1 order.
+    pub fn mutated(&self, rng: &mut Rng, p: &Params, _next_history: &mut u32) -> Genome {
         let mut g = self.clone();
         let (rate, sigma) = (p.get(id::MUT_RATE), p.get(id::MUT_SIGMA));
-        let genes = [
-            &mut g.len,
-            &mut g.wid,
-            &mut g.flagellum,
-            &mut g.cilia,
-            &mut g.filter,
-            &mut g.chemo,
-        ];
-        for (gene, (lo, hi)) in genes.into_iter().zip(GENE_RANGE) {
-            *gene = nudged(*gene, rng, rate, sigma * (hi - lo), (lo, hi));
+        let mut body =
+            |v: f32, (lo, hi): (f32, f32)| nudged(v, rng, rate, sigma * (hi - lo), (lo, hi));
+        g.len = body(g.len, LEN_RANGE);
+        g.wid = body(g.wid, WID_RANGE);
+        for part in &mut g.parts {
+            part.size = body(part.size, size_range(part.kind));
         }
         let hue = g.hue + rng.gauss() * p.get(id::HUE_SIGMA);
         // A hue just below 0 rounds up to exactly 1. The `%` sends that to 0.
@@ -202,32 +281,96 @@ impl Genome {
         g
     }
 
+    /// The sum over the parts of that kind.
+    pub fn size_of(&self, kind: u8) -> f32 {
+        let of_kind = self.parts.iter().filter(|part| part.kind == kind);
+        // A fold from 0, because the sum of no floats is -0.
+        of_kind.fold(0.0, |sum, part| sum + part.size)
+    }
+
+    /// Sets the first part of the kind. With none, adds one at the founder anchor of the kind, with
+    /// history 0, if the list has room. For founders and tests.
+    pub fn set_size(&mut self, kind: u8, size: f32) {
+        if let Some(part) = self.parts.iter_mut().find(|part| part.kind == kind) {
+            part.size = size;
+            return;
+        }
+        let founder = FOUNDER_PARTS.iter().find(|part| part.0 == kind);
+        let (anchor, extra) = match (founder, kind) {
+            (Some(part), _) => (part.1, 0.0),
+            (None, KIND_EYE) => (FOUNDER_EYE_ANCHOR, FOUNDER_EYE_EXTRA),
+            (None, _) => (FIN_ANCHOR, 0.0),
+        };
+        if self.parts.len() < MAX_PART_GENES {
+            self.parts.push(PartGene {
+                kind,
+                anchor,
+                size,
+                extra,
+                history: 0,
+            });
+        }
+    }
+
+    /// The sizes of every part that is not an eye, summed in gene order, plus `eye_cost` times the
+    /// sizes of the eyes.
+    pub fn part_sum(&self, eye_cost: f32) -> f32 {
+        let (mut plain, mut eyes) = (0.0, 0.0);
+        for part in &self.parts {
+            if part.kind == KIND_EYE {
+                eyes += part.size;
+            } else {
+                plain += part.size;
+            }
+        }
+        plain + eye_cost * eyes
+    }
+
     pub fn save(&self, w: &mut Writer) {
-        let genes = [
-            self.len,
-            self.wid,
-            self.flagellum,
-            self.cilia,
-            self.filter,
-            self.chemo,
-            self.hue,
-        ];
-        for gene in genes {
+        for gene in [self.len, self.wid, self.egg, self.old, self.hue] {
             w.f32(gene);
+        }
+        w.u32(self.parts.len() as u32);
+        for part in &self.parts {
+            w.u32(part.kind as u32);
+            w.f32(part.anchor);
+            w.f32(part.size);
+            w.f32(part.extra);
+            w.u32(part.history);
         }
         self.brain.save(w);
     }
 
-    /// The body genes are not checked. The brain is: see `BrainGenome::load`.
+    /// `Invalid` for more than `MAX_PART_GENES` parts or a kind outside `1..=KINDS`. The floats are
+    /// not checked: `Creatures::express` is safe for any float. The brain is checked: see
+    /// `BrainGenome::load`.
     pub fn load(r: &mut Reader) -> Result<Genome, LoadError> {
+        let (len, wid, egg, old, hue) = (r.f32()?, r.f32()?, r.f32()?, r.f32()?, r.f32()?);
+        let count = r.u32()? as usize;
+        if count > MAX_PART_GENES {
+            return Err(LoadError::Invalid("genome part count"));
+        }
+        let mut parts = Vec::with_capacity(count);
+        for _ in 0..count {
+            let kind = r.u32()?;
+            if !(1..=KINDS as u32).contains(&kind) {
+                return Err(LoadError::Invalid("genome part kind"));
+            }
+            parts.push(PartGene {
+                kind: kind as u8,
+                anchor: r.f32()?,
+                size: r.f32()?,
+                extra: r.f32()?,
+                history: r.u32()?,
+            });
+        }
         Ok(Genome {
-            len: r.f32()?,
-            wid: r.f32()?,
-            flagellum: r.f32()?,
-            cilia: r.f32()?,
-            filter: r.f32()?,
-            chemo: r.f32()?,
-            hue: r.f32()?,
+            len,
+            wid,
+            egg,
+            old,
+            hue,
+            parts,
             brain: BrainGenome::load(r)?,
         })
     }

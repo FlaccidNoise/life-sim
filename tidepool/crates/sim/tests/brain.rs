@@ -2,9 +2,9 @@
 #![allow(clippy::disallowed_methods, clippy::approx_constant)]
 
 use tidepool_sim::brain::{self, Brains, IN_CONST, N_IN, OUT_THRUST, OUT_TURN};
-use tidepool_sim::genome::{BrainGenome, ConnGene, Genome};
+use tidepool_sim::genome::{BrainGenome, ConnGene, Genome, KIND_CHEMO};
 use tidepool_sim::math::act;
-use tidepool_sim::params::id;
+use tidepool_sim::params::{id, Params};
 use tidepool_sim::rng::Rng;
 use tidepool_sim::world::{SpawnAt, World};
 
@@ -105,7 +105,8 @@ fn a_neuron_reads_last_steps_values() {
 
 #[test]
 fn the_starter_brain_has_the_documented_shape() {
-    let g = brain::starter(&mut Rng::new(1));
+    let p = Params::new();
+    let g = brain::starter(&mut Rng::new(1), &p);
     assert_eq!(
         (g.n_hidden, g.conns.len(), g.bias.len(), g.alpha.len()),
         (4, 39, 6, 6)
@@ -116,7 +117,7 @@ fn the_starter_brain_has_the_documented_shape() {
         .conns
         .iter()
         .all(|c| (c.src as usize) < N_IN + 4 && c.dst >= N_IN as u16));
-    let h = brain::starter(&mut Rng::new(2));
+    let h = brain::starter(&mut Rng::new(2), &p);
     assert_eq!(h.conns[10].history, g.conns[10].history); // founders share ids
     assert_ne!(h.conns[10].weight, g.conns[10].weight);
 }
@@ -149,8 +150,8 @@ fn seeker(seed: u32, chemo: f32) -> f32 {
     }
     w.plants.dirty = true;
     w.run(800); // let the scent spread before the creature exists
-    let mut g = Genome::founder(&mut Rng::new(seed as u64));
-    g.chemo = chemo;
+    let mut g = Genome::founder(&mut Rng::new(seed as u64), &w.params);
+    g.set_size(KIND_CHEMO, chemo);
     let at = SpawnAt {
         x: 700.0,
         y: 500.0,

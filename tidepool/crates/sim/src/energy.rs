@@ -2,7 +2,8 @@
 //!
 //! A filter mouth feeds on every plant the body touches, with no brain output. A full creature
 //! takes nothing. Upkeep is paid for mass, for parts, for the brain, and for thrust. A juvenile
-//! with a reserve builds mass. A creature with no energy starves, and an old one dies.
+//! with a reserve builds mass. A creature with no energy starves, and one at the age of its `old`
+//! gene dies.
 
 use crate::control::{CAUSE_OLD_AGE, CAUSE_STARVED};
 use crate::params::id;
@@ -29,7 +30,7 @@ pub fn contact(world: &mut World) {
         }
         let (x, y, radius) = (c.x[s], c.y[s], c.radius(s));
         let mut budget = intake_rate * c.filter[s] * c.length(s);
-        let mut room = per_mass * c.mass(s) - c.energy[s];
+        let mut room = per_mass * c.area(s) - c.energy[s];
         let mut energy = c.energy[s];
         // The centre of a plant that the body touches is at most this far away.
         let reach = radius + plant::MAX_RADIUS;
@@ -59,14 +60,13 @@ pub fn contact(world: &mut World) {
 /// reserve. The dead are removed after the loop, in slot order.
 pub fn life(world: &mut World) {
     let p = &world.params;
-    let lifespan = p.get(id::LIFESPAN) as u32;
     let (flag_force, cilia_force) = (p.get(id::FLAG_FORCE), p.get(id::CILIA_FORCE));
     let (basal, part_upkeep) = (p.get(id::BASAL), p.get(id::PART_UPKEEP));
     let (neuron_upkeep, conn_upkeep) = (p.get(id::NEURON_UPKEEP), p.get(id::CONN_UPKEEP));
     let (move_cost, per_mass) = (p.get(id::MOVE_COST), p.get(id::ENERGY_PER_MASS));
     let (grow_reserve, grow_rate) = (p.get(id::GROW_RESERVE), p.get(id::GROW_RATE));
     let build_cost = p.get(id::BUILD_COST);
-    let (c, brains) = (&mut world.creatures, &world.brains);
+    let (c, brains, stats) = (&mut world.creatures, &world.brains, &mut world.stats);
     let mut deaths: Vec<(u32, u32)> = Vec::new();
 
     for s in 0..c.slots.high_water() as usize {
@@ -76,10 +76,10 @@ pub fn life(world: &mut World) {
         // The count stops at the top of its range: a snapshot can hold any age.
         c.age[s] = c.age[s].saturating_add(1);
 
-        let (mass, growth, thrust) = (c.mass(s), c.growth[s], c.cmd_thrust[s]);
-        let parts = c.flagellum[s] + c.cilia[s] + c.filter[s] + c.chemo[s];
+        let (mass, growth, thrust) = (c.area(s), c.growth[s], c.cmd_thrust[s]);
+        let parts = c.plain_sum[s];
         // The force that the motor applies at full thrust is `drive * length`.
-        let drive = flag_force * c.flagellum[s] + cilia_force * c.cilia[s];
+        let drive = flag_force * c.flag_push[s] + cilia_force * c.cilia[s];
         let upkeep = basal * mass
             + part_upkeep * mass * parts
             + neuron_upkeep * brains.n_neur[s] as f32
@@ -90,7 +90,7 @@ pub fn life(world: &mut World) {
         let reserve = grow_reserve * per_mass * mass;
         if growth < 1.0 && energy > reserve {
             c.growth[s] = (growth + grow_rate).min(1.0);
-            let cost = build_cost * (c.mass(s) - mass);
+            let cost = build_cost * (c.area(s) - mass);
             if energy - cost > reserve * GROW_FLOOR {
                 energy -= cost;
             } else {
@@ -98,12 +98,15 @@ pub fn life(world: &mut World) {
             }
         }
         // The capacity of the body as it is now, after any growth.
-        energy = energy.min(per_mass * c.mass(s));
+        energy = energy.min(per_mass * c.area(s));
         c.energy[s] = energy;
 
         if energy <= 0.0 {
             deaths.push((s as u32, CAUSE_STARVED));
-        } else if c.age[s] >= lifespan {
+            if c.growth[s] < 1.0 {
+                stats.starved_juv = stats.starved_juv.saturating_add(1);
+            }
+        } else if c.age[s] >= c.old[s] as u32 {
             deaths.push((s as u32, CAUSE_OLD_AGE));
         }
     }

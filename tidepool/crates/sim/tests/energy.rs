@@ -1,5 +1,5 @@
 use tidepool_sim::control::{CAUSE_OLD_AGE, CAUSE_STARVED};
-use tidepool_sim::genome::Genome;
+use tidepool_sim::genome::{Genome, KIND_CHEMO, KIND_CILIA, KIND_FILTER, KIND_FLAGELLUM};
 use tidepool_sim::params::id;
 use tidepool_sim::rng::Rng;
 use tidepool_sim::world::{SpawnAt, World};
@@ -9,8 +9,17 @@ fn empty() -> World {
 }
 
 fn add(w: &mut World, x: f32, growth: f32, energy01: f32, edit: impl FnOnce(&mut Genome)) -> usize {
-    let mut g = Genome::founder(&mut Rng::new(1));
-    (g.len, g.wid, g.flagellum, g.cilia, g.filter, g.chemo) = (12.0, 0.5, 0.6, 0.4, 0.6, 0.5);
+    let mut g = Genome::founder(&mut Rng::new(1), &w.params);
+    (g.len, g.wid) = (12.0, 0.5);
+    let sizes = [
+        (KIND_FLAGELLUM, 0.6),
+        (KIND_CILIA, 0.4),
+        (KIND_FILTER, 0.6),
+        (KIND_CHEMO, 0.5),
+    ];
+    for (kind, size) in sizes {
+        g.set_size(kind, size);
+    }
     edit(&mut g);
     let at = SpawnAt {
         x,
@@ -140,6 +149,39 @@ fn old_age_kills_at_lifespan() {
     assert_eq!(w.control.death_cause, CAUSE_OLD_AGE);
 }
 
+/// The `lifespan` parameter is 4800. Each body dies on the tick of its own gene.
+#[test]
+fn a_creature_dies_at_its_own_old_gene() {
+    let mut w = empty();
+    still(&mut w);
+    no_upkeep(&mut w);
+    let short = add(&mut w, 500.0, 1.0, 1.0, |g| g.old = 1300.0);
+    add(&mut w, 600.0, 1.0, 1.0, |g| g.old = 2000.0);
+    assert!(w.possess(w.creatures.uid[short]));
+    w.run(1299);
+    assert_eq!(w.creatures.slots.count(), 2);
+    w.run(1);
+    assert_eq!(w.creatures.slots.count(), 1);
+    assert_eq!(w.control.death_cause, CAUSE_OLD_AGE);
+    w.run(699);
+    assert_eq!(w.creatures.slots.count(), 1);
+    w.run(1);
+    assert_eq!(w.creatures.slots.count(), 0);
+}
+
+#[test]
+fn a_juvenile_that_starves_is_counted() {
+    let mut w = empty();
+    still(&mut w);
+    add(&mut w, 500.0, 1.0, 0.01, |_| {});
+    w.run(50);
+    assert_eq!((w.creatures.slots.count(), w.stats.starved_juv), (0, 0));
+    add(&mut w, 500.0, 0.4, 0.01, |_| {});
+    w.run(50);
+    assert_eq!((w.creatures.slots.count(), w.stats.starved_juv), (0, 1));
+    assert_eq!(w.stat(tidepool_sim::stats::STAT_STARVED_JUV), 1.0);
+}
+
 #[test]
 fn a_fed_juvenile_grows_to_adult_and_growth_costs_energy() {
     let mut w = empty();
@@ -173,7 +215,7 @@ fn parts_cost_upkeep() {
     let ticks_alive = |chemo: f32| {
         let mut w = empty();
         still(&mut w);
-        add(&mut w, 500.0, 1.0, 0.5, |g| g.chemo = chemo);
+        add(&mut w, 500.0, 1.0, 0.5, |g| g.set_size(KIND_CHEMO, chemo));
         let mut t = 0;
         while w.creatures.slots.count() == 1 && t < 5000 {
             w.tick();
@@ -220,7 +262,7 @@ fn energy_never_passes_capacity() {
     w.run(1500);
     for s in 0..w.creatures.slots.high_water() as usize {
         if w.creatures.slots.is_alive(s as u32) {
-            let cap = w.params.get(id::ENERGY_PER_MASS) * w.creatures.mass(s);
+            let cap = w.params.get(id::ENERGY_PER_MASS) * w.creatures.area(s);
             assert!(w.creatures.energy[s] <= cap + 1e-3 && w.creatures.energy[s] > 0.0);
         }
     }
