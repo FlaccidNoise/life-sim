@@ -307,6 +307,10 @@ tick.
 |---|---|---|---|---|---|
 | 2026-10-10 | 8 (M0) | Chrome, Apple M4 Pro | 1,500 drifters, no plants, no brains | 17,197 | 1.4 s |
 | 2026-10-10 | 16, bench on the settled world | Chrome, Apple M4 Pro | The default world after 12,000 ticks, 1,537 creatures | 3,961 | 6.1 s |
+| 2026-10-11 | 20 (M1 exit), owner's reading | The owner's MacBook, dev server. Browser and model not stated | The default world after 12,000 ticks, 1,537 creatures | 4,157 | 5.8 s |
+
+The owner's row reads like the reference machine (3,961 and 4,004 there), so it is not the mid-range
+laptop reading that `architecture.md` §13 still lacks. No phone reading exists yet.
 
 The M0 row: four more loads on the same day read 16,207 to 17,212. The same module in Node read about
 16,300 for 2,000 ticks, so the browser cost nothing over Node there.
