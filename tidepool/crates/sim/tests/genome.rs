@@ -178,7 +178,11 @@ fn express_is_safe_for_any_genome() {
     }
     g.parts.truncate(MAX_PART_GENES);
     let s = w.spawn(g, at(10.0)).expect("slot") as usize;
-    assert!(w.creatures.n_eyes[s] as usize <= MAX_EYES);
+    let c = &w.creatures;
+    assert!(c.n_eyes[s] as usize <= MAX_EYES);
+    let sums = [c.plain_sum[s], c.eye_sum[s], c.flag_push[s], c.flag_side[s]];
+    assert!(sums.iter().all(|v| v.is_finite()), "{sums:?}");
+    assert!(c.mass(s, 0.3, 1.0).is_finite());
     w.run(5); // must not panic
 }
 

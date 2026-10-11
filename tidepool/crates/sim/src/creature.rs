@@ -149,36 +149,48 @@ fn scatter<T>(live: &[u32], values: Vec<T>, a: &mut [T]) -> Result<(), LoadError
 impl Creatures {
     /// Sets every expressed array of the slot from the genome. Never panics, for any genome. Eye
     /// cones past `MAX_EYES` are not made, and their genes still count in `eye_sum`.
+    ///
+    /// A loaded genome can hold any float. A part value that is not finite counts as 0, and each
+    /// one is held in 0 to 1, so every sum here is finite. `Genome::part_sum` counts a size the
+    /// same way.
     pub fn express(&mut self, s: usize, g: &Genome) {
         (self.len[s], self.wid[s], self.hue[s]) = (g.len, g.wid, g.hue);
         (self.egg[s], self.old[s]) = (g.egg, g.old);
+        let unit = |v: f32| {
+            if v.is_finite() {
+                v.clamp(0.0, 1.0)
+            } else {
+                0.0
+            }
+        };
         let (mut flag_push, mut flag_side) = (0.0, 0.0);
         let (mut cilia, mut fin, mut filter, mut chemo) = (0.0, 0.0, 0.0, 0.0);
         let (mut plain_sum, mut eye_sum, mut cones) = (0.0, 0.0, 0);
         for part in &g.parts {
+            let (anchor, size, extra) = (unit(part.anchor), unit(part.size), unit(part.extra));
             if part.kind != KIND_EYE {
-                plain_sum += part.size;
+                plain_sum += size;
             }
             match part.kind {
                 KIND_FLAGELLUM => {
-                    flag_push += part.size * push_of(part.anchor);
-                    flag_side += part.size * side_of(part.anchor);
+                    flag_push += size * push_of(anchor);
+                    flag_side += size * side_of(anchor);
                 }
-                KIND_CILIA => cilia += part.size,
-                KIND_FIN => fin += part.size,
-                KIND_FILTER => filter += part.size,
-                KIND_CHEMO => chemo += part.size,
+                KIND_CILIA => cilia += size,
+                KIND_FIN => fin += size,
+                KIND_FILTER => filter += size,
+                KIND_CHEMO => chemo += size,
                 KIND_EYE => {
-                    eye_sum += part.size;
-                    let (dir, half) = (part.anchor * PI, EYE_HALF_MIN + EYE_HALF_SPAN * part.extra);
+                    eye_sum += size;
+                    let (dir, half) = (anchor * PI, EYE_HALF_MIN + EYE_HALF_SPAN * extra);
                     // An eye on the midline is one cone. Any other eye is a pair.
-                    let midline = part.anchor == 0.0 || part.anchor == 1.0;
+                    let midline = anchor == 0.0 || anchor == 1.0;
                     for dir in [dir, -dir].into_iter().take(if midline { 1 } else { 2 }) {
                         if cones < MAX_EYES {
                             let k = s * MAX_EYES + cones;
                             self.eye_dir[k] = dir;
                             self.eye_cos[k] = sin_cos(half).1;
-                            self.eye_size[k] = part.size;
+                            self.eye_size[k] = size;
                             cones += 1;
                         }
                     }

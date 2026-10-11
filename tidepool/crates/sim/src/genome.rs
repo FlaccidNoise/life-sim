@@ -281,11 +281,19 @@ impl Genome {
         g
     }
 
-    /// The sum over the parts of that kind.
+    /// The sum over the parts of that kind. A size that is not finite counts as 0, and a size is
+    /// held in 0 to 1, as in `Creatures::express`.
     pub fn size_of(&self, kind: u8) -> f32 {
+        let unit = |v: f32| {
+            if v.is_finite() {
+                v.clamp(0.0, 1.0)
+            } else {
+                0.0
+            }
+        };
         let of_kind = self.parts.iter().filter(|part| part.kind == kind);
         // A fold from 0, because the sum of no floats is -0.
-        of_kind.fold(0.0, |sum, part| sum + part.size)
+        of_kind.fold(0.0, |sum, part| sum + unit(part.size))
     }
 
     /// Sets the first part of the kind. With none, adds one at the founder anchor of the kind, with
@@ -313,14 +321,22 @@ impl Genome {
     }
 
     /// The sizes of every part that is not an eye, summed in gene order, plus `eye_cost` times the
-    /// sizes of the eyes.
+    /// sizes of the eyes. A size that is not finite counts as 0, and a size is held in 0 to 1, as in
+    /// `Creatures::express`. So the sum is finite for any genome that `load` lets in.
     pub fn part_sum(&self, eye_cost: f32) -> f32 {
+        let unit = |v: f32| {
+            if v.is_finite() {
+                v.clamp(0.0, 1.0)
+            } else {
+                0.0
+            }
+        };
         let (mut plain, mut eyes) = (0.0, 0.0);
         for part in &self.parts {
             if part.kind == KIND_EYE {
-                eyes += part.size;
+                eyes += unit(part.size);
             } else {
-                plain += part.size;
+                plain += unit(part.size);
             }
         }
         plain + eye_cost * eyes

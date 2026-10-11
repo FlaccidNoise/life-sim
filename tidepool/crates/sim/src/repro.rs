@@ -7,6 +7,7 @@
 
 use crate::creature::heft;
 use crate::genome::Genome;
+use crate::math::sin_cos;
 use crate::params::id;
 use crate::snapshot::{LoadError, Reader, Writer};
 use crate::world::{SpawnAt, World};
@@ -14,11 +15,16 @@ use crate::world::{SpawnAt, World};
 /// How far a newborn's heading spreads from its parent's, in radians per unit of `gauss`. A brood
 /// that all faced one way would swim off as one body.
 const HEADING_JITTER: f32 = 0.5;
+/// The angle between two neighbours of a brood, in radians about the centre of the parent. The
+/// motor does not push two bodies that sit on one point, so each child gets its own place. With
+/// the largest `brood_max` the last child sits at 4 steps, which is short of half a turn.
+const BROOD_FAN: f32 = 0.7;
 
 /// Each live creature in slot order counts down its cooldown, or buds if it is a fed adult and
 /// can pay. One bud makes up to `brood_max` children and stops at the first one that the parent
-/// cannot pay for. The births are applied after the loop, in the slot order of the parents, so a
-/// newborn does not bud on the tick of its birth.
+/// cannot pay for. The first child is born behind the parent. The others fan out around the rear
+/// at the same distance, to one side and then to the other. The births are applied after the
+/// loop, in the slot order of the parents, so a newborn does not bud on the tick of its birth.
 pub fn step(world: &mut World) {
     let p = &world.params;
     let (bud_at, cooldown) = (p.get(id::BUD_AT), p.get(id::BUD_COOLDOWN) as u32);
@@ -47,7 +53,7 @@ pub fn step(world: &mut World) {
             continue;
         }
         let egg = c.egg[s];
-        for _ in 0..brood_max {
+        for i in 0..brood_max {
             if births.len() >= room {
                 break;
             }
@@ -55,13 +61,7 @@ pub fn step(world: &mut World) {
             let child = world.genomes[s].mutated(&mut world.rng_mutate, p, &mut world.next_history);
             let (length, width) = (child.len * egg, child.len * child.wid * egg);
             let area = length * width;
-            // With `part_mass` at 0 a part weighs nothing, whatever its size. The product of 0 and
-            // a wild size is NaN.
-            let mass = if part_mass > 0.0 {
-                area * heft(child.part_sum(eye_cost), part_mass)
-            } else {
-                area
-            };
+            let mass = area * heft(child.part_sum(eye_cost), part_mass);
             let cost = build_cost * mass + child_energy * per_mass * area;
             // A loaded genome can hold any size and any egg. A child of negative mass would pay
             // its parent, and two negative sides make a positive area. Every test is false for NaN.
@@ -77,11 +77,20 @@ pub fn step(world: &mut World) {
                 // A snapshot can hold any count.
                 held.buds = held.buds.saturating_add(1);
             }
-            // Behind the parent, with the two bodies just touching.
+            // Behind the parent, with the two bodies just touching. Child 0 is straight behind,
+            // by the heading as it is. A later child is turned `BROOD_FAN` more with each pair: the
+            // odd ones to one side and the even ones to the other.
             let behind = c.radius(s) + (length + width) / 4.0;
+            let (hc, hs) = if i == 0 {
+                (c.hc[s], c.hs[s])
+            } else {
+                let turn = BROOD_FAN * i.div_ceil(2) as f32;
+                let (sin, cos) = sin_cos(if i % 2 == 1 { turn } else { -turn });
+                (c.hc[s] * cos - c.hs[s] * sin, c.hs[s] * cos + c.hc[s] * sin)
+            };
             let at = SpawnAt {
-                x: c.x[s] - c.hc[s] * behind,
-                y: c.y[s] - c.hs[s] * behind,
+                x: c.x[s] - hc * behind,
+                y: c.y[s] - hs * behind,
                 heading: c.heading[s] + world.rng_mutate.gauss() * HEADING_JITTER,
                 growth: egg,
                 energy01: child_energy,
