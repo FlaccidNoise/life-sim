@@ -9,6 +9,13 @@ read numbers from `window.__tidepool` and from screenshots. An agent cannot feel
 question below has the numbers that bear on it. Each felt judgment says "not judged: needs a person".
 The owner plays the game at the M1 exit and gives those judgments.
 
+## Owner play check, 2026-10-11
+
+The owner played the dev build on a MacBook with no instructions. Swimming and steering "felt good".
+The owner did not answer the four questions below one by one, so each felt judgment still reads "not
+judged". Scent is not drawn, so the first question cannot be judged by anyone yet.
+`m1-exit.md` has the rest of that session.
+
 ## Setup
 
 - Apple M4 Pro, Chrome, a 120 Hz display, the Vite dev server (not a production build).

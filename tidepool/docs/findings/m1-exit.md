@@ -177,3 +177,24 @@ These need the owner and were not done by an agent:
    feel record flags first: the body turns about 20 degrees more after a turn key comes up, and a body
    that pushes through a crowd loses about half of its speed.
 3. Say whether you could swim, eat, bud, die, and continue as a descendant.
+
+## Owner play check, 2026-10-11
+
+The owner played the dev build on a MacBook, with no instructions.
+
+| Step | Result |
+|---|---|
+| Swim | Done. "It felt good." |
+| Eat | Not reported |
+| Bud | **Not done.** The owner did not see a bud and was not sure whether there was something to press |
+| Die | Done |
+| Continue as a descendant | **Not done.** No heir was offered |
+
+**The first half of the M1 exit is not met.** A person swam and died and could not continue as a
+descendant. The owner could not tell whether a bud needs an action. It needs none: a fed adult buds by
+itself at `bud_at`. This is confusion 4 of "Played as a stranger" seen by a person, and it agrees with
+the audit's 26% to 36% (finding F5). The M2 plan carries both: a bud that the player can see, and a
+measured target for how often a death has an heir.
+
+Still open: the `?bench` line from a phone and from a mid-range laptop, and the four felt judgments of
+`m1-feel.md` one by one. The owner gave one judgment for steering as a whole: it felt good.

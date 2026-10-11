@@ -41,6 +41,11 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
   `plant_seed_range`, each read at 36,000 ticks against a sense-off pair. If the two trials do not close
   the gap, the fallback is a rule: a bite cannot take a plant under `plant_death_reserve`.
   → `../findings/m1-exit.md` problem 2, `../findings/m1-audit.md` finding F2
+- 2026-10-11: **Possessing a creature also marks its living descendants.** A child born before the
+  player took the body is an heir. `possess` scans the stored parent uid once, through living parents
+  only. A descendant behind a dead parent is missed until M5 builds the lineage tree. A body the player
+  left stays an heir, and the heirs of a death stay every marked creature. Built in M2.
+  → `../design.md` §5.6, `../findings/m1-audit.md` finding F5
 
 ## Architecture
 
