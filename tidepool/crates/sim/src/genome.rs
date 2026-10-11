@@ -111,6 +111,29 @@ fn nudged(v: f32, rng: &mut Rng, rate: f32, step: f32, (lo, hi): (f32, f32)) -> 
     }
 }
 
+/// True with chance `rate`. A rate of 0 makes no draw.
+fn chance(rng: &mut Rng, rate: f32) -> bool {
+    rate > 0.0 && rng.unit() < rate
+}
+
+/// The id for a new gene. The counter rises. A snapshot can hold any counter, so it stops at the
+/// top.
+fn new_history(next_history: &mut u32) -> u32 {
+    let history = *next_history;
+    *next_history = history.saturating_add(1);
+    history
+}
+
+/// A part size as the sums count it: one that is not finite counts as 0, and a size is held in 0
+/// to 1, as in `Creatures::express`.
+fn unit(v: f32) -> f32 {
+    if v.is_finite() {
+        v.clamp(0.0, 1.0)
+    } else {
+        0.0
+    }
+}
+
 /// The size range of a kind. A kind outside `1..=KINDS` has no size.
 fn size_range(kind: u8) -> (f32, f32) {
     SIZE_RANGE.get(kind as usize).copied().unwrap_or((0.0, 0.0))
@@ -249,12 +272,29 @@ impl Genome {
     /// Hue: add gauss * hue_sigma, wrap into [0, 1).
     /// Each brain weight, bias: with chance mut_weight_rate, add gauss * mut_weight_sigma.
     /// Each alpha: with chance mut_weight_rate, add gauss * 0.1, clamp to [0.05, 1].
-    /// Weights and biases are clamped to [-8, 8]. Structure and history ids do not change yet, so
-    /// `next_history` is not read.
+    /// Weights and biases are clamped to [-8, 8]. The structure of the brain does not change yet.
     ///
     /// Draws in this order: len, wid, each part size in gene order, the hue, the weights, the
     /// biases, the alphas. That is the M1 order.
-    pub fn mutated(&self, rng: &mut Rng, p: &Params, _next_history: &mut u32) -> Genome {
+    ///
+    /// Five M2 groups follow, in this order. A group whose rate is 0 makes no draw, so with every
+    /// M2 rate at 0 the draws are the M1 draws.
+    /// 1. Shape. Each part in gene order, its anchor and then, for an eye, its `extra`: with chance
+    ///    mut_shape_rate, add gauss * mut_sigma, clamp to [0, 1].
+    /// 2. Life. `egg`, then `old`: with chance mut_life_rate, add gauss * mut_sigma * (max - min),
+    ///    clamp.
+    /// 3. Remove. With chance mut_part_remove, one part chosen evenly is lost.
+    /// 4. Duplicate. With chance mut_part_dup, and with room, one part chosen evenly is copied to
+    ///    the end. The anchor of the copy gets gauss * mut_sigma and a clamp to [0, 1]. Its id is
+    ///    `*next_history`, and the counter rises.
+    /// 5. Add. With chance mut_part_add, and with room, a new part goes on the end: a kind chosen
+    ///    evenly, then an anchor in [0, 1), then an `extra` in [0, 1). Its size is part_new_size,
+    ///    held in the range of its kind. Its id is `*next_history`, and the counter rises.
+    ///
+    /// In groups 3 to 5 the draw of the chance comes first. The other draws are made only if the
+    /// mutation happens: a list with no part loses none and copies none, and a full list takes
+    /// none.
+    pub fn mutated(&self, rng: &mut Rng, p: &Params, next_history: &mut u32) -> Genome {
         let mut g = self.clone();
         let (rate, sigma) = (p.get(id::MUT_RATE), p.get(id::MUT_SIGMA));
         let mut body =
@@ -278,19 +318,51 @@ impl Genome {
         for alpha in &mut g.brain.alpha {
             *alpha = nudged(*alpha, rng, rate, ALPHA_SIGMA, ALPHA_RANGE);
         }
+
+        let sigma = p.get(id::MUT_SIGMA);
+        let rate = p.get(id::MUT_SHAPE_RATE);
+        if rate > 0.0 {
+            for part in &mut g.parts {
+                part.anchor = nudged(part.anchor, rng, rate, sigma, (0.0, 1.0));
+                if part.kind == KIND_EYE {
+                    part.extra = nudged(part.extra, rng, rate, sigma, (0.0, 1.0));
+                }
+            }
+        }
+        let rate = p.get(id::MUT_LIFE_RATE);
+        if rate > 0.0 {
+            for (gene, (lo, hi)) in [(&mut g.egg, EGG_RANGE), (&mut g.old, OLD_RANGE)] {
+                *gene = nudged(*gene, rng, rate, sigma * (hi - lo), (lo, hi));
+            }
+        }
+        if chance(rng, p.get(id::MUT_PART_REMOVE)) && !g.parts.is_empty() {
+            g.parts.remove(rng.below(g.parts.len() as u32) as usize);
+        }
+        let count = g.parts.len();
+        if chance(rng, p.get(id::MUT_PART_DUP)) && (1..MAX_PART_GENES).contains(&count) {
+            let mut copy = g.parts[rng.below(count as u32) as usize].clone();
+            copy.anchor = (copy.anchor + rng.gauss() * sigma).clamp(0.0, 1.0);
+            copy.history = new_history(next_history);
+            g.parts.push(copy);
+        }
+        if chance(rng, p.get(id::MUT_PART_ADD)) && g.parts.len() < MAX_PART_GENES {
+            let kind = 1 + rng.below(KINDS as u32) as u8;
+            let (lo, hi) = size_range(kind);
+            let (anchor, extra) = (rng.unit(), rng.unit());
+            g.parts.push(PartGene {
+                kind,
+                anchor,
+                size: p.get(id::PART_NEW_SIZE).clamp(lo, hi),
+                extra,
+                history: new_history(next_history),
+            });
+        }
         g
     }
 
     /// The sum over the parts of that kind. A size that is not finite counts as 0, and a size is
     /// held in 0 to 1, as in `Creatures::express`.
     pub fn size_of(&self, kind: u8) -> f32 {
-        let unit = |v: f32| {
-            if v.is_finite() {
-                v.clamp(0.0, 1.0)
-            } else {
-                0.0
-            }
-        };
         let of_kind = self.parts.iter().filter(|part| part.kind == kind);
         // A fold from 0, because the sum of no floats is -0.
         of_kind.fold(0.0, |sum, part| sum + unit(part.size))
@@ -324,13 +396,6 @@ impl Genome {
     /// sizes of the eyes. A size that is not finite counts as 0, and a size is held in 0 to 1, as in
     /// `Creatures::express`. So the sum is finite for any genome that `load` lets in.
     pub fn part_sum(&self, eye_cost: f32) -> f32 {
-        let unit = |v: f32| {
-            if v.is_finite() {
-                v.clamp(0.0, 1.0)
-            } else {
-                0.0
-            }
-        };
         let (mut plain, mut eyes) = (0.0, 0.0);
         for part in &self.parts {
             if part.kind == KIND_EYE {
