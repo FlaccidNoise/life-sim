@@ -23,7 +23,7 @@ one before it ships, because what is learned from playing a milestone changes th
 
 ## Milestones
 
-### M0 — Foundation
+### M0 — Foundation (done 2026-10-10)
 
 The empty game, wired end to end.
 
@@ -39,7 +39,10 @@ The empty game, wired end to end.
 Exit: open the page, see moving dots at 60 fps, with the sim in a worker. `make check` is green and each
 gate has been seen to fail on a bad input.
 
-### M1 — First swim
+### M1 — First swim (built 2026-10-10, owner check open)
+
+Status: every gate passes and a fresh-context audit found nothing that blocks the exit. The first half of
+the exit line below needs a person and is not done. `findings/m1-exit.md` has the record.
 
 The smallest world you can live in.
 

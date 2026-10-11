@@ -14,10 +14,11 @@ creature among creatures that each run an evolved neural network. It shares no c
 
 ## Status
 
-M0 (foundation) is built: the Rust core, the C ABI, the worker host, the WebGL2 page, `make check`,
-`make gates`, and a CI workflow. The CI workflow has not run yet, because nothing is pushed. The M1
-simulation and page are built. The M1 exit audit is next: Task 20 of
-`docs/plans/2026-10-10-m0-m1-first-swim.md`.
+M0 (foundation) and M1 (first swim) are built and audited. `make check` and `make gates` exit 0. The
+CI workflow has not run yet, because nothing is pushed. What remains of M1 is the owner's part of the
+exit: the play check and the `?bench` readings on a phone and a laptop. `docs/findings/m1-exit.md`
+lists them, with the open problems and the five rule questions that the owner decides. The next plan
+is M2 (Bodies). It is not written yet: it is written from what M1 measured.
 
 ## Commands
 
