@@ -302,7 +302,7 @@ fn a_fin_turns_only_at_speed_and_cuts_the_slip() {
     assert_eq!(at_rest(true), at_rest(false));
 
     // With the default `fin_grip` of 0.3 the turn that this fin adds outruns its grip: the slip
-    // rises from 0.176 to 0.217. At 0.6 the grip wins.
+    // rises from 0.176 to 0.215. At 0.6 the grip wins.
     let at_speed = |fin: bool| {
         let (mut w, s) = body(fin);
         w.params.set(id::FIN_GRIP, 0.6);
