@@ -18,8 +18,7 @@ M0 (foundation) and M1 (first swim) are built, audited, and pushed. `make check`
 and CI has passed on `main`. One half of the M1 exit is not met: the owner swam and died and could not
 continue as a descendant (`docs/findings/m1-exit.md`). The owner decided the five rule questions on
 2026-10-11 (`docs/decisions/INDEX.md`). The plan for M2 (Bodies) is
-`docs/plans/2026-10-11-m2-bodies.md`. **It is a draft until the owner approves it. Build nothing from it
-before that.**
+`docs/plans/2026-10-11-m2-bodies.md`. The owner approved it on 2026-10-11 and the build follows it.
 
 ## Commands
 
