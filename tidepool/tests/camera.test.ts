@@ -1,11 +1,50 @@
 import { expect, test } from 'vitest';
-import { clampToWorld, fitWorld, follow, screenToWorld, viewRect, zoomAt } from '../src/app/camera';
+import {
+  clampToWorld,
+  fitWorld,
+  follow,
+  isFitted,
+  pan,
+  screenToWorld,
+  viewRect,
+  zoomAt,
+} from '../src/app/camera';
 
 test('fitWorld centres the world and fits the tighter axis', () => {
   // A 1536 x 1024 world on a 768 x 1024 screen: the width is the limit.
   expect(fitWorld(1536, 1024, 768, 1024)).toEqual({ x: 768, y: 512, scale: 0.5 });
   // On a 3072 x 1024 screen the height is the limit.
   expect(fitWorld(1536, 1024, 3072, 1024)).toEqual({ x: 768, y: 512, scale: 1 });
+});
+
+test('fitWorld stays inside the scale limits', () => {
+  expect(fitWorld(1536, 1024, 300, 300)).toEqual({ x: 768, y: 512, scale: 0.4 });
+  expect(fitWorld(10, 10, 1000, 1000).scale).toBe(12);
+});
+
+test('a camera is fitted until a zoom or a pan changes what the screen shows', () => {
+  const [w, h, cssW, cssH] = [1536, 1024, 614, 800];
+  const inWorld = (cam: { x: number; y: number; scale: number }) =>
+    clampToWorld(cam, w, h, cssW, cssH);
+  const fit = fitWorld(w, h, cssW, cssH);
+  expect(isFitted(fit, w, h, cssW, cssH)).toBe(true);
+  // The screen shows more than the height of the world, so the limits undo a pan up or down.
+  expect(isFitted(inWorld(pan(fit, 0, 50)), w, h, cssW, cssH)).toBe(true);
+  expect(isFitted(inWorld(zoomAt(fit, cssW, cssH, 0, 0, 0.5)), w, h, cssW, cssH)).toBe(true);
+
+  expect(isFitted(inWorld(zoomAt(fit, cssW, cssH, 307, 400, 2)), w, h, cssW, cssH)).toBe(false);
+  expect(isFitted(inWorld(pan(fit, 50, 0)), w, h, cssW, cssH)).toBe(false);
+  // The fitted camera of another screen size is not the fitted camera of this one.
+  expect(isFitted(fitWorld(w, h, 1280, 800), w, h, cssW, cssH)).toBe(false);
+});
+
+test('a page opened in a small window fills a larger one after a resize', () => {
+  // Opened 614 pixels wide: the world is drawn at the lowest scale, 614 pixels wide.
+  const small = fitWorld(1536, 1024, 614, 800);
+  expect(small.scale).toBe(0.4);
+  expect(isFitted(small, 1536, 1024, 614, 800)).toBe(true);
+  // So the resize to 1280 pixels fits the world again: it is drawn 1,200 pixels wide.
+  expect(fitWorld(1536, 1024, 1280, 800).scale * 1536).toBeCloseTo(1200, 6);
 });
 
 test('viewRect of a fitted camera holds the whole world', () => {

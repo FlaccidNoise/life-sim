@@ -15,10 +15,12 @@ pub fn bench(args: &[String]) {
     let (mut creatures, mut plants) = FOUNDERS;
     let (mut settle, mut ticks, mut runs) = (12000u32, 2000u32, 5u32);
     let (mut w, mut h) = WORLD;
+    let mut seed = 1u32;
     let (mut reference, mut floor) = (1500u32, 2400.0f64);
     let mut it = args.iter().map(String::as_str);
     while let Some(flag) = it.next() {
         match flag {
+            "--seed" => seed = value(flag, it.next()),
             "--creatures" => creatures = value(flag, it.next()),
             "--plants" => plants = value(flag, it.next()),
             "--settle" => settle = value(flag, it.next()),
@@ -34,7 +36,7 @@ pub fn bench(args: &[String]) {
         usage("--creatures, --ticks, and --runs need a value above 0");
     }
 
-    let mut world = World::new(1, w, h);
+    let mut world = World::new(seed, w, h);
     world.seed_founders(creatures, plants);
     world.run(settle);
     println!(

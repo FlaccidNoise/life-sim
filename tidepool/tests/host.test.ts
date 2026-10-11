@@ -105,6 +105,92 @@ test('speed 0 pauses', () => {
   expect(r.of('frame').length).toBe(0);
 });
 
+// A corner of the world that holds some of the founders and not all of them.
+const CORNER = { type: 'view', x0: 0, y0: 0, x1: 400, y1: 300 } as const;
+const WHOLE = { type: 'view', x0: 0, y0: 0, x1: P.WORLD_W, y1: P.WORLD_H } as const;
+
+test('a new view while paused by `speed` posts one frame of it, with no tick', () => {
+  const r = rig({ recycle: true });
+  r.host.handle({ type: 'init', seed: 1 });
+  r.host.handle(CORNER);
+  r.advance(100);
+  const before = { tick: r.lastTick(), creatures: frameOf(r).creatureCount };
+  expect(before.creatures).toBeGreaterThan(0);
+  expect(before.creatures).toBeLessThan(P.FOUNDER_CREATURES);
+  r.host.handle({ type: 'speed', ticksPerSecond: 0 });
+  const frames = r.of('frame').length;
+
+  r.host.handle(WHOLE);
+  expect(r.of('frame').length).toBe(frames + 1);
+  expect(frameOf(r).creatureCount).toBe(P.FOUNDER_CREATURES);
+  expect(r.lastTick()).toBe(before.tick);
+  // The pause holds, and the frame is not posted twice.
+  r.advance(1000);
+  expect(r.of('frame').length).toBe(frames + 1);
+});
+
+test('a new view while paused by a death posts one frame of it, with no tick', () => {
+  const m = mortal();
+  const r = rig({ recycle: true, wrap: m.wrap });
+  r.host.handle({ type: 'init', seed: 1 });
+  r.host.handle(CORNER);
+  r.host.handle({ type: 'possess', uid: 7 });
+  m.die(1);
+  r.advance(1000);
+  expect(r.of('died').length).toBe(1);
+  const before = { tick: r.lastTick(), creatures: frameOf(r).creatureCount };
+  expect(before.creatures).toBeLessThan(P.FOUNDER_CREATURES);
+  const frames = r.of('frame').length;
+
+  r.host.handle(WHOLE);
+  expect(r.of('frame').length).toBe(frames + 1);
+  expect(frameOf(r).creatureCount).toBe(P.FOUNDER_CREATURES);
+  expect(r.lastTick()).toBe(before.tick);
+  r.advance(1000);
+  expect(r.of('frame').length).toBe(frames + 1);
+  expect(r.of('died').length).toBe(1);
+});
+
+test('a view equal to the stored one posts nothing while paused', () => {
+  const r = rig({ recycle: true });
+  r.host.handle({ type: 'init', seed: 1 });
+  r.host.handle(CORNER);
+  r.advance(100);
+  r.host.handle({ type: 'speed', ticksPerSecond: 0 });
+  const frames = r.of('frame').length;
+  r.host.handle({ ...CORNER });
+  r.advance(1000);
+  expect(r.of('frame').length).toBe(frames);
+});
+
+test('a new view while paused waits for a buffer and then shows the latest view', () => {
+  const r = rig(); // no buffer comes back
+  r.host.handle({ type: 'init', seed: 1 });
+  r.advance(1000);
+  expect(r.of('frame').length).toBe(P.FRAME_POOL);
+  r.host.handle({ type: 'speed', ticksPerSecond: 0 });
+
+  r.host.handle({ type: 'view', x0: 0, y0: 0, x1: 1, y1: 1 }); // a step of a camera that slides
+  r.host.handle(CORNER);
+  r.advance(1000);
+  expect(r.of('frame').length).toBe(P.FRAME_POOL);
+  expect(r.of('error')).toEqual([]);
+
+  const back = r.of('frame')[0];
+  if (!back) throw new Error('no frame to hand back');
+  r.host.handle({ type: 'recycle', buffer: back.buffer });
+  expect(r.of('frame').length).toBe(P.FRAME_POOL + 1);
+  const shown = frameOf(r);
+  expect(shown.creatureCount).toBeGreaterThan(0);
+  expect(shown.creatureCount).toBeLessThan(P.FOUNDER_CREATURES);
+  expect(shown.tick).toBe(r.of('stats').at(-1)?.tick); // the world as it is, 20 ticks in
+  // A second buffer has no frame to carry.
+  const next = r.of('frame')[1];
+  if (!next) throw new Error('no second frame to hand back');
+  r.host.handle({ type: 'recycle', buffer: next.buffer });
+  expect(r.of('frame').length).toBe(P.FRAME_POOL + 1);
+});
+
 test('a long stall runs at most 5 ticks and drops the rest', () => {
   const r = rig({ recycle: true });
   r.host.handle({ type: 'init', seed: 1 });
@@ -388,7 +474,7 @@ test('a death cause that this build does not know is an error, not a silent paus
   expect(r.of('error')[0]?.message).toContain('death cause 9');
 });
 
-test('death pauses the world, posts the cause and heirs, and possessing an heir resumes', () => {
+test('a death by the rules of the core pauses the world, and `speed` resumes it', () => {
   const r = rig({ recycle: true });
   r.host.handle({ type: 'init', seed: 1 });
   const idx = (name: string) => {

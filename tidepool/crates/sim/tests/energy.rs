@@ -184,6 +184,35 @@ fn parts_cost_upkeep() {
     assert!(ticks_alive(0.0) > ticks_alive(1.0) + 20);
 }
 
+/// Two worlds with the same lone adult and no plants. The player holds full thrust in one and no
+/// thrust in the other, so the two bodies differ only in what the thrust costs.
+#[test]
+fn thrust_costs_energy() {
+    const TICKS: u32 = 100;
+    let energy_after = |thrust: f32| {
+        let mut w = empty();
+        let c = add(&mut w, 500.0, 1.0, 0.9, |_| {});
+        assert!(w.possess(w.creatures.uid[c]));
+        w.input(true, thrust, 0.0);
+        w.run(TICKS);
+        (w.creatures.energy[c], w.creatures.x[c])
+    };
+    let ((coasting, stayed), (thrusting, swam)) = (energy_after(0.0), energy_after(1.0));
+    assert!(swam > stayed + 50.0, "full thrust did not move the body");
+
+    let w = empty();
+    let p = &w.params;
+    // The body of `add`: flagellum 0.6, cilia 0.4, and an adult length of 12.
+    let drive = p.get(id::FLAG_FORCE) * 0.6 + p.get(id::CILIA_FORCE) * 0.4;
+    let cost = p.get(id::MOVE_COST) * drive * 12.0 * TICKS as f32;
+    assert!(cost > 1.0, "the expected cost {cost} is too small to test");
+    assert!(
+        (coasting - thrusting - cost).abs() < 1e-2,
+        "thrust cost {}, expected {cost}",
+        coasting - thrusting
+    );
+}
+
 #[test]
 fn energy_never_passes_capacity() {
     let mut w = World::new(2, 1536.0, 1024.0);

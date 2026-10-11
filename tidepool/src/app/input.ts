@@ -96,6 +96,18 @@ export function inputToSend(sent: Steer | null, next: Steer): Steer | null {
   return same ? null : next;
 }
 
+/**
+ * What a `possessed` message with uid 0 tells the player. The worker posts one when a pick finds
+ * nothing, when an heir is dead before the pick reaches it, and as the answer to every `release`. A
+ * `release` can cross a death and arrive while the death overlay is open: it is not a failed pick.
+ */
+export function emptyAnswer(
+  heirPickWaiting: boolean,
+  clickWaiting: boolean,
+): 'heir gone' | 'nothing there' | null {
+  return heirPickWaiting ? 'heir gone' : clickWaiting ? 'nothing there' : null;
+}
+
 /** The possessed creature as the renderer draws it. */
 export interface Body {
   uid: number;

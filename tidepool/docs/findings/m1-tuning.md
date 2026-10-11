@@ -412,11 +412,25 @@ Each line says which of the three claims it makes: the mechanism fires, evolutio
 5. **`mean_chemo` did not fall. Evolution keeps it, on these seeds.** At tick 12,000 it is 0.50 to
    0.57 on seeds 1 to 3 and 0.37 to 0.53 on seeds 4 to 10. At tick 72,000 it is 0.60 to 0.63. That
    does not show that the sense helps: no run without it was made.
+
+   *Added 2026-10-10, after the M1 audit.* The audit made that run (`m1-audit.md`, findings F2 and
+   F3). With the sense switched off (`chemo_gain=0`) the mean at tick 36,000 is 0.44, 0.48, 0.39 on
+   seeds 1, 2, 3, against 0.55, 0.54, 0.60 with the sense on. So the mean is higher with the sense on,
+   on 3 of 3 seeds. At tick 12,000 it reads 0.47, 0.48, 0.49 with the sense off, against 0.57, 0.50,
+   0.53 with it on, and the gate passes 3 of 3 both ways.
 6. **The world thins over a long run. Measured, cause unknown.** Creatures: 1,148 to 1,477 at tick
    12,000, 780 to 1,013 at tick 36,000, 683 to 817 at tick 72,000. Plants: 1,471 to 1,682, then 776
    to 914, then 701 to 833. The gate still passes at 72,000 ticks. Nothing longer was run on this set.
    One guess, not measured: a patch that loses all of its plants is not seeded again, because
    `plant_seed_range` (48) is shorter than the gap between patches.
+
+   *Added 2026-10-10, after the M1 audit.* The audit ran the same seeds with and without the sense
+   (`m1-audit.md`, finding F2). With the sense switched off (`chemo_gain=0`) the creature count climbs
+   from tick 12,000 to tick 36,000: 1,251, 1,048, 891, then 1,842, 1,489, 1,448. The plants fall less:
+   1,952, 1,818, 1,725, then 1,510, 1,287, 1,254. With the sense on, the same seeds hold 1,013, 874,
+   780 creatures and 914, 844, 776 plants at tick 36,000. So the thinning goes with scent following. The path from scent to a dead plant is the likely one and is not measured. With the
+   sense on, the world levels off and does not collapse: 610, 729, 670 creatures at tick 200,000. What
+   to do about it is a rule question for the owner.
 7. **A richer world is a slower and a less steady world.** At `plant_growth=0.04` (trial 3) the default
    world ran at 2,478 ticks per second near tick 12,000 and held 301 to 492 plants at tick 72,000.
 8. **The bands of the gate allow 3,000 creatures, and the throughput floor does not.** Trial 3 held

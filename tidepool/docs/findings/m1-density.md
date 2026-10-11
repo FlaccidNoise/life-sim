@@ -3,8 +3,12 @@
 Date: 2026-10-10. Task 16 of `docs/plans/2026-10-10-m0-m1-first-swim.md`.
 
 **The rule holds.** The median distance from a creature to its nearest plant is 1.0 to 1.8 of its own
-body lengths, under the limit of about 3 (`design.md` §7.3). It held before the tuning as well, so the
-fertility parameters did not need to change for spacing.
+body lengths, under the limit of about 3. It held before the tuning as well, so the fertility
+parameters did not need to change for spacing.
+
+The limit of about 3 body lengths comes from the build plan (Task 16 of the plan named above).
+`design.md` §7.3 says that local spacing must sit below interaction range, and it names no number.
+The plan read that rule as about 3 body lengths to the nearest plant for M1.
 
 ## Method
 
@@ -36,6 +40,17 @@ half, and the end of the run.
 | 6,000 | 780 | 1,984 | 13.2 | 9.3 | 1.11 | 0.83 | 1.67 |
 | 12,000 | 1,477 | 1,682 | 9.7 | 10.0 | 1.79 | 0.57 | 2.36 |
 
+## Seed 1, the tuned defaults with the sense switched off (`--param chemo_gain=0`)
+
+A control row from the M1 audit (`m1-audit.md`, finding F13). It ran again after the audit and
+printed the same numbers.
+
+| Tick | Creatures | Plants | `nearest_creature` | `nearest_plant` | `nearest_plant_lengths` | `near_plant` | `per_cell` |
+|---|---|---|---|---|---|---|---|
+| 3,000 | 608 | 2,098 | 16.0 | 9.7 | 1.04 | 0.82 | 1.50 |
+| 6,000 | 749 | 2,065 | 13.0 | 9.4 | 1.06 | 0.82 | 1.68 |
+| 12,000 | 1,251 | 1,952 | 11.5 | 9.9 | 1.54 | 0.66 | 2.05 |
+
 ## What the tables show
 
 - The distance to the nearest plant stays near 10 world units from tick 3,000 to tick 12,000.
@@ -55,5 +70,9 @@ half, and the end of the run.
 - One seed. The plan asks for seed 1 only.
 - The probe measures centre to centre. A creature touches a plant from farther than that: its own
   radius plus the radius of the plant.
+- **In a settled world this probe does not show that the brain forages.** With the sense switched
+  off, the share of creatures near a plant is 0.82, 0.82, 0.66 at ticks 3,000, 6,000, 12,000. With the
+  sense on it is 0.87, 0.83, 0.57. A child is born on the patch of its parent, so creatures sit near
+  plants with or without the sense.
 - The probe says where creatures are, not what they eat. The share that touches a plant on a given
   tick was 22% to 44% in a scratch census of this world. That census is not part of the repo.

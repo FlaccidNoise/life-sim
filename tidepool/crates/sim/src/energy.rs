@@ -10,9 +10,6 @@ use crate::plant;
 use crate::snapshot::{LoadError, Reader, Writer};
 use crate::world::World;
 
-/// How far past a body's edge the centre of a plant it touches can be. It is the radius of a
-/// plant at a full reserve, the largest that `plant::radius` gives.
-const PLANT_REACH: f32 = 8.0;
 /// Growth must leave this share of the reserve that starts it, so a step of growth cannot starve
 /// the juvenile that takes it.
 const GROW_FLOOR: f32 = 0.5;
@@ -34,13 +31,15 @@ pub fn contact(world: &mut World) {
         let mut budget = intake_rate * c.filter[s] * c.length(s);
         let mut room = per_mass * c.mass(s) - c.energy[s];
         let mut energy = c.energy[s];
-        let reach = radius + PLANT_REACH;
+        // The centre of a plant that the body touches is at most this far away.
+        let reach = radius + plant::MAX_RADIUS;
         plants
             .grid
             .for_each_in_box(x - reach, y - reach, x + reach, y + reach, |j| {
                 let j = j as usize;
                 let (dx, dy) = (plants.x[j] - x, plants.y[j] - y);
-                let touch = radius + plant::radius(plants.reserve[j], plant_cap).min(PLANT_REACH);
+                let touch =
+                    radius + plant::radius(plants.reserve[j], plant_cap).min(plant::MAX_RADIUS);
                 // Every test is false for NaN, so a body or a plant with a wild value eats and
                 // loses nothing.
                 if budget > 0.0 && room > 0.0 && dx * dx + dy * dy <= touch * touch {
