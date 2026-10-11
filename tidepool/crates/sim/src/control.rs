@@ -22,6 +22,8 @@ pub struct Control {
     pub thrust: f32,
     pub turn: f32,
     pub death_cause: u32,
+    /// Buds of the possessed body since it was possessed.
+    pub buds: u32,
     /// Scratch, not saved. The last list that `write_heirs` made.
     pub heirs: Vec<u32>,
 }
@@ -55,8 +57,8 @@ impl World {
         best
     }
 
-    /// Sets the lineage mark on the creature and clears `death_cause`. The new body starts with
-    /// its brain driving. False if the uid is not alive.
+    /// Sets the lineage mark on the creature and clears `death_cause` and `buds`. The new body
+    /// starts with its brain driving. False if the uid is not alive.
     pub fn possess(&mut self, uid: u32) -> bool {
         let Some(slot) = self.slot_of(uid) else {
             return false;
@@ -65,6 +67,7 @@ impl World {
         self.control.possessed = uid;
         self.control.possessed_slot = slot;
         self.control.death_cause = CAUSE_NONE;
+        self.control.buds = 0;
         self.input(false, 0.0, 0.0);
         true
     }
@@ -128,6 +131,7 @@ pub fn save(world: &World, w: &mut Writer) {
     w.f32(c.thrust);
     w.f32(c.turn);
     w.u32(c.death_cause);
+    w.u32(c.buds);
 }
 
 /// A possessed uid must be alive. The input must be what `World::input` could have stored.
@@ -152,6 +156,7 @@ pub fn load(world: &mut World, r: &mut Reader) -> Result<(), LoadError> {
     if death_cause > CAUSE_OLD_AGE {
         return Err(LoadError::Invalid("death cause"));
     }
+    let buds = r.u32()?;
     world.control = Control {
         possessed,
         possessed_slot,
@@ -159,6 +164,7 @@ pub fn load(world: &mut World, r: &mut Reader) -> Result<(), LoadError> {
         thrust,
         turn,
         death_cause,
+        buds,
         heirs: Vec::new(),
     };
     Ok(())

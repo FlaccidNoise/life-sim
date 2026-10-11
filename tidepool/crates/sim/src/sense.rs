@@ -25,8 +25,8 @@ pub fn step(world: &mut World) {
         ..
     } = world;
     let every = params.get(id::THINK_EVERY) as u32;
-    let (lifespan, v_max) = (params.get(id::LIFESPAN), params.get(id::V_MAX));
-    let (per_mass, gain) = (params.get(id::ENERGY_PER_MASS), params.get(id::CHEMO_GAIN));
+    let (v_max, gain) = (params.get(id::V_MAX), params.get(id::CHEMO_GAIN));
+    let per_mass = params.get(id::ENERGY_PER_MASS);
     for s in 0..c.slots.high_water() as usize {
         if !c.slots.is_alive(s as u32) || !thinks(*tick, s, every) {
             continue;
@@ -41,7 +41,7 @@ pub fn step(world: &mut World) {
         let input = brains.inputs_mut(s);
         input[IN_CONST] = 1.0;
         input[IN_ENERGY] = energy01;
-        input[IN_AGE] = c.age[s] as f32 / lifespan;
+        input[IN_AGE] = c.age[s] as f32 / c.old[s];
         input[IN_SPEED] = speed / v_max;
         input[IN_SCENT] = level / (1.0 + level);
         input[IN_GRAD_FWD] = ((gx * hc + gy * hs) * k).clamp(-1.0, 1.0);

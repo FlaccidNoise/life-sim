@@ -63,6 +63,22 @@ fn with_no_growth_nothing_spreads() {
 }
 
 #[test]
+fn a_plant_removed_for_a_low_reserve_is_counted() {
+    let mut w = garden(1);
+    w.params.set(id::PLANT_GROWTH, 0.0);
+    w.params.set(id::PLANT_SEED_CHANCE, 0.0);
+    let before = w.plants.slots.count();
+    let floor = w.params.get(id::PLANT_DEATH_RESERVE);
+    for &s in &live_plants(&w)[..3] {
+        w.plants.reserve[s] = floor / 2.0;
+    }
+    w.run(50);
+    assert_eq!(w.plants.slots.count(), before - 3);
+    assert_eq!(w.stats.plant_deaths, 3);
+    assert_eq!(w.stat(tidepool_sim::stats::STAT_PLANT_DEATHS), 3.0);
+}
+
+#[test]
 fn diffusion_spreads_decays_and_keeps_mass_when_decay_is_one() {
     let mut f = Field::new(1536.0, 1024.0);
     f.deposit(768.0, 512.0, 100.0);

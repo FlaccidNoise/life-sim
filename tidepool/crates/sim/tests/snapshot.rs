@@ -1,8 +1,8 @@
 use tidepool_sim::brain::{MAX_NEURONS, N_IN, N_OUT};
 use tidepool_sim::control::{CAUSE_OLD_AGE, CAUSE_STARVED};
-use tidepool_sim::creature::MAX_CREATURES;
+use tidepool_sim::creature::{MAX_CREATURES, MAX_EYES};
 use tidepool_sim::frame;
-use tidepool_sim::genome::{BrainGenome, ConnGene, Genome};
+use tidepool_sim::genome::{BrainGenome, ConnGene, Genome, KIND_EYE};
 use tidepool_sim::params::{id, Params, DEFS};
 use tidepool_sim::plant::MAX_PLANTS;
 use tidepool_sim::snapshot::{seal, LoadError, Writer, FORMAT_VERSION};
@@ -80,6 +80,44 @@ fn possession_and_a_parameter_survive_a_round_trip() {
     assert_eq!(loaded.creatures.mark[3] & 1, 1);
 }
 
+/// The body arrays are not saved. A load makes them again from the genomes.
+#[test]
+fn a_load_expresses_every_body_again() {
+    let mut w = World::new(9, 1536.0, 1024.0);
+    w.params.set(id::FOUNDER_EYE, 0.2);
+    w.seed_founders(400, 1200);
+    w.run(1500);
+    let loaded = World::load(&w.save()).expect("load");
+    let (a, b) = (&w.creatures, &loaded.creatures);
+    let live = a.slots.high_water() as usize;
+    assert!(a.slots.count() > 400, "no births before the save");
+    for s in (0..live).filter(|&s| a.slots.is_alive(s as u32)) {
+        let floats = |c: &tidepool_sim::creature::Creatures| {
+            [
+                c.len[s],
+                c.wid[s],
+                c.hue[s],
+                c.egg[s],
+                c.old[s],
+                c.flag_push[s],
+                c.flag_side[s],
+                c.cilia[s],
+                c.fin[s],
+                c.filter[s],
+                c.chemo[s],
+                c.plain_sum[s],
+                c.eye_sum[s],
+            ]
+        };
+        assert_eq!(floats(a), floats(b), "slot {s}");
+        assert_eq!((a.n_eyes[s], b.n_eyes[s]), (2, 2), "slot {s}");
+        let eyes = s * MAX_EYES..s * MAX_EYES + 2;
+        assert_eq!(a.eye_dir[eyes.clone()], b.eye_dir[eyes.clone()]);
+        assert_eq!(a.eye_cos[eyes.clone()], b.eye_cos[eyes.clone()]);
+        assert_eq!(a.eye_size[eyes.clone()], b.eye_size[eyes]);
+    }
+}
+
 /// One change to each saved field. Each must change the hash, and the changed world must load back
 /// to the same hash. A field missing from `save` fails the first check. A field that `load` drops
 /// fails the second.
@@ -110,15 +148,19 @@ fn every_saved_field_is_in_the_hash_and_survives_a_load() {
         ("parent", |w| w.creatures.parent[S] = 1),
         ("mark", |w| w.creatures.mark[S] ^= 1),
         ("bud_cooldown", |w| w.creatures.bud_cooldown[S] += 1),
-        ("len", |w| w.creatures.len[S] += 1.0),
-        ("wid", |w| w.creatures.wid[S] += 0.1),
-        ("flagellum", |w| w.creatures.flagellum[S] += 0.1),
-        ("cilia", |w| w.creatures.cilia[S] += 0.1),
-        ("filter", |w| w.creatures.filter[S] += 0.1),
-        ("chemo", |w| w.creatures.chemo[S] += 0.1),
-        ("hue", |w| w.creatures.hue[S] += 0.1),
-        ("genome body", |w| w.genomes[S].chemo += 0.1),
+        ("genome len", |w| w.genomes[S].len += 1.0),
+        ("genome wid", |w| w.genomes[S].wid += 0.1),
+        ("genome egg", |w| w.genomes[S].egg += 0.1),
+        ("genome old", |w| w.genomes[S].old += 1.0),
         ("genome hue", |w| w.genomes[S].hue += 0.1),
+        ("part kind", |w| w.genomes[S].parts[0].kind = KIND_EYE),
+        ("part anchor", |w| w.genomes[S].parts[1].anchor += 0.1),
+        ("part size", |w| w.genomes[S].parts[2].size += 0.1),
+        ("part extra", |w| w.genomes[S].parts[3].extra += 0.1),
+        ("part history", |w| w.genomes[S].parts[3].history += 1),
+        ("part count", |w| {
+            w.genomes[S].parts.pop();
+        }),
         ("genome bias", |w| w.genomes[S].brain.bias[0] += 0.5),
         ("genome alpha", |w| w.genomes[S].brain.alpha[0] = 0.5),
         ("brain activation", |w| {
@@ -136,9 +178,12 @@ fn every_saved_field_is_in_the_hash_and_survives_a_load() {
         ("births", |w| w.stats.births += 1),
         ("deaths", |w| w.stats.deaths += 1),
         ("eaten", |w| w.stats.eaten += 0.5),
+        ("starved_juv", |w| w.stats.starved_juv += 1),
+        ("plant_deaths", |w| w.stats.plant_deaths += 1),
         ("possessed", |w| assert!(w.possess(w.creatures.uid[S]))),
         ("manual input", |w| w.input(true, 0.3, -0.2)),
         ("death cause", |w| w.kill(3, CAUSE_OLD_AGE)),
+        ("buds", |w| w.control.buds += 1),
         ("plant slots", |w| w.plants.slots.free(S as u32)),
         ("plant x", |w| w.plants.x[S] += 1.0),
         ("plant y", |w| w.plants.y[S] += 1.0),
@@ -183,9 +228,8 @@ fn garbage_is_rejected_without_panic() {
 
 /// Bytes before the first length prefix: 5 header words and 3 generators of 2 words each.
 const HEADER_BYTES: usize = 4 * (5 + 3 * 2);
-/// The `f32` creature fields before the integer fields, and after them.
+/// The `f32` creature fields. They come before the integer fields.
 const FLOATS_BEFORE: usize = 10;
-const FLOATS_AFTER: usize = 7;
 
 /// A payload written by hand in the order of `World::save_payload`. A test changes one part.
 struct Crafted {
@@ -195,8 +239,10 @@ struct Crafted {
     params: Vec<f32>,
     live: Vec<u32>,
     uids: Vec<u32>,
-    /// Every `f32` creature field.
+    /// Every `f32` creature field, and the hue of each genome.
     field: Vec<f32>,
+    /// True: every other float of the body of each genome is the value of `field` as well.
+    wild_genome: bool,
     ages: Vec<u32>,
     parents: Vec<u32>,
     /// The brain of every genome.
@@ -231,6 +277,7 @@ impl Crafted {
             live: live.to_vec(),
             uids: (1..=n as u32).collect(),
             field: field.to_vec(),
+            wild_genome: false,
             ages: vec![0; n],
             parents: vec![0; n],
             brain: BrainGenome::default(),
@@ -290,19 +337,29 @@ impl Crafted {
         p.u32s(&self.parents);
         p.u8s(&vec![0; self.field.len()]); // mark
         p.u32s(&vec![0; self.field.len()]); // bud_cooldown
-        for _ in 0..FLOATS_AFTER {
-            p.f32s(&self.field);
-        }
-        let genome = Genome {
-            brain: self.brain.clone(),
-            ..Genome::default()
-        };
-        for _ in &self.live {
+        for i in 0..self.live.len() {
+            // A field of the wrong length has failed the load before a genome is read.
+            let v = self.field.get(i).copied().unwrap_or(0.0);
+            let mut genome = Genome {
+                hue: v,
+                brain: self.brain.clone(),
+                ..Genome::default()
+            };
+            if self.wild_genome {
+                (genome.len, genome.wid, genome.egg, genome.old) = (v, v, v, v);
+                for part in &mut genome.parts {
+                    (part.anchor, part.size, part.extra) = (v, v, v);
+                }
+                // An eye, so that the cones are made from wild values as well.
+                genome.parts[0].kind = KIND_EYE;
+            }
             genome.save(&mut p);
         }
         p.u64(self.births);
         p.u64(0); // deaths
         p.u64(0f64.to_bits()); // eaten
+        p.u64(0); // starved_juv
+        p.u64(0); // plant_deaths
         let neurons = N_IN + self.brain.n_hidden as usize + N_OUT;
         let zeros = vec![0.0; self.live.len() * neurons];
         p.f32s(self.activations.as_ref().unwrap_or(&zeros));
@@ -312,6 +369,7 @@ impl Crafted {
         p.f32(thrust);
         p.f32(turn);
         p.u32(cause);
+        p.u32(0); // buds
         p.u32s(&self.plant_slots);
         p.f32s(&self.plant_place); // x
         p.f32s(&self.plant_place); // y
@@ -797,8 +855,8 @@ fn another_format_version_is_rejected() {
     );
 }
 
-/// `load` does not check creature values. The tick and every read of the world must survive any of
-/// them.
+/// `load` does not check creature values or the floats of a genome. The tick and every read of the
+/// world must survive any of them.
 #[test]
 fn wild_creature_values_load_and_run_without_panic() {
     let wild = [
@@ -811,6 +869,7 @@ fn wild_creature_values_load_and_run_without_panic() {
     ];
     let p = Crafted {
         control: (6, 1, 1.0, 1.0, 0),
+        wild_genome: true,
         ..Crafted::new(&[0, 1, 2, 3, 4, 5], &wild)
     };
     let mut w = p.load().expect("load");
@@ -879,7 +938,8 @@ fn wild_activations_and_scent_under_a_creature_load_and_run_without_panic() {
         brain: brain(1, conns),
         activations: Some(cycle(live.len() * (N_IN + 1 + N_OUT))),
         scent: cycle(SCENT_CELLS),
-        // A body of size 1 pays little upkeep, so each of the 7 lives to its first thought.
+        // An energy of 1 pays the upkeep of the default body for a few ticks, so each of the 7
+        // lives to its first thought.
         ..Crafted::new(&live, &[1.0; 7])
     };
     let mut w = p.load().expect("load");

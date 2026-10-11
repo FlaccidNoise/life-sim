@@ -2,6 +2,7 @@
 
 use std::io::Write;
 
+use tidepool_sim::genome::{KIND_CHEMO, KIND_CILIA, KIND_FILTER, KIND_FLAGELLUM};
 use tidepool_sim::params::id;
 use tidepool_sim::stats::STAT_MAX_GENERATION;
 use tidepool_sim::world::World;
@@ -61,7 +62,7 @@ fn args(args: &[String], seeds: &[u32]) -> Args {
 
 fn default_world(seed: u32, params: &[(usize, f32)]) -> World {
     let mut world = World::new(seed, WORLD.0, WORLD.1);
-    // Before the founders: the fertility map and the founder ages read the parameters.
+    // Before the founders: the fertility map and the founder genomes read the parameters.
     for &(i, x) in params {
         world.params.set(i, x);
     }
@@ -297,8 +298,9 @@ const SKIP_MEASURES: [&str; 7] = [
     "brain_weight",
 ];
 
-/// The mean and the standard deviation over the living of each of `SKIP_MEASURES`. A creature's
-/// brain weight is the mean size of its connection weights.
+/// The mean and the standard deviation over the living of each of `SKIP_MEASURES`. A part measure
+/// is the sum of the sizes of the parts of that kind. A creature's brain weight is the mean size
+/// of its connection weights.
 fn gene_stats(world: &World) -> [(f64, f64); 7] {
     let c = &world.creatures;
     let weight = |s: usize| {
@@ -312,10 +314,10 @@ fn gene_stats(world: &World) -> [(f64, f64); 7] {
             f64::from(match g {
                 0 => c.len[s],
                 1 => c.wid[s],
-                2 => c.flagellum[s],
-                3 => c.cilia[s],
-                4 => c.filter[s],
-                5 => c.chemo[s],
+                2 => world.genomes[s].size_of(KIND_FLAGELLUM),
+                3 => world.genomes[s].size_of(KIND_CILIA),
+                4 => world.genomes[s].size_of(KIND_FILTER),
+                5 => world.genomes[s].size_of(KIND_CHEMO),
                 _ => weight(s),
             })
         };

@@ -153,6 +153,14 @@ project kept the machine at a load average near 5, so these readings are lower b
 | 2026-10-10 | 15 (brains) | The same world. Creatures now follow scent | 144 | VOID | VOID | 2,400 |
 | 2026-10-10 | 16 (tuned defaults) | The same world | 425 | VOID | VOID | 2,400 |
 | 2026-10-10 | 16, bench on the settled world | The default world after 12,000 ticks, seed 1 | 1,539 | 4,381 | 3,757 | 2,400 |
+| 2026-10-11 | After M2 task 2 (the genome is a part list, every M2 rule is off) | The same world. The `settled` line and the mean are the M1 ones | 1,539 | 3,993 | 3,594 | 2,400 |
+
+**The row after M2 task 2 is a lower bound.** Other projects held the machine at a load average near 7
+during that run of `make gates`. Run back to back at that load, 3 runs each and twice over, the native
+bench of the commit before the task read 4,290 and 4,435, and the bench of the task read 4,269 and
+4,339. So the task costs 2% of a tick at most. An earlier run of `make gates`, at a load average above
+20, failed the native floor at 1,531. The bench of the commit before the task read 2,071 and 2,309
+then, so that failure was the machine and not the task.
 
 **The void row after Task 13.** Both benches print `VOID: population fell` and `make gates` exits 2. The
 gate works as built: it refuses to time a world that has emptied. The bench world falls from 1,500

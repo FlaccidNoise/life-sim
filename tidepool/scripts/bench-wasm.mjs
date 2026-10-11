@@ -6,7 +6,7 @@
 import { readFileSync } from 'node:fs';
 
 const USAGE =
-  'usage: node scripts/bench-wasm.mjs [--seed <u32>] [--creatures <u32>] [--plants <u32>] [--world <W>x<H>] [--settle <u32>] [--ticks <u32>] [--runs <u32>] [--reference <u32>] [--floor <n>]';
+  'usage: node scripts/bench-wasm.mjs [--seed <u32>] [--creatures <u32>] [--plants <u32>] [--world <W>x<H>] [--settle <u32>] [--ticks <u32>] [--runs <u32>] [--reference <u32>] [--floor <n>] [--param <name>=<value>]...';
 // Ticks between two population samples. The sample is outside the timed section.
 const CHUNK = 100;
 // A run whose mean alive count is below this share of `--reference` is void.
@@ -36,6 +36,8 @@ let [creatures, plants] = [400, 1200];
 let [w, h] = [1536, 1024];
 let seed = 1;
 let [settle, ticks, runs, reference, floor] = [12000, 2000, 5, 1500, 2400];
+// Each `--param`, as it was written. The module that knows the names is not loaded yet.
+const paramArgs = [];
 const args = process.argv.slice(2);
 for (let i = 0; i < args.length; i += 2) {
   const [flag, v] = [args[i], args[i + 1]];
@@ -47,6 +49,7 @@ for (let i = 0; i < args.length; i += 2) {
   else if (flag === '--runs') runs = u32(flag, v);
   else if (flag === '--reference') reference = u32(flag, v);
   else if (flag === '--floor') floor = float(flag, v);
+  else if (flag === '--param') paramArgs.push(v ?? '');
   else if (flag === '--world') {
     const sides = (v ?? '').split('x');
     if (sides.length !== 2) usage(`${flag} needs a valid value`);
@@ -72,8 +75,32 @@ const x = new WebAssembly.Instance(new WebAssembly.Module(bytes), {}).exports;
 const wasmBytes = (ptr, len) => new Uint8Array(x.memory.buffer, ptr >>> 0, len >>> 0);
 const lastError = () => new TextDecoder().decode(wasmBytes(x.tp_error_ptr(), x.tp_error_len()));
 
+// One `--param name=value`: the parameter's index and the value. An unknown name or a value outside
+// the parameter's range is a usage error.
+const paramNames = Array.from({ length: x.tp_param_count() >>> 0 }, (_, i) =>
+  new TextDecoder().decode(wasmBytes(x.tp_param_name_ptr(i), x.tp_param_name_len(i))),
+);
+const params = paramArgs.map((arg) => {
+  const [name, number, ...rest] = arg.split('=');
+  if (number === undefined || rest.length > 0) {
+    usage('--param needs <name>=<value>, like drag_fwd=0.1');
+  }
+  const i = paramNames.indexOf(name);
+  if (i < 0) usage(`unknown parameter ${name}. Valid names: ${paramNames.join(', ')}`);
+  const value = float('--param', number);
+  const [min, max] = [x.tp_param_min(i), x.tp_param_max(i)];
+  if (!(value >= min && value <= max)) {
+    // The table holds 32-bit floats. 7 digits print one as it was written.
+    const [lo, hi] = [min, max].map((v) => Number(v.toPrecision(7)));
+    usage(`--param ${name}=${number} is outside the range ${lo} to ${hi}`);
+  }
+  return [i, value];
+});
+
 const settled = x.tp_new(seed, w, h);
 if (settled === 0) usage(lastError());
+// Before the founders: the fertility map and the founder genomes read the parameters.
+for (const [i, value] of params) x.tp_param_set(settled, i, value);
 x.tp_seed_founders(settled, creatures, plants);
 x.tp_tick(settled, settle);
 console.log(

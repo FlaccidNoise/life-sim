@@ -141,6 +141,18 @@ export function createHost(deps: HostDeps): Host {
         ? { seed: msg.seed, snapshot: new Uint8Array(msg.snapshot) }
         : { seed: msg.seed },
     );
+    const table = made.params();
+    for (const { name, value } of msg.params ?? []) {
+      const param = table.find((p) => p.name === name);
+      if (!param) {
+        made.free();
+        throw new Error(
+          `no parameter is named ${name}. Fix: use one of ${table.map((p) => p.name).join(', ')}.`,
+        );
+      }
+      made.setParam(param.index, value);
+    }
+    // After the parameters: the fertility map and the founder genomes read them.
     if (!msg.snapshot) made.seedFounders(FOUNDER_CREATURES, FOUNDER_PLANTS);
     sim = made;
     view = { x0: 0, y0: 0, x1: made.worldW, y1: made.worldH };

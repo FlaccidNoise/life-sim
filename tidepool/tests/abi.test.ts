@@ -17,7 +17,80 @@ test('frame layout constants match the module', () => {
   expect(n('tp_frame_header_words')).toBe(P.FRAME_HEADER_WORDS);
   expect(n('tp_frame_creature_stride')).toBe(P.CREATURE_STRIDE);
   expect(n('tp_frame_plant_stride')).toBe(P.PLANT_STRIDE);
+  expect(n('tp_frame_part_words')).toBe(P.PART_WORDS);
+  expect(n('tp_frame_max_eyes')).toBe(P.MAX_EYES);
   expect(n('tp_heir_stride')).toBe(P.HEIR_STRIDE);
+  expect(P.C_PARTS + P.PART_WORDS).toBe(P.CREATURE_STRIDE);
+});
+
+test('a founder record unpacks to its four parts, and to an eye with `founder_eye`', () => {
+  const sim = fresh();
+  const eye = sim.params().find((p) => p.name === 'founder_eye');
+  if (!eye) throw new Error('no parameter founder_eye');
+  const partsOf = (s: typeof sim) => {
+    s.seedFounders(1, 0);
+    const buf = new ArrayBuffer(4 * (P.FRAME_HEADER_WORDS + P.CREATURE_STRIDE));
+    s.writeFrame(0, 0, 1536, 1024, buf);
+    const f = P.viewFrame(buf);
+    const words = f.u32.subarray(f.creatureBase + P.C_PARTS, f.creatureBase + P.CREATURE_STRIDE);
+    return Array.from(words, P.unpackPart);
+  };
+  const plain = partsOf(sim);
+  expect(plain.map((p) => p?.kind ?? 0)).toEqual([
+    P.KIND_FLAGELLUM,
+    P.KIND_CILIA,
+    P.KIND_FILTER,
+    P.KIND_CHEMO,
+    ...Array<number>(8).fill(0),
+  ]);
+  expect(plain[4]).toBeNull();
+  // The flagellum is at the tail, the cilia pair at the middle, and the filter at the nose.
+  expect(plain.slice(0, 3).map((p) => p?.anchor)).toEqual([1, 128 / 255, 0]);
+  for (const part of plain.slice(0, 4)) {
+    expect(part?.size).toBeGreaterThan(0.2);
+    expect(part?.size).toBeLessThan(0.9);
+    expect(part?.extra).toBe(0);
+  }
+
+  const eyed = fresh();
+  eyed.setParam(eye.index, 0.2);
+  const fifth = partsOf(eyed)[4];
+  expect(fifth).toEqual({ kind: P.KIND_EYE, anchor: 51 / 255, size: 51 / 255, extra: 102 / 255 });
+});
+
+test('the frame header holds the lineage count, the buds, and the cones of the possessed body', () => {
+  const sim = fresh();
+  const eye = sim.params().find((p) => p.name === 'founder_eye');
+  if (!eye) throw new Error('no parameter founder_eye');
+  sim.setParam(eye.index, 0.2);
+  sim.seedFounders(300, 0);
+  const buf = new ArrayBuffer(4 * (P.FRAME_HEADER_WORDS + 300 * P.CREATURE_STRIDE));
+  sim.writeFrame(0, 0, 1536, 1024, buf);
+  let f = P.viewFrame(buf);
+  expect([f.lineageAlive, f.buds, f.cones]).toEqual([0, 0, []]);
+
+  for (const uid of [10, 20]) expect(sim.possess(uid)).toBe(true);
+  sim.writeFrame(0, 0, 1536, 1024, buf);
+  f = P.viewFrame(buf);
+  expect([f.lineageAlive, f.buds, f.cones.length]).toEqual([2, 0, 2]);
+  let heading = NaN;
+  let length = NaN;
+  for (let i = 0; i < f.creatureCount; i++) {
+    const o = f.creatureBase + i * P.CREATURE_STRIDE;
+    if (f.u32[o + P.C_UID] === 20) {
+      heading = f.f32[o + P.C_HEADING] ?? NaN;
+      length = f.f32[o + P.C_LENGTH] ?? NaN;
+    }
+  }
+  const [left, right] = f.cones;
+  // The eye of a founder: 0.2 of a half turn off the heading on each side, a half angle of 0.6
+  // radians, and a range of 16 * 0.2 body lengths.
+  expect(left?.dir).toBeCloseTo(heading + 0.2 * Math.PI, 3);
+  expect(right?.dir).toBeCloseTo(heading - 0.2 * Math.PI, 3);
+  for (const cone of f.cones) {
+    expect(cone.cosHalf).toBeCloseTo(Math.cos(0.6), 3);
+    expect(cone.range).toBeCloseTo(3.2 * length, 3);
+  }
 });
 
 test('a frame of the whole world holds every creature', () => {

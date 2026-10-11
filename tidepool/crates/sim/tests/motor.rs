@@ -1,4 +1,4 @@
-use tidepool_sim::genome::Genome;
+use tidepool_sim::genome::{Genome, KIND_CILIA, KIND_FLAGELLUM};
 use tidepool_sim::params::id;
 use tidepool_sim::rng::Rng;
 use tidepool_sim::world::{SpawnAt, World};
@@ -6,8 +6,10 @@ use tidepool_sim::world::{SpawnAt, World};
 /// One default-bodied adult alone in open water, driven by fixed commands through possession.
 fn solo(edit: impl FnOnce(&mut Genome)) -> (World, usize) {
     let mut w = World::new(1, 1536.0, 1024.0);
-    let mut g = Genome::founder(&mut Rng::new(1));
-    (g.len, g.wid, g.flagellum, g.cilia) = (12.0, 0.5, 0.6, 0.4);
+    let mut g = Genome::founder(&mut Rng::new(1), &w.params);
+    (g.len, g.wid) = (12.0, 0.5);
+    g.set_size(KIND_FLAGELLUM, 0.6);
+    g.set_size(KIND_CILIA, 0.4);
     edit(&mut g);
     let at = SpawnAt {
         x: 768.0,
@@ -67,7 +69,7 @@ fn a_body_with_cilia_turns_at_rest() {
 
 #[test]
 fn a_body_without_cilia_cannot_turn_at_rest() {
-    let (mut w, s) = solo(|g| g.cilia = 0.0);
+    let (mut w, s) = solo(|g| g.set_size(KIND_CILIA, 0.0));
     drive(&mut w, 0.0, 1.0, 20);
     assert!(w.creatures.omega[s].abs() < 1e-6);
 }

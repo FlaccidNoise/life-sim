@@ -231,6 +231,7 @@ pub fn step(world: &mut World) {
         world.plants.slots.free(slot);
         world.plants.dirty = true;
     }
+    world.stats.plant_deaths = world.stats.plant_deaths.saturating_add(deaths.len() as u64);
     for [x, y, reserve, cap] in births {
         world.plants.add(x, y, reserve, cap);
     }

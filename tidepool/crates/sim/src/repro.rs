@@ -1,4 +1,5 @@
-//! Budding. A fed adult splits off a small child with a mutated genome and its parent's mark.
+//! Budding. A fed adult splits off a small child with a mutated genome and its parent's mark. The
+//! parent's `egg` gene is the growth of the child.
 //!
 //! The parent pays for the child's body and for the child's first energy, so a bud moves energy
 //! and makes none.
@@ -8,9 +9,6 @@ use crate::params::id;
 use crate::snapshot::{LoadError, Reader, Writer};
 use crate::world::{SpawnAt, World};
 
-/// The share of its capacity that a parent must still hold after a bud, so that a bud cannot
-/// starve the parent.
-const PARENT_RESERVE: f32 = 0.25;
 /// How far a newborn's heading spreads from its parent's, in radians per unit of `gauss`. A brood
 /// that all faced one way would swim off as one body.
 const HEADING_JITTER: f32 = 0.5;
@@ -21,7 +19,7 @@ const HEADING_JITTER: f32 = 0.5;
 pub fn step(world: &mut World) {
     let p = &world.params;
     let (bud_at, cooldown) = (p.get(id::BUD_AT), p.get(id::BUD_COOLDOWN) as u32);
-    let (birth_growth, child_energy) = (p.get(id::BIRTH_GROWTH), p.get(id::CHILD_ENERGY));
+    let (parent_reserve, child_energy) = (p.get(id::PARENT_RESERVE), p.get(id::CHILD_ENERGY));
     let (build_cost, per_mass) = (p.get(id::BUILD_COST), p.get(id::ENERGY_PER_MASS));
     let c = &mut world.creatures;
     // A birth needs a free slot and a uid. `World::spawn` never gives out the last uid.
@@ -37,21 +35,19 @@ pub fn step(world: &mut World) {
             c.bud_cooldown[s] -= 1;
             continue;
         }
-        let cap = per_mass * c.mass(s);
+        let cap = per_mass * c.area(s);
         // Both tests are false for NaN, so a body with a wild value does not bud.
         let fed_adult = c.growth[s] >= 1.0 && c.energy[s] >= bud_at * cap;
         if !fed_adult || births.len() >= room {
             continue;
         }
-        let child = world.genomes[s].mutated(&mut world.rng_mutate, p);
-        let (length, width) = (
-            child.len * birth_growth,
-            child.len * child.wid * birth_growth,
-        );
+        let child = world.genomes[s].mutated(&mut world.rng_mutate, p, &mut world.next_history);
+        let egg = c.egg[s];
+        let (length, width) = (child.len * egg, child.len * child.wid * egg);
         let mass = length * width;
         let cost = build_cost * mass + child_energy * per_mass * mass;
         // A loaded genome can hold any size. A child of negative mass would pay its parent.
-        let can_pay = mass > 0.0 && c.energy[s] - cost >= PARENT_RESERVE * cap;
+        let can_pay = mass > 0.0 && c.energy[s] - cost >= parent_reserve * cap;
         if !can_pay {
             continue;
         }
@@ -63,7 +59,7 @@ pub fn step(world: &mut World) {
             x: c.x[s] - c.hc[s] * behind,
             y: c.y[s] - c.hs[s] * behind,
             heading: c.heading[s] + world.rng_mutate.gauss() * HEADING_JITTER,
-            growth: birth_growth,
+            growth: egg,
             energy01: child_energy,
             parent: c.uid[s],
             // A snapshot can hold any generation.
@@ -79,7 +75,8 @@ pub fn step(world: &mut World) {
     }
 }
 
-/// Writes nothing: the cooldown is a creature field and `rng_mutate` is a world field.
+/// Writes nothing: the cooldown is a creature field, and `rng_mutate` and `next_history` are world
+/// fields.
 pub fn save(_world: &World, _w: &mut Writer) {}
 
 /// Reads nothing.

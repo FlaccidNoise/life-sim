@@ -5,7 +5,7 @@ use crate::control::{self, Control};
 use crate::creature::{Creatures, MAX_CREATURES};
 use crate::energy;
 use crate::field::{self, Field};
-use crate::genome::Genome;
+use crate::genome::{Genome, FOUNDER_HISTORIES};
 use crate::grid::Grid;
 use crate::math::{sin_cos, wrap_angle, PI};
 use crate::motor::{self, Motor};
@@ -49,7 +49,7 @@ pub struct World {
     pub genomes: Vec<Genome>,
     /// Starts at 1. 0 means none.
     pub next_uid: u32,
-    /// The next history id for a new brain connection.
+    /// The next history id for a new brain connection or a new part.
     pub next_history: u32,
     pub plants: Plants,
     pub fertility: Fertility,
@@ -94,7 +94,7 @@ impl World {
             creatures: Creatures::default(),
             genomes: vec![Genome::default(); MAX_CREATURES as usize],
             next_uid: 1,
-            next_history: brain::STARTER_CONNS + 1,
+            next_history: FOUNDER_HISTORIES + 1,
             plants: Plants::new(w, h),
             fertility: Fertility::new(w, h),
             scent: Field::new(w, h),
@@ -111,7 +111,8 @@ impl World {
         }
     }
 
-    /// Allocates a slot, sets every array from the genome and `at`, and calls `brains.express`.
+    /// Allocates a slot, sets every array from the genome and `at`, and expresses the body and the
+    /// brain.
     /// The heading is wrapped and the place is clamped to the world. A spawn with a parent counts
     /// as a birth. None if the pool is full.
     pub fn spawn(&mut self, genome: Genome, at: SpawnAt) -> Option<u32> {
@@ -130,11 +131,9 @@ impl World {
         (c.cmd_thrust[s], c.cmd_turn[s]) = (0.0, 0.0);
         (c.age[s], c.bud_cooldown[s]) = (0, 0);
         (c.generation[s], c.parent[s], c.mark[s]) = (at.generation, at.parent, at.mark);
-        (c.len[s], c.wid[s], c.hue[s]) = (genome.len, genome.wid, genome.hue);
-        (c.flagellum[s], c.cilia[s]) = (genome.flagellum, genome.cilia);
-        (c.filter[s], c.chemo[s]) = (genome.filter, genome.chemo);
+        c.express(s, &genome);
         c.growth[s] = at.growth;
-        c.energy[s] = at.energy01 * self.params.get(id::ENERGY_PER_MASS) * c.mass(s);
+        c.energy[s] = at.energy01 * self.params.get(id::ENERGY_PER_MASS) * c.area(s);
         self.brains.express(s, &genome.brain);
         self.genomes[s] = genome;
         if at.parent != 0 {
@@ -177,7 +176,7 @@ impl World {
         let half_lifespan = (self.params.get(id::LIFESPAN) / 2.0) as u32;
         for _ in 0..creatures {
             let rng = &mut self.rng_spawn;
-            let genome = Genome::founder(rng);
+            let genome = Genome::founder(rng, &self.params);
             let (mut place, mut placed) = ((0.0, 0.0), false);
             for _ in 0..FOUNDER_TRIES {
                 let (x, y, chance) = (rng.range(0.0, self.w), rng.range(0.0, self.h), rng.unit());
@@ -297,7 +296,9 @@ impl World {
         for s in 0..world.creatures.slots.high_water() as usize {
             if world.creatures.slots.is_alive(s as u32) {
                 world.genomes[s] = Genome::load(&mut r)?;
-                // Bias, alpha, and connections are not saved. They come from the genome.
+                // The body, and the bias, alpha, and connections of the brain, are not saved. They
+                // come from the genome.
+                world.creatures.express(s, &world.genomes[s]);
                 world.brains.express(s, &world.genomes[s].brain);
             }
         }

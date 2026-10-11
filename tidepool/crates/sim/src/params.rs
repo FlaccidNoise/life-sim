@@ -30,9 +30,11 @@ macro_rules! table {
 }
 
 // Name, default, minimum, maximum. `plant_growth` and `intake_rate` are tuned against the health
-// gate (`docs/findings/m1-tuning.md`). The other defaults are arithmetic, not measurement.
+// gate (`docs/findings/m1-tuning.md`). The other defaults are arithmetic, not measurement. The rows
+// from `part_mass` on are for the M2 rules. Their defaults leave the M1 world as it was
+// (`docs/plans/2026-10-11-m2-bodies.md`, "The switch-on rule").
 table! {
-    /// Ticks until death by old age.
+    /// The founder's `old` gene: ticks until death by old age.
     LIFESPAN "lifespan" 4800.0 600.0 24000.0;
     /// A creature senses and thinks every Nth tick.
     THINK_EVERY "think_every" 2.0 1.0 8.0;
@@ -106,7 +108,7 @@ table! {
     GROW_RATE "grow_rate" 0.0015 0.0 0.1;
     /// Energy per unit of mass built.
     BUILD_COST "build_cost" 0.5 0.0 5.0;
-    /// Growth at birth.
+    /// The founder's `egg` gene: growth at birth.
     BIRTH_GROWTH "birth_growth" 0.4 0.1 1.0;
     /// `energy01` needed to bud.
     BUD_AT "bud_at" 0.8 0.2 1.0;
@@ -126,6 +128,63 @@ table! {
     HUE_SIGMA "hue_sigma" 0.01 0.0 0.5;
     /// Scent gradient gain.
     CHEMO_GAIN "chemo_gain" 4.0 0.0 50.0;
+    /// Mass of a part per unit size, as a share of body area.
+    PART_MASS "part_mass" 0.0 0.0 1.0;
+    /// Weight of an eye's size in the part sum.
+    EYE_COST "eye_cost" 1.0 0.0 10.0;
+    /// 0: upkeep follows mass. 1: mass to the power 3/4.
+    UPKEEP_CURVE "upkeep_curve" 0.0 0.0 1.0;
+    /// 0: the mouth follows length. 1: area.
+    INTAKE_CURVE "intake_curve" 0.0 0.0 1.0;
+    /// 0: the M1 motor. 1: speed free of size.
+    MOTOR_CURVE "motor_curve" 0.0 0.0 1.0;
+    /// 0: equal push. 1: split by mass.
+    PUSH_MASS "push_mass" 0.0 0.0 1.0;
+    /// Turning per unit fin at `v_max`.
+    FIN_TORQUE "fin_torque" 1.3 0.0 5.0;
+    /// Side drag added per unit fin.
+    FIN_GRIP "fin_grip" 0.3 0.0 0.6;
+    /// Upkeep added for a life longer than `lifespan`.
+    OLD_COST "old_cost" 0.0 0.0 2.0;
+    /// Most children in one bud.
+    BROOD_MAX "brood_max" 1.0 1.0 8.0;
+    /// Share of its capacity that a parent keeps after a bud, so that a bud cannot starve it.
+    PARENT_RESERVE "parent_reserve" 0.25 0.0 0.9;
+    /// Share of the growth reserve that a growth step must leave, so that a step of growth cannot
+    /// starve the juvenile that takes it.
+    GROW_FLOOR "grow_floor" 0.5 0.0 1.0;
+    /// How far a founder's body gene sits from its default, as a share of the gene's range.
+    FOUNDER_SIGMA "founder_sigma" 0.05 0.0 0.3;
+    /// Founder brain: constant to thrust. At 0.9 a founder with no scent swims at 0.73 of its full
+    /// thrust.
+    STARTER_CRUISE "starter_cruise" 0.9 -3.0 3.0;
+    /// Founder brain: side gradient to turn. At 2 a gradient half off to one side gives a turn
+    /// command of 0.78.
+    STARTER_STEER "starter_steer" 2.0 -8.0 8.0;
+    /// Founder brain: forward gradient to thrust. Faster up the gradient, slower down it.
+    STARTER_SURGE "starter_surge" 0.5 -8.0 8.0;
+    /// Founder brain: seen plant to turn. Only a founder with an eye has the wire.
+    STARTER_LOOK "starter_look" 1.5 -8.0 8.0;
+    /// Size of the founder's eye gene. 0: no eye gene.
+    FOUNDER_EYE "founder_eye" 0.0 0.0 1.0;
+    /// Cone range in body lengths per unit eye size.
+    EYE_RANGE "eye_range" 16.0 0.0 64.0;
+    /// Scale of the eye inputs.
+    EYE_GAIN "eye_gain" 1.0 0.0 10.0;
+    /// Eyes scan on every Nth think.
+    SEE_EVERY "see_every" 1.0 1.0 4.0;
+    /// Chance that an anchor or an eye's `extra` mutates.
+    MUT_SHAPE_RATE "mut_shape_rate" 0.0 0.0 1.0;
+    /// Chance that `egg` or `old` mutates.
+    MUT_LIFE_RATE "mut_life_rate" 0.0 0.0 1.0;
+    /// Chance per birth of a new part.
+    MUT_PART_ADD "mut_part_add" 0.0 0.0 1.0;
+    /// Chance per birth that a part is lost.
+    MUT_PART_REMOVE "mut_part_remove" 0.0 0.0 1.0;
+    /// Chance per birth that a part is copied.
+    MUT_PART_DUP "mut_part_dup" 0.0 0.0 1.0;
+    /// Size of a part that a mutation adds.
+    PART_NEW_SIZE "part_new_size" 0.1 0.01 1.0;
 }
 
 #[derive(Clone)]

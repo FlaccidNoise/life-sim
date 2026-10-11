@@ -1,14 +1,25 @@
 // Constants and layouts shared by the page and the worker. The frame layout mirrors
 // crates/sim/src/frame.rs. tests/abi.test.ts fails if the two disagree.
 
-export const ABI_VERSION = 2;
+export const ABI_VERSION = 3;
 export const TICK_HZ = 20;
-export const FRAME_HEADER_WORDS = 8;
-export const CREATURE_STRIDE = 10;
+export const FRAME_HEADER_WORDS = 34;
+export const CREATURE_STRIDE = 22;
 export const PLANT_STRIDE = 4;
+export const PART_WORDS = 12;
+export const MAX_EYES = 8;
 export const NO_SLOT = 0xffffffff;
 
-// Word offsets in a creature record. The first seven are floats, the last three are integers.
+// Word offsets in a frame header. A cone is CONE_WORDS floats: its direction in world radians, the
+// cosine of its half angle, and its range in world units.
+const F_LINEAGE_ALIVE = 7,
+  F_BUDS = 8,
+  F_CONE_COUNT = 9,
+  F_CONES = 10;
+const CONE_WORDS = 3;
+
+// Word offsets in a creature record. The first seven are floats, the next three are integers, and
+// PART_WORDS part words follow from C_PARTS.
 export const C_X = 0,
   C_Y = 1,
   C_HEADING = 2,
@@ -19,9 +30,46 @@ export const C_X = 0,
 export const C_UID = 7,
   C_SLOT = 8,
   C_FLAGS = 9;
+export const C_PARTS = 10;
 export const FLAG_LINEAGE = 1,
   FLAG_POSSESSED = 2,
-  FLAG_JUVENILE = 4;
+  FLAG_JUVENILE = 4,
+  FLAG_BUDDED = 8; // the body budded a short time ago
+
+// The kinds of part. They mirror the `KIND_` constants in crates/sim/src/genome.rs.
+export const KIND_FLAGELLUM = 1,
+  KIND_CILIA = 2,
+  KIND_FILTER = 3,
+  KIND_CHEMO = 4,
+  KIND_FIN = 5,
+  KIND_EYE = 6;
+
+/** One part of a body. `anchor`, `size`, and `extra` are 0 to 1 each, in steps of 1/255. */
+export interface Part {
+  kind: number;
+  anchor: number; // 0 at the nose, 1 at the tail
+  size: number;
+  extra: number; // an eye's cone width
+}
+
+/** A part word of a creature record. Null for a place with no part. */
+export function unpackPart(word: number): Part | null {
+  const kind = word & 0xff;
+  if (kind === 0) return null;
+  return {
+    kind,
+    anchor: ((word >>> 8) & 0xff) / 255,
+    size: ((word >>> 16) & 0xff) / 255,
+    extra: (word >>> 24) / 255,
+  };
+}
+
+/** An eye cone of the possessed body, in world space. */
+export interface Cone {
+  dir: number; // radians
+  cosHalf: number; // the cosine of the half angle
+  range: number;
+}
 
 export interface FrameView {
   readonly buffer: ArrayBuffer;
@@ -34,17 +82,26 @@ export interface FrameView {
   readonly plantsAlive: number;
   readonly possessedSlot: number;
   readonly brainDriving: boolean;
+  readonly lineageAlive: number; // living creatures with the lineage mark
+  readonly buds: number; // buds of the possessed body since it was possessed
+  readonly cones: Cone[]; // of the possessed body. Empty with nothing possessed.
   readonly creatureBase: number; // word index of the first creature record
   readonly plantBase: number;
 }
 
 export function viewFrame(buffer: ArrayBuffer): FrameView {
   const u32 = new Uint32Array(buffer);
+  const f32 = new Float32Array(buffer);
   const word = (i: number): number => u32[i] ?? 0;
   const creatureCount = word(1);
+  const cones: Cone[] = [];
+  for (let k = 0; k < Math.min(word(F_CONE_COUNT), MAX_EYES); k++) {
+    const o = F_CONES + k * CONE_WORDS;
+    cones.push({ dir: f32[o] ?? 0, cosHalf: f32[o + 1] ?? 0, range: f32[o + 2] ?? 0 });
+  }
   return {
     buffer,
-    f32: new Float32Array(buffer),
+    f32,
     u32,
     tick: word(0),
     creatureCount,
@@ -53,6 +110,9 @@ export function viewFrame(buffer: ArrayBuffer): FrameView {
     plantsAlive: word(4),
     possessedSlot: word(5),
     brainDriving: word(6) === 1,
+    lineageAlive: word(F_LINEAGE_ALIVE),
+    buds: word(F_BUDS),
+    cones,
     creatureBase: FRAME_HEADER_WORDS,
     plantBase: FRAME_HEADER_WORDS + creatureCount * CREATURE_STRIDE,
   };
@@ -104,7 +164,13 @@ export interface Heir {
 }
 
 export type ToWorker =
-  | { type: 'init'; seed: number; snapshot?: ArrayBuffer }
+  // `params` are set by name before the founders are seeded.
+  | {
+      type: 'init';
+      seed: number;
+      snapshot?: ArrayBuffer;
+      params?: { name: string; value: number }[];
+    }
   | { type: 'view'; x0: number; y0: number; x1: number; y1: number }
   | { type: 'speed'; ticksPerSecond: number } // 0 pauses. TICK_HZ is normal.
   | { type: 'recycle'; buffer: ArrayBuffer }

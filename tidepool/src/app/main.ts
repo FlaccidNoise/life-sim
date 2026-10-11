@@ -248,6 +248,21 @@ function start(): void {
     stop();
   };
 
+  // In `?debug`, each `p=<name>=<value>` of the query string sets a parameter before the founders
+  // are seeded. The worker rejects a name that is not in the table.
+  const initParams: { name: string; value: number }[] = [];
+  for (const p of query.has('debug') ? query.getAll('p') : []) {
+    const [name = '', number = '', ...rest] = p.split('=');
+    const value = /\S/.test(number) ? Number(number) : NaN;
+    if (name === '' || rest.length > 0 || Number.isNaN(value)) {
+      fail(
+        `The address has \`p=${p}\`. Fix: write it as \`p=<name>=<number>\`, like p=bud_at=0.3.`,
+      );
+      return;
+    }
+    initParams.push({ name, value });
+  }
+
   let renderer: Renderer;
   try {
     renderer = createRenderer(canvas);
@@ -446,7 +461,7 @@ function start(): void {
         break;
     }
   };
-  send({ type: 'init', seed: 1 });
+  send({ type: 'init', seed: 1, params: initParams });
 
   layout();
   window.addEventListener('resize', layout);
