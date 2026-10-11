@@ -198,3 +198,11 @@ measured target for how often a death has an heir.
 
 Still open: the `?bench` line from a phone and from a mid-range laptop, and the four felt judgments of
 `m1-feel.md` one by one. The owner gave one judgment for steering as a whole: it felt good.
+
+## First CI run, 2026-10-11
+
+Open problem 11 is half closed. The owner chose to push a side branch first. The Tidepool workflow
+passed on `tidepool-ci` in 1 minute 54 seconds, and the root CI passed too. On the x86-64 runner the
+native build gives the hashes of the `.wasm`, and the three health rows equal the rows above to the
+digit. The runner read 1,882 ticks per second in WASM and 2,360 native, against the CI floor of 800.
+Not done: a bad commit that makes the run fail. `gates.md` has the record.
