@@ -155,6 +155,7 @@ project kept the machine at a load average near 5, so these readings are lower b
 | 2026-10-10 | 16 (tuned defaults) | The same world | 425 | VOID | VOID | 2,400 |
 | 2026-10-10 | 16, bench on the settled world | The default world after 12,000 ticks, seed 1 | 1,539 | 4,381 | 3,757 | 2,400 |
 | 2026-10-11 | After M2 task 2 (the genome is a part list, every M2 rule is off) | The same world. The `settled` line and the mean are the M1 ones | 1,539 | 3,993 | 3,594 | 2,400 |
+| 2026-10-11 | M2 task 4 (motor), rules off | The default world after 12,000 ticks, seed 1 | 1,539 | 4,096 | 3,594 to 3,640 | 2,400 |
 
 **The row after M2 task 2 is a lower bound.** Other projects held the machine at a load average near 7
 during that run of `make gates`. Run back to back at that load, 3 runs each and twice over, the native
@@ -162,6 +163,18 @@ bench of the commit before the task read 4,290 and 4,435, and the bench of the t
 4,339. So the task costs 2% of a tick at most. An earlier run of `make gates`, at a load average above
 20, failed the native floor at 1,531. The bench of the commit before the task read 2,071 and 2,309
 then, so that failure was the machine and not the task.
+
+**The row after M2 task 4 is an alternating reading.** The machine held a load average of 6 to 8 from
+other projects, so the orchestrator timed the build before the task (`a069d59`) and the build after it
+three times each, in turn. WASM before: 3,434, 3,440, 3,483. WASM after: 3,594, 3,632, 3,640. That is
+4.9% faster. The first version of the task was 7.4% slower in WASM (3,306, 3,300, 3,306 against 3,568,
+3,568, 3,549) and no slower native. The agent found the cost by building one variant at a time: the
+fin term read the velocity of this tick and so waited for the velocity update (about 5%), a call to
+`Creatures::mass` per body in the scratch fill (about 2%), a division by `v_max` per body, and the heft
+worked out twice. The neighbour box is now the body's own radius plus `MAX_RADIUS`, not twice
+`MAX_RADIUS`. With the M2 motor rules switched on (`--param push_mass=1 --param motor_curve=1 --param
+part_mass=0.1`) the same bench reads 4,432 at a mean of 1,321 creatures: a different world, so not a
+pair with the rows above.
 
 **The void row after Task 13.** Both benches print `VOID: population fell` and `make gates` exits 2. The
 gate works as built: it refuses to time a world that has emptied. The bench world falls from 1,500
