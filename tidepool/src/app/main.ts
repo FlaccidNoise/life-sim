@@ -32,6 +32,7 @@ import {
   clampToWorld,
   fitWorld,
   follow,
+  isFitted,
   pan,
   screenToWorld,
   viewRect,
@@ -39,6 +40,7 @@ import {
   type Camera,
 } from './camera';
 import {
+  emptyAnswer,
   inputToSend,
   keyOf,
   manualNow,
@@ -157,7 +159,7 @@ function start(): void {
   if (!canvas || !ui) throw new Error('index.html has no #view or no #ui');
 
   const query = new URLSearchParams(location.search);
-  // The death overlay's three actions. They run after `send` and `resume` exist.
+  // The overlay's actions. They run after `send`, `resume`, and `leave` exist.
   const closeDeath = (): void => {
     death.value = null;
     focusHeir.value = null;
@@ -166,9 +168,14 @@ function start(): void {
   render(
     h(App, {
       debug: query.has('debug'),
+      touch: matchMedia('(pointer: coarse)').matches,
+      onLeave() {
+        leave();
+      },
       onPick(uid) {
         const heir = death.peek()?.heirs.find((x) => x.uid === uid);
         if (heir) seenAt = { x: heir.x, y: heir.y };
+        heirPick = true;
         send({ type: 'possess', uid });
       },
       onWatch() {
@@ -260,11 +267,14 @@ function start(): void {
 
   const inWorld = (c: Camera): Camera =>
     world ? clampToWorld(c, world.w, world.h, cssW, cssH) : c;
+  // A resize fits the world again while the player watches through the fitted camera. A camera
+  // that the player zoomed or panned keeps its place, and in Play the camera follows the body.
   const layout = (): void => {
+    const fitted = world && mode.peek() === 'watch' && isFitted(cam, world.w, world.h, cssW, cssH);
     cssW = canvas.clientWidth;
     cssH = canvas.clientHeight;
     renderer.resize(cssW, cssH, devicePixelRatio);
-    cam = inWorld(cam);
+    cam = world && fitted ? fitWorld(world.w, world.h, cssW, cssH) : inWorld(cam);
   };
 
   // Watch: the player moves the camera. Play: the camera follows the body, and the keys and a held
@@ -276,6 +286,7 @@ function start(): void {
   // place where the body was last seen.
   let seenAt = { x: 0, y: 0 };
   let picking = false; // a `possessAt` has no answer yet
+  let heirPick = false; // a `possess` that the death overlay sent has no answer yet
   let posted: Steer | null = null; // the last `input` posted in this possession
   let lastActive = -Infinity; // the time of the last frame with a key or a pointer down
   let pressedAt: number | null = null; // a press that took over from the brain, not yet drawn
@@ -290,6 +301,12 @@ function start(): void {
     mode.value = 'watch';
     possessedUid = 0;
     forget();
+  };
+  // The Escape key and the Leave button.
+  const leave = (): void => {
+    if (mode.peek() !== 'play') return;
+    send({ type: 'release' });
+    watch();
   };
   let hintTimer: ReturnType<typeof setTimeout> | undefined;
   const flash = (text: string, ms: number): void => {
@@ -333,10 +350,7 @@ function start(): void {
     if (inText(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
     // The overlay owns the keyboard: Tab and Enter work its buttons, and nothing steers behind it.
     if (death.peek()) return;
-    if (e.code === 'Escape' && mode.peek() === 'play') {
-      send({ type: 'release' });
-      watch();
-    }
+    if (e.code === 'Escape') leave();
     const key = keyOf(e.code);
     if (!key) return;
     pressed();
@@ -357,25 +371,33 @@ function start(): void {
       case 'ready':
         world = { w: msg.worldW, h: msg.worldH };
         params = msg.params;
-        // The whole world, or as much of it as the scale limits allow, about the screen centre.
-        cam = inWorld(
-          zoomAt(fitWorld(world.w, world.h, cssW, cssH), cssW, cssH, cssW / 2, cssH / 2, 1),
-        );
+        cam = fitWorld(world.w, world.h, cssW, cssH);
         ready.value = true;
         if (query.has('bench')) {
           benchText.value = 'Measuring. This can take a minute on a slow device.';
           send({ type: 'bench', settle: BENCH_SETTLE_TICKS, ticks: BENCH_TICKS });
         }
         break;
-      case 'frame':
+      case 'frame': {
+        const next = viewFrame(msg.buffer);
+        // A paused world posts a frame of the tick it stopped on when the view changes. That frame
+        // replaces `cur`, and the bodies keep their places between the last two ticks.
+        const sameTick = next.tick === cur?.tick;
+        const old = sameTick ? cur : prev;
+        if (!sameTick) {
+          prev = cur;
+          arrival = performance.now();
+        }
         // The buffer goes back whole: the worker drops a buffer of another length.
-        if (prev) send({ type: 'recycle', buffer: prev.buffer }, [prev.buffer]);
-        prev = cur;
-        cur = viewFrame(msg.buffer);
-        arrival = performance.now();
+        if (old) send({ type: 'recycle', buffer: old.buffer }, [old.buffer]);
+        cur = next;
         brainDriving.value = cur.brainDriving;
         break;
-      case 'possessed':
+      }
+      case 'possessed': {
+        const empty = emptyAnswer(heirPick, picking);
+        heirPick = false;
+        picking = false;
         if (msg.uid !== 0) {
           possessedUid = msg.uid;
           forget();
@@ -383,15 +405,16 @@ function start(): void {
           hint.value = null;
           mode.value = 'play';
           closeDeath();
-        } else if (death.peek()) {
+        } else if (empty === 'heir gone') {
           heirGone.value = true;
-        } else if (picking) {
+        } else if (empty === 'nothing there') {
           flash('Nothing there.', HINT_MS);
         }
-        picking = false;
         break;
+      }
       case 'died':
         // The worker paused the world. It stays paused until a `possess` or a `speed`.
+        heirPick = false;
         watch();
         hint.value = null;
         closeDeath();

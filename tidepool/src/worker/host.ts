@@ -40,6 +40,9 @@ export function createHost(deps: HostDeps): Host {
   let sim: Sim | undefined;
   let stop = (): void => {};
   let view = { x0: 0, y0: 0, x1: 0, y1: 0 };
+  // The page has no frame of the world and the view as they are now: the view changed, or a step
+  // found the pool empty.
+  let frameDue = false;
   let ticksPerSecond = TICK_HZ;
   // True from the death of the possessed creature until the next possess or `speed`.
   let pausedByDeath = false;
@@ -56,6 +59,27 @@ export function createHost(deps: HostDeps): Host {
   const fail = (e: unknown): void => {
     stop();
     deps.post({ type: 'error', message: e instanceof Error ? e.message : String(e) });
+  };
+
+  // Writes the world as it is now for the view and posts it. False when the pool is empty: the
+  // page holds every buffer.
+  const postFrame = (sim: Sim): boolean => {
+    const buffer = pool.pop();
+    if (!buffer) return false;
+    if (sim.writeFrame(view.x0, view.y0, view.x1, view.y1, buffer) < 0) {
+      throw new Error(
+        `a frame of the view is larger than ${MAX_FRAME_BYTES} bytes. Fix: raise MAX_FRAME_BYTES in src/protocol.ts.`,
+      );
+    }
+    frameDue = false;
+    deps.post({ type: 'frame', buffer }, [buffer]);
+    return true;
+  };
+
+  // `step` posts no frame while the world is paused, so `view` and `recycle` post the frame that is
+  // due, with no tick. With an empty pool it stays due, and the next `recycle` posts it.
+  const postDueWhilePaused = (sim: Sim): void => {
+    if (frameDue && !(ticksPerSecond > 0)) postFrame(sim);
   };
 
   const step = (sim: Sim): void => {
@@ -107,15 +131,7 @@ export function createHost(deps: HostDeps): Host {
     }
     // A stall: the world runs late instead of running fast to catch up.
     if (owed >= period) owed = 0;
-    if (ran === 0) return;
-    const buffer = pool.pop();
-    if (!buffer) return;
-    if (sim.writeFrame(view.x0, view.y0, view.x1, view.y1, buffer) < 0) {
-      throw new Error(
-        `a frame of the view is larger than ${MAX_FRAME_BYTES} bytes. Fix: raise MAX_FRAME_BYTES in src/protocol.ts.`,
-      );
-    }
-    deps.post({ type: 'frame', buffer }, [buffer]);
+    if (ran > 0 && !postFrame(sim)) frameDue = true;
   };
 
   const init = (msg: Extract<ToWorker, { type: 'init' }>): void => {
@@ -184,7 +200,10 @@ export function createHost(deps: HostDeps): Host {
         }
         switch (msg.type) {
           case 'view':
+            frameDue ||=
+              msg.x0 !== view.x0 || msg.y0 !== view.y0 || msg.x1 !== view.x1 || msg.y1 !== view.y1;
             view = msg;
+            postDueWhilePaused(sim);
             break;
           case 'speed':
             ticksPerSecond = msg.ticksPerSecond;
@@ -192,6 +211,7 @@ export function createHost(deps: HostDeps): Host {
             break;
           case 'recycle':
             if (msg.buffer.byteLength === MAX_FRAME_BYTES) pool.push(msg.buffer);
+            postDueWhilePaused(sim);
             break;
           case 'bench':
             bench(msg.settle, msg.ticks);

@@ -132,6 +132,22 @@ fn mutation_stays_in_range_and_rate_zero_copies() {
     assert_eq!(child.brain.conns.len(), g.brain.conns.len());
 }
 
+#[test]
+fn mutation_changes_a_body_gene_the_hue_and_a_brain_weight() {
+    let p = Params::new();
+    let mut rng = Rng::new(3);
+    let start = Genome::founder(&mut rng);
+    let mut g = start.clone();
+    for _ in 0..100 {
+        g = g.mutated(&mut rng, &p);
+    }
+    let genes = |g: &Genome| [g.len, g.wid, g.flagellum, g.cilia, g.filter, g.chemo];
+    let weights = |g: &Genome| g.brain.conns.iter().map(|c| c.weight).collect::<Vec<_>>();
+    assert_ne!(genes(&g), genes(&start), "no body gene changed");
+    assert_ne!(g.hue, start.hue, "the hue did not change");
+    assert_ne!(weights(&g), weights(&start), "no brain weight changed");
+}
+
 /// `load` does not check the floats of a genome. A parent buds from a genome with wild part genes
 /// and wild brain numbers, and does not bud from one with a wild size: a child of negative mass
 /// would pay its parent. Neither panics, and the world with the wild children saves and loads.

@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 import {
   GRACE_MS,
+  emptyAnswer,
   inputToSend,
   manualNow,
   possessedBody,
@@ -137,4 +138,11 @@ test('no body when nothing is possessed or the creature is outside the frame', (
   expect(possessedBody(null, cur, 0.5)).toMatchObject({ x: 104, y: 202, heading: 1 });
   const reused = frame(7, [{ slot: 7, uid: 39, x: 0, y: 0, heading: 0 }]);
   expect(possessedBody(reused, cur, 0.5)).toMatchObject({ x: 104, y: 202, heading: 1 });
+});
+
+test('an empty answer is a lost heir only when the overlay sent a pick', () => {
+  expect(emptyAnswer(true, false)).toBe('heir gone');
+  expect(emptyAnswer(false, true)).toBe('nothing there');
+  // The answer to a `release`, which can arrive while the death overlay is open.
+  expect(emptyAnswer(false, false)).toBe(null);
 });

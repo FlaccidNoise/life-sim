@@ -16,6 +16,8 @@ pub const MAX_PLANTS: u32 = 8192;
 /// The radius of a plant with no reserve, and what a reserve of `plant_cap` adds to it.
 const RADIUS_MIN: f32 = 2.0;
 const RADIUS_SPAN: f32 = 6.0;
+/// The radius of a plant at a full reserve, the largest that `radius` gives.
+pub const MAX_RADIUS: f32 = RADIUS_MIN + RADIUS_SPAN;
 /// A plant is updated on one tick in this many, and grows that many ticks at once.
 const STAGGER: u32 = 8;
 /// A founder plant starts with a reserve between this share of its limit and all of it.

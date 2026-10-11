@@ -13,8 +13,8 @@ output seen. All proofs ran on 2026-10-10, except the CI row, which has no proof
 | Rust format | `cargo fmt --all -- --check` | `pub fn  ugly( )->u32{1}` added to `crates/sim/src/lib.rs` | `Diff in` the path of `lib.rs`, then the bad line and the formatted lines, exit 1 | 2026-10-10 |
 | TypeScript format | `pnpm exec prettier --check src tests scripts` | A file `src/z.ts` that contains `export const  ugly = {a:1,` and ` b:2}` on two lines | `[warn] src/z.ts`, `[warn] Code style issues found in the above file. Run Prettier with --write to fix.`, exit 1 | 2026-10-10 |
 | Type check | `pnpm exec tsc --noEmit` | A file `src/x.ts` that contains `export const n: number = 'a';` | `src/x.ts(1,14): error TS2322: Type 'string' is not assignable to type 'number'.`, exit 2 | 2026-10-10 |
-| Snapshot round trip | `cargo test --test snapshot` | The `vy` line removed from both `Creatures::save` and `Creatures::load` in `crates/sim/src/creature.rs` | 5 tests fail. The round-trip test is `load_then_run_equals_unbroken_run ... FAILED`, with ``assertion `left == right` failed``, `left: 865352771`, `right: 4132115202`. The other 4 are in the notes. | 2026-10-10 |
-| Native equals WASM | `pnpm exec vitest run tests/determinism.test.ts` | `#[cfg(target_arch = "wasm32")] { self.creatures.vx[0] += 1.0e-6; }` added to `World::tick`, just before `self.tick` is incremented at the end, then `make wasm` | All 3 seeds fail. Seed 1: `AssertionError: expected 3869756312 to be 1603536447 // Object.is equality` | 2026-10-10 |
+| Snapshot round trip | `cargo test --test snapshot` | The `vy` line removed from both `Creatures::save` and `Creatures::load` in `crates/sim/src/creature.rs` | 19 of 31 tests fail, exit 101. The round-trip test is `load_then_run_equals_unbroken_run ... FAILED`, with ``assertion `left == right` failed``, `left: 734987217`, `right: 3259364194`. The other 18 are in the notes. | 2026-10-10 |
+| Native equals WASM | `pnpm exec vitest run tests/determinism.test.ts` | `#[cfg(target_arch = "wasm32")] { self.creatures.vx[0] += 1.0e-6; }` added to `World::tick`, just before `self.tick` is incremented at the end, then `make wasm` | All 3 seeds fail. Seed 1: `AssertionError: expected 1261540159 to be 3031850156 // Object.is equality` | 2026-10-10 |
 | Throughput, native | `make gates` (runs `target/release/tidepool-headless bench`) | `bench --floor 1000000000`, and `bench --reference 5000` | `bench creatures=1539 median_tps=4430 floor=1000000000 FAIL`, exit 1. `VOID: population fell`, exit 1. The full output is in "Throughput bench" below. | 2026-10-10 |
 | Throughput, WASM in Node | `make gates` (runs `node scripts/bench-wasm.mjs`) | `node scripts/bench-wasm.mjs --floor 1000000000`, and `--reference 5000` | `bench-wasm creatures=1539 median_tps=3761 floor=1000000000 FAIL`, exit 1. `VOID: population fell`, exit 1. The full output is in "Throughput bench" below. | 2026-10-10 |
 | Health | `make gates` (runs `target/release/tidepool-headless gate-health`) | `gate-health --param plant_growth=0`, and `gate-health --param basal=0.01` | Both: every seed `FAIL`, `gate-health 0/3 FAIL`, exit 1. The full output is in "Health gate" below. | 2026-10-10 |
@@ -25,14 +25,18 @@ output seen. All proofs ran on 2026-10-10, except the CI row, which has no proof
 - **Clippy banned methods.** The list covers `f32` and `f64`. `(x as f64).sin() as f32` and `x.ln()` on an `f32`, added to `crates/sim/src/lib.rs`, give
   ``error: use of a disallowed method `f64::sin` `` and ``error: use of a disallowed method `f32::ln` ``,
   exit 101. A test file under `crates/sim/tests/` runs native only and can allow the lint.
-- **Snapshot round trip.** The other two round-trip tests (`load_gives_the_same_hash_immediately` and
-  `spawning_after_load_matches_spawning_without_it`) still pass with that field missing. Only
-  `load_then_run_equals_unbroken_run` catches a forgotten field. Removing the line from `save` alone
-  fails earlier, with `load: Truncated`. The other 4 tests that fail are
-  `a_crafted_payload_loads`, `every_cut_of_a_payload_is_an_error`,
-  `wild_creature_values_load_and_run_without_panic`, and
-  `counters_at_the_top_of_their_range_do_not_panic_or_wrap_a_uid`. They fail because the test helper
-  `raw_payload` writes 5 creature fields.
+- **Snapshot round trip.** Run again at the M1 head, after the audit found the old output of an
+  earlier build in this row. Three tests catch a forgotten field by themselves:
+  `load_then_run_equals_unbroken_run`, `load_then_run_equals_unbroken_run_across_births` (`left:
+  1380643796`, `right: 2738402061`), and `every_saved_field_is_in_the_hash_and_survives_a_load` (`vy is
+  not in the hash`). The other two round-trip tests (`load_gives_the_same_hash_immediately` and
+  `spawning_after_load_matches_spawning_without_it`) still pass with that field missing. The other 16
+  tests that fail build a payload by hand in the test file, and that payload now has one creature
+  field too many. Removing the line from `save` alone fails 10 of 31 tests. The 3 tests above and both
+  of the other round-trip tests are among them. 9 of the 10 stop at the load with `Invalid("creature
+  field length")`, and 1 stops with `Invalid("death cause")`.
+- **Native equals WASM.** Run again at the M1 head for the same reason. 3031850156 is `b4b65cac`, the
+  native hash of seed 1.
 - **Throughput.** The floor is 2,400 ticks per second at the reference world, for WASM in Node
   (`architecture.md` section 2). `scripts/bench-wasm.mjs` enforces it. The native bench is for probes
   and a quick reading. "Throughput bench" below says what both benches time.
@@ -51,10 +55,10 @@ output seen. All proofs ran on 2026-10-10, except the CI row, which has no proof
 `target/release/tidepool-headless bench` and `node scripts/bench-wasm.mjs` take the same flags and
 print the same lines. The summary line starts `bench` or `bench-wasm`.
 
-`[--world 1536x1024] [--creatures 400] [--plants 1200] [--settle 12000] [--ticks 2000] [--runs 5]
-[--reference 1500] [--floor 2400]`
+`[--seed 1] [--world 1536x1024] [--creatures 400] [--plants 1200] [--settle 12000] [--ticks 2000]
+[--runs 5] [--reference 1500] [--floor 2400]`
 
-1. Make the default world on seed 1 and run `--settle` ticks. These ticks are not timed.
+1. Make the default world on `--seed` and run `--settle` ticks. These ticks are not timed.
 2. Print `settled tick=<n> creatures=<n> plants=<n>` and save a snapshot.
 3. For each run, load the snapshot and time `--ticks` ticks. Every run does the same work. The alive
    count is sampled every 100 ticks, outside the timed section.
@@ -62,6 +66,23 @@ print the same lines. The summary line starts `bench` or `bench-wasm`.
 
 The `settled` line at the defaults matches the seed 1 row of the health gate: 1,477 creatures and
 1,682 plants at tick 12,000.
+
+**The throughput gate is a seed 1 reading.** `make gates` and the CI workflow time the default world
+on seed 1 and on no other seed. The mean alive count over the timed ticks, from `bench --seed <n>
+--runs 1`:
+
+| Seed | Alive at tick 12,000 | Mean alive over ticks 12,000 to 14,000 | Against the void line of 1,200 |
+|---|---|---|---|
+| 1 | 1,477 | 1,539 | Above |
+| 2 | 1,373 | 1,265 | Above |
+| 3 | 1,148 | 1,197 | Below: void |
+| 4 | 1,058 | 1,071 | Below: void |
+| 5 | 1,550 | 1,535 | Above |
+| 6 | 1,180 | 1,243 | Above |
+
+Seeds 3 and 4 would be void at the 1,200 line. A thinner world reads faster (native, one run each:
+4,479 on seed 1 and 6,524 on seed 4), so seed 1 is on the slow side of these 6. The margin over the
+floor belongs to seed 1. The audit found this (`findings/m1-audit.md`, finding F7).
 
 The proofs. Other work ran on the machine, so the `tps` figures here are not gate readings.
 
@@ -160,8 +181,9 @@ plants asked, timed from tick 200 to tick 2,200. In the tuned ecology that world
 state. It has 3 times the area of the default world and the same 14 fertile patches, so it falls to
 about 200 creatures by tick 1,000. The default world (1536 by 1024, 400 founders, 1,200 plants) is the
 world the game ships and the world `gate-health` judges. It holds 1,148 to 1,477 creatures at tick
-12,000 on seeds 1 to 3. That is the reference population of 1,500, reached by living instead of by
-seeding. So both benches now run the default world for 12,000 ticks on seed 1 and time the next 2,000.
+12,000 on seeds 1 to 3. On seed 1 that is near the reference population of 1,500, reached by living
+instead of by seeding. It is not so on every seed: see "The throughput gate is a seed 1 reading"
+above. So both benches now run the default world for 12,000 ticks on seed 1 and time the next 2,000.
 The floor (2,400), the reference population (1,500), and the 80% void rule did not change. No
 simulation rule or parameter changed. "Throughput bench" above has the protocol and the proofs.
 
@@ -238,11 +260,39 @@ What has rejected a world, and what has not:
 - Rejected: `creatures` on both sides, `min_late`, `plants` on both sides, `births_late`, `max_gen`,
   and `parked`. `max_gen` also rejected worlds with living creatures: the third proof, the baseline on
   the old defaults, and tuning trial 2. `creatures` above 3,000 rejected a tuning trial on all 3 seeds.
-- **`mean_chemo` has only rejected an empty world**, where the mean of no creatures prints as 0. No
-  world with living creatures and a mean below 0.15 has been made. The band is not proven as a warning
-  for risk R1 until a world that strips the gene exists.
+- **`mean_chemo` has rejected an empty world**, where the mean of no creatures prints as 0, and no
+  living world inside the protocol of the gate. "What the `mean_chemo` band can see" below has the
+  readings.
 - A usage error exits 2: an unknown parameter name, a value outside the range of its parameter, or a
   seed that is not a number.
+
+### What the `mean_chemo` band can see
+
+The band is the early warning for risk R1 of `design.md`: evolution strips a sense that costs upkeep
+and does not pay. The M1 audit measured what the band does (`findings/m1-audit.md`, finding F3). The
+readings below ran again after the audit and printed the same numbers.
+
+- **It does not show that evolution keeps the sense.** With the sense switched off the gate passes 3
+  of 3, and `mean_chemo` reads 0.47, 0.48, 0.49 at 12,000 ticks. A founder holds 0.5. A gene that does
+  nothing drifts too slowly for 12,000 ticks to move its mean under 0.15.
+- **It fired on a living world once, outside the protocol.** That world needed 36,000 ticks, 5 times
+  the part upkeep, and faster mutation of the body genes. At 12,000 ticks the same world reads 0.29 and
+  passes.
+- **So a pass says only that the gene is not gone yet.** A gate that can see whether a sense pays is a
+  question for the M2 plan. The gate, its bands, and its protocol did not change here.
+
+```
+$ target/release/tidepool-headless gate-health --param chemo_gain=0
+seed=1 creatures=1251 min_late=739 plants=1952 births_late=1477 max_gen=11 mean_chemo=0.47 parked=0.00 first_bud=1581 PASS
+seed=2 creatures=1048 min_late=679 plants=1818 births_late=1297 max_gen=12 mean_chemo=0.48 parked=0.00 first_bud=1553 PASS
+seed=3 creatures=891 min_late=599 plants=1725 births_late=924 max_gen=10 mean_chemo=0.49 parked=0.00 first_bud=1592 PASS
+gate-health 3/3 PASS
+exit=0
+$ target/release/tidepool-headless gate-health --seeds 1 --ticks 36000 --param chemo_gain=0 --param part_upkeep=0.001 --param mut_rate=0.5 --param mut_sigma=0.2
+seed=1 creatures=1637 min_late=1486 plants=1812 births_late=3386 max_gen=29 mean_chemo=0.09 parked=0.00 first_bud=957 FAIL(mean_chemo=0.09 < 0.15)
+gate-health 0/1 FAIL
+exit=1
+```
 
 ## In-page bench, reference machine
 

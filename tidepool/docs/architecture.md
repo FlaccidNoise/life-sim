@@ -3,7 +3,6 @@
 Status: set 2026-10-10 from `research/kernel-bench.md` and `research/tech-feasibility.md`. This file says
 HOW the game is built. `design.md` says what it is. `roadmap.md` says in what order.
 
-
 ## 1. Stack
 
 | Layer | Choice | Version checked | Why |
@@ -30,10 +29,10 @@ These numbers are the contract. Changing one is a decision, logged in `docs/deci
 |---|---|---|
 | Tick | 1/20 second of world time | Reaction time of 50 to 100 ms reads as alive |
 | Think rate | Each creature senses and thinks every 2nd tick. Odd and even slots alternate. | Halves the two largest phases |
-| Time-skip target | 24,000 ticks (20 minutes of world time, about 30 generations) | `design.md` §4 |
+| Time-skip target | 24,000 ticks (20 minutes of world time). M1 measured about 11 generations per skip: a generation is about 2,200 ticks. The design assumed about 30. M5 decides the skip length. | `design.md` §4, `findings/m1-tuning.md` |
 | Time-skip wall time | 10 seconds on the reference machine. Hard stop at 30 seconds on any machine. | The report says how many generations passed |
 | **Throughput floor** | **2,400 ticks per second** at the reference world, WASM in Node, reference machine (Apple M4 Pro). A run with a mean below 80% of the reference population of 1,500 creatures is void. | 24,000 ticks in 10 s |
-| Reference world | The default world (1536 by 1024, 400 founder creatures, 1,200 founder plants, seed 1) after 12,000 ticks | It holds 1,148 to 1,477 creatures on seeds 1 to 3. Measured at M1: 3,757 ticks per second in WASM and 4,381 native, at a mean of 1,539 creatures (`gates.md`). That is a 24,000-tick skip in 6.4 s. M1 has no eyes, so it understates M2. M2 gives the first full reading. |
+| Reference world | The default world (1536 by 1024, 400 founder creatures, 1,200 founder plants, seed 1) after 12,000 ticks | It holds 1,148 to 1,477 creatures on seeds 1 to 3. The floor is a seed 1 reading: seeds 3 and 4 would be void (`gates.md`). Measured at M1: 3,757 ticks per second in WASM and 4,381 native, at a mean of 1,539 creatures (`gates.md`). That is a 24,000-tick skip in 6.4 s. M1 has no eyes, so it understates M2. M2 gives the first full reading. |
 | Creature pool | 4,096 slots. Budding fails when the pool is full. | Bounds the worst case |
 | Plant pool | 8,192 slots | |
 | Parts per genome | 12 genes (up to 24 parts when mirrored) | Enforced from M2 |
@@ -180,7 +179,9 @@ Messages are plain objects with a `type` field, declared in `src/protocol.ts`.
 
 Rules:
 
-- The worker steps the world on a fixed-step accumulator and posts one frame per tick.
+- The worker steps the world on a fixed-step accumulator. It posts at most one frame per 10 ms step,
+  and a step can hold up to 5 ticks. A paused world posts one frame, with no tick, when the view
+  changes.
 - A frame holds only entities inside the view rectangle the page last sent, plus a margin.
 - The page returns each frame buffer with `recycle`. If the pool is empty the worker skips that frame and
   keeps ticking.

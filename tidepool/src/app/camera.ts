@@ -28,14 +28,33 @@ export function screenToWorld(
   return { x: cam.x + (sx - cssW / 2) / cam.scale, y: cam.y + (sy - cssH / 2) / cam.scale };
 }
 
-/** The camera that shows the whole world, centred, as large as the screen allows. */
-export function fitWorld(worldW: number, worldH: number, cssW: number, cssH: number): Camera {
-  return { x: worldW / 2, y: worldH / 2, scale: Math.min(cssW / worldW, cssH / worldH) };
-}
-
 export const SCALE_MIN = 0.4; // the whole world fits a laptop screen
 export const SCALE_MAX = 12;
 export const PLAY_SCALE = 4; // a 12-unit body is 48 CSS pixels long
+
+/**
+ * The fitted camera: the world centred, as large as the screen allows. On a screen too small for the
+ * whole world at `SCALE_MIN`, it shows the middle of the world at that scale.
+ */
+export function fitWorld(worldW: number, worldH: number, cssW: number, cssH: number): Camera {
+  const scale = Math.min(cssW / worldW, cssH / worldH);
+  return { x: worldW / 2, y: worldH / 2, scale: Math.min(Math.max(scale, SCALE_MIN), SCALE_MAX) };
+}
+
+/**
+ * True when `cam` is the fitted camera of a screen of this size. A zoom or a pan that changed what
+ * the screen shows makes it false. One that the limits undid does not.
+ */
+export function isFitted(
+  cam: Camera,
+  worldW: number,
+  worldH: number,
+  cssW: number,
+  cssH: number,
+): boolean {
+  const fit = fitWorld(worldW, worldH, cssW, cssH);
+  return cam.x === fit.x && cam.y === fit.y && cam.scale === fit.scale;
+}
 
 /** Multiplies the scale by `factor`, inside the limits. The world point under (sx, sy) stays there. */
 export function zoomAt(

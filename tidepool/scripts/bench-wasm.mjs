@@ -6,7 +6,7 @@
 import { readFileSync } from 'node:fs';
 
 const USAGE =
-  'usage: node scripts/bench-wasm.mjs [--creatures <u32>] [--plants <u32>] [--world <W>x<H>] [--settle <u32>] [--ticks <u32>] [--runs <u32>] [--reference <u32>] [--floor <n>]';
+  'usage: node scripts/bench-wasm.mjs [--seed <u32>] [--creatures <u32>] [--plants <u32>] [--world <W>x<H>] [--settle <u32>] [--ticks <u32>] [--runs <u32>] [--reference <u32>] [--floor <n>]';
 // Ticks between two population samples. The sample is outside the timed section.
 const CHUNK = 100;
 // A run whose mean alive count is below this share of `--reference` is void.
@@ -34,11 +34,13 @@ function float(flag, v) {
 // The default world, as in crates/headless/src/main.rs.
 let [creatures, plants] = [400, 1200];
 let [w, h] = [1536, 1024];
+let seed = 1;
 let [settle, ticks, runs, reference, floor] = [12000, 2000, 5, 1500, 2400];
 const args = process.argv.slice(2);
 for (let i = 0; i < args.length; i += 2) {
   const [flag, v] = [args[i], args[i + 1]];
-  if (flag === '--creatures') creatures = u32(flag, v);
+  if (flag === '--seed') seed = u32(flag, v);
+  else if (flag === '--creatures') creatures = u32(flag, v);
   else if (flag === '--plants') plants = u32(flag, v);
   else if (flag === '--settle') settle = u32(flag, v);
   else if (flag === '--ticks') ticks = u32(flag, v);
@@ -70,7 +72,7 @@ const x = new WebAssembly.Instance(new WebAssembly.Module(bytes), {}).exports;
 const wasmBytes = (ptr, len) => new Uint8Array(x.memory.buffer, ptr >>> 0, len >>> 0);
 const lastError = () => new TextDecoder().decode(wasmBytes(x.tp_error_ptr(), x.tp_error_len()));
 
-const settled = x.tp_new(1, w, h);
+const settled = x.tp_new(seed, w, h);
 if (settled === 0) usage(lastError());
 x.tp_seed_founders(settled, creatures, plants);
 x.tp_tick(settled, settle);
