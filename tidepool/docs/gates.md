@@ -713,6 +713,42 @@ seed=1 plan=flagellum+cilia+filter+chemo+eye share=0.72 len=7.9 top_speed=1.21 t
 seed=1 plan=flagellum+cilia+2filter+chemo+eye share=0.19 len=7.8 top_speed=1.26 turn_rate=0.172 eye_angle=2.38
 ```
 
+**`probe-census [--seeds 1,2,3] [--ticks 36000] [--every 12000] [--param ...]`.** Added on 2026-10-12
+for findings M3 and M4 of the M2 audit: the tuning record read these numbers from a scratch census
+that was not in the repo. It runs the default world of each seed, which is the world that
+`gate-evolve` runs as given, and prints one row for each seed at each multiple of `--every`.
+`--every` is from 1 to `--ticks`. The run stops at the last multiple. It has no band and it has
+rejected nothing. The rows below are the tuned defaults, not the Start values of the other probes
+of this section.
+
+| Column | What it is |
+|---|---|
+| `seed`, `tick` | The seed, and the tick of the row |
+| `creatures`, `plants` | Alive at the row |
+| `juv` | The share of the creatures that are not full-grown: `growth` under 1 |
+| `len`, `wid`, `egg`, `old` | The mean of each gene |
+| `area` | The mean adult area, `len * len * wid`. It is a mean of products, not the product of the means |
+| `flagellum`, `cilia`, `filter`, `chemo`, `fin`, `eye` | The mean part sum of the kind: the sizes of a body's parts of that kind, added up (`Genome::size_of`) |
+| `parts` | The mean count of part genes |
+| `senseless` | The share of the creatures with no chemoreceptor part and no eye part. A part of size 0 is still a part |
+| `speed`, `turn` | The mean top speed in units per tick and the mean turn rate in radians per tick. Both are the formulas of `probe-plans` (`evolve::top_speed`, `evolve::turn_rate`): the full-grown body, alone, at full thrust. A juvenile counts with its adult body |
+| `eaten` | The energy that all creatures ate per tick, as a mean over the ticks since the row before, or since tick 0 for the first row. It depends on `--every` |
+| `reserve01` | The mean of `reserve / cap` over the plants, as in `probe-plants` |
+
+Every mean but `reserve01` is over the living creatures. A mean over nobody prints as `NaN`, not as 0.
+`creatures`, `len`, `parts`, `chemo`, and `eye` are the numbers that `gate-evolve` prints for its
+seeing run at the same tick, and `creatures`, `plants`, and `chemo` at tick 12,000 are those of
+`gate-health`. Three tests in `crates/headless/src/probes.rs` hold the columns to their fields. Two
+failed when the probe was broken: with `senseless` made to read the eye alone, and with each part
+column made to read the next kind.
+
+```
+$ target/release/tidepool-headless probe-census --seeds 1 --ticks 36000
+seed=1 tick=12000 creatures=1321 plants=2229 juv=0.36 len=12.0 wid=0.50 egg=0.68 old=4545 area=72.8 flagellum=0.55 cilia=0.40 filter=0.66 chemo=0.38 fin=0.00 eye=0.20 parts=5.1 senseless=0.00 speed=1.22 turn=0.106 eaten=185.70 reserve01=0.46
+seed=1 tick=24000 creatures=1410 plants=2229 juv=0.36 len=12.0 wid=0.50 egg=0.67 old=4145 area=72.7 flagellum=0.50 cilia=0.34 filter=0.73 chemo=0.26 fin=0.00 eye=0.20 parts=5.1 senseless=0.00 speed=1.16 turn=0.100 eaten=191.95 reserve01=0.41
+seed=1 tick=36000 creatures=1470 plants=2229 juv=0.38 len=11.8 wid=0.52 egg=0.66 old=3650 area=72.4 flagellum=0.46 cilia=0.36 filter=0.74 chemo=0.14 fin=0.00 eye=0.22 parts=5.2 senseless=0.01 speed=1.11 turn=0.104 eaten=191.80 reserve01=0.36
+```
+
 **`run --out <path>`** writes `World::save()` to the path after the run.
 
 ## In-page bench, reference machine

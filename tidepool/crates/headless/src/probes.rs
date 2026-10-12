@@ -7,12 +7,13 @@ use std::io::Write;
 
 use tidepool_sim::creature::MAX_EYES;
 use tidepool_sim::eye::{EYE_HALF_MIN, EYE_HALF_SPAN};
-use tidepool_sim::genome::{Genome, KIND_EYE};
+use tidepool_sim::genome::{Genome, KIND_CHEMO, KIND_EYE};
 use tidepool_sim::grid::CELL;
 use tidepool_sim::world::World;
 
 use crate::evolve::{self, mean_sd, top_speed, turn_rate};
 use crate::health::{args, default_world, live, median};
+use crate::{usage, value};
 
 /// Ticks between two rows of `probe-plants`.
 const PLANT_ROW_TICKS: u32 = 4000;
@@ -275,11 +276,224 @@ pub fn plans(argv: &[String]) {
     }
 }
 
+/// The mean. NaN for no values, so that a world with nobody in it does not read as a world of
+/// zeros.
+fn mean(values: impl Iterator<Item = f32>) -> f64 {
+    let (sum, n) = values.fold((0.0, 0u32), |(sum, n), v| (sum + f64::from(v), n + 1));
+    sum / f64::from(n)
+}
+
+/// One row of `probe-census`: the world as it is now. Each gene and each part sum is a mean over
+/// the living. `eaten` is the energy eaten per tick since the row before.
+fn census_row(seed: u32, world: &World, eaten: f64) -> String {
+    let (c, p) = (&world.creatures, &world.plants);
+    let of_living = |of: &dyn Fn(usize) -> f32| mean(live(world).map(of));
+    let share = |of: &dyn Fn(usize) -> bool| of_living(&|s| f32::from(u8::from(of(s))));
+    let senseless = |s: usize| {
+        let mut parts = world.genomes[s].parts.iter();
+        !parts.any(|part| part.kind == KIND_CHEMO || part.kind == KIND_EYE)
+    };
+    let plants = (0..p.slots.high_water() as usize).filter(|&s| p.slots.is_alive(s as u32));
+    let mut row = format!(
+        "seed={seed} tick={} creatures={} plants={} juv={:.2} len={:.1} wid={:.2} egg={:.2} old={:.0} area={:.1}",
+        world.tick,
+        c.slots.count(),
+        p.slots.count(),
+        share(&|s| c.growth[s] < 1.0),
+        of_living(&|s| c.len[s]),
+        of_living(&|s| c.wid[s]),
+        of_living(&|s| c.egg[s]),
+        of_living(&|s| c.old[s]),
+        of_living(&|s| c.len[s] * c.len[s] * c.wid[s]),
+    );
+    for (kind, name) in (1..).zip(&KIND_NAMES[1..]) {
+        let sum = of_living(&|s| world.genomes[s].size_of(kind));
+        row += &format!(" {name}={sum:.2}");
+    }
+    row += &format!(
+        " parts={:.1} senseless={:.2} speed={:.2} turn={:.3} eaten={eaten:.2} reserve01={:.2}",
+        of_living(&|s| world.genomes[s].parts.len() as f32),
+        share(&senseless),
+        of_living(&|s| top_speed(world, s)),
+        of_living(&|s| turn_rate(world, s)),
+        mean(plants.map(|s| p.reserve[s] / p.cap[s])),
+    );
+    row
+}
+
+/// `probe-census`. One row for each seed at each multiple of `--every`: who lives, what genes and
+/// parts they hold, how they move, and what the world eats.
+pub fn census(argv: &[String]) {
+    // `--every` is this probe's own flag. `args` reads the others.
+    let (mut every, mut others) = (12000, Vec::new());
+    let mut it = argv.iter();
+    while let Some(flag) = it.next() {
+        if flag == "--every" {
+            every = value::<u32>(flag, it.next().map(String::as_str));
+        } else {
+            others.push(flag.clone());
+        }
+    }
+    let a = args(&others, &[1, 2, 3], Some("--ticks"), 36000);
+    if every == 0 || every > a.ticks {
+        usage(&format!(
+            "--every needs a value from 1 to --ticks, which is {}",
+            a.ticks
+        ));
+    }
+    for &seed in &a.seeds {
+        let mut world = default_world(seed, &a.params);
+        while world.tick + every <= a.ticks {
+            let eaten = world.stats.eaten;
+            world.run(every);
+            let per_tick = (world.stats.eaten - eaten) / f64::from(every);
+            println!("{}", census_row(seed, &world, per_tick));
+            // A killed run keeps the rows it finished.
+            std::io::stdout().flush().expect("flush stdout");
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use tidepool_sim::genome::{KIND_FILTER, KIND_FIN, KIND_FLAGELLUM};
     use tidepool_sim::params::id;
+    use tidepool_sim::world::SpawnAt;
 
     use super::*;
+
+    /// The value of one column of a row.
+    fn column<'a>(row: &'a str, name: &str) -> &'a str {
+        let mut pairs = row.split(' ').filter_map(|pair| pair.split_once('='));
+        let found = pairs.find(|(key, _)| *key == name);
+        found.unwrap_or_else(|| panic!("no {name} in {row}")).1
+    }
+
+    /// Two bodies that differ in every gene and that hold a different size of every kind of part,
+    /// and two plants. Each column of the row has its own value, so a column that read another
+    /// field would show it.
+    #[test]
+    fn a_census_row_reads_each_column_from_its_own_field() {
+        let mut world = World::new(1, 256.0, 256.0);
+        let mut rich = Genome::default();
+        (rich.len, rich.wid, rich.egg, rich.old) = (10.0, 0.4, 0.3, 2400.0);
+        for (kind, size) in [(KIND_FILTER, 0.8), (KIND_FIN, 0.3), (KIND_EYE, 0.2)] {
+            rich.set_size(kind, size);
+        }
+        let mut bare = Genome::default();
+        (bare.len, bare.wid, bare.egg, bare.old) = (20.0, 0.6, 0.5, 4800.0);
+        bare.parts
+            .retain(|part| part.kind == KIND_FLAGELLUM || part.kind == KIND_FILTER);
+        bare.set_size(KIND_FLAGELLUM, 0.2);
+        bare.set_size(KIND_FILTER, 0.4);
+        for (genome, x, growth) in [(rich, 50.0, 1.0), (bare, 150.0, 0.5)] {
+            let at = SpawnAt {
+                x,
+                y: 100.0,
+                heading: 0.0,
+                growth,
+                energy01: 0.5,
+                parent: 0,
+                generation: 0,
+                mark: 0,
+            };
+            world.spawn(genome, at).expect("slot");
+        }
+        for (reserve, cap) in [(5.0, 10.0), (20.0, 20.0)] {
+            let s = world.plants.slots.alloc().expect("plant slot") as usize;
+            (world.plants.reserve[s], world.plants.cap[s]) = (reserve, cap);
+        }
+
+        let row = census_row(7, &world, 1.5);
+        let speed = (top_speed(&world, 0) + top_speed(&world, 1)) / 2.0;
+        let turn = (turn_rate(&world, 0) + turn_rate(&world, 1)) / 2.0;
+        assert!(top_speed(&world, 0) != top_speed(&world, 1));
+        let want = [
+            ("seed", "7".to_string()),
+            ("tick", "0".to_string()),
+            ("creatures", "2".to_string()),
+            ("plants", "2".to_string()),
+            ("juv", "0.50".to_string()),
+            ("len", "15.0".to_string()),
+            ("wid", "0.50".to_string()),
+            ("egg", "0.40".to_string()),
+            ("old", "3600".to_string()),
+            // 10 * 10 * 0.4 and 20 * 20 * 0.6.
+            ("area", "140.0".to_string()),
+            ("flagellum", "0.40".to_string()),
+            ("cilia", "0.20".to_string()),
+            ("filter", "0.60".to_string()),
+            ("chemo", "0.25".to_string()),
+            ("fin", "0.15".to_string()),
+            ("eye", "0.10".to_string()),
+            ("parts", "4.0".to_string()),
+            ("senseless", "0.50".to_string()),
+            ("speed", format!("{speed:.2}")),
+            ("turn", format!("{turn:.3}")),
+            ("eaten", "1.50".to_string()),
+            ("reserve01", "0.75".to_string()),
+        ];
+        for (name, value) in &want {
+            assert_eq!(column(&row, name), value, "{name} in {row}");
+        }
+        assert_eq!(row.split(' ').count(), want.len(), "{row}");
+    }
+
+    /// The default world after a short run. The founders hold no eye, and no part is added, lost,
+    /// or copied, so the row must say that nobody has an eye. Then the same world with the
+    /// chemoreceptor taken from every founder: nobody has a sense.
+    #[test]
+    fn a_census_row_reads_the_senses_of_a_world() {
+        let no_eye = [
+            (id::FOUNDER_EYE, 0.0),
+            (id::MUT_PART_ADD, 0.0),
+            (id::MUT_PART_REMOVE, 0.0),
+            (id::MUT_PART_DUP, 0.0),
+        ];
+        let mut world = default_world(1, &no_eye);
+        world.run(CENSUS_TICKS);
+        let row = census_row(1, &world, 0.0);
+        assert!(world.stats.births > 0, "nobody was born: {row}");
+        assert_eq!(column(&row, "eye"), "0.00", "{row}");
+        assert_eq!(column(&row, "senseless"), "0.00", "{row}");
+        assert_eq!(column(&row, "parts"), "4.0", "{row}");
+        assert!(column(&row, "chemo").parse::<f64>().expect("a number") > 0.3);
+
+        let mut world = default_world(1, &no_eye);
+        for s in live(&world).collect::<Vec<_>>() {
+            world.genomes[s]
+                .parts
+                .retain(|part| part.kind != KIND_CHEMO);
+            world.creatures.express(s, &world.genomes[s]);
+        }
+        world.run(CENSUS_TICKS);
+        let row = census_row(1, &world, 0.0);
+        assert!(world.stats.births > 0, "nobody was born: {row}");
+        assert_eq!(column(&row, "senseless"), "1.00", "{row}");
+        assert_eq!(column(&row, "chemo"), "0.00", "{row}");
+        assert_eq!(column(&row, "eye"), "0.00", "{row}");
+        assert_eq!(column(&row, "parts"), "3.0", "{row}");
+    }
+
+    /// With nobody alive a mean is not a number, and the row says so.
+    #[test]
+    fn a_census_row_of_an_empty_world_holds_no_zero_for_a_mean() {
+        let row = census_row(1, &World::new(1, 256.0, 256.0), 0.0);
+        assert_eq!(column(&row, "creatures"), "0", "{row}");
+        for name in [
+            "juv",
+            "len",
+            "eye",
+            "parts",
+            "senseless",
+            "speed",
+            "reserve01",
+        ] {
+            assert_eq!(column(&row, name), "NaN", "{name} in {row}");
+        }
+    }
+
+    const CENSUS_TICKS: u32 = 400;
 
     /// `follow` hands the lineage mark on by its own count. This holds it to the real thing: for
     /// some picks, possess the pick in a copy of the world, run to its death, and ask
