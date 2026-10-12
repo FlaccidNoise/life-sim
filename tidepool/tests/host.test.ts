@@ -536,7 +536,7 @@ test('picking an heir resumes the world in that body', () => {
     { name: 'bud_at', value: 0.2 },
     { name: 'bud_cooldown', value: 0 },
     { name: 'lifespan', value: 1200 },
-    ...['basal', 'part_upkeep', 'neuron_upkeep', 'conn_upkeep', 'move_cost'].map((name) => ({
+    ...['basal', 'neuron_upkeep', 'conn_upkeep', 'move_cost'].map((name) => ({
       name,
       value: 0,
     })),

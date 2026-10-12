@@ -11,13 +11,7 @@ use tidepool_sim::world::{SpawnAt, World};
 /// and 14 land.
 fn still_water() -> World {
     let mut w = World::new(1, 1536.0, 1024.0);
-    for k in [
-        id::BASAL,
-        id::PART_UPKEEP,
-        id::NEURON_UPKEEP,
-        id::CONN_UPKEEP,
-        id::MOVE_COST,
-    ] {
+    for k in [id::BASAL, id::NEURON_UPKEEP, id::CONN_UPKEEP, id::MOVE_COST] {
         w.params.set(k, 0.0);
     }
     w
@@ -56,9 +50,8 @@ fn solo(edit: impl FnOnce(&mut Genome)) -> (World, usize) {
 
 /// Two adults at rest, 8 apart, each changed by its edit. Their brains command nothing. One tick.
 /// The mass of each and the velocity that the push gave it.
-fn bump_of(edits: [&dyn Fn(&mut Genome); 2], push_mass: f32) -> [(f32, f32, f32); 2] {
+fn bump_of(edits: [&dyn Fn(&mut Genome); 2]) -> [(f32, f32, f32); 2] {
     let mut w = still_water();
-    w.params.set(id::PUSH_MASS, push_mass);
     let slots = [(edits[0], 0.0, 0.0), (edits[1], 4.8, 6.4)].map(|(edit, dx, dy)| {
         adult(&mut w, 768.0 + dx, 512.0 + dy, |g| {
             edit(g);
@@ -72,8 +65,8 @@ fn bump_of(edits: [&dyn Fn(&mut Genome); 2], push_mass: f32) -> [(f32, f32, f32)
 }
 
 /// `bump_of` for two adults of these lengths. Their radii add up to 9, so they overlap by 1.
-fn bump(lens: [f32; 2], push_mass: f32) -> [(f32, f32, f32); 2] {
-    bump_of([&|g| g.len = lens[0], &|g| g.len = lens[1]], push_mass)
+fn bump(lens: [f32; 2]) -> [(f32, f32, f32); 2] {
+    bump_of([&|g| g.len = lens[0], &|g| g.len = lens[1]])
 }
 
 fn drive(w: &mut World, thrust: f32, turn: f32, ticks: u32) {
@@ -143,18 +136,6 @@ fn turn_radius_grows_with_speed_and_exceeds_half_a_body_length() {
 }
 
 #[test]
-fn a_slender_body_is_faster() {
-    // The M1 motor. At `motor_curve` 1 top speed does not depend on size.
-    let top = |wid: f32| {
-        let (mut w, s) = solo(|g| g.wid = wid);
-        w.params.set(id::MOTOR_CURVE, 0.0);
-        drive(&mut w, 1.0, 0.0, 200);
-        speed(&w, s)
-    };
-    assert!(top(0.3) > top(0.8) * 1.5);
-}
-
-#[test]
 fn a_long_body_turns_slower() {
     let rate = |len: f32| {
         let (mut w, s) = solo(|g| g.len = len);
@@ -193,13 +174,10 @@ fn speed_never_passes_v_max() {
 }
 
 #[test]
-fn the_push_is_equal_at_push_mass_0_and_by_mass_at_1() {
+fn the_push_is_split_by_mass() {
     let len = |(_, vx, vy): (f32, f32, f32)| (vx * vx + vy * vy).sqrt();
-    let [small, big] = bump([6.0, 18.0], 0.0);
+    let [small, big] = bump([6.0, 18.0]);
     assert!(len(small) > 0.01, "no push: {small:?}");
-    assert!((len(small) - len(big)).abs() < 1e-6, "{small:?} {big:?}");
-
-    let [small, big] = bump([6.0, 18.0], 1.0);
     let (got, want) = (len(small) / len(big), big.0 / small.0);
     assert!((got / want - 1.0).abs() < 0.01, "got {got} want {want}");
     assert!((small.0 * small.1 + big.0 * big.1).abs() < 1e-4);
@@ -211,12 +189,9 @@ fn the_push_is_equal_at_push_mass_0_and_by_mass_at_1() {
 #[test]
 fn the_push_counts_the_mass_of_the_parts() {
     let len = |(_, vx, vy): (f32, f32, f32)| (vx * vx + vy * vy).sqrt();
-    let [light, heavy] = bump_of(
-        [&|g| g.set_size(KIND_CHEMO, 0.0), &|g| {
-            g.set_size(KIND_CHEMO, 1.0)
-        }],
-        1.0,
-    );
+    let [light, heavy] = bump_of([&|g| g.set_size(KIND_CHEMO, 0.0), &|g| {
+        g.set_size(KIND_CHEMO, 1.0)
+    }]);
     assert!(heavy.0 > light.0 * 1.2, "mass {} {}", light.0, heavy.0);
     let (got, want) = (len(light) / len(heavy), heavy.0 / light.0);
     assert!((got / want - 1.0).abs() < 0.01, "got {got} want {want}");
@@ -225,62 +200,55 @@ fn the_push_counts_the_mass_of_the_parts() {
 }
 
 #[test]
-fn two_equal_bodies_get_the_m1_push_at_any_push_mass() {
-    for push_mass in [0.0, 0.5, 1.0] {
-        let [a, b] = bump([12.0, 12.0], push_mass);
-        // The M1 push is `(9 - 8) / 8 * repel` times the offset. Then one tick of drag.
-        assert!((b.1 - 0.025 * 4.8 * 0.92).abs() < 1e-5, "vx {}", b.1);
-        assert!((b.2 - 0.025 * 6.4 * 0.70).abs() < 1e-5, "vy {}", b.2);
-        assert_eq!((a.1, a.2), (-b.1, -b.2));
-    }
+fn two_equal_bodies_get_the_same_push() {
+    let [a, b] = bump([12.0, 12.0]);
+    // The push is `(9 - 8) / 8 * repel` times the offset. Then one tick of drag.
+    assert!((b.1 - 0.025 * 4.8 * 0.92).abs() < 1e-5, "vx {}", b.1);
+    assert!((b.2 - 0.025 * 6.4 * 0.70).abs() < 1e-5, "vy {}", b.2);
+    assert_eq!((a.1, a.2), (-b.1, -b.2));
 }
 
 #[test]
-fn at_motor_curve_1_top_speed_is_free_of_size_and_turning_is_not() {
-    let body = |len: f32| {
-        let (mut w, s) = solo(|g| g.len = len);
+fn top_speed_is_free_of_size_and_turning_is_not() {
+    let body = |len: f32, wid: f32| {
+        let (mut w, s) = solo(|g| (g.len, g.wid) = (len, wid));
         w.params.set(id::PART_MASS, 0.0);
-        w.params.set(id::MOTOR_CURVE, 1.0);
         (w, s)
     };
-    let top = |len: f32| {
-        let (mut w, s) = body(len);
+    let top = |len: f32, wid: f32| {
+        let (mut w, s) = body(len, wid);
         drive(&mut w, 1.0, 0.0, 200);
         speed(&w, s)
     };
     let spin = |len: f32| {
-        let (mut w, s) = body(len);
+        let (mut w, s) = body(len, 0.5);
         drive(&mut w, 0.0, 1.0, 40);
         w.creatures.omega[s]
     };
-    let (small, big) = (top(8.0), top(20.0));
+    let (small, big) = (top(8.0, 0.3), top(20.0, 0.8));
     assert!((small / big - 1.0).abs() < 0.02, "top {small} {big}");
     let ratio = spin(8.0) / spin(20.0);
     assert!((ratio / (20.0 / 8.0) - 1.0).abs() < 0.05, "ratio {ratio}");
 }
 
 #[test]
-fn the_founder_moves_the_same_at_motor_curve_0_and_1() {
-    for part_mass in [0.0, 0.3] {
-        let moves = |curve: f32| {
-            // The four founder parts at their default sizes: a part sum of `REF_PARTS`.
-            let (mut w, s) = solo(|g| g.parts = Genome::default().parts);
-            w.params.set(id::PART_MASS, part_mass);
-            w.params.set(id::MOTOR_CURVE, curve);
-            cruise(&mut w, s)
-        };
-        let ((top_0, turn_0), (top_1, turn_1)) = (moves(0.0), moves(1.0));
-        assert!(top_0 > 1.0 && turn_0 > 0.01, "top {top_0} turn {turn_0}");
-        assert!((top_0 - top_1).abs() < 1e-4, "top {top_0} {top_1}");
-        assert!((turn_0 - turn_1).abs() < 1e-4, "turn {turn_0} {turn_1}");
-    }
+fn the_founder_moves_the_same_at_any_part_mass() {
+    let moves = |part_mass: f32| {
+        // The four founder parts at their default sizes: a part sum of `REF_PARTS`.
+        let (mut w, s) = solo(|g| g.parts = Genome::default().parts);
+        w.params.set(id::PART_MASS, part_mass);
+        cruise(&mut w, s)
+    };
+    let ((top_0, turn_0), (top_1, turn_1)) = (moves(0.0), moves(0.3));
+    assert!(top_0 > 1.0 && turn_0 > 0.01, "top {top_0} turn {turn_0}");
+    assert!((top_0 - top_1).abs() < 1e-4, "top {top_0} {top_1}");
+    assert!((turn_0 - turn_1).abs() < 1e-4, "turn {turn_0} {turn_1}");
 }
 
 #[test]
 fn a_heavier_load_of_parts_is_slower() {
     let top = |edit: fn(&mut Genome)| {
         let (mut w, s) = solo(edit);
-        w.params.set(id::MOTOR_CURVE, 1.0);
         w.params.set(id::PART_MASS, 0.3);
         drive(&mut w, 1.0, 0.0, 200);
         speed(&w, s)
@@ -289,8 +257,8 @@ fn a_heavier_load_of_parts_is_slower() {
     assert!(loaded < bare, "bare {bare} loaded {loaded}");
 }
 
-/// Rule S3 for the turn. Two bodies that differ only in a chemoreceptor, which steers nothing. At
-/// `motor_curve` 1 the turn of a body is over the heft of its parts.
+/// Rule S3 for the turn. Two bodies that differ only in a chemoreceptor, which steers nothing.
+/// The turn of a body is over the heft of its parts.
 #[test]
 fn a_heavier_load_of_parts_turns_slower() {
     let spin = |chemo: f32| {

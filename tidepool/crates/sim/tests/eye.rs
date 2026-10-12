@@ -28,7 +28,6 @@ fn world(seed: u32) -> World {
         id::PLANT_SEED_CHANCE,
         id::PLANT_DEATH_RESERVE,
         id::BASAL,
-        id::PART_UPKEEP,
         id::NEURON_UPKEEP,
         id::CONN_UPKEEP,
         id::MOVE_COST,

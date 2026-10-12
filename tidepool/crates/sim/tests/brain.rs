@@ -177,7 +177,6 @@ fn seeker(seed: u32, chemo: f32) -> f32 {
         id::PLANT_SEED_CHANCE,
         id::PLANT_DEATH_RESERVE,
         id::BASAL,
-        id::PART_UPKEEP,
         id::NEURON_UPKEEP,
         id::CONN_UPKEEP,
         id::MOVE_COST,

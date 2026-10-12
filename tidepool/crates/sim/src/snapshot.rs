@@ -2,7 +2,7 @@
 //! of what the writer produced.
 
 pub const MAGIC: [u8; 4] = *b"TDPL";
-pub const FORMAT_VERSION: u32 = 6;
+pub const FORMAT_VERSION: u32 = 7;
 /// Magic, version, payload length, and checksum.
 const ENVELOPE_BYTES: usize = 16;
 

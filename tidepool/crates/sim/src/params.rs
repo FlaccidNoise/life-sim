@@ -92,16 +92,14 @@ table! {
     ENERGY_PER_MASS "energy_per_mass" 1.0 0.1 10.0;
     /// Upkeep per unit mass per tick.
     BASAL "basal" 0.0005 0.0 0.01;
-    /// Upkeep per unit mass per unit part size per tick.
-    PART_UPKEEP "part_upkeep" 0.0002 0.0 0.01;
     /// Upkeep per neuron per tick.
     NEURON_UPKEEP "neuron_upkeep" 0.0012 0.0 0.01;
     /// Upkeep per connection per tick.
     CONN_UPKEEP "conn_upkeep" 0.0003 0.0 0.01;
     /// Cost of thrust.
     MOVE_COST "move_cost" 0.006 0.0 1.0;
-    /// Energy per tick per unit filter per unit of mouth. The mouth follows the area at
-    /// `intake_curve` 1: `area / REF_WIDTH`, which is the length for the reference body.
+    /// Energy per tick per unit filter per unit of mouth. The mouth follows the area:
+    /// `area / REF_WIDTH`, which is the length for the reference body.
     INTAKE_RATE "intake_rate" 0.08 0.0 1.0;
     /// Largest share of a plant's reserve taken per tick.
     BITE_FRACTION "bite_fraction" 0.05 0.001 1.0;
@@ -135,14 +133,6 @@ table! {
     PART_MASS "part_mass" 1.0 0.0 1.0;
     /// Weight of an eye's size in the part sum.
     EYE_COST "eye_cost" 1.0 0.0 10.0;
-    /// 0: upkeep follows mass. 1: mass to the power 3/4.
-    UPKEEP_CURVE "upkeep_curve" 1.0 0.0 1.0;
-    /// 0: the mouth follows length. 1: area.
-    INTAKE_CURVE "intake_curve" 1.0 0.0 1.0;
-    /// 0: the M1 motor. 1: speed free of size.
-    MOTOR_CURVE "motor_curve" 1.0 0.0 1.0;
-    /// 0: equal push. 1: split by mass.
-    PUSH_MASS "push_mass" 1.0 0.0 1.0;
     /// Turning per unit fin at `v_max`.
     FIN_TORQUE "fin_torque" 1.3 0.0 5.0;
     /// Side drag added per unit fin.

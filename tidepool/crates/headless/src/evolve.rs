@@ -40,10 +40,10 @@ pub fn mean_sd(values: impl Iterator<Item = f32>) -> (f64, f64) {
 /// speed.
 pub fn top_speed(world: &World, s: usize) -> f32 {
     let (p, c) = (&world.params, &world.creatures);
-    let (curve, drag) = (p.get(id::MOTOR_CURVE), p.get(id::DRAG_FWD));
+    let drag = p.get(id::DRAG_FWD);
     let drive = p.get(id::FLAG_FORCE) * c.flag_push[s] + p.get(id::CILIA_FORCE) * c.cilia[s];
     let heft = heft(c.part_sum(s, p.get(id::EYE_COST)), p.get(id::PART_MASS));
-    let accel = drive / (c.len[s] * c.wid[s] * (1.0 - curve) + REF_WIDTH * heft * curve);
+    let accel = drive / (REF_WIDTH * heft);
     (accel * (1.0 - drag) / drag).min(p.get(id::V_MAX))
 }
 
@@ -51,14 +51,12 @@ pub fn top_speed(world: &World, s: usize) -> f32 {
 /// and at its top speed, by the same rule.
 pub fn turn_rate(world: &World, s: usize) -> f32 {
     let (p, c) = (&world.params, &world.creatures);
-    let (curve, drag) = (p.get(id::MOTOR_CURVE), p.get(id::DRAG_ANG));
-    let (length, width) = (c.len[s], c.len[s] * c.wid[s]);
+    let drag = p.get(id::DRAG_ANG);
     let heft = heft(c.part_sum(s, p.get(id::EYE_COST)), p.get(id::PART_MASS));
     let steer = p.get(id::CILIA_TORQUE) * c.cilia[s]
         + p.get(id::FLAG_TORQUE) * (c.flag_push[s] + c.flag_side[s])
         + p.get(id::FIN_TORQUE) * c.fin[s] * top_speed(world, s) / p.get(id::V_MAX);
-    let inertia = 2.0 * p.get(id::INERTIA_K) * length;
-    let a_ang = steer / (inertia * width * (1.0 - curve) + inertia * REF_WIDTH * heft * curve);
+    let a_ang = steer / (2.0 * p.get(id::INERTIA_K) * c.len[s] * REF_WIDTH * heft);
     a_ang * (1.0 - drag) / drag
 }
 
