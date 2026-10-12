@@ -125,7 +125,7 @@ tick 3,000 on 3 of 3 seeds. It is met.
 | # | Question | What is measured |
 |---|---|---|
 | H2 | Should a gate read a long run? | Nothing in `make gates` reads past tick 36,000. The loss of the senses showed only at tick 144,000 |
-| H3 | Is 0.10 the right band for the two gaps? | It was set from a chance gap of 0.073 in a world that the tuning replaced. The eye gap reads 0.097 to 0.19 at tick 36,000 now |
+| H3 | Is 0.10 the right band for the two gaps? | It was set from a chance gap of 0.073 in a world that the tuning replaced. At these defaults the chance input reads scent gaps of 0.008, 0.022, -0.116 and eye gaps of -0.003, -0.015, 0.008 (`gates.md`). The real gaps at tick 36,000 on 10 seeds: scent 0.17 to 0.37, eye 0.097 to 0.19 |
 | M3 | Does the fall of the speed matter? | `speed` reads 0.85 to 1.15 at tick 36,000 and 0.73 to 0.99 at tick 144,000. No gate reads it |
 | M5 | Should `plans` and `speed_cv` have bands? | Both are printed with no band |
 | M7 | Should the size band read more than length? | `area` falls from 50 to 76 at tick 36,000 to 33 to 45 at tick 144,000. `len` loses about 1.5, and `wid` reads 0.34 to 0.45 against a founder's 0.50 |
@@ -134,11 +134,20 @@ tick 3,000 on 3 of 3 seeds. It is met.
 | L5 | The fin: default or claim? | At the default `fin_grip` a fin raises the slip. The test passes only at 0.6 |
 | L7 | The near circle on the page | The page draws a circle of 1.5 body lengths that no sense feeds |
 
-**Code and docs, in hand.**
+**Code and docs.**
 
-- The failure proofs of `gates.md` are being run again at these defaults (audit finding M1).
-- `architecture.md`, `roadmap.md`, and `design.md` §6 are being brought up to the head.
-- Comments on the fixed constants (audit finding L2) are not done.
+- Done: the failure proofs of `gates.md` ran again at these defaults (audit finding M1, commit
+  f2ee41d). Every band of the throughput, health, and evolution gates has rejected a bad input.
+  Fourteen recorded inputs still reject, and seven bands or checks have a new input. The two
+  blind-run checks have each rejected one seed of three in a living world.
+- Done: `architecture.md`, `roadmap.md`, and `design.md` §6 match the head (commit 8def4dc).
+- In part: seven fixed constants say why they are fixed (audit finding L2, commit 2ba4f3d). The
+  other constants of that finding have no reason on record and no comment.
+- Found on the way: the plan and the decision log said a Fin uses its place. It does not, in the
+  plan's own rule or in the code. Both are corrected with a dated note.
+- One finding from the proofs: in a starved world (`fert_radius=25`) the seeing runs hold 60 to 80
+  creatures and the runs with `chemo_gain=0` hold 13, 4, and 0. Where food is sparse the scent sense
+  is the difference between a world that lives and one that dies. One run per seed.
 
 **Known and carried to M3.**
 
