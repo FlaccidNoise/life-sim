@@ -359,6 +359,8 @@ mod tests {
     #[test]
     fn plant_records_follow_the_creature_records_and_are_culled_by_the_view() {
         let mut w = World::new(5, 1536.0, 1024.0);
+        // The radius below is for a `plant_cap` of 20.
+        w.params.set(id::PLANT_CAP, 20.0);
         w.seed_founders(20, 0);
         for (x, reserve, cap) in [(100.0, 20.0, 20.0), (1400.0, 5.0, 10.0)] {
             let s = w.plants.slots.alloc().expect("plant slot") as usize;

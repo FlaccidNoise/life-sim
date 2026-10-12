@@ -1,20 +1,30 @@
-# M2 tuning: the switch-on and the grazing trials
+# M2 tuning: the switch-on, the grazing rule, and the trials
 
-Date: 2026-10-11. Base commit: c5d732c. Task 13 of `docs/plans/2026-10-11-m2-bodies.md`, first stage:
-Part 1, Part 2, and trials 1 and 2 of Part 3.
+Date: 2026-10-11. Base commit: c5d732c. Task 13 of `docs/plans/2026-10-11-m2-bodies.md`, in two
+stages.
 
 ## Result
 
-**The M2 rules are on at their Start values, and the two grazing trials did not meet target 5.**
+**The M2 rules are on, with tuned defaults. Five of the six targets are met. The scent gap is not,
+and `make gates` fails on it.**
 
-- The switched-on world passes `gate-health` on 2 of 3 seeds and `gate-evolve` on 1 of 3, and the
-  bench is void: 476 creatures on seed 1 at tick 12,000. `make check` exits 0. `make gates` does not.
-- Sight kills plants 5 to 7 times as fast as they die with blind eyes, and it empties the rich
-  ground first. The seeing world holds 31% to 51% of the creatures of the world with blind eyes.
-- Trial 1, `bite_fraction=0.02`: 68% to 88% of the blind world, and body length on its floor (6.1
-  to 6.5). Trial 2, `plant_seed_range=96`: 48% to 53%, and no move in length.
-- No default changed after Part 1. The fallback of the grazing decision is a rule and is the
-  owner's.
+- **The first stage** switched the rules on and ran the two grazing trials. Sight killed plants 5 to
+  7 times as fast as they die with blind eyes, and neither trial closed the gap.
+- **The grazing rule** (a bite cannot take a plant under its death reserve) ends the kill. The
+  seeing world then holds as many creatures as either blind world, on 3 of 3 seeds.
+- **Body size** fell to its floor in every world of good foragers until trial 8. Evolution holds
+  the mouth of a newborn and builds it from the cheapest of filter, egg, and body. The accepted
+  set prices the filter, starts the egg at its top, makes the brain cost 6 times as much, and
+  gives the plants 2.75 times the reserve. `len` then reads 11.8 to 13.3 on seeds 1 to 10 and
+  levels off at 10.5 to 11.5 by tick 144,000.
+- **The accepted defaults**: `plant_growth` 0.035, `plant_cap` 55, `part_mass` 1, `neuron_upkeep`
+  0.0012, `conn_upkeep` 0.0003, `birth_growth` 0.7. 10 of the 12 trials were used.
+- **The gates**: `make check` exits 0. `make gates` exits 2 at `gate-evolve`: the scent gap of seed 1
+  reads 0.079 against 0.10, and it fails on 5 of seeds 1 to 10. The benches and `gate-health` pass.
+- **What needs a rule or a decision** has its own heading, before the last one.
+
+The file is in the order of the work. The first stage is Part 1 to Part 3. The second stage starts
+at "Second stage".
 
 ## Protocol
 
@@ -648,7 +658,7 @@ a plant can be eaten far below 0.2 and then grows back slowly.
 | none | 1,705 | 1,184 | 662 | 0.65 | 429 | 477 | 572 |
 | `plant_death_reserve=0` | 2,217 | 0 | 742 | 0.57 | 557 | 534 | 594 |
 
-## What is still wrong or fragile, at the end of this stage
+## What was still wrong or fragile at the end of the first stage
 
 Each line says which of the three claims it makes: the mechanism fires, evolution uses it, or it
 helps.
@@ -665,3 +675,1201 @@ helps.
 6. **Every reading here is one run per seed.** No arm was run twice with other founders, so the
    spread between two runs of one arm is not known. The proofs of `gates.md` put the chance gap of
    a sense at up to 0.07.
+
+# Second stage: the grazing rule, trials 3 to 12, and the close
+
+Date: 2026-10-11. Base commit: 55fdcc0.
+
+## After the grazing rule
+
+Commit 1cdcfd5 builds the fallback of the grazing decision: a bite cannot take a plant under
+`plant_death_reserve`. A rule changed, so every reading starts again. These are readings, not
+trials. No parameter changed.
+
+```
+$ target/release/tidepool-headless gate-health
+seed=1 creatures=811 min_late=647 plants=2229 births_late=1316 max_gen=8 mean_chemo=0.47 parked=0.00 first_bud=2084 juv_starved=0.69 to_bud=0.13 PASS
+seed=2 creatures=709 min_late=552 plants=2076 births_late=1096 max_gen=9 mean_chemo=0.46 parked=0.00 first_bud=2048 juv_starved=0.68 to_bud=0.14 PASS
+seed=3 creatures=700 min_late=556 plants=1965 births_late=1135 max_gen=9 mean_chemo=0.47 parked=0.00 first_bud=1971 juv_starved=0.69 to_bud=0.13 PASS
+gate-health 3/3 PASS
+$ target/release/tidepool-headless gate-evolve
+seed=1 creatures=1194 creatures_noscent=1174 creatures_noeye=1016 len=7.5 len_sd=1.25 parts=6.6 chemo=0.41 chemo_blind=0.16 eye=0.33 eye_blind=0.10 plans=5 speed_cv=0.24 FAIL(len=7.51 < 7.8)
+seed=2 creatures=1202 creatures_noscent=1096 creatures_noeye=786 len=6.5 len_sd=0.90 parts=6.8 chemo=0.38 chemo_blind=0.20 eye=0.39 eye_blind=0.09 plans=2 speed_cv=0.17 FAIL(len=6.49 < 7.8)
+seed=3 creatures=1086 creatures_noscent=1032 creatures_noeye=1121 len=7.5 len_sd=1.09 parts=5.2 chemo=0.34 chemo_blind=0.26 eye=0.30 eye_blind=0.09 plans=3 speed_cv=0.26 FAIL(len=7.50 < 7.8, chemo_gap=0.080 < 0.1)
+gate-evolve 0/3 FAIL
+$ target/release/tidepool-headless probe-heirs --seeds 1,2,3 --pick 3000      (adults)
+seed=1 pick=3000 group=adults picks=213 heir=0.68 median_ticks=1163
+seed=2 pick=3000 group=adults picks=191 heir=0.65 median_ticks=1164
+seed=3 pick=3000 group=adults picks=184 heir=0.77 median_ticks=1166
+$ target/release/tidepool-headless probe-heirs --seeds 1,2,3 --pick 12000     (adults)
+seed=1 pick=12000 group=adults picks=258 heir=0.72 median_ticks=1038
+seed=2 pick=12000 group=adults picks=260 heir=0.67 median_ticks=1100
+seed=3 pick=12000 group=adults picks=245 heir=0.71 median_ticks=1047
+$ node scripts/bench-wasm.mjs
+settled tick=12000 creatures=811 plants=2229
+run 1 creatures=794 tps=5418
+VOID: population fell
+```
+
+`gate-evolve` took 75 seconds at a load average of 12. For all picks `probe-heirs` reads 0.38 to
+0.39 at tick 3,000 and 0.37 to 0.39 at tick 12,000, and for juveniles 0.19 to 0.23.
+
+`probe-plants --seeds 1,2,3`, and the same with `--param eye_gain=0`. Rows at ticks 4,000, 12,000,
+24,000, and 36,000:
+
+| Arm | Seed | Plants | Plant deaths per 4,000 ticks | Cells | `reserve01` | Creatures |
+|---|---|---|---|---|---|---|
+| Senses on | 1 | 2,216, 2,229, 2,229, 2,229 | 1, 0, 0, 0 | 741, 743, 743, 743 | 0.55, 0.52, 0.43, 0.38 | 643, 811, 1,043, 1,194 |
+| Senses on | 2 | 2,074, 2,076, 2,076, 2,076 | 0, 0, 0, 0 | 692 at every row | 0.57, 0.50, 0.39, 0.36 | 584, 709, 1,020, 1,202 |
+| Senses on | 3 | 1,954, 1,965, 1,965, 1,965 | 0, 0, 0, 0 | 655 at every row | 0.55, 0.51, 0.46, 0.38 | 530, 700, 943, 1,086 |
+| `eye_gain=0` | 1 | 2,224, 2,229, 2,229, 2,229 | 1, 0, 0, 0 | 742, 743, 743, 743 | 0.68, 0.64, 0.60, 0.57 | 616, 714, 879, 1,016 |
+| `eye_gain=0` | 2 | 2,076 at every row | 0, 0, 0, 0 | 692 at every row | 0.69, 0.66, 0.63, 0.61 | 566, 624, 696, 786 |
+| `eye_gain=0` | 3 | 1,963, 1,965, 1,965, 1,965 | 1, 0, 0, 0 | 655 at every row | 0.67, 0.62, 0.57, 0.54 | 547, 623, 850, 1,121 |
+
+What moved against the baseline before the rule, target by target:
+
+| Target | Before the rule | After the rule |
+|---|---|---|
+| 1. `gate-health` 3 of 3 | 2 of 3. `max_gen` 7, 10, 9 | **3 of 3.** `max_gen` 8, 9, 9. Seed 1 is on the band |
+| 2. 1,200 creatures on seed 1 at tick 12,000 | 476. Void | 811. Still void |
+| 3. `len` and `len_sd` | 1 of 3. `len` 7.9, 6.3, 6.8 | 0 of 3. `len` 7.5, 6.5, 7.5 |
+| 4. `parts` and the two gaps | 3 of 3 | 2 of 3. Scent gap 0.25, 0.18, 0.08. Eye gap 0.23, 0.30, 0.21 |
+| 5. Against `creatures_noeye` | 51%, 37%, 31% | **118%, 153%, 97%. 3 of 3** |
+| 5. Against `creatures_noscent` | 140%, 72%, 92% | **102%, 110%, 105%. 3 of 3** |
+| 6. Heir for an adult picked at tick 3,000 | 69%, 60%, 74% | **68%, 65%, 77%. 3 of 3** |
+
+What the readings show:
+
+- **The rule ends the kill, and target 5 is met.** No plant dies after tick 4,000 on any seed. The
+  seeing world holds 1,086 to 1,202 creatures at tick 36,000, against 296 to 475, and holds as many
+  as either blind world or more. The kind of claim is "the mechanism fires" for the rule and "it
+  helps the world" for the count, on 3 of 3 seeds, one run each.
+- **Sight now crops the plants where it killed them.** Mean `reserve01` falls to 0.36 to 0.38 with
+  sight and to 0.54 to 0.61 with blind eyes. It is still falling at tick 36,000 in every run.
+- **The plants no longer turn over.** Every cell where a seed can root holds its 3 plants from
+  about tick 4,000 (743, 692, and 655 cells times 3), no plant dies, and no seed finds room. The
+  count of plants is a constant of the map. Nothing in the rules can remove a plant now but a
+  change of parameter. This follows from the rule as the owner wrote it. It is here so that nobody
+  is surprised.
+- **`len` is no better.** 7.5, 6.5, 7.5.
+- **The bench is still void**: 811 creatures on seed 1 at tick 12,000.
+
+### What sets the count and the size: a scratch census
+
+A scratch census outside the repo read the same three runs. Its creature counts are those of
+`probe-plants`. One row per seed at ticks 4,000, 12,000, 24,000, and 36,000.
+
+| Reading | Seed 1 | Seed 2 | Seed 3 |
+|---|---|---|---|
+| Energy eaten per tick, mean since the last row | 46.8, 48.4, 46.0, 44.3 | 43.3, 43.9, 41.7, 39.5 | 43.7, 44.3, 41.0, 39.7 |
+| The most that the plants could grow per tick | 93.5 | 83.5 | 87.2 |
+| Creatures | 643, 811, 1,043, 1,194 | 584, 709, 1,020, 1,202 | 530, 700, 943, 1,086 |
+| Mean `len` gene | 11.3, 9.9, 8.3, 7.5 | 11.3, 9.9, 7.2, 6.5 | 11.5, 10.1, 8.2, 7.5 |
+| Mean `wid` gene | 0.50, 0.47, 0.43, 0.37 | 0.50, 0.45, 0.37, 0.34 | 0.49, 0.45, 0.42, 0.37 |
+| Mean adult area, `len * len * wid` | 64, 46, 30, 21 | 63, 45, 20, 15 | 65, 47, 29, 21 |
+| Mean filter sum | 0.62, 0.68, 0.86, 1.02 | 0.61, 0.70, 1.18, 1.37 | 0.61, 0.67, 0.78, 0.87 |
+| Mean `egg` gene | 0.40, 0.39, 0.39, 0.40 | 0.40, 0.40, 0.41, 0.42 | 0.40, 0.40, 0.41, 0.43 |
+| Share of bodies that touch a plant | 0.56, 0.60, 0.52, 0.53 | 0.57, 0.60, 0.53, 0.50 | 0.65, 0.59, 0.55, 0.53 |
+| Births per 1,000 ticks, and juveniles starved | 1,461 and 1,211 at the last row | 1,830 and 1,486 | 1,255 and 1,026 |
+
+- **The world is at the limit of its food from tick 4,000.** The creatures eat 40 to 48 units of
+  energy per tick through the whole run, about half of what the plants could grow at best. The
+  count of creatures almost doubles from tick 4,000 to tick 36,000 on the same food.
+- **The count rises because the bodies shrink.** The mean adult area falls from 64 to between 15
+  and 21. The length gene and the width gene both fall, and both are still falling at tick 36,000.
+  So `len` at tick 36,000 is a point on a slope, not a level, and the count of tick 12,000 that the
+  bench needs is the count of a world of bodies that have not yet shrunk.
+- **The mouth moves from the body to the filter.** A mouth is `intake_rate * filter * area / 6`. The
+  filter sum rises from 0.61 to between 0.87 and 1.37 while the area falls to a third. A filter is
+  the cheap way to a mouth: by the arithmetic of rules P1 and S1 a unit of mouth costs 3 to 5
+  times as much upkeep through the area as through the filter, at an area of 21 and at 72.
+  `parts` rises with it (6.6, 6.8, 5.2): a second filter part.
+- **Kind of claim:** evolution uses it, on 3 of 3 seeds, one run each. Rule S2 says the plants set
+  the best body. The census says the plants set the best mouth, and evolution builds that mouth
+  from filter and not from body.
+
+## Trials 3 to 12
+
+The protocol of the first stage holds. Two things are added. A value that a trial proves goes into
+`params.rs` before the next trial, and the record says so. After each trial the bench
+(`node scripts/bench-wasm.mjs`, seed 1) and the scratch census are read with the trial's parameter.
+They are readings.
+
+### Looks before trial 3
+
+Seed 1 at tick 3,000, `gate-health --seeds 1 --ticks 3000`. A look decides nothing.
+
+| Change | `creatures` | `first_bud` | `juv_starved` | `to_bud` |
+|---|---|---|---|---|
+| none | 606 | 1,562 | 0.54 | 0.04 |
+| `plant_growth=0.03` | 825 | 1,516 | 0.57 | 0.07 |
+| `plant_growth=0.035` | 980 | 1,465 | 0.57 | 0.07 |
+| `plant_growth=0.04` | 1,019 | 1,373 | 0.58 | 0.08 |
+| `plant_cap=35` | 943 | 1,406 | 0.64 | 0.06 |
+| `birth_growth=0.6` | 484 | 1,138 | 0.35 | 0.17 |
+| `bite_fraction=0.1` | 514 | 1,694 | 0.65 | 0.04 |
+
+### Trial 3: `plant_growth` 0.02 to 0.035
+
+For target 2, and for the margin of target 1.
+
+**Why this lever and this value.** The census says the world eats all the food it can find from tick
+4,000, and that the count follows the food and the size of the bodies. The bench needs a mean of
+1,200 creatures on seed 1 over ticks 12,000 to 14,000, and the world holds 811 there: a factor of
+1.5. `plant_growth` raises what every plant grows per tick and changes nothing else: not the count
+of plants, not their radius, not the map. `plant_cap` would do the same to the food and would also
+change how much one bite gives. `fert_blobs` would change the map. A factor of 1.5 (0.03) lands on
+the line, so the value is 0.035: a factor of 1.75. 0.04 is the next step, and a world of 1,600
+creatures at tick 12,000 would sit near the throughput floor.
+
+**Hypothesis, written before the run.**
+
+- **`creatures` at tick 12,000**: 1,300 to 1,450 on seed 1, and 1,100 to 1,300 on seeds 2 and 3,
+  against 811, 709, 700. `plants` does not move: 2,229, 2,076, 1,965.
+- **`max_gen`**: 9 to 11. `first_bud` 1,700 to 1,950, against 1,971 to 2,084. `gate-health` 3 of 3.
+- **The bench**: not void, with a mean of 1,250 to 1,500 alive, and 2,700 to 3,400 ticks per second.
+  So target 2 is met.
+- **`creatures` at tick 36,000**: 1,800 to 2,200, against 1,086 to 1,202. `creatures_noeye` 1,300 to
+  2,000. Target 5 stays met.
+- **`len`**: no gain. 6.4 to 7.6, and the band fails 3 of 3. More food feeds more bodies. It does
+  not change which body is best.
+
+**Result.**
+
+```
+$ target/release/tidepool-headless gate-health --param plant_growth=0.035
+seed=1 creatures=1328 min_late=1048 plants=2229 births_late=2447 max_gen=10 mean_chemo=0.49 parked=0.00 first_bud=1747 juv_starved=0.72 to_bud=0.13 PASS
+seed=2 creatures=1207 min_late=953 plants=2076 births_late=2248 max_gen=9 mean_chemo=0.48 parked=0.00 first_bud=1870 juv_starved=0.72 to_bud=0.13 PASS
+seed=3 creatures=1124 min_late=926 plants=1965 births_late=2286 max_gen=11 mean_chemo=0.50 parked=0.00 first_bud=1687 juv_starved=0.72 to_bud=0.13 PASS
+gate-health 3/3 PASS
+$ target/release/tidepool-headless gate-evolve --param plant_growth=0.035
+seed=1 creatures=2288 creatures_noscent=2282 creatures_noeye=1906 len=6.2 len_sd=0.43 parts=5.8 chemo=0.21 chemo_blind=0.21 eye=0.40 eye_blind=0.16 plans=4 speed_cv=0.18 FAIL(len=6.15 < 7.8, len_sd=0.43 < 0.5, chemo_gap=-0.001 < 0.1)
+seed=2 creatures=2093 creatures_noscent=2139 creatures_noeye=1729 len=6.3 len_sd=0.54 parts=6.6 chemo=0.31 chemo_blind=0.07 eye=0.38 eye_blind=0.04 plans=3 speed_cv=0.22 FAIL(len=6.27 < 7.8)
+seed=3 creatures=2073 creatures_noscent=1959 creatures_noeye=1440 len=6.3 len_sd=0.68 parts=6.0 chemo=0.39 chemo_blind=0.06 eye=0.37 eye_blind=0.09 plans=4 speed_cv=0.21 FAIL(len=6.35 < 7.8)
+gate-evolve 0/3 FAIL
+```
+
+`gate-evolve` took 124 seconds at a load average of 16.
+
+The bench, in turn with the world before the trial. The machine was under heavy load from other
+projects (a load average of 21 to 25 on 12 cores), so every figure is a lower bound:
+
+| Round | Before, 794 alive: void | Trial 3, a mean of 1,404 alive: ticks per second of the 5 runs | Median |
+|---|---|---|---|
+| First reading | | 1,646, 1,614, 2,311, 2,305, 1,743 | 1,743 |
+| 1 | 3,716 in its one run | 2,470, 2,667, 2,626, 2,214, 2,473 | 2,473 |
+| 2 | 3,139 | 1,699, 1,737, 1,596, 1,757, 1,804 | 1,737 |
+| 3 | 2,744 | 1,803, 1,885, 2,000, 1,786, 2,058 | 1,885 |
+
+More readings of this set:
+
+| Reading | Seed 1 | Seed 2 | Seed 3 |
+|---|---|---|---|
+| `probe-heirs --pick 3000`, adults | 0.69 | 0.69 | 0.74 |
+| Energy eaten per tick, ticks 4,000 to 12,000 and 24,000 to 36,000 (census) | 78 and 72 | 71 and 65 | 71 and 66 |
+| Mean adult area at ticks 12,000 and 36,000 | 42 and 14 | 44 and 14 | 45 and 15 |
+| Mean filter sum at the same ticks | 0.85 and 1.37 | 0.70 and 1.46 | 0.83 and 1.56 |
+| `reserve01`, and the share of plants at their death reserve, at tick 36,000 | 0.30 and 0.16 | 0.34 and 0.15 | 0.34 and 0.15 |
+
+**Verdict: accepted, with the throughput reading still open. `plant_growth` is 0.035 in
+`params.rs` from here.**
+
+| Target | Trial 3 | Before it |
+|---|---|---|
+| 1. `gate-health` 3 of 3 | 3 of 3. `max_gen` 10, 9, 11 | 3 of 3. `max_gen` 8, 9, 9 |
+| 2. The bench holds 1,200 on seed 1 | A mean of 1,404. Not void | 794. Void |
+| 2. The bench reads 2,400 ticks per second | 1,737 to 2,473 on a loaded machine. Not decided | |
+| 3. `len` and `len_sd` | 0 of 3. `len` 6.2, 6.3, 6.3. `len_sd` 0.43 on seed 1 | 0 of 3. `len` 7.5, 6.5, 7.5 |
+| 4. `parts` and the two gaps | 2 of 3. Scent gap -0.00, 0.24, 0.33. Eye gap 0.24, 0.34, 0.28 | 2 of 3 |
+| 5. Against `creatures_noeye` and `creatures_noscent` | 120%, 121%, 144% and 100%, 98%, 106% | Met |
+| 6. Heir for an adult | 69%, 69%, 74% | Met |
+
+The hypothesis against the result:
+
+- **Right: the count follows the food.** 1,328, 1,207, 1,124 creatures at tick 12,000, inside the
+  expected ranges, and the creatures eat 1.6 to 1.7 times the energy. `max_gen` is 10, 9, 11 and
+  `first_bud` is 1,687 to 1,870. The bench is not void.
+- **Right: `len` does not gain. Wrong: it loses.** 6.2, 6.3, 6.3, under the expected 6.4 to 7.6. With
+  2.1 to 2.6 times the births the bodies reach the floor sooner. The adult area at tick 36,000 is
+  14 on every seed, and the smallest body that the genes allow has an area of 10.8.
+- **A little over: `creatures` at tick 36,000** is 2,073 to 2,288, against the expected 1,800 to
+  2,200.
+- **Not decided: the throughput.** On this machine, at this load, the trial world reads 0.55 to 0.69
+  of the world before it in the same round, and the world before it read 5,418 at a load average
+  of 16. The floor is 2,400. The close of this task reads it again.
+
+What the trial shows beyond its targets:
+
+- **The world of tick 12,000 is not the world of tick 36,000.** The bench times 1,404 creatures.
+  The same world holds 2,073 to 2,288 at tick 36,000, because the bodies shrink, and no gate times
+  that world. A time-skip in it will be slower than the bench says. `m1-tuning.md` point 8 said
+  the same of M1 with the sign turned: there the world thinned.
+- **The scent sense is at the line.** One seed of three fails the scent gap in this trial and in
+  the readings after the rule, and not the same seed. On seed 1 the seeing world holds a
+  chemoreceptor sum of 0.21, the same as its blind arm. With every rootable cell planted, the
+  direction of the scent has less to say.
+
+### Trial 4: `bite_fraction` 0.05 to 0.1
+
+For target 3. On `plant_growth` 0.035.
+
+**Why this lever and this value.** Rule S2 says a larger bite feeds a larger mouth, and with the
+grazing rule a bite can no longer kill a plant. The first stage read `len` at 0.02 and at 0.05.
+Nothing above 0.05 has been run. 0.1 is twice the default: a step large enough to show in `len` if
+the bite sets it.
+
+**Hypothesis, written before the run. This trial should fail, and the way it fails matters.**
+
+- **`len`: no gain. 6.1 to 6.6 on every seed, against 6.2, 6.3, 6.3.** The census says that evolution
+  builds the mouth from filter, not from body. A larger bite makes an adult's mouth the limit more
+  often, so it asks for more mouth. The filter sum should rise further, to 1.5 to 2.0 against 1.37
+  to 1.56, and the adult area should stay at 13 to 16.
+- **The plants are cropped harder.** One grazer that stays holds a plant at the death reserve at any
+  bite above `plant_growth`, and a larger bite gets there sooner. The share of plants at their
+  death reserve rises from 0.15 to between 0.25 and 0.40, and `reserve01` falls from 0.30 to 0.34
+  down to 0.20 to 0.28. A plant at its death reserve grows almost nothing, so the creatures eat 10%
+  to 25% less.
+- **`creatures` at tick 12,000**: 1,000 to 1,250 on seed 1, against 1,328. The bench is on the void
+  line or under it. `max_gen` 8 to 10, with `first_bud` later than 1,687 to 1,870.
+- **`creatures` at tick 36,000**: 1,600 to 2,100, against 2,073 to 2,288. Target 5 stays met.
+
+It is accepted only if `len` gains on 3 of 3 seeds and targets 1 and 2 hold.
+
+**Result.**
+
+```
+$ target/release/tidepool-headless gate-health --param bite_fraction=0.1
+seed=1 creatures=995 min_late=806 plants=2229 births_late=1895 max_gen=11 mean_chemo=0.49 parked=0.00 first_bud=1769 juv_starved=0.75 to_bud=0.12 PASS
+seed=2 creatures=877 min_late=758 plants=2076 births_late=1510 max_gen=10 mean_chemo=0.47 parked=0.00 first_bud=1843 juv_starved=0.75 to_bud=0.12 PASS
+seed=3 creatures=852 min_late=755 plants=1965 births_late=1596 max_gen=10 mean_chemo=0.48 parked=0.00 first_bud=1799 juv_starved=0.76 to_bud=0.12 PASS
+gate-health 3/3 PASS
+$ target/release/tidepool-headless gate-evolve --param bite_fraction=0.1
+seed=1 creatures=1556 creatures_noscent=1647 creatures_noeye=1231 len=6.3 len_sd=0.51 parts=6.3 chemo=0.31 chemo_blind=0.06 eye=0.39 eye_blind=0.14 plans=5 speed_cv=0.25 FAIL(len=6.25 < 7.8)
+seed=2 creatures=1406 creatures_noscent=1355 creatures_noeye=1146 len=6.3 len_sd=0.63 parts=6.6 chemo=0.25 chemo_blind=0.10 eye=0.39 eye_blind=0.06 plans=2 speed_cv=0.19 FAIL(len=6.31 < 7.8)
+seed=3 creatures=1254 creatures_noscent=1428 creatures_noeye=1292 len=7.8 len_sd=1.58 parts=6.3 chemo=0.39 chemo_blind=0.20 eye=0.34 eye_blind=0.07 plans=2 speed_cv=0.16 FAIL(len=7.78 < 7.8)
+gate-evolve 0/3 FAIL
+$ node scripts/bench-wasm.mjs --param bite_fraction=0.1
+settled tick=12000 creatures=995 plants=2229
+VOID: population fell
+```
+
+The census, at ticks 12,000 and 36,000, against the same reading of the set before the trial:
+
+| Reading | Seed 1 | Seed 2 | Seed 3 | Before, at tick 36,000 |
+|---|---|---|---|---|
+| Mean `len` gene | 10.1 and 6.3 | 10.7 and 6.3 | 10.7 and 7.8 | 6.2, 6.3, 6.3 |
+| Mean adult area | 50 and 16 | 56 and 20 | 56 and 24 | 14, 14, 15 |
+| Mean filter sum | 0.87 and 1.34 | 0.76 and 1.39 | 0.83 and 1.28 | 1.37, 1.46, 1.56 |
+| Share of plants at their death reserve | 0.10 and 0.19 | 0.10 and 0.18 | 0.11 and 0.17 | 0.16, 0.15, 0.15 |
+| `reserve01` | 0.46 and 0.28 | 0.47 and 0.31 | 0.46 and 0.31 | 0.30, 0.34, 0.34 |
+| Energy eaten per tick | 68 and 61 | 62 and 57 | 62 and 58 | 72, 65, 66 |
+| Births per 1,000 ticks at tick 36,000 | 2,376 | 2,120 | 1,663 | 3,347, 3,802, 3,228 |
+
+**Verdict: rejected. `bite_fraction` stays at 0.05.** It breaks target 2 and does not meet target 3.
+
+- **Right: no gain in `len` that holds.** 6.3, 6.3, 7.8 against 6.2, 6.3, 6.3. Two seeds are at the
+  floor. Seed 3 reads 7.78 and still fails. The bodies of this world are larger at tick 12,000
+  (10.1 to 10.7 against 9.3 to 9.9) and the world has two thirds of the births, so it is the same
+  slope, walked more slowly.
+- **Right: the plants are cropped harder and the world eats less**, by 10% to 14%. Wrong in size: the
+  share of plants at their death reserve is 0.17 to 0.19, not 0.25 to 0.40.
+- **Right: the bench is void.** 995 creatures on seed 1 at tick 12,000, against 1,328.
+- **Wrong: the filter sum did not rise further.** 1.28 to 1.39 against 1.37 to 1.56.
+- **Low: `creatures` at tick 36,000** is 1,254 to 1,556, under the expected 1,600 to 2,100 on two
+  seeds.
+
+So above 0.05 the bite is not a size lever. `len` at tick 36,000 is 6.2 to 6.3 at a bite of 0.05
+and 6.3 to 7.8 at 0.1. Trial 1 read 6.1 to 6.5 at 0.02, in the world before the grazing rule.
+
+### Trial 5: `part_mass` 0.1 to 1
+
+For target 3. On `plant_growth` 0.035.
+
+**Why this lever and this value.** The census says the body shrinks because a filter is a cheaper
+mouth than a body. `part_mass` is the one number that prices a part against the body: at 1 a
+filter sum of 1.4 makes a body 26% heavier than the founder's parts do, against 6% at 0.1, and by
+rules S1 and S3 a heavier body pays more upkeep and swims slower. No other number does this
+without also moving the upkeep of every body: `part_upkeep` at 5 times its value would triple the
+upkeep of the founder. 1 is the top of the range. If the largest value does not hold the body up,
+no value of this number does.
+
+**Hypothesis, written before the run.**
+
+- **The filter sum stays lower**: 0.8 to 1.1 at tick 36,000, against 1.37 to 1.56.
+- **The adult area stays higher**: 17 to 25, against 14 to 15. **`len` 6.6 to 7.8.** That is a gain on
+  every seed and still under the band of 7.8 on at least 2 of 3. By the arithmetic a filter is
+  still the cheaper mouth at `part_mass` 1, by a factor of 2 to 3 in upkeep and not 3 to 5. So this
+  trial should slow the fall of the body and not stop it. Evolution may also answer with a larger
+  egg, which no reading so far has shown: `egg` has stayed at 0.39 to 0.44.
+- **`creatures` at tick 12,000**: 1,200 to 1,300 on seed 1, against 1,328. A founder with its eye is
+  5% heavier at `part_mass` 1. `max_gen` 9 to 11. `gate-health` 3 of 3.
+- **`creatures` at tick 36,000**: 1,500 to 2,000, against 2,073 to 2,288: larger bodies, fewer of
+  them. Target 5 stays met.
+- **The two gaps**: no forecast. A sense costs more to carry, in both arms.
+
+It is accepted only if `len` passes 3 of 3 and targets 1 and 2 hold.
+
+**Result.**
+
+```
+$ target/release/tidepool-headless gate-health --param part_mass=1
+seed=1 creatures=1320 min_late=987 plants=2229 births_late=2447 max_gen=9 mean_chemo=0.42 parked=0.00 first_bud=1798 juv_starved=0.72 to_bud=0.13 PASS
+seed=2 creatures=1188 min_late=937 plants=2076 births_late=2125 max_gen=9 mean_chemo=0.44 parked=0.00 first_bud=1797 juv_starved=0.72 to_bud=0.13 PASS
+seed=3 creatures=1155 min_late=928 plants=1965 births_late=2177 max_gen=8 mean_chemo=0.41 parked=0.00 first_bud=1774 juv_starved=0.73 to_bud=0.13 PASS
+gate-health 3/3 PASS
+$ target/release/tidepool-headless gate-evolve --param part_mass=1
+seed=1 creatures=2115 creatures_noscent=2021 creatures_noeye=1736 len=7.2 len_sd=1.24 parts=4.4 chemo=0.09 chemo_blind=0.01 eye=0.29 eye_blind=0.06 plans=3 speed_cv=0.26 FAIL(len=7.15 < 7.8, chemo_gap=0.080 < 0.1)
+seed=2 creatures=2039 creatures_noscent=1940 creatures_noeye=1635 len=7.4 len_sd=1.49 parts=4.4 chemo=0.07 chemo_blind=0.00 eye=0.28 eye_blind=0.05 plans=5 speed_cv=0.30 FAIL(len=7.44 < 7.8, chemo_gap=0.066 < 0.1)
+seed=3 creatures=1752 creatures_noscent=1696 creatures_noeye=1712 len=8.3 len_sd=1.63 parts=4.4 chemo=0.14 chemo_blind=0.02 eye=0.28 eye_blind=0.04 plans=3 speed_cv=0.26 PASS
+gate-evolve 1/3 FAIL
+$ node scripts/bench-wasm.mjs --param part_mass=1
+settled tick=12000 creatures=1320 plants=2229
+bench-wasm creatures=1359 median_tps=3171 floor=2400 PASS
+```
+
+The bench ran at a load average of 15. The census, at ticks 12,000 and 36,000:
+
+| Reading | Seed 1 | Seed 2 | Seed 3 | Before, at tick 36,000 |
+|---|---|---|---|---|
+| Mean `len` gene | 9.7 and 7.2 | 9.9 and 7.4 | 10.0 and 8.3 | 6.2, 6.3, 6.3 |
+| Mean `wid` gene | 0.48 and 0.46 | 0.45 and 0.42 | 0.46 and 0.44 | 0.37, 0.35, 0.36 |
+| Mean adult area | 46 and 24 | 45 and 24 | 47 and 30 | 14, 14, 15 |
+| Mean filter sum | 0.65 and 0.72 | 0.64 and 0.81 | 0.62 and 0.67 | 1.37, 1.46, 1.56 |
+| Filter sum times area | 30 and 17 | 29 and 19 | 29 and 20 | 19, 20, 23 |
+| Mean `egg` gene | 0.41 and 0.46 | 0.40 and 0.45 | 0.41 and 0.42 | 0.44, 0.40, 0.41 |
+| Mean chemoreceptor sum | 0.42 and 0.09 | 0.44 and 0.07 | 0.41 and 0.14 | 0.21, 0.31, 0.39 |
+| Energy eaten per tick | 78 and 72 | 70 and 67 | 71 and 66 | 72, 65, 66 |
+
+**Verdict: not accepted by the test written before the run. `len` gains on 3 of 3 seeds and passes
+on 1. It costs the scent sense.**
+
+| Target | Trial 5 | Before it |
+|---|---|---|
+| 1. `gate-health` 3 of 3 | 3 of 3. `max_gen` 9, 9, 8 | 3 of 3. `max_gen` 10, 9, 11 |
+| 2. The bench | A mean of 1,359 alive and 3,171 ticks per second. Passes | 1,404 alive |
+| 3. `len` and `len_sd` | 1 of 3. `len` 7.2, 7.4, 8.3 | 0 of 3. `len` 6.2, 6.3, 6.3 |
+| 4. `parts` and the two gaps | 1 of 3. Scent gap 0.08, 0.07, 0.12. Eye gap 0.23, 0.23, 0.24. `parts` 4.4 | 2 of 3 |
+| 5. Against `creatures_noeye` and `creatures_noscent` | 122%, 125%, 102% and 105%, 105%, 103% | Met |
+
+The hypothesis against the result:
+
+- **Right: the filter stays small and the body stays larger.** The filter sum is 0.67 to 0.81, a
+  little under the expected 0.8 to 1.1. The adult area is 24, 24, 30 against 14, 14, 15. `len` is
+  7.2, 7.4, 8.3, inside the expected 6.6 to 7.8 on two seeds and over it on one. As expected it is
+  a gain on every seed and it fails the band on 2 of 3.
+- **Right: `creatures` at tick 12,000** is 1,320 on seed 1 and `gate-health` is 3 of 3. `max_gen` is
+  9, 9, 8: one seed on the band.
+- **A little over: `creatures` at tick 36,000** is 1,752 to 2,115, against 1,500 to 2,000.
+- **Not forecast: evolution drops the chemoreceptor.** Its sum falls to 0.07 to 0.14 in the seeing
+  world and to 0.00 to 0.02 in the blind arm. The scent gap fails on 2 of 3 seeds. `parts` falls
+  to 4.4.
+
+What the trial shows:
+
+- **This is the first number that moves `len` in a world of good foragers. Evolution uses it, on 3
+  of 3 seeds.** The census of the grazing rule read a body that hands its mouth to the filter. With
+  the filter priced, the body keeps more of it.
+- **The mouth has a floor, and it is the same in both worlds.** Filter sum times area reads 17, 19,
+  20 here and 19, 20, 23 in the world before the trial, at tick 36,000. It read 22, 20, 18 after
+  the grazing rule at the old food. So evolution shrinks the mouth to about 19 and stops, and the
+  price of the filter decides how that 19 is split between filter and body. Arithmetic, not
+  measured: a newborn of such a body, at an egg of 0.4, has a mouth of 0.04 per tick, touches a
+  plant half of the time, and pays 0.015 per tick, of which the brain is 0.006. So the floor of
+  the mouth looks like the smallest newborn that can feed itself.
+- **`len` at tick 36,000 is still a point on a slope.** The area falls from 46 to 24 between ticks
+  12,000 and 36,000. If the mouth stays at 19 and the filter at 0.75, the area ends near 25, which
+  is a length of 7.5 at this width: under the band.
+
+### Trial 6: `part_mass` 1 with twice the brain upkeep (`neuron_upkeep` 0.0004, `conn_upkeep` 0.0001)
+
+For target 3. On `plant_growth` 0.035. Trial 5 was not accepted, so this trial carries its value
+again. The three numbers are one group: the price of the filter and the fixed cost of a body. The
+second only makes sense with the first, because a body can answer a higher fixed cost with more
+filter as long as the filter is cheap.
+
+**Why.** Trial 5 says the mouth has a floor near 19 and that the floor looks like the smallest
+newborn that can feed itself. The brain is the cost that a small body cannot shrink: decision 5
+keeps it fixed per neuron and per connection, and says that a fixed cost per body favours a large
+body and a large egg. Twice the brain upkeep raises what a newborn pays from 0.015 to 0.021 per
+tick, a factor of 1.4, and a founder's upkeep by 6%.
+
+**Hypothesis, written before the run.**
+
+- **The floor of the mouth rises**: filter sum times area reads 24 to 30 at tick 36,000, against 17
+  to 20. The filter sum stays at 0.65 to 0.85.
+- **`len` 8.0 to 9.5 on every seed, and the band passes 3 of 3.** Adult area 32 to 42.
+- **The risk: evolution answers with the egg and not the body.** Then `egg` rises from 0.42 to 0.46
+  toward 0.55 or more, and `len` stays near 7.5.
+- **`creatures` at tick 12,000**: 1,100 to 1,250 on seed 1, against 1,320. Every body pays more, and
+  more juveniles starve: `juv_starved` 0.75 to 0.80 against 0.72. The bench is on the void line.
+- **`max_gen`**: 7 to 9. At least one seed may fail the band of 8. If it does, target 1 decides and
+  the trial is rejected as it stands.
+- **`creatures` at tick 36,000**: 1,200 to 1,600, against 1,752 to 2,115.
+- **The scent gap**: fails on at least 2 of 3 seeds, as in trial 5.
+
+**Result.**
+
+```
+$ target/release/tidepool-headless gate-health --param part_mass=1 --param neuron_upkeep=0.0004 --param conn_upkeep=0.0001
+seed=1 creatures=1000 min_late=874 plants=2229 births_late=1884 max_gen=9 mean_chemo=0.47 parked=0.00 first_bud=1818 juv_starved=0.76 to_bud=0.12 PASS
+seed=2 creatures=942 min_late=789 plants=2076 births_late=1736 max_gen=11 mean_chemo=0.44 parked=0.00 first_bud=1840 juv_starved=0.75 to_bud=0.12 PASS
+seed=3 creatures=850 min_late=784 plants=1965 births_late=1644 max_gen=8 mean_chemo=0.47 parked=0.00 first_bud=1843 juv_starved=0.77 to_bud=0.12 PASS
+gate-health 3/3 PASS
+$ target/release/tidepool-headless gate-evolve --param part_mass=1 --param neuron_upkeep=0.0004 --param conn_upkeep=0.0001
+seed=1 creatures=1598 creatures_noscent=1413 creatures_noeye=1340 len=9.5 len_sd=1.99 parts=4.7 chemo=0.11 chemo_blind=0.02 eye=0.29 eye_blind=0.05 plans=4 speed_cv=0.26 FAIL(chemo_gap=0.088 < 0.1)
+seed=2 creatures=1373 creatures_noscent=1304 creatures_noeye=1185 len=7.9 len_sd=1.60 parts=4.8 chemo=0.22 chemo_blind=0.03 eye=0.29 eye_blind=0.08 plans=3 speed_cv=0.18 PASS
+seed=3 creatures=1201 creatures_noscent=1185 creatures_noeye=1170 len=9.4 len_sd=1.44 parts=5.0 chemo=0.27 chemo_blind=0.04 eye=0.27 eye_blind=0.11 plans=1 speed_cv=0.21 PASS
+gate-evolve 2/3 FAIL
+$ node scripts/bench-wasm.mjs --param part_mass=1 --param neuron_upkeep=0.0004 --param conn_upkeep=0.0001
+settled tick=12000 creatures=1000 plants=2229
+VOID: population fell
+```
+
+**The `len` band passes on 3 of 3 seeds at tick 36,000. It does not last.** The census ran the same
+set to tick 72,000:
+
+| Reading at ticks 12,000, 36,000, 48,000, 72,000 | Seed 1 | Seed 2 | Seed 3 |
+|---|---|---|---|
+| Mean `len` gene | 10.9, 9.5, 9.0, 7.9 | 10.9, 7.9, 6.9, 6.5 | 11.0, 9.4, 8.9, 8.0 |
+| Mean adult area | 58, 34, 29, 23 | 57, 30, 22, 18 | 58, 41, 34, 22 |
+| Mean filter sum | 0.65, 0.78, 0.82, 0.86 | 0.62, 0.79, 0.87, 0.85 | 0.62, 0.72, 0.75, 0.80 |
+| Mean `egg` gene | 0.40, 0.45, 0.49, 0.56 | 0.40, 0.50, 0.54, 0.60 | 0.40, 0.43, 0.48, 0.55 |
+| The mouth of a newborn: filter sum times area times `egg` squared | 6.1, 5.4, 5.7, 6.1 | 5.7, 5.8, 5.5, 5.6 | 5.8, 5.5, 5.8, 5.4 |
+| Mean chemoreceptor sum | 0.47, 0.11, 0.10, 0.08 | 0.44, 0.22, 0.07, 0.03 | 0.47, 0.27, 0.19, 0.11 |
+| Creatures | 1,000, 1,598, 1,697, 1,921 | 942, 1,373, 1,627, 1,804 | 850, 1,201, 1,366, 1,641 |
+
+**Verdict: not accepted. It breaks target 2, and its pass on target 3 is a point on a slope.**
+
+| Target | Trial 6 | The accepted set |
+|---|---|---|
+| 1. `gate-health` 3 of 3 | 3 of 3. `max_gen` 9, 11, 8 | 3 of 3. `max_gen` 10, 9, 11 |
+| 2. The bench | Void: 1,000 creatures on seed 1 | A mean of 1,404 alive |
+| 3. `len` and `len_sd` | 3 of 3 at tick 36,000: 9.5, 7.9, 9.4. At tick 72,000 the census reads 7.9, 6.5, 8.0 | 0 of 3 |
+| 4. `parts` and the two gaps | 2 of 3. Scent gap 0.09, 0.19, 0.23. Eye gap 0.24, 0.21, 0.16 | 2 of 3 |
+| 5. Against `creatures_noeye` and `creatures_noscent` | 119%, 116%, 103% and 113%, 105%, 101% | Met |
+
+The hypothesis against the result:
+
+- **Right: the floor of the mouth rises, and `len` passes 3 of 3.** Filter sum times area is 27, 23,
+  30 at tick 36,000, against the expected 24 to 30. `len` is 9.5, 7.9, 9.4 against 8.0 to 9.5. Seed
+  2 is just under the range and just over the band.
+- **Right: the risk came true, and it is what happens next.** Evolution answers with the egg. `egg`
+  rises on every seed, to 0.55 to 0.60 at tick 72,000, and the body shrinks as it rises.
+- **Right: `creatures` at tick 12,000** is 1,000 on seed 1 against 1,100 to 1,250 expected: a little
+  under, and the bench is void. `juv_starved` is 0.75 to 0.77. `creatures` at tick 36,000 is 1,201
+  to 1,598.
+- **Better than feared: `max_gen`** is 9, 11, 8 and `gate-health` passes.
+- **Right: the scent gap** fails, on 1 seed and not on 2.
+
+What the trial shows:
+
+- **What evolution holds fixed is the mouth of a newborn. Evolution uses it, on 3 of 3 seeds.** Filter
+  sum times adult area times `egg` squared reads 5.4 to 6.1 at every row of every seed, while the
+  area falls by 60% and the egg grows by 40%. In trial 5, with the brain upkeep of the defaults,
+  the same product reads 3.6 to 3.9 at tick 36,000, and in trial 3 it reads 3.2 to 3.9. So twice
+  the brain upkeep asks for 1.5 times the mouth at birth.
+- **There are three ways to that mouth, and the body is the dearest.** A filter, a larger egg, and a
+  larger body all give a newborn more mouth. Evolution took the filter first. With the filter
+  priced by `part_mass` it takes the egg. A larger egg and a smaller body give the same newborn at
+  the same cost per child, and the smaller adult then pays less upkeep for the rest of its life.
+- **So `len` at tick 36,000 can be bought with numbers, and the body keeps shrinking after it.** The
+  `egg` gene has a top of 0.7. At the rate of this run it gets there after tick 100,000.
+- **The count is still not level.** 1,000 creatures at tick 12,000 and 1,921 at tick 72,000 on seed
+  1, on the same food.
+
+### Trial 7: no cheap way left to a newborn's mouth
+
+`part_mass` 1, `neuron_upkeep` 0.0012, `conn_upkeep` 0.0003, `birth_growth` 0.7. On `plant_growth`
+0.035. For target 3, as a level and not as a point on a slope.
+
+**Why this group.** Trial 6 says the body ends where the mouth of a newborn ends, and that the
+mouth can come from the filter, the egg, or the body. This group closes the first two:
+
+- `part_mass` 1 prices the filter, as in trials 5 and 6.
+- `birth_growth` 0.7 starts every founder at the top of the `egg` gene. The egg cannot grow further,
+  so it cannot stand in for the body. A larger egg is also the lever that `m1-tuning.md` named for
+  the length of a generation.
+- Six times the brain upkeep sets how much mouth a newborn needs. From two points (3.6 at the
+  default, 5.6 at twice it) the product grows by about 2 for each time the default is added, so
+  six times it asks for about 13.6. With a filter of 0.85 and an egg of 0.7 that is an adult area
+  of 33, which is a length of 8.6 to 9.8 at the widths that these worlds hold.
+
+The three only make sense together. A higher brain cost alone is answered by the filter, and with
+a priced filter by the egg. A founder at the default egg of 0.4 could not raise a newborn at this
+brain cost: its newborn has a mouth of 6.9.
+
+**Hypothesis, written before the run.**
+
+- **`len` at tick 36,000**: 9.0 to 10.5 on every seed. The band passes 3 of 3.
+- **`len` at tick 72,000 (census)**: within 1.0 of its value at tick 36,000, and 8.3 or more on
+  every seed. The area ends at 30 to 45. This is the test of the trial. If `len` falls on as it
+  did in trial 6, there is a fourth way to the mouth, or the product is not what holds.
+- **`egg`** stays at 0.62 to 0.70. The filter sum stays at 0.65 to 0.90.
+- **`first_bud`** 1,100 to 1,500, against 1,687 to 1,870, and `max_gen` 10 to 14. `juv_starved` 0.30 to
+  0.50, against 0.72. `gate-health` 3 of 3.
+- **`creatures` at tick 12,000**: 600 to 800 on seed 1. Every body costs more to run and a parent
+  buds one large child where it budded several small ones. The bench is void. The next trial is
+  the food for this set, if this one holds.
+- **`creatures` at tick 36,000**: 700 to 950. Much nearer to the count of tick 12,000 than in any
+  set so far, because the bodies stop shrinking.
+- **The scent gap** fails on at least 2 of 3 seeds: the chemoreceptor is priced like the filter.
+
+**Result.**
+
+```
+$ target/release/tidepool-headless gate-health --param part_mass=1 --param neuron_upkeep=0.0012 --param conn_upkeep=0.0003 --param birth_growth=0.7
+seed=1 creatures=637 min_late=530 plants=2229 births_late=856 max_gen=11 mean_chemo=0.44 parked=0.00 first_bud=1048 juv_starved=0.47 to_bud=0.33 PASS
+seed=2 creatures=522 min_late=464 plants=2076 births_late=683 max_gen=11 mean_chemo=0.46 parked=0.00 first_bud=1113 juv_starved=0.46 to_bud=0.34 PASS
+seed=3 creatures=578 min_late=494 plants=1965 births_late=793 max_gen=12 mean_chemo=0.46 parked=0.00 first_bud=1029 juv_starved=0.48 to_bud=0.33 PASS
+gate-health 3/3 PASS
+$ target/release/tidepool-headless gate-evolve --param part_mass=1 --param neuron_upkeep=0.0012 --param conn_upkeep=0.0003 --param birth_growth=0.7
+seed=1 creatures=841 creatures_noscent=846 creatures_noeye=771 len=9.5 len_sd=1.60 parts=4.7 chemo=0.22 chemo_blind=0.06 eye=0.25 eye_blind=0.05 plans=2 speed_cv=0.24 PASS
+seed=2 creatures=712 creatures_noscent=728 creatures_noeye=675 len=9.7 len_sd=1.67 parts=4.7 chemo=0.25 chemo_blind=0.07 eye=0.26 eye_blind=0.03 plans=2 speed_cv=0.25 PASS
+seed=3 creatures=722 creatures_noscent=785 creatures_noeye=725 len=10.7 len_sd=1.70 parts=5.1 chemo=0.25 chemo_blind=0.06 eye=0.20 eye_blind=0.10 plans=4 speed_cv=0.31 PASS
+gate-evolve 3/3 PASS
+$ node scripts/bench-wasm.mjs --param part_mass=1 --param neuron_upkeep=0.0012 --param conn_upkeep=0.0003 --param birth_growth=0.7
+settled tick=12000 creatures=637 plants=2229
+VOID: population fell
+```
+
+`gate-evolve` took 42 seconds. **This is the first set that passes `gate-evolve` on 3 of 3 seeds.** The
+census, to tick 72,000:
+
+| Reading at ticks 12,000, 36,000, 48,000, 72,000 | Seed 1 | Seed 2 | Seed 3 |
+|---|---|---|---|
+| Mean `len` gene | 10.9, 9.5, 8.9, 8.1 | 11.2, 9.7, 9.2, 9.7 | 11.0, 10.7, 10.6, 10.2 |
+| Mean `wid` gene | 0.50, 0.48, 0.47, 0.49 | 0.48, 0.50, 0.48, 0.40 | 0.49, 0.45, 0.41, 0.38 |
+| Mean adult area | 59, 44, 38, 33 | 60, 46, 40, 37 | 60, 52, 46, 40 |
+| Mean filter sum | 0.62, 0.71, 0.75, 0.85 | 0.62, 0.69, 0.75, 0.74 | 0.63, 0.69, 0.72, 0.78 |
+| Mean `egg` gene | 0.69, 0.68, 0.68, 0.67 | 0.69, 0.67, 0.65, 0.67 | 0.68, 0.67, 0.68, 0.67 |
+| The mouth of a newborn | 17.4, 14.3, 13.1, 12.6 | 17.7, 14.4, 12.8, 12.3 | 17.6, 16.0, 15.2, 14.1 |
+| Mean chemoreceptor sum | 0.44, 0.22, 0.21, 0.24 | 0.46, 0.25, 0.18, 0.25 | 0.46, 0.25, 0.14, 0.17 |
+| Creatures | 637, 841, 922, 956 | 522, 712, 804, 862 | 578, 722, 830, 872 |
+| Juveniles, as a share of the creatures | 0.36, 0.36, 0.36, 0.37 | 0.31, 0.36, 0.40, 0.36 | 0.37, 0.36, 0.37, 0.38 |
+| Energy eaten per tick | 77, 81, 83, 84 | 68, 72, 73, 75 | 73, 75, 76, 80 |
+
+**Verdict: not accepted as it stands, because the bench is void. Every other target is met. Trial 8
+is this set with the food that it needs.**
+
+| Target | Trial 7 | The accepted set |
+|---|---|---|
+| 1. `gate-health` 3 of 3 | 3 of 3. `max_gen` 11, 11, 12. `first_bud` 1,029 to 1,113 | 3 of 3. `max_gen` 10, 9, 11 |
+| 2. The bench | Void: 637 creatures on seed 1 | A mean of 1,404 alive |
+| 3. `len` and `len_sd` | 3 of 3. `len` 9.5, 9.7, 10.7. At tick 72,000: 8.1, 9.7, 10.2 | 0 of 3 |
+| 4. `parts` and the two gaps | 3 of 3. Scent gap 0.16, 0.18, 0.19. Eye gap 0.20, 0.23, 0.10. `parts` 4.7 to 5.1 | 2 of 3 |
+| 5. Against `creatures_noeye` and `creatures_noscent` | 109%, 105%, 100% and 99%, 98%, 92% | Met |
+
+The hypothesis against the result:
+
+- **Right: `len` passes 3 of 3 at tick 36,000**, at 9.5, 9.7, 10.7 against 9.0 to 10.5.
+- **Half right: the test at tick 72,000.** Seeds 2 and 3 hold: 9.7 and 10.2, within 1.0 of tick
+  36,000. Seed 1 does not: 8.1, which is 1.4 lower and under the 8.3 that the hypothesis asked
+  for. The area is still falling on every seed, more slowly in each span: on seed 1 it loses 15,
+  then 6, then 5. The mouth of a newborn falls from 17.5 toward 12 to 14 and slows. So the body
+  is nearer to a level than in any set before, and this run does not show the level.
+- **Right: the egg stays** at 0.65 to 0.69. **The filter creeps**: 0.62 to between 0.74 and 0.85. A
+  priced filter still grows, slowly. That is what is left of the slope.
+- **Right: the generation is shorter and the young live.** `first_bud` is 1,029 to 1,113, `max_gen` 11
+  to 12, `juv_starved` 0.46 to 0.48, and `to_bud` 0.33 against 0.13.
+- **Right: the count is low and nearly level.** 637 creatures on seed 1 at tick 12,000 and 956 at
+  tick 72,000: a factor of 1.5, where trial 6 read 1.9 and the world after the grazing rule read
+  1.5 by tick 36,000 alone.
+- **Wrong: the scent gap passes**, at 0.16 to 0.19 on 3 of 3 seeds. The seeing world keeps a
+  chemoreceptor sum of 0.17 to 0.25 to tick 72,000, where trial 6 lost it. Not explained.
+- **On the line: the eye gap of seed 3**, at 0.10.
+
+What the trial shows: **the body holds when nothing cheaper than a body can make a newborn's
+mouth. Evolution uses it, on 3 of 3 seeds, and the hold is not yet shown to be a level.** It takes
+three things at once: a priced filter, an egg that starts at its top, and a brain that costs 6
+times what it did. A third of the creatures are juveniles, against two thirds before, and half of
+the newborns starve, against three quarters.
+
+### Looks before trial 8
+
+Seed 1 at tick 3,000, `gate-health --seeds 1 --ticks 3000`, each on the set of trial 7.
+
+| Change | `creatures` | `first_bud` | `juv_starved` |
+|---|---|---|---|
+| none | 519 | 845 | 0.38 |
+| `plant_growth=0.07` | 890 | 701 | 0.38 |
+| `plant_growth=0.085` | 1,020 | 634 | 0.37 |
+| `plant_growth=0.1` | 1,148 | 613 | 0.37 |
+| `plant_cap=45` | 977 | 586 | 0.43 |
+
+### Trial 8: the set of trial 7 with `plant_cap` 20 to 55
+
+For target 2. `part_mass` 1, `neuron_upkeep` 0.0012, `conn_upkeep` 0.0003, `birth_growth` 0.7, and
+`plant_cap` 55, on `plant_growth` 0.035.
+
+**Why this lever and this value.** The bench needs a mean of 1,200 creatures on seed 1 and the set of
+trial 7 holds 637 at tick 12,000: it needs twice the food and a little more. `plant_growth` would
+have to go to 0.09 or 0.1, the top of its range. `plant_cap` gives the same food and one thing
+more: each bite is a share of a larger reserve, so one plant offers a mouth more per tick. By rule
+S2 that is the side on which a body pays for itself. In trial 3 the count at tick 12,000 followed
+the count of the look at tick 3,000 (a factor of 1.62 in the look and 1.64 in the trial). The look
+at `plant_cap` 45 reads a factor of 1.88, and the bench needs 2.1 to 2.2, so the value is 55.
+
+**Hypothesis, written before the run.**
+
+- **`creatures` at tick 12,000**: 1,300 to 1,450 on seed 1, and 1,050 to 1,300 on seeds 2 and 3.
+  `plants` does not move. `max_gen` 12 to 15, `first_bud` 750 to 950. `gate-health` 3 of 3.
+- **The bench**: not void, a mean of 1,300 to 1,480 alive, and 2,500 to 3,300 ticks per second if the
+  load average is under 12.
+- **`creatures` at tick 36,000**: 1,650 to 2,000. Target 5 stays met.
+- **`len` at tick 36,000**: 8.0 to 10.5, and the band passes 3 of 3. With twice the births this world
+  is further down its slope at tick 36,000 than trial 7 was: about where trial 7 was at tick
+  72,000, which read 8.1, 9.7, 10.2. Seed 1 is the one at risk.
+- **The two gaps**: the scent gap 0.10 to 0.20 and the eye gap 0.10 to 0.25. One seed may fail one of
+  them by a little: trial 7 has the eye gap of seed 3 on the line.
+
+It is accepted if targets 1 and 2 hold and `gate-evolve` is no worse than in trial 7.
+
+**Result.**
+
+```
+$ target/release/tidepool-headless gate-health --param part_mass=1 --param neuron_upkeep=0.0012 --param conn_upkeep=0.0003 --param birth_growth=0.7 --param plant_cap=55
+seed=1 creatures=1321 min_late=1170 plants=2229 births_late=2187 max_gen=14 mean_chemo=0.38 parked=0.00 first_bud=747 juv_starved=0.53 to_bud=0.33 PASS
+seed=2 creatures=1274 min_late=1110 plants=2076 births_late=2223 max_gen=16 mean_chemo=0.31 parked=0.00 first_bud=745 juv_starved=0.52 to_bud=0.32 PASS
+seed=3 creatures=1166 min_late=1066 plants=1965 births_late=1996 max_gen=16 mean_chemo=0.43 parked=0.00 first_bud=712 juv_starved=0.52 to_bud=0.33 PASS
+gate-health 3/3 PASS
+$ target/release/tidepool-headless gate-evolve --param part_mass=1 --param neuron_upkeep=0.0012 --param conn_upkeep=0.0003 --param birth_growth=0.7 --param plant_cap=55
+seed=1 creatures=1470 creatures_noscent=1511 creatures_noeye=1412 len=11.8 len_sd=1.47 parts=5.2 chemo=0.14 chemo_blind=0.06 eye=0.22 eye_blind=0.04 plans=4 speed_cv=0.23 FAIL(chemo_gap=0.079 < 0.1)
+seed=2 creatures=1361 creatures_noscent=1409 creatures_noeye=1294 len=12.8 len_sd=1.62 parts=4.4 chemo=0.15 chemo_blind=0.01 eye=0.18 eye_blind=0.05 plans=3 speed_cv=0.27 PASS
+seed=3 creatures=1390 creatures_noscent=1324 creatures_noeye=1308 len=11.9 len_sd=1.75 parts=5.1 chemo=0.28 chemo_blind=0.01 eye=0.21 eye_blind=0.05 plans=4 speed_cv=0.38 PASS
+gate-evolve 2/3 FAIL
+$ node scripts/bench-wasm.mjs --param part_mass=1 --param neuron_upkeep=0.0012 --param conn_upkeep=0.0003 --param birth_growth=0.7 --param plant_cap=55
+settled tick=12000 creatures=1321 plants=2229
+run 1 creatures=1327 tps=3078
+run 2 creatures=1327 tps=3082
+run 3 creatures=1327 tps=3072
+run 4 creatures=1327 tps=3090
+run 5 creatures=1327 tps=3096
+bench-wasm creatures=1327 median_tps=3082 floor=2400 PASS
+```
+
+`gate-evolve` took 99 seconds. The bench ran at a load average of 11. The census, to tick 72,000:
+
+| Reading at ticks 12,000, 36,000, 48,000, 72,000 | Seed 1 | Seed 2 | Seed 3 |
+|---|---|---|---|
+| Mean `len` gene | 12.1, 11.8, 11.5, 11.3 | 12.0, 12.8, 12.6, 11.6 | 12.4, 11.9, 11.6, 11.8 |
+| Mean `wid` gene | 0.50, 0.52, 0.54, 0.46 | 0.49, 0.49, 0.49, 0.49 | 0.49, 0.45, 0.42, 0.39 |
+| Mean adult area | 73, 72, 71, 59 | 71, 80, 77, 65 | 76, 66, 59, 56 |
+| Mean filter sum | 0.66, 0.74, 0.79, 0.72 | 0.67, 0.71, 0.74, 0.76 | 0.67, 0.73, 0.79, 0.78 |
+| Mean `egg` gene | 0.68, 0.66, 0.67, 0.67 | 0.68, 0.66, 0.64, 0.62 | 0.68, 0.66, 0.66, 0.64 |
+| Mean chemoreceptor sum | 0.38, 0.14, 0.11, 0.14 | 0.31, 0.15, 0.16, 0.20 | 0.43, 0.28, 0.22, 0.17 |
+| Creatures | 1,321, 1,470, 1,440, 1,564 | 1,274, 1,361, 1,389, 1,583 | 1,166, 1,390, 1,478, 1,525 |
+| Energy eaten per tick | 193, 192, 192, 184 | 173, 175, 174, 172 | 172, 169, 167, 163 |
+| `reserve01` | 0.46, 0.36, 0.34, 0.28 | 0.44, 0.37, 0.35, 0.31 | 0.44, 0.34, 0.35, 0.32 |
+
+`probe-heirs --pick 3000`, adults: 0.67, 0.70, 0.68.
+
+**Verdict: accepted. `part_mass` 1, `neuron_upkeep` 0.0012, `conn_upkeep` 0.0003, `birth_growth` 0.7, and
+`plant_cap` 55 are in `params.rs` from here.** By the test written before the run it is one band
+short: the scent gap of seed 1 reads 0.079, and trial 7 passed that band. By the order of the
+targets it is the best set so far: it is the first that meets targets 1, 2, and 3 together.
+
+| Target | Trial 8 | The set before it (trial 3) |
+|---|---|---|
+| 1. `gate-health` 3 of 3 | 3 of 3. `max_gen` 14, 16, 16. `first_bud` 712 to 747 | 3 of 3. `max_gen` 10, 9, 11 |
+| 2. The bench | A mean of 1,327 alive and 3,082 ticks per second. Passes | 1,404 alive. Throughput not decided |
+| 3. `len` and `len_sd` | 3 of 3. `len` 11.8, 12.8, 11.9. At tick 72,000: 11.3, 11.6, 11.8 | 0 of 3. `len` 6.2, 6.3, 6.3 |
+| 4. `parts` and the two gaps | 2 of 3. Scent gap 0.08, 0.14, 0.27. Eye gap 0.18, 0.13, 0.16. `parts` 4.4 to 5.2 | 2 of 3 |
+| 5. Against `creatures_noeye` and `creatures_noscent` | 104%, 105%, 106% and 97%, 97%, 105% | Met |
+| 6. Heir for an adult | 67%, 70%, 68% | Met |
+
+The hypothesis against the result:
+
+- **Right: the count.** 1,321 creatures on seed 1 at tick 12,000, and 1,274 and 1,166 on seeds 2 and
+  3. `max_gen` is 14 to 16 and `first_bud` 712 to 747. The bench is not void and reads 3,082.
+- **Low: `creatures` at tick 36,000** is 1,361 to 1,470, under the expected 1,650 to 2,000. The world
+  grows by 7% to 19% from tick 12,000, not by a half.
+- **Wrong, the good way: `len` does not fall.** 11.8, 12.8, 11.9 at tick 36,000, over the expected 8.0
+  to 10.5, and 11.3, 11.6, 11.8 at tick 72,000. The founder is 12. The area loses 8% to 26% in
+  60,000 ticks, most of it in the width on seed 3.
+- **As feared: one gap fails by a little.** The scent gap of seed 1 is 0.079.
+
+What the trial shows:
+
+- **With plants that hold more, the body holds its size. Evolution uses it, on 3 of 3 seeds, to tick
+  72,000.** This is rule S2 at work for the first time in a world of good foragers: a plant offers
+  `bite_fraction` of a reserve that is 2.75 times as large, the mouth of an adult is the limit
+  again, and a larger body takes more. Arithmetic, not measured: a plant on mean ground at the
+  `reserve01` of this world offers about 0.4 per tick, a body touches 1 to 2 plants, and a mouth of
+  that size at a filter of 0.75 is an area of 40 to 80.
+- **The brain cost is not what holds this body.** The mouth of a newborn reads 18 to 19 here at tick
+  72,000. Trial 7 shrank it to 12 to 14 at the same brain cost. So the floor that the brain sets
+  is not reached. Trial 9 asks whether the brain cost is needed at all.
+- **The world of tick 12,000 is nearly the world of tick 72,000.** 1,321 creatures and 1,564 on seed
+  1. The bench now times a world that the game will keep.
+- **The plants are grazed lower over time.** `reserve01` falls from 0.44 to 0.46 down to 0.28 to
+  0.32 by tick 72,000, and the energy eaten falls by 1% to 5%. Nothing longer was run.
+- **The chemoreceptor is small in the seeing world**, at 0.14 to 0.28, and it is the band that fails.
+  `sense.rs` multiplies the gradient by `chemo_gain` times the chemoreceptor sum, and a brain
+  weight can multiply it again at no cost. So with parts priced, evolution can keep the sense and
+  shrink the part. The scent gap then reads the size of the part and not the use of the sense.
+
+### Looks before trial 9
+
+Seed 1 at tick 3,000, `gate-health --seeds 1 --ticks 3000`, on the accepted set.
+
+| Change | `creatures` | `first_bud` | `juv_starved` |
+|---|---|---|---|
+| none | 1,179 | 551 | 0.43 |
+| `neuron_upkeep=0.0002 conn_upkeep=0.00005` | 1,506 | 563 | 0.38 |
+| The same and `plant_growth=0.028` | 1,208 | 588 | 0.39 |
+| The same and `plant_growth=0.024` | 1,086 | 644 | 0.40 |
+
+### Trial 9: the brain upkeep back at its Start value, with the food to match
+
+`neuron_upkeep` 0.0002, `conn_upkeep` 0.00005, and `plant_growth` 0.028, on the accepted set. A test
+of what trial 8 needs, not a search for a better world.
+
+**Why.** Six times the brain upkeep is the largest step of the accepted set, and decision 5 leaves
+the rule of brain upkeep to M3. Trial 8 suggests that the body is held by the plants and not by
+the brain. If so, the Start value should do, and the set is one large step smaller. A body with a
+cheap brain costs less to run, so the same food holds more of them: the look reads 1,506 creatures
+against 1,179 at tick 3,000. `plant_growth` 0.028 brings the look back to 1,208, so that the bench
+times about the same count.
+
+**Hypothesis, written before the run.**
+
+- **`len` holds**: 10.5 to 12.5 at tick 36,000 on every seed, and 9.5 or more at tick 72,000.
+- **The risk.** With a cheap brain a small body can live, so if the adult's mouth favours a body a
+  little under the founder's, nothing stops the slide early. Then `len` at tick 72,000 is under 9.5
+  and still falling.
+- **`creatures` at tick 12,000**: 1,280 to 1,420 on seed 1. `max_gen` 13 to 16. `gate-health` 3 of 3.
+  The bench passes at 2,800 to 3,300 ticks per second.
+- **`creatures` at tick 36,000**: 1,450 to 1,750.
+- **The two gaps**: as in trial 8. One may fail by a little.
+
+It is accepted if targets 1, 2, and 3 hold, `len` at tick 72,000 is 9.5 or more on every seed, and
+`gate-evolve` is no worse than in trial 8.
+
+**Result.**
+
+```
+$ target/release/tidepool-headless gate-health --param neuron_upkeep=0.0002 --param conn_upkeep=0.00005 --param plant_growth=0.028
+seed=1 creatures=1678 min_late=1368 plants=2229 births_late=2389 max_gen=18 mean_chemo=0.43 parked=0.00 first_bud=837 juv_starved=0.48 to_bud=0.35 PASS
+seed=2 creatures=1509 min_late=1235 plants=2076 births_late=2326 max_gen=19 mean_chemo=0.37 parked=0.00 first_bud=806 juv_starved=0.48 to_bud=0.35 PASS
+seed=3 creatures=1537 min_late=1267 plants=1965 births_late=2214 max_gen=18 mean_chemo=0.30 parked=0.00 first_bud=809 juv_starved=0.48 to_bud=0.34 PASS
+gate-health 3/3 PASS
+$ target/release/tidepool-headless gate-evolve --param neuron_upkeep=0.0002 --param conn_upkeep=0.00005 --param plant_growth=0.028
+seed=1 creatures=2398 creatures_noscent=2859 creatures_noeye=2118 len=8.5 len_sd=1.85 parts=4.9 chemo=0.12 chemo_blind=0.00 eye=0.22 eye_blind=0.02 plans=3 speed_cv=0.33 PASS
+seed=2 creatures=2518 creatures_noscent=2184 creatures_noeye=2106 len=7.3 len_sd=1.81 parts=5.1 chemo=0.07 chemo_blind=0.02 eye=0.26 eye_blind=0.08 plans=3 speed_cv=0.31 FAIL(len=7.32 < 7.8, chemo_gap=0.050 < 0.1)
+seed=3 creatures=2229 creatures_noscent=2102 creatures_noeye=2096 len=8.5 len_sd=1.62 parts=4.4 chemo=0.12 chemo_blind=0.02 eye=0.23 eye_blind=0.04 plans=5 speed_cv=0.39 FAIL(chemo_gap=0.098 < 0.1)
+gate-evolve 1/3 FAIL
+$ node scripts/bench-wasm.mjs --param neuron_upkeep=0.0002 --param conn_upkeep=0.00005 --param plant_growth=0.028
+settled tick=12000 creatures=1678 plants=2229
+bench-wasm creatures=1672 median_tps=2423 floor=2400 PASS
+```
+
+The census, at ticks 12,000 and 36,000:
+
+| Reading | Seed 1 | Seed 2 | Seed 3 |
+|---|---|---|---|
+| Mean `len` gene | 10.5 and 8.5 | 10.1 and 7.3 | 10.3 and 8.5 |
+| Mean adult area | 52 and 32 | 50 and 23 | 51 and 30 |
+| Mean filter sum | 0.62 and 0.64 | 0.76 and 0.97 | 0.66 and 0.69 |
+| Mean `egg` gene | 0.68 and 0.67 | 0.69 and 0.67 | 0.69 and 0.67 |
+| The mouth of a newborn | 15.0 and 9.3 | 18.1 and 10.1 | 16.0 and 9.4 |
+| Energy eaten per tick | 139 and 116 | 128 and 105 | 125 and 106 |
+
+**Verdict: rejected. The brain upkeep stays at 6 times its Start value.**
+
+- **Wrong: `len` does not hold.** 8.5, 7.3, 8.5 at tick 36,000, against the expected 10.5 to 12.5. One
+  seed is under the band. The risk named in the hypothesis is what happened: the adult area falls
+  from 51 to between 23 and 32, with the egg at its top and the filter priced. The census at tick
+  72,000 was not run: the trial had failed its test at tick 36,000.
+- **Wrong: the count.** 1,678, 1,509, 1,537 at tick 12,000 against 1,280 to 1,420, and 2,229 to 2,518
+  at tick 36,000 against 1,450 to 1,750. The look matched the count at tick 3,000 and the bodies
+  then shrank.
+- **The bench passes at 2,423**, 1% over the floor, with a mean of 1,672 alive.
+- **The energy eaten falls by 15% to 18%** from tick 12,000 to tick 36,000 as the count grows.
+
+What the trial shows: **the hold of trial 8 needs the brain cost. Evolution uses it, on 3 of 3
+seeds.** Trial 7 has the brain cost and thin plants, and its body slides slowly. Trial 9 has fat
+plants and a cheap brain, and its body slides. Trial 8 has both and holds to tick 72,000. The note
+in trial 8 that the brain cost is not what holds the body was wrong.
+
+### More readings of the accepted set
+
+None is a trial. The accepted set is the set of trial 8.
+
+Seeds 4 to 10:
+
+```
+$ target/release/tidepool-headless gate-health --seeds 4,5,6,7,8,9,10
+seed=4 creatures=1079 min_late=979 plants=1764 births_late=1961 max_gen=17 mean_chemo=0.39 parked=0.00 first_bud=702 juv_starved=0.54 to_bud=0.32 PASS
+seed=5 creatures=1381 min_late=1288 plants=2178 births_late=2276 max_gen=17 mean_chemo=0.35 parked=0.00 first_bud=752 juv_starved=0.53 to_bud=0.32 PASS
+seed=6 creatures=1117 min_late=1025 plants=1851 births_late=1903 max_gen=16 mean_chemo=0.40 parked=0.00 first_bud=720 juv_starved=0.52 to_bud=0.32 PASS
+seed=7 creatures=1345 min_late=1173 plants=2058 births_late=2276 max_gen=16 mean_chemo=0.37 parked=0.00 first_bud=714 juv_starved=0.53 to_bud=0.33 PASS
+seed=8 creatures=1321 min_late=1168 plants=1731 births_late=2296 max_gen=17 mean_chemo=0.18 parked=0.00 first_bud=667 juv_starved=0.53 to_bud=0.32 PASS
+seed=9 creatures=1169 min_late=1107 plants=1917 births_late=1985 max_gen=16 mean_chemo=0.37 parked=0.00 first_bud=737 juv_starved=0.54 to_bud=0.32 PASS
+seed=10 creatures=1218 min_late=1139 plants=1884 births_late=2259 max_gen=16 mean_chemo=0.34 parked=0.00 first_bud=694 juv_starved=0.54 to_bud=0.32 PASS
+gate-health 7/7 PASS
+$ target/release/tidepool-headless gate-evolve --seeds 4,5,6,7,8,9,10
+seed=4 creatures=1200 creatures_noscent=1200 creatures_noeye=1218 len=12.4 len_sd=1.70 parts=5.0 chemo=0.17 chemo_blind=0.04 eye=0.20 eye_blind=0.06 plans=4 speed_cv=0.28 PASS
+seed=5 creatures=1451 creatures_noscent=1460 creatures_noeye=1472 len=12.7 len_sd=1.87 parts=4.5 chemo=0.08 chemo_blind=0.04 eye=0.15 eye_blind=0.02 plans=6 speed_cv=0.28 FAIL(chemo_gap=0.041 < 0.1)
+seed=6 creatures=1233 creatures_noscent=1214 creatures_noeye=1278 len=11.9 len_sd=1.69 parts=5.4 chemo=0.20 chemo_blind=0.03 eye=0.18 eye_blind=0.07 plans=4 speed_cv=0.31 PASS
+seed=7 creatures=1459 creatures_noscent=1627 creatures_noeye=1421 len=12.7 len_sd=1.52 parts=4.7 chemo=0.07 chemo_blind=0.02 eye=0.19 eye_blind=0.04 plans=4 speed_cv=0.26 FAIL(chemo_gap=0.052 < 0.1)
+seed=8 creatures=1370 creatures_noscent=1282 creatures_noeye=1227 len=12.9 len_sd=1.58 parts=4.0 chemo=0.03 chemo_blind=0.02 eye=0.15 eye_blind=0.03 plans=3 speed_cv=0.28 FAIL(chemo_gap=0.016 < 0.1)
+seed=9 creatures=1241 creatures_noscent=1200 creatures_noeye=1389 len=13.3 len_sd=1.87 parts=4.9 chemo=0.15 chemo_blind=0.06 eye=0.19 eye_blind=0.04 plans=6 speed_cv=0.26 FAIL(chemo_gap=0.092 < 0.1)
+seed=10 creatures=1329 creatures_noscent=1365 creatures_noeye=1349 len=12.0 len_sd=1.58 parts=4.7 chemo=0.18 chemo_blind=0.03 eye=0.19 eye_blind=0.04 plans=3 speed_cv=0.29 PASS
+gate-evolve 3/7 FAIL
+```
+
+Over seeds 1 to 10:
+
+| Band | Seeds that pass | Range |
+|---|---|---|
+| `gate-health`, every band | 10 of 10 | `creatures` 1,079 to 1,381, `max_gen` 14 to 17, `first_bud` 667 to 752 |
+| `len` | 10 of 10 | 11.8 to 13.3 |
+| `len_sd` | 10 of 10 | 1.47 to 1.87 |
+| `parts` | 10 of 10 | 4.0 to 5.4 |
+| Eye gap | 10 of 10 | 0.11 to 0.18 |
+| Scent gap | 5 of 10 | 0.02 to 0.27, with a mean of 0.11 |
+| Target 5, against `creatures_noeye` | 10 of 10 | 89% to 112% |
+| Target 5, against `creatures_noscent` | 10 of 10 | 90% to 107% |
+
+**The scent gap is the one band that the accepted set does not hold.** It passes on half of the seeds.
+The seeing world keeps a chemoreceptor sum of 0.03 to 0.28 and the blind arm 0.01 to 0.06.
+
+How the living use the scent, from a scratch reading of the accepted set at tick 36,000 on seeds 1,
+2, 3:
+
+| Reading | Seed 1 | Seed 2 | Seed 3 | Founders, seed 1 at tick 300 |
+|---|---|---|---|---|
+| Mean chemoreceptor sum | 0.14 | 0.15 | 0.28 | 0.49 |
+| Mean size of the side gradient input, of a most of 1 | 0.02 | 0.02 | 0.04 | 0.07 |
+| Share of bodies with that input at its limit | 0.00 | 0.00 | 0.00 | 0.00 |
+| Mean weight of the wire from the side gradient to the turn | 2.05 | 2.22 | 2.03 | 2.00 |
+| Mean weight of the two wires from a seen plant to the turn | 1.55 | 1.47 | 1.69 | 1.50 |
+
+- **The direction of the scent is a weak signal in this world.** The input is 0.07 of its range for a
+  founder and 0.02 to 0.04 at tick 36,000. The weight that reads it stays at the founder's 2. So
+  the turn that scent asks for is a tenth or less of the turn that a seen plant asks for. The earlier
+  note that a brain weight makes up for a small part is not what happens: the weight does not
+  move.
+- **Looks, on seed 1 at tick 3,000, which decide nothing:** `chemo_gain` 8, 16, and 32 read 1,096,
+  1,003, and 984 creatures against 1,179 at the default of 4, and `chemo_gain=0` reads 1,200. A
+  stronger pull by scent does not help the founders. `eye_range` 8 and 10 read 1,094 and 1,127.
+  With `eye_gain=0` the look reads 1,230, and with both gains at 0 it reads 1,432.
+- **Why, guessed and not measured:** since the grazing rule every rootable cell holds its 3 plants
+  for good. A body inside a patch always has a plant near it, and there is no bare ground with
+  food beyond it for a scent to point at. Before the rule the scent gap read 0.17 to 0.37 on the
+  switched-on defaults.
+
+### Trial 10: `eye_range` 16 to 8
+
+For target 4. On the accepted set.
+
+**Why this lever and this value.** `eye_range` is the lever that the plan names for how much sight
+does. Sight is what makes the scent redundant: a founder's eye reaches 38 units and the plants
+stand about 18 apart. At 8 the same eye reaches 19 units. Two things may follow. An eye must be
+larger to reach as far, and the eye gap is the size of the part, so the eye gap should rise from
+its narrow 0.11 to 0.18. And a body that sees less far has more use for a sense that reads the
+ground beyond its sight.
+
+**Hypothesis, written before the run.**
+
+- **The eye gap rises** to 0.20 to 0.35 on every seed: the eye sum of the seeing world goes from 0.18
+  to 0.22 up to 0.30 to 0.45.
+- **The scent gap: no clear gain.** 0.05 to 0.25, and it fails on at least one seed of three. The
+  readings above say the scent has little to tell in this world, and a shorter sight does not
+  change the ground. This is the more likely result, and the trial is run because it is the last
+  lever with a reason behind it.
+- **`creatures` at tick 12,000**: 1,200 to 1,270 on seed 1, against 1,321. The bench is on the void
+  line. `max_gen` 14 to 16.
+- **`len`**: 11.5 to 13, as it is.
+
+It is accepted only if the scent gap passes 3 of 3 and targets 1, 2, and 3 hold. It is then read on
+seeds 4 to 10.
+
+**Result.**
+
+```
+$ target/release/tidepool-headless gate-health --param eye_range=8
+seed=1 creatures=1326 min_late=1172 plants=2229 births_late=2178 max_gen=18 mean_chemo=0.46 parked=0.00 first_bud=718 juv_starved=0.52 to_bud=0.32 PASS
+seed=2 creatures=1194 min_late=1083 plants=2076 births_late=1961 max_gen=16 mean_chemo=0.41 parked=0.00 first_bud=758 juv_starved=0.52 to_bud=0.33 PASS
+seed=3 creatures=1243 min_late=1109 plants=1965 births_late=2176 max_gen=17 mean_chemo=0.39 parked=0.00 first_bud=706 juv_starved=0.53 to_bud=0.32 PASS
+gate-health 3/3 PASS
+$ target/release/tidepool-headless gate-evolve --param eye_range=8
+seed=1 creatures=1464 creatures_noscent=1512 creatures_noeye=1412 len=14.2 len_sd=1.96 parts=4.1 chemo=0.05 chemo_blind=0.01 eye=0.13 eye_blind=0.04 plans=5 speed_cv=0.27 FAIL(chemo_gap=0.039 < 0.1, eye_gap=0.089 < 0.1)
+seed=2 creatures=1400 creatures_noscent=1331 creatures_noeye=1294 len=12.4 len_sd=1.55 parts=4.5 chemo=0.14 chemo_blind=0.05 eye=0.15 eye_blind=0.05 plans=7 speed_cv=0.26 FAIL(chemo_gap=0.094 < 0.1, eye_gap=0.099 < 0.1)
+seed=3 creatures=1258 creatures_noscent=1366 creatures_noeye=1308 len=13.3 len_sd=1.67 parts=4.8 chemo=0.19 chemo_blind=0.05 eye=0.12 eye_blind=0.05 plans=3 speed_cv=0.27 FAIL(eye_gap=0.062 < 0.1)
+gate-evolve 0/3 FAIL
+$ node scripts/bench-wasm.mjs --param eye_range=8
+settled tick=12000 creatures=1326 plants=2229
+bench-wasm creatures=1342 median_tps=3272 floor=2400 PASS
+```
+
+The bench ran at a load average of 5.
+
+**Verdict: rejected. `eye_range` stays at 16.** It breaks the eye gap on 3 of 3 seeds and does not
+help the scent gap.
+
+- **Wrong: the eye gap falls.** 0.09, 0.10, 0.06 against 0.18, 0.13, 0.16. The eye sum of the seeing
+  world falls to 0.12 to 0.15 from 0.18 to 0.22. An eye that reaches half as far is worth less,
+  and evolution does not pay for a larger one to make up the reach.
+- **Right: the scent gap does not gain.** 0.04, 0.09, 0.14 against 0.08, 0.14, 0.27.
+- **Wrong: the count does not fall.** 1,326 on seed 1 at tick 12,000 against the expected 1,200 to
+  1,270. The look at tick 3,000 was wrong again.
+- `len` is 14.2, 12.4, 13.3.
+
+So the eye band asks for sight that reaches further, not less far, and the scent band is not helped
+by weaker sight.
+
+### Trials stop here, at 10 of 12
+
+Two trials are left and are not used. The one target that is open is the scent gap of target 4, and
+no lever with a reason behind it is left for it:
+
+- `chemo_gain` up: the looks read fewer creatures at 8, 16, and 32, and the most with the direction
+  of the scent switched off.
+- `eye_range` down: trial 10.
+- `part_mass` down: the worlds at `part_mass` 0.1 after the grazing rule read a scent gap of 0.25,
+  0.18, 0.08 and of 0.00, 0.24, 0.33. One seed of three fails there too, and the body loses its
+  hold (trial 9 and the census of the grazing rule).
+- `scent_deposit`, `scent_diffuse`, `scent_decay`: the input is the gradient over the level, so the
+  strength of the field cancels. Its shape would change. No reading here says which shape would
+  make the direction worth a part.
+
+## The close
+
+### The accepted set
+
+Six defaults differ from the Start values of Part 1. `params.rs` holds them, and the parameter
+table of the plan is updated.
+
+| Parameter | Start of the first stage | Default now | Trial | What it does here |
+|---|---|---|---|---|
+| `plant_growth` | 0.02 | 0.035 | 3 | Food. The count follows it |
+| `plant_cap` | 20 | 55 | 8 | Food, and a plant that offers a mouth more per bite |
+| `part_mass` | 0.1 | 1 | 5 to 8 | Prices the filter, so the mouth is not built from filter alone |
+| `neuron_upkeep` | 0.0002 | 0.0012 | 7, 8, and 9 | With `conn_upkeep`: the cost that a small body cannot shrink |
+| `conn_upkeep` | 0.00005 | 0.0003 | 7, 8, and 9 | |
+| `birth_growth` | 0.4 | 0.7 | 7 and 8 | The founder's egg at the top of the gene, so the egg cannot stand in for the body |
+
+The rule of commit 1cdcfd5 is the seventh change: a bite cannot take a plant under its death
+reserve.
+
+### The trials in one table
+
+`gate-health` is `creatures/max_gen` at tick 12,000. `gate-evolve` is `creatures/creatures_noeye/len` at
+tick 36,000. Seeds 1, 2, 3.
+
+| Trial | Change | `gate-health` | `gate-evolve` | Verdict |
+|---|---|---|---|---|
+| 1 | `bite_fraction=0.02`, before the rule | 860/7, 1,057/13, 784/11. 2 of 3 | 1,153/1,316/6.3, 1,071/1,233/6.1, 874/1,283/6.5. 0 of 3 | Rejected |
+| 2 | `plant_seed_range=96`, before the rule | 466/7, 458/8, 463/9. 2 of 3 | 486/1,020/7.1, 444/900/6.8, 452/859/6.6. 0 of 3 | Rejected |
+| | The grazing rule, no trial | 811/8, 709/9, 700/9. 3 of 3 | 1,194/1,016/7.5, 1,202/786/6.5, 1,086/1,121/7.5. 0 of 3 | The new baseline |
+| 3 | `plant_growth=0.035` | 1,328/10, 1,207/9, 1,124/11. 3 of 3 | 2,288/1,906/6.2, 2,093/1,729/6.3, 2,073/1,440/6.3. 0 of 3 | Accepted |
+| 4 | `bite_fraction=0.1` | 995/11, 877/10, 852/10. 3 of 3 | 1,556/1,231/6.3, 1,406/1,146/6.3, 1,254/1,292/7.8. 0 of 3 | Rejected |
+| 5 | `part_mass=1` | 1,320/9, 1,188/9, 1,155/8. 3 of 3 | 2,115/1,736/7.2, 2,039/1,635/7.4, 1,752/1,712/8.3. 1 of 3 | Not accepted |
+| 6 | Trial 5 and twice the brain upkeep | 1,000/9, 942/11, 850/8. 3 of 3 | 1,598/1,340/9.5, 1,373/1,185/7.9, 1,201/1,170/9.4. 2 of 3 | Not accepted |
+| 7 | `part_mass=1`, six times the brain upkeep, `birth_growth=0.7` | 637/11, 522/11, 578/12. 3 of 3 | 841/771/9.5, 712/675/9.7, 722/725/10.7. 3 of 3 | Not accepted: the bench is void |
+| 8 | Trial 7 and `plant_cap=55` | 1,321/14, 1,274/16, 1,166/16. 3 of 3 | 1,470/1,412/11.8, 1,361/1,294/12.8, 1,390/1,308/11.9. 2 of 3 | **Accepted** |
+| 9 | The brain upkeep back at its Start value, `plant_growth=0.028` | 1,678/18, 1,509/19, 1,537/18. 3 of 3 | 2,398/2,118/8.5, 2,518/2,106/7.3, 2,229/2,096/8.5. 1 of 3 | Rejected |
+| 10 | `eye_range=8` | 1,326/18, 1,194/16, 1,243/17. 3 of 3 | 1,464/1,412/14.2, 1,400/1,294/12.4, 1,258/1,308/13.3. 0 of 3 | Rejected |
+
+### A long reading of the accepted set
+
+The scratch census, to tick 200,000 on seed 1 and to tick 144,000 on seeds 2 and 3. A reading.
+
+| Reading at ticks 12,000, 36,000, 72,000, 108,000, 144,000 | Seed 1 | Seed 2 | Seed 3 |
+|---|---|---|---|
+| Mean `len` gene | 12.1, 11.8, 11.3, 10.6, 10.5 | 12.0, 12.8, 11.6, 11.2, 11.5 | 12.4, 11.9, 11.8, 11.4, 10.7 |
+| Mean adult area | 73, 72, 59, 48, 47 | 71, 80, 65, 52, 49 | 76, 66, 56, 54, 50 |
+| Mean filter sum | 0.66, 0.74, 0.72, 0.79, 0.81 | 0.67, 0.71, 0.76, 0.78, 0.79 | 0.67, 0.73, 0.78, 0.80, 0.79 |
+| Mean `egg` gene | 0.68, 0.66, 0.67, 0.66, 0.67 | 0.68, 0.66, 0.62, 0.66, 0.67 | 0.68, 0.66, 0.64, 0.65, 0.67 |
+| Creatures | 1,321, 1,470, 1,564, 1,766, 1,691 | 1,274, 1,361, 1,583, 1,589, 1,601 | 1,166, 1,390, 1,525, 1,526, 1,682 |
+| Energy eaten per tick | 193, 192, 184, 177, 174 | 173, 175, 172, 166, 162 | 172, 169, 163, 162, 160 |
+| `reserve01` | 0.46, 0.36, 0.28, 0.26, 0.29 | 0.44, 0.37, 0.31, 0.30, 0.27 | 0.44, 0.34, 0.32, 0.31, 0.27 |
+
+At tick 200,000 seed 1 reads a `len` of 11.2, an area of 47, 1,762 creatures, and a `reserve01` of
+0.25.
+
+- **The body levels off. Evolution uses it, on 3 of 3 seeds.** The area falls from 71 to 76 down to
+  47 to 50 by tick 144,000, and on seed 1 it reads 48, 47, 47 at ticks 108,000, 144,000, and
+  200,000. `len` ends at 10.5 to 11.5. The founder is 12, and the band starts at 7.8.
+- **The world grows by 26% to 44% and then holds**: 1,166 to 1,321 creatures at tick 12,000 and
+  1,601 to 1,691 at tick 144,000.
+- **The plants are grazed lower, and the creatures eat 6% to 10% less** at tick 144,000 than at
+  tick 12,000.
+- **A time-skip in the old world misses its budget by a little.** `node scripts/bench-wasm.mjs
+  --settle 108000 --runs 3` reads 2,304 ticks per second at a mean of 1,734 alive, against a floor
+  of 2,400. The same command at the default settle reads 3,026 at 1,327. The load average was 3
+  to 4. No gate times the old world.
+
+### `probe-skip` and `probe-plans`
+
+`probe-skip` on seeds 1, 2, 3: the genes at tick 12,000 and after one skip, at tick 36,000.
+
+| Seed | Creatures, and `max_gen` | `len` | `wid` | Flagellum | Cilia | Filter | Chemoreceptor | Mean size of a brain weight |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 1,321 and 1,470. 14 and 33 | 12.05 to 11.82 | 0.50 to 0.52 | 0.55 to 0.46 | 0.40 to 0.36 | 0.66 to 0.74 | 0.38 to 0.14 | 0.27 to 0.39 |
+| 2 | 1,274 and 1,361. 16 and 35 | 11.99 to 12.76 | 0.49 to 0.49 | 0.53 to 0.43 | 0.38 to 0.28 | 0.67 to 0.71 | 0.31 to 0.15 | 0.29 to 0.40 |
+| 3 | 1,166 and 1,390. 16 and 36 | 12.36 to 11.89 | 0.49 to 0.45 | 0.49 to 0.43 | 0.38 to 0.31 | 0.67 to 0.73 | 0.43 to 0.28 | 0.29 to 0.42 |
+
+The shift over one skip, in standard deviations of the gene at tick 12,000:
+
+| Seed | `len` | `wid` | Flagellum | Cilia | Filter | Chemoreceptor | Brain weight |
+|---|---|---|---|---|---|---|---|
+| 1 | -0.23 | +0.35 | -0.64 | -0.31 | +0.78 | -1.52 | +3.87 |
+| 2 | +0.72 | +0.06 | -0.80 | -0.82 | +0.26 | -0.76 | +2.94 |
+| 3 | -0.36 | -0.83 | -0.47 | -0.55 | +0.55 | -1.07 | +3.61 |
+
+One skip is 19 to 20 generations, against the 11 of M1 (`m1-skip-drift.md`). The chemoreceptor
+moves the most of the body genes, and down. The brain weights move 3 to 4 standard deviations.
+
+`probe-plans --seed 1`: 48 plans at tick 36,000 among 1,470 creatures. The 8 most common:
+
+| Plan | Share | `len` | Top speed | Turn rate | Eye angle |
+|---|---|---|---|---|---|
+| flagellum+cilia+filter+chemo+eye | 0.40 | 11.7 | 1.11 | 0.118 | 2.47 |
+| flagellum+cilia+2filter+eye | 0.21 | 12.0 | 1.24 | 0.092 | 2.13 |
+| flagellum+cilia+filter+eye | 0.07 | 11.3 | 1.05 | 0.117 | 3.21 |
+| flagellum+cilia+filter+2chemo+eye | 0.06 | 12.6 | 1.04 | 0.093 | 2.88 |
+| flagellum+cilia+2filter+chemo+eye | 0.05 | 12.4 | 1.08 | 0.072 | 2.27 |
+| flagellum+filter+chemo+eye | 0.03 | 10.8 | 0.65 | 0.047 | 2.05 |
+| flagellum+cilia+filter+chemo+fin+eye | 0.02 | 11.5 | 1.03 | 0.115 | 2.50 |
+| flagellum+2cilia+filter+chemo+eye | 0.02 | 11.9 | 0.96 | 0.131 | 3.23 |
+
+The founder's plan holds 40% of the creatures. At least 28% have lost the chemoreceptor. Every one
+of the 8 has an eye.
+
+### Tests at the accepted defaults
+
+10 tests failed at the accepted defaults. Each sets the old value that it relied on, but for two
+that pin the default itself. `make check` exits 0.
+
+| Test | Change | Why |
+|---|---|---|
+| `frame.rs` `plant_records_follow_the_creature_records_and_are_culled_by_the_view` | Sets `plant_cap` 20 | Its radius is for a `plant_cap` of 20 |
+| `energy.rs` `a_small_body_pays_more_per_unit_of_mass_on_the_curve` | Sets `founder_eye` 0 | Its arithmetic takes the mass as the area, which holds for the reference parts |
+| `repro.rs` `a_fed_adult_buds_a_child_that_carries_its_line` | Sets `birth_growth` 0.4 | It asserts a newborn at a growth of 0.4 |
+| `repro.rs` `a_brood_conserves_energy` | Sets `birth_growth` 0.4 | It needs a brood of more than one |
+| `repro.rs` `a_parent_keeps_its_reserve` | Sets `birth_growth` 0.4 and `part_mass` 0.1 | Its child costs 11.52 |
+| `repro.rs` `the_children_of_a_brood_are_born_apart` | Sets `birth_growth` 0.4 | It needs a brood of 3 |
+| `repro.rs` `the_possessed_body_counts_its_buds` | Sets `birth_growth` 0.4 | It counts 2 children per bud |
+| `tests/host.test.ts` `a possessed body that buds shows buds and a lineage in the frame` | Sets `birth_growth` 0.4 | A founder at half of its energy must be able to pay for a child |
+| `world.rs` `the_default_genome_is_the_default_body` | **The assertion now reads 0.7** | `Genome::default()` holds the default of `birth_growth`. The test pins that default |
+| `world.rs` `spawn_sets_the_creature_from_the_genome_and_the_place` | **The assertion now reads 0.7** | The same |
+
+One more test changed, as asked after the first stage:
+
+- **`genome.rs` `with_every_m2_rate_at_0_a_mutation_makes_the_m1_draws_and_no_more` can fail again.**
+  Its first two assertions compared two equal tables. They are replaced. The test now takes the
+  defaults, sets every M2 rate to 0 by hand, mutates, and compares the generator with one that the
+  test steps by hand through the M1 draws at the M1 rates of the defaults: a draw for the chance
+  of each gene, a `gauss` for each hit, and a `gauss` for the hue. It also asserts that a gene was
+  hit and that the child differs from the parent. Proof: with the M2 rates set to 0.5 where the
+  test sets 0, it fails on the comparison of the two generators. The last block of the test now
+  compares against that mutation and not against the old one.
+
+Three tests are new, with the rule: `a_bite_stops_at_the_death_reserve`,
+`a_plant_at_its_death_reserve_feeds_nobody`, and `grazing_never_removes_a_plant`. Each failed before
+the rule was written.
+
+### The gates at the close
+
+```
+$ make check
+exit 0
+$ make gates
+target/release/tidepool-headless bench
+settled tick=12000 creatures=1321 plants=2229
+bench creatures=1327 median_tps=3214 floor=2400 PASS
+node scripts/bench-wasm.mjs
+settled tick=12000 creatures=1321 plants=2229
+bench-wasm creatures=1327 median_tps=2989 floor=2400 PASS
+target/release/tidepool-headless gate-health
+seed=1 creatures=1321 min_late=1170 plants=2229 births_late=2187 max_gen=14 mean_chemo=0.38 parked=0.00 first_bud=747 juv_starved=0.53 to_bud=0.33 PASS
+seed=2 creatures=1274 min_late=1110 plants=2076 births_late=2223 max_gen=16 mean_chemo=0.31 parked=0.00 first_bud=745 juv_starved=0.52 to_bud=0.32 PASS
+seed=3 creatures=1166 min_late=1066 plants=1965 births_late=1996 max_gen=16 mean_chemo=0.43 parked=0.00 first_bud=712 juv_starved=0.52 to_bud=0.33 PASS
+gate-health 3/3 PASS
+target/release/tidepool-headless gate-evolve
+seed=1 creatures=1470 creatures_noscent=1511 creatures_noeye=1412 len=11.8 len_sd=1.47 parts=5.2 chemo=0.14 chemo_blind=0.06 eye=0.22 eye_blind=0.04 plans=4 speed_cv=0.23 FAIL(chemo_gap=0.079 < 0.1)
+seed=2 creatures=1361 creatures_noscent=1409 creatures_noeye=1294 len=12.8 len_sd=1.62 parts=4.4 chemo=0.15 chemo_blind=0.01 eye=0.18 eye_blind=0.05 plans=3 speed_cv=0.27 PASS
+seed=3 creatures=1390 creatures_noscent=1324 creatures_noeye=1308 len=11.9 len_sd=1.75 parts=5.1 chemo=0.28 chemo_blind=0.01 eye=0.21 eye_blind=0.05 plans=4 speed_cv=0.38 PASS
+gate-evolve 2/3 FAIL
+make: *** [gates] Error 1
+```
+
+**`make check` exits 0. `make gates` exits 2: it fails at its last step, `gate-evolve`, on the scent
+gap of seed 1.** The two benches and `gate-health` pass. CI would fail at the same step.
+
+The throughput, native and WASM in turn, 3 rounds at a load average of 3.7, each at a mean of 1,327
+alive: 3,298, 2,993, 3,284 native and 3,002, 3,043, 3,067 WASM.
+
+### The six targets at the close
+
+| Target | At the close | Met |
+|---|---|---|
+| 1. `gate-health` 3 of 3 | `creatures` 1,321, 1,274, 1,166. `max_gen` 14, 16, 16. `first_bud` 712 to 747. Seeds 4 to 10 pass too | Yes |
+| 2. `make gates` exits 0: 1,200 creatures and 2,400 ticks per second | A mean of 1,327 alive and 2,989 to 3,067 in WASM. But `make gates` exits 2 at `gate-evolve` | The bench: yes. The exit code: no |
+| 3. `len` and `len_sd` 3 of 3 | `len` 11.8, 12.8, 11.9. `len_sd` 1.47 to 1.75. 10 of 10 seeds. 10.5 to 11.5 at tick 144,000 | Yes |
+| 4. `parts`, the eye gap, the scent gap 3 of 3 | `parts` 4.4 to 5.2. Eye gap 0.18, 0.13, 0.16. Scent gap 0.08, 0.14, 0.27 | **No.** The scent gap fails on seed 1, and on 5 of seeds 1 to 10 |
+| 5. `creatures` at 80% of each blind run | 104%, 105%, 106% of `creatures_noeye` and 97%, 97%, 105% of `creatures_noscent` | Yes |
+| 6. An adult picked at tick 3,000 has an heir in 60% of picks | 67%, 70%, 68% | Yes |
+
+## What needs a rule or a decision
+
+None of these was made here.
+
+1. **The scent sense after the grazing rule.** The rule plants every rootable cell for good, and in
+   that world the direction of the scent is worth less than the part that reads it. Either the
+   world must give the scent something to point at (plants that die of something else, or that
+   are not everywhere), or the scent gap band is not the right reading of the sense. The first is
+   a rule and the second is a band. Both are out of scope here.
+2. **Plants that never die.** It follows from the rule as written. Is it wanted?
+3. **The brain upkeep.** It now carries the size of the body. A change of the rule in M3 (decision
+   5) will move the body with it.
+4. **The egg gene.** The accepted set starts it at the top of its range. The range is a constant
+   (difference 6 of the plan). A wider range would let evolution trade the body for the egg again.
+5. **The words of rule S2 in the plan.** They say `bite_fraction` is a size lever. It is not, at
+   any value tried.
+6. **A time-skip in an old world.** The bench times tick 12,000. The old world is 26% to 44%
+   fuller and reads under the floor.
+
+## What is still wrong or fragile
+
+Each line says which of the three claims it makes: the mechanism fires, evolution uses it, or it
+helps.
+
+1. **The scent gap fails on half of the seeds, and `make gates` fails with it. Evolution does not
+   keep the chemoreceptor in this world.** On seeds 1 to 10 the gap is 0.02 to 0.27 with a mean of
+   0.11, against a band of 0.10. The seeing world holds a chemoreceptor sum of 0.03 to 0.28. The
+   side gradient input reads 0.02 to 0.04 of its range. No lever was found: see "Trials stop
+   here, at 10 of 12".
+2. **The plants never turn over. The mechanism fires.** Since the grazing rule every rootable cell
+   holds its 3 plants for good. No plant dies and no seed roots after about tick 4,000.
+3. **The body holds on three numbers at once, and each sits at an end. Evolution uses it, on 3 of 3
+   seeds to tick 144,000.** `part_mass` is at the top of its range. The founder's egg is at the top
+   of the `egg` gene, so that gene can only go down, and it reads 0.62 to 0.68 in every row. The
+   brain upkeep is 6 times its Start value, and decision 5 leaves the rule of brain upkeep to M3.
+   Take the brain cost away and the body slides (trial 9). Take the fat plants away and it slides
+   slowly (trial 7). No trial took away the egg or the priced filter alone at `plant_cap` 55.
+4. **Rule S2 is not what the plan says it is. Evolution uses it.** The plan says the plants set the
+   best body and that `bite_fraction` is a size lever. Measured: evolution holds the mouth of a
+   newborn and builds it from the cheapest of filter, egg, and body. `bite_fraction` at 0.02, 0.05,
+   and 0.1 leaves `len` at the floor.
+5. **The eye gap has little room.** 0.11 to 0.18 on seeds 1 to 10, against 0.10. A shorter sight
+   breaks it (trial 10).
+6. **An old world is slower than the bench world.** The world holds 26% to 44% more creatures at
+   tick 144,000 than at tick 12,000, and reads 2,304 ticks per second at tick 108,000 against a
+   floor of 2,400. No gate times it. The mechanism fires.
+7. **The plants are grazed lower for 100,000 ticks.** `reserve01` falls from 0.44 to 0.46 down to
+   0.25 to 0.29, and the energy eaten falls by 6% to 10%. Seed 1 is level from tick 108,000 to tick
+   200,000. Nothing longer was run.
+8. **Half of the newborns starve as juveniles. The mechanism fires.** `juv_starved` is 0.52 to 0.54,
+   against 0.66 to 0.72 before the accepted set and 0.46 to 0.50 before the M2 rules.
+9. **A parent now buds one large child.** A child at an egg of 0.7 costs about half of what a
+   full-grown parent can hold. `brood_max` is 4 and is seldom reached. Not measured: the size of a
+   brood in the accepted world.
+10. **The bench has a quarter of room over the floor**: 2,989 to 3,067 ticks per second in WASM at a
+    load average of 3 to 4. Under a load average of 21 to 25 another world read a third to a half
+    less than it did at 16.
+11. **A look at tick 3,000 was wrong 3 more times**: for `plant_seed_range` (trial 2), for the count
+    with a cheap brain (trial 9), and for the count at `eye_range` 8 (trial 10).
+12. **Every reading is one run per seed.** Only the accepted set was read on 10 seeds.

@@ -586,13 +586,15 @@ test('a body that already has a child leaves that child among its heirs', () => 
   expect(heirs.some((h) => h.uid !== parent?.uid)).toBe(true);
 });
 
-// With bud_at at its floor and no cooldown, a founder buds on its first tick. The frame then counts
-// the buds of the possessed body and the marked bodies alive, the body itself among them.
+// With bud_at at its floor, no cooldown, and an egg small enough for a founder at half of its
+// energy to pay for, a founder buds on its first tick. The frame then counts the buds of the
+// possessed body and the marked bodies alive, the body itself among them.
 test('a possessed body that buds shows buds and a lineage in the frame', () => {
   const r = rig({ recycle: true });
   const params = [
     { name: 'bud_at', value: 0.2 },
     { name: 'bud_cooldown', value: 0 },
+    { name: 'birth_growth', value: 0.4 },
   ];
   r.host.handle({ type: 'init', seed: 1, params });
   r.host.handle({ type: 'possess', uid: 88 });

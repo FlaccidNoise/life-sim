@@ -64,7 +64,7 @@ fn the_default_genome_is_the_default_body() {
     let g = Genome::default();
     assert_eq!(genes(&g), GENE_DEFAULT);
     assert_eq!(g.parts.len(), 4);
-    assert_eq!((g.egg, g.old), (0.4, 4800.0));
+    assert_eq!((g.egg, g.old), (0.7, 4800.0));
 }
 
 #[test]
@@ -125,7 +125,7 @@ fn spawn_sets_the_creature_from_the_genome_and_the_place() {
     );
     assert_eq!((c.filter[s], c.chemo[s], c.fin[s]), (0.6, 0.5, 0.0));
     assert_eq!((c.plain_sum[s], c.eye_sum[s], c.n_eyes[s]), (2.1, 0.0, 0));
-    assert_eq!((c.egg[s], c.old[s]), (0.4, 4800.0));
+    assert_eq!((c.egg[s], c.old[s]), (0.7, 4800.0));
     assert_eq!(w.genomes[s].hue, 0.25);
 }
 
