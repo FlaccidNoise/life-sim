@@ -74,10 +74,10 @@ print the same lines. The summary line starts `bench` or `bench-wasm`.
 The `settled` line at the defaults matches the seed 1 row of the health gate: 1,477 creatures and
 1,682 plants at tick 12,000.
 
-*Since M2 Task 13 (2026-10-11):* the `settled` line reads 1,321 creatures and 2,229 plants, and the
-mean over the timed ticks is 1,327. The table of seeds below is the M1 world. At the tuned defaults
-`gate-health` reads 1,079 to 1,381 creatures at tick 12,000 on seeds 1 to 10, and seeds 3, 4, 6, and 9
-are under 1,200 there. The gate is still a seed 1 reading.
+*Since 2026-10-12 (no part upkeep, `plant_growth` 0.03):* the `settled` line reads 1,319 creatures
+and 2,229 plants, and the mean over the timed ticks is 1,320. The table of seeds below is the M1
+world. At these defaults `gate-health` reads 1,105 to 1,408 creatures at tick 12,000 on seeds 1 to 10,
+and seeds 4, 6, and 8 are under 1,200 there. The gate is still a seed 1 reading.
 
 **The throughput gate is a seed 1 reading.** `make gates` and the CI workflow time the default world
 on seed 1 and on no other seed. The mean alive count over the timed ticks, from `bench --seed <n>
@@ -166,6 +166,7 @@ project kept the machine at a load average near 5, so these readings are lower b
 | 2026-10-11 | M2 task 10 (eyes), no founder has an eye | The default world after 12,000 ticks, seed 1. Four more input neurons per brain | 1,483 | not read | 4,041 to 4,105 | 2,400 |
 | 2026-10-11 | M2 task 10, every body scans | A probe world, not the default: `founder_eye=0.2 starter_look=0 eye_gain=0`, so every body has eyes and none steers by sight | 1,592 | not read | 2,967 to 2,981 at `see_every` 2. 2,543 to 2,557 at 1 | 2,400 |
 | 2026-10-11 | M2 task 13 (the M2 rules on, the grazing rule, tuned defaults) | The default world after 12,000 ticks, seed 1: 1,321 creatures and 2,229 plants. Every body has eyes and steers by them | 1,327 | 2,993 to 3,298 | 3,002 to 3,067 | 2,400 |
+| 2026-10-12 | No part upkeep, `plant_growth` 0.03 (`findings/m2-senses.md`, trial 13) | The default world after 12,000 ticks, seed 1: 1,319 creatures and 2,229 plants | 1,320 | 3,188 to 3,411 | 2,933 to 3,127 | 2,400 |
 
 The Task 13 row: native and WASM in turn, 3 rounds, at a load average of 3.7 from other projects.
 Native 3,298, 2,993, 3,284. WASM 3,002, 3,043, 3,067. The world of this row is not the world of
@@ -380,12 +381,13 @@ A command below that reads `--m2` was run before that. The same command without 
 the same world: `gate-health` and `gate-evolve` print at the new defaults what they printed with
 `--m2` at the old ones, digit for digit (`findings/m2-tuning.md`, "Part 1").
 
-**`make gates` fails at its last step at the tuned defaults, and so would CI.** Task 13 closed on
-2026-10-11 with both benches and `gate-health` passing and `gate-evolve` at 2 of 3: the scent gap of
-seed 1 reads 0.079 against 0.10. On seeds 1 to 10 the scent gap passes on 5 and every other band
-passes on 10. No number was found that makes the scent sense pay in the world that the grazing rule
-makes. No band, floor, or reference population was changed (`findings/m2-tuning.md`, "What needs a
-rule or a decision").
+**`make gates` exits 0 since 2026-10-12.** Task 13 closed on 2026-10-11 with `gate-evolve` at 2 of 3:
+the scent gap of seed 1 read 0.079 against 0.10, and on seeds 1 to 10 it passed on 5. The cause was
+the upkeep of a part. The owner deleted that rule, and `plant_growth` went from 0.035 to 0.03 to
+hold the count (`findings/m2-senses.md`). Now the scent gap reads 0.17 to 0.37 on seeds 1 to 10. On
+those ten seeds the gate reads 9 of 10: seed 7 fails the eye gap at 0.097. No band, floor, or
+reference population was changed. **The failure proofs below were recorded on older worlds and are
+not yet run again at these defaults** (`findings/m2-audit.md`, finding M1).
 
 | Measure | Meaning | Band |
 |---|---|---|

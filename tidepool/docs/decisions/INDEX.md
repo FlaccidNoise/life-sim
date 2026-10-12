@@ -89,6 +89,10 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
   read on 10 seeds at ticks 36,000 and 144,000 before it becomes a default. Rejected: half the upkeep
   (6 of 10 seeds), a rule that makes plants come and go (not built, the controls did not point to it),
   and a looser band. → `../findings/m2-senses.md`
+- 2026-10-12: **`plant_growth` is 0.03.** Trial 13, the first of the 3 allowed past the 12. With no part
+  upkeep the world held 260 more creatures and the WASM bench read 2,385 against 2,400. At 0.03 it
+  reads 2,933 to 3,127, `make gates` exits 0, and on 10 seeds the chemoreceptor reads 0.16 to 0.27 at
+  tick 144,000. → `../findings/m2-senses.md`
 
 ## Architecture
 

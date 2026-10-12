@@ -441,3 +441,96 @@ bench-wasm creatures=1320 median_tps=2933 floor=2400 PASS
 
 Exit codes: 0, 0, 0. Hypotheses 2 and 3 held. Hypothesis 1 held in direction and the fall was larger:
 1,319 on seed 1, not 1,400. The WASM bench reads 2,933, with more room than the 2,700 expected.
+
+### Rows, the long steps
+
+```
+$ target/release/tidepool-headless gate-evolve --seeds 1,2,3,4,5,6,7,8,9,10 --param part_upkeep=0 --param plant_growth=0.03
+seed=1 creatures=1448 creatures_noscent=1456 creatures_noeye=1404 len=11.5 len_sd=1.48 parts=5.8 chemo=0.36 chemo_blind=0.05 eye=0.24 eye_blind=0.08 plans=6 speed_cv=0.27 PASS
+seed=2 creatures=1429 creatures_noscent=1380 creatures_noeye=1309 len=10.3 len_sd=1.50 parts=6.1 chemo=0.39 chemo_blind=0.07 eye=0.26 eye_blind=0.07 plans=5 speed_cv=0.29 PASS
+seed=3 creatures=1397 creatures_noscent=1312 creatures_noeye=1314 len=11.0 len_sd=1.69 parts=5.2 chemo=0.33 chemo_blind=0.16 eye=0.22 eye_blind=0.09 plans=3 speed_cv=0.29 PASS
+seed=4 creatures=1095 creatures_noscent=1212 creatures_noeye=1232 len=11.9 len_sd=1.26 parts=5.4 chemo=0.41 chemo_blind=0.18 eye=0.23 eye_blind=0.08 plans=4 speed_cv=0.24 PASS
+seed=5 creatures=1450 creatures_noscent=1434 creatures_noeye=1486 len=11.8 len_sd=1.35 parts=5.2 chemo=0.38 chemo_blind=0.05 eye=0.24 eye_blind=0.08 plans=3 speed_cv=0.31 PASS
+seed=6 creatures=1225 creatures_noscent=1204 creatures_noeye=1233 len=11.6 len_sd=1.48 parts=5.9 chemo=0.46 chemo_blind=0.12 eye=0.21 eye_blind=0.10 plans=4 speed_cv=0.23 PASS
+seed=7 creatures=1360 creatures_noscent=1428 creatures_noeye=1390 len=12.0 len_sd=1.65 parts=5.6 chemo=0.38 chemo_blind=0.07 eye=0.21 eye_blind=0.12 plans=3 speed_cv=0.23 FAIL(eye_gap=0.097 < 0.1)
+seed=8 creatures=1199 creatures_noscent=1192 creatures_noeye=1221 len=13.0 len_sd=1.51 parts=5.0 chemo=0.36 chemo_blind=0.07 eye=0.18 eye_blind=0.08 plans=3 speed_cv=0.26 PASS
+seed=9 creatures=1371 creatures_noscent=1312 creatures_noeye=1405 len=12.3 len_sd=1.69 parts=5.8 chemo=0.40 chemo_blind=0.10 eye=0.21 eye_blind=0.07 plans=6 speed_cv=0.30 PASS
+seed=10 creatures=1241 creatures_noscent=1219 creatures_noeye=1223 len=11.8 len_sd=1.21 parts=5.4 chemo=0.41 chemo_blind=0.04 eye=0.29 eye_blind=0.13 plans=4 speed_cv=0.27 PASS
+gate-evolve 9/10 FAIL
+
+$ target/release/tidepool-headless probe-census --seeds 1,2,3,4,5,6,7,8,9,10 --ticks 144000 --every 36000 --param part_upkeep=0 --param plant_growth=0.03
+seed=1 tick=36000 creatures=1448 plants=2229 juv=0.38 len=11.5 wid=0.48 egg=0.66 old=4203 area=64.5 flagellum=0.56 cilia=0.41 filter=0.80 chemo=0.36 fin=0.02 eye=0.24 parts=5.8 senseless=0.00 speed=1.07 turn=0.108 eaten=150.77 reserve01=0.31
+seed=1 tick=144000 creatures=1770 plants=2229 juv=0.38 len=9.4 wid=0.39 egg=0.67 old=3212 area=34.8 flagellum=0.34 cilia=0.60 filter=1.03 chemo=0.16 fin=0.03 eye=0.28 parts=6.7 senseless=0.00 speed=0.84 turn=0.142 eaten=141.31 reserve01=0.23
+seed=2 tick=36000 creatures=1429 plants=2076 juv=0.38 len=10.3 wid=0.45 egg=0.65 old=4145 area=50.2 flagellum=0.48 cilia=0.52 filter=0.92 chemo=0.39 fin=0.00 eye=0.26 parts=6.1 senseless=0.00 speed=0.85 turn=0.126 eaten=138.63 reserve01=0.28
+seed=2 tick=144000 creatures=1661 plants=2076 juv=0.41 len=9.2 wid=0.39 egg=0.66 old=3235 area=33.2 flagellum=0.32 cilia=0.65 filter=1.10 chemo=0.22 fin=0.01 eye=0.31 parts=7.1 senseless=0.00 speed=0.81 turn=0.144 eaten=130.26 reserve01=0.24
+seed=3 tick=36000 creatures=1397 plants=1965 juv=0.40 len=11.0 wid=0.47 egg=0.67 old=3591 area=58.2 flagellum=0.49 cilia=0.45 filter=0.80 chemo=0.33 fin=0.00 eye=0.22 parts=5.2 senseless=0.00 speed=1.05 turn=0.115 eaten=136.92 reserve01=0.31
+seed=3 tick=144000 creatures=1460 plants=1965 juv=0.35 len=9.9 wid=0.45 egg=0.66 old=3549 area=43.4 flagellum=0.33 cilia=0.48 filter=0.89 chemo=0.19 fin=0.00 eye=0.28 parts=5.5 senseless=0.00 speed=0.81 turn=0.122 eaten=124.89 reserve01=0.22
+seed=4 tick=36000 creatures=1095 plants=1764 juv=0.35 len=11.9 wid=0.51 egg=0.67 old=4408 area=72.6 flagellum=0.49 cilia=0.40 filter=0.75 chemo=0.41 fin=0.00 eye=0.23 parts=5.4 senseless=0.00 speed=1.08 turn=0.101 eaten=124.96 reserve01=0.31
+seed=4 tick=144000 creatures=1373 plants=1764 juv=0.38 len=9.9 wid=0.45 egg=0.67 old=3938 area=43.0 flagellum=0.36 cilia=0.53 filter=0.92 chemo=0.20 fin=0.00 eye=0.28 parts=6.6 senseless=0.00 speed=0.83 turn=0.129 eaten=114.53 reserve01=0.22
+seed=5 tick=36000 creatures=1450 plants=2178 juv=0.38 len=11.8 wid=0.47 egg=0.67 old=4154 area=66.6 flagellum=0.54 cilia=0.45 filter=0.73 chemo=0.38 fin=0.00 eye=0.24 parts=5.2 senseless=0.00 speed=1.03 turn=0.110 eaten=153.82 reserve01=0.28
+seed=5 tick=144000 creatures=1566 plants=2178 juv=0.36 len=10.5 wid=0.36 egg=0.67 old=3458 area=39.1 flagellum=0.28 cilia=0.58 filter=0.94 chemo=0.27 fin=0.01 eye=0.26 parts=5.7 senseless=0.00 speed=0.73 turn=0.119 eaten=137.72 reserve01=0.23
+seed=6 tick=36000 creatures=1225 plants=1851 juv=0.38 len=11.6 wid=0.47 egg=0.66 old=4287 area=63.1 flagellum=0.55 cilia=0.56 filter=0.86 chemo=0.46 fin=0.00 eye=0.21 parts=5.9 senseless=0.00 speed=1.09 turn=0.118 eaten=129.06 reserve01=0.30
+seed=6 tick=144000 creatures=1378 plants=1851 juv=0.37 len=10.7 wid=0.34 egg=0.67 old=3213 area=38.7 flagellum=0.38 cilia=0.64 filter=1.02 chemo=0.26 fin=0.01 eye=0.26 parts=6.8 senseless=0.00 speed=0.88 turn=0.131 eaten=119.50 reserve01=0.24
+seed=7 tick=36000 creatures=1360 plants=2058 juv=0.36 len=12.0 wid=0.47 egg=0.67 old=4363 area=67.3 flagellum=0.56 cilia=0.45 filter=0.75 chemo=0.38 fin=0.04 eye=0.21 parts=5.6 senseless=0.00 speed=1.15 turn=0.113 eaten=146.15 reserve01=0.28
+seed=7 tick=144000 creatures=1610 plants=2058 juv=0.40 len=9.9 wid=0.35 egg=0.68 old=3030 area=33.9 flagellum=0.51 cilia=0.56 filter=1.11 chemo=0.21 fin=0.05 eye=0.27 parts=7.4 senseless=0.00 speed=0.99 turn=0.137 eaten=135.24 reserve01=0.24
+seed=8 tick=36000 creatures=1199 plants=1731 juv=0.34 len=13.0 wid=0.45 egg=0.67 old=4296 area=76.2 flagellum=0.50 cilia=0.39 filter=0.74 chemo=0.36 fin=0.00 eye=0.18 parts=5.0 senseless=0.00 speed=1.13 turn=0.094 eaten=138.95 reserve01=0.26
+seed=8 tick=144000 creatures=1461 plants=1731 juv=0.41 len=9.9 wid=0.36 egg=0.67 old=3084 area=35.0 flagellum=0.48 cilia=0.49 filter=1.10 chemo=0.17 fin=0.05 eye=0.25 parts=9.6 senseless=0.00 speed=0.91 turn=0.126 eaten=124.54 reserve01=0.22
+seed=9 tick=36000 creatures=1371 plants=1917 juv=0.39 len=12.3 wid=0.43 egg=0.66 old=3967 area=64.7 flagellum=0.49 cilia=0.44 filter=0.74 chemo=0.40 fin=0.00 eye=0.21 parts=5.8 senseless=0.00 speed=1.02 turn=0.102 eaten=140.22 reserve01=0.27
+seed=9 tick=144000 creatures=1390 plants=1917 juv=0.38 len=11.3 wid=0.36 egg=0.67 old=3511 area=44.6 flagellum=0.44 cilia=0.59 filter=0.97 chemo=0.19 fin=0.00 eye=0.27 parts=7.3 senseless=0.00 speed=0.90 turn=0.123 eaten=126.75 reserve01=0.19
+seed=10 tick=36000 creatures=1241 plants=1884 juv=0.38 len=11.8 wid=0.50 egg=0.67 old=3638 area=70.8 flagellum=0.47 cilia=0.42 filter=0.70 chemo=0.41 fin=0.00 eye=0.29 parts=5.4 senseless=0.00 speed=0.94 turn=0.102 eaten=136.67 reserve01=0.27
+seed=10 tick=144000 creatures=1507 plants=1884 juv=0.38 len=9.8 wid=0.41 egg=0.67 old=3219 area=39.3 flagellum=0.40 cilia=0.56 filter=1.05 chemo=0.20 fin=0.00 eye=0.29 parts=7.2 senseless=0.00 speed=0.81 turn=0.131 eaten=125.03 reserve01=0.22
+
+$ target/release/tidepool-headless gate-evolve --seeds 1,5,8 --ticks 144000 --param part_upkeep=0 --param plant_growth=0.03
+seed=1 creatures=1770 creatures_noscent=1717 creatures_noeye=1267 len=9.4 len_sd=1.30 parts=6.7 chemo=0.16 chemo_blind=0.00 eye=0.28 eye_blind=0.00 plans=5 speed_cv=0.24 PASS
+seed=5 creatures=1566 creatures_noscent=1595 creatures_noeye=1376 len=10.5 len_sd=1.24 parts=5.7 chemo=0.27 chemo_blind=0.01 eye=0.26 eye_blind=0.02 plans=4 speed_cv=0.29 PASS
+seed=8 creatures=1461 creatures_noscent=1285 creatures_noeye=1065 len=9.9 len_sd=1.29 parts=9.6 chemo=0.17 chemo_blind=0.01 eye=0.25 eye_blind=0.05 plans=4 speed_cv=0.26 PASS
+gate-evolve 3/3 PASS
+```
+
+Exit codes: 1, 0, 0.
+
+### Verdict: accepted
+
+| Hypothesis | Result |
+|---|---|
+| 1. `creatures` on seed 1 near 1,400 | Lower: 1,319 |
+| 2. WASM bench near 2,700 | Held, with more room: 2,933, and 3,127 in `make gates` |
+| 3. `gate-health` 3 of 3 | Held |
+| 4. `chemo` at least 0.12 on 10 of 10 at tick 144,000, scent gap at least 0.10 on 9 of 10 at tick 36,000 | Held. `chemo` 0.16 to 0.27. Scent gap 0.17 to 0.37 on 10 of 10 |
+| 5. `len` inside 7.8 to 22.2 | Held. 10.3 to 13.0 at tick 36,000 and 9.2 to 11.3 at tick 144,000 |
+
+- **Less food did not shrink the sense. It grew.** `chemo` at tick 36,000 is 0.33 to 0.46 here and 0.22
+  to 0.37 in trial 11. The risk of hypothesis 4 did not show.
+- **"Evolution uses it" at tick 144,000 on seeds 1, 5, 8:** scent gaps 0.16, 0.26, 0.16 and eye gaps
+  0.28, 0.24, 0.20. The other seven seeds have no gap reading at that tick.
+- **`gate-evolve` at tick 36,000 reads 9 of 10.** Seed 7 fails the eye gap at 0.097 against 0.10, and
+  seed 8 reads 0.10. The eye itself is not lost: `eye` is 0.18 to 0.29 at tick 36,000 and 0.25 to 0.31
+  at tick 144,000. The gap is thin because the blind world still holds an eye that costs it only mass
+  (`eye_blind` 0.07 to 0.13 at tick 36,000, and 0.00 to 0.05 at tick 144,000 on the three seeds
+  read). The band is the audit's finding H3 and is the owner's.
+- **`speed` at tick 144,000 is 0.73 to 0.99**, against 0.63 to 0.92 at the old defaults. It still
+  falls from tick 36,000 on 9 of 10 seeds.
+- **`len` still falls slowly with time** on most seeds. The lowest row is 8.3 (seed 2, tick 108,000),
+  against a floor of 7.8. `area` is 33 to 45 at tick 144,000.
+
+### The new defaults, proven
+
+`part_upkeep` is deleted (commit d9c62d2: `gate-health` and `gate-evolve` printed the rows of trial 11
+digit for digit). `plant_growth` is 0.03. With both in `params.rs`:
+
+- `make check` exits 0.
+- **`make gates` exits 0.** Native bench 3,411, WASM bench 3,127, both at 1,320 creatures.
+  `gate-health` 3 of 3 and `gate-evolve` 3 of 3, and their rows are the rows of trial 13 above, digit
+  for digit.
+- `gate-health --seeds 1,2,3,4,5,6,7,8,9,10` reads 10 of 10, with 1,105 to 1,408 creatures.
+
+Still open, and not changed by this:
+
+```
+$ node scripts/bench-wasm.mjs --settle 108000 --runs 3
+settled tick=108000 creatures=1648 plants=2229
+bench-wasm creatures=1665 median_tps=2357 floor=2400 FAIL
+```
+
+An old world is still under the floor (the audit's finding M8). The load average was 4.3 at this
+timing, so the number is low by some unknown amount.
