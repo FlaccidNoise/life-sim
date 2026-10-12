@@ -177,6 +177,25 @@ fn a_larger_eye_and_a_longer_body_both_see_farther() {
     assert!(sees_plants(long, &far)[1] > 0.0);
 }
 
+/// A body with the founder's eye at half of its growth. Its cone is half as long as the adult's:
+/// 19.2 units, where the adult sees 38.4.
+#[test]
+fn a_juvenile_sees_as_far_as_its_body_has_grown() {
+    let view = |d: f32| {
+        let mut w = world(1);
+        plant(&mut w, off(d, SIDE));
+        let s = body(&mut w, founder_eyed(), AT);
+        w.creatures.growth[s] = 0.5;
+        let range = w.creatures.cone_range(s, 0, w.params.get(id::EYE_RANGE));
+        assert!((range - RANGE / 2.0).abs() < 1e-4, "range {range}");
+        seen(&mut w, s)[1]
+    };
+    // Half way out of the juvenile's cone. The adult's cone would read 0.75 here.
+    assert!((view(9.6) - 0.5).abs() < 1e-3, "at 9.6: {}", view(9.6));
+    // Inside the adult's cone and outside the juvenile's.
+    assert_eq!(view(25.0), 0.0);
+}
+
 #[test]
 fn no_cone_is_longer_than_eye_reach() {
     // `eye_range * size * length` is 384 for this body.

@@ -586,6 +586,44 @@ test('a body that already has a child leaves that child among its heirs', () => 
   expect(heirs.some((h) => h.uid !== parent?.uid)).toBe(true);
 });
 
+// The default world of seed 1 after 1,500 ticks holds founders with grandchildren. A founder has
+// generation 0 and one of the first uids, so an heir of generation 2 or more is at least its
+// grandchild. The core finds a founder whose whole line fits the list of heirs. Then the page
+// possesses that founder, and the heirs that the page gets at its death hold the grandchild.
+test('a body that already has a grandchild leaves that grandchild among its heirs', () => {
+  const size = { worldW: P.WORLD_W, worldH: P.WORLD_H };
+  const core = createSim(module, { seed: 1, ...size });
+  core.seedFounders(P.FOUNDER_CREATURES, P.FOUNDER_PLANTS);
+  core.tick(1500);
+  const snapshot = new Uint8Array(core.save());
+  core.free();
+  // The line of a founder, as the core marks it in a copy of the world: the founder and its
+  // living descendants. An empty list for a founder that is dead.
+  const lineOf = (uid: number) => {
+    const copy = createSim(module, { seed: 1, ...size, snapshot });
+    const line = copy.possess(uid) ? copy.heirs() : [];
+    copy.free();
+    return line;
+  };
+  const founders = Array.from({ length: P.FOUNDER_CREATURES }, (_, i) => i + 1);
+  const founder = founders.find((uid) => {
+    const line = lineOf(uid);
+    // Under 5 heirs: the list is not cut, so no later tick can push the grandchild out of it.
+    return line.length < 5 && line.some((h) => h.generation >= 2);
+  });
+  expect(founder, 'no founder has a grandchild among its heirs').toBeDefined();
+
+  const m = mortal();
+  const r = rig({ recycle: true, wrap: m.wrap });
+  r.host.handle({ type: 'init', seed: 1, snapshot: snapshot.buffer });
+  r.host.handle({ type: 'possess', uid: founder ?? 0 });
+  m.die(1);
+  r.advance(100);
+  const heirs = r.of('died')[0]?.heirs ?? [];
+  expect(heirs.some((h) => h.generation === 1)).toBe(true);
+  expect(heirs.some((h) => h.generation >= 2)).toBe(true);
+});
+
 // With bud_at at its floor, no cooldown, and an egg small enough for a founder at half of its
 // energy to pay for, a founder buds on its first tick. The frame then counts the buds of the
 // possessed body and the marked bodies alive, the body itself among them.

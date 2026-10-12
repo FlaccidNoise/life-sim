@@ -1,6 +1,6 @@
 //! Creature arrays. One index per slot. A dead slot holds stale values, except `uid`, which is 0.
 
-use crate::eye::{EYE_HALF_MIN, EYE_HALF_SPAN};
+use crate::eye::{EYE_HALF_MIN, EYE_HALF_SPAN, EYE_REACH};
 use crate::genome::{
     Genome, KIND_CHEMO, KIND_CILIA, KIND_EYE, KIND_FILTER, KIND_FIN, KIND_FLAGELLUM, LEN_RANGE,
     REF_PARTS, WID_RANGE,
@@ -231,6 +231,13 @@ impl Creatures {
 
     pub fn radius(&self, s: usize) -> f32 {
         radius(self.length(s), self.width(s))
+    }
+
+    /// How far cone `k` of the body sees, in world units: `eye_range * size * length` of the body
+    /// as it has grown, and at most `EYE_REACH`. `eye::see` scans this far and `frame::write` sends
+    /// this number to the page, so the cone that the player sees is the cone that the eye scans.
+    pub fn cone_range(&self, s: usize, k: usize, eye_range: f32) -> f32 {
+        (eye_range * self.eye_size[s * MAX_EYES + k] * self.length(s)).min(EYE_REACH)
     }
 
     /// The part sizes as the upkeep and the mass count them: an eye's size is times `eye_cost`.

@@ -3,7 +3,6 @@
 //! mirrors this layout.
 
 use crate::creature::{MARK_LINEAGE, MAX_EYES};
-use crate::eye::EYE_REACH;
 use crate::genome::{PartGene, MAX_PART_GENES};
 use crate::params::id;
 use crate::plant;
@@ -101,7 +100,7 @@ pub fn write(world: &mut World, x0: f32, y0: f32, x1: f32, y1: f32) -> u32 {
             let cone = [
                 c.heading[s] + c.eye_dir[eye],
                 c.eye_cos[eye],
-                (eye_range * c.eye_size[eye] * c.length(s)).min(EYE_REACH),
+                c.cone_range(s, k, eye_range),
             ];
             frame[at..at + cone.len()].copy_from_slice(&cone.map(f32::to_bits));
         }
@@ -171,6 +170,7 @@ pub fn write(world: &mut World, x0: f32, y0: f32, x1: f32, y1: f32) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::eye::EYE_REACH;
     use crate::genome::Genome;
     use crate::world::SpawnAt;
 
@@ -334,6 +334,25 @@ mod tests {
         // The two bodies keep their marks. The cones go.
         assert_eq!(w.frame[7], 2);
         assert_eq!(w.frame[9..HEADER], [0; HEADER - 9]);
+    }
+
+    /// The page draws the cone that the eye scans: `Creatures::cone_range`, which follows the
+    /// length of the body as it has grown.
+    #[test]
+    fn the_cones_of_a_juvenile_are_as_long_as_its_eyes_see() {
+        let mut w = World::new(5, 1536.0, 1024.0);
+        w.params.set(id::FOUNDER_EYE, 0.2);
+        w.seed_founders(50, 0);
+        w.creatures.growth[9] = 0.5;
+        assert!(w.possess(w.creatures.uid[9]));
+        write(&mut w, 0.0, 0.0, 1536.0, 1024.0);
+        let range = w.creatures.cone_range(9, 0, w.params.get(id::EYE_RANGE));
+        // Half of the 16 * 0.2 lengths that the same body sees when it is full-grown.
+        assert!((range - 1.6 * w.creatures.len[9]).abs() < 1e-4, "{range}");
+        assert_eq!(w.frame[CONE_COUNT_AT], 2);
+        for cone in w.frame[CONES_AT..].as_chunks::<3>().0.iter().take(2) {
+            assert_eq!(cone[2], range.to_bits());
+        }
     }
 
     #[test]

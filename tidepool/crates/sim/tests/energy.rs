@@ -390,6 +390,89 @@ fn growth_pays_for_the_mass_of_the_parts() {
     assert!(finned > plain, "{finned} against {plain}");
 }
 
+/// At a `grow_rate` of 0.1 one step of growth costs more than the growth reserve holds above its
+/// floor. Two juveniles have the reserve to try the step. One would be left a little under
+/// `grow_floor` of the reserve, so it does not grow and pays nothing. The other is left a little
+/// over it.
+#[test]
+fn a_step_of_growth_leaves_grow_floor_of_the_reserve() {
+    let mut w = empty();
+    still(&mut w);
+    no_upkeep(&mut w);
+    w.params.set(id::GROW_RATE, 0.1);
+    let (short, enough) = (
+        add(&mut w, 400.0, 0.4, 0.9, |_| {}),
+        add(&mut w, 800.0, 0.4, 0.9, |_| {}),
+    );
+    let p = &w.params;
+    let (part_mass, eye_cost) = (p.get(id::PART_MASS), p.get(id::EYE_COST));
+    let (build_cost, grow_floor) = (p.get(id::BUILD_COST), p.get(id::GROW_FLOOR));
+    let reserve = p.get(id::GROW_RESERVE) * p.get(id::ENERGY_PER_MASS) * w.creatures.area(short);
+    let c = &mut w.creatures;
+    let mass = c.mass(short, part_mass, eye_cost);
+    c.growth[short] = 0.5;
+    let cost = build_cost * (c.mass(short, part_mass, eye_cost) - mass);
+    c.growth[short] = 0.4;
+    // The least that a body must hold to take the step.
+    let least = reserve * grow_floor + cost;
+    assert!(
+        grow_floor > 0.0 && least - 0.01 > reserve,
+        "{least} {reserve}"
+    );
+    (c.energy[short], c.energy[enough]) = (least - 0.01, least + 0.01);
+    w.tick();
+    let c = &w.creatures;
+    assert_eq!((c.growth[short], c.energy[short]), (0.4, least - 0.01));
+    assert!(
+        (c.growth[enough] - 0.5).abs() < 1e-6,
+        "{}",
+        c.growth[enough]
+    );
+    assert!((c.energy[enough] - (least + 0.01 - cost)).abs() < 1e-4);
+}
+
+/// A resting adult with every other upkeep at 0. The brain of the body of `add` has 17 neurons and
+/// 57 connections, and each of the two rates is paid for its own count.
+#[test]
+fn a_brain_costs_upkeep_for_each_neuron_and_each_connection() {
+    const TICKS: f32 = 100.0;
+    // What the body lost at these two rates, then its counts of neurons and of connections.
+    let loss = |neuron_upkeep: f32, conn_upkeep: f32| {
+        let mut w = empty();
+        still(&mut w);
+        no_upkeep(&mut w);
+        w.params.set(id::NEURON_UPKEEP, neuron_upkeep);
+        w.params.set(id::CONN_UPKEEP, conn_upkeep);
+        let c = add(&mut w, 500.0, 1.0, 0.9, |_| {});
+        let before = w.creatures.energy[c];
+        w.run(TICKS as u32);
+        let (neurons, conns) = (w.brains.n_neur[c] as f32, w.brains.n_conn[c] as f32);
+        (before - w.creatures.energy[c], neurons, conns)
+    };
+    let (free, neurons, conns) = loss(0.0, 0.0);
+    assert_eq!((free, neurons, conns), (0.0, 17.0, 57.0));
+    let near = |got: f32, want: f32| (got / want - 1.0).abs() < 1e-3;
+    let (for_neurons, ..) = loss(0.002, 0.0);
+    assert!(
+        near(for_neurons, TICKS * 0.002 * neurons),
+        "lost {for_neurons} for {neurons} neurons"
+    );
+    let (for_conns, ..) = loss(0.0, 0.002);
+    assert!(
+        near(for_conns, TICKS * 0.002 * conns),
+        "lost {for_conns} for {conns} connections"
+    );
+    // At the defaults the brain of a founder is not free.
+    let p = empty().params;
+    let (neuron_upkeep, conn_upkeep) = (p.get(id::NEURON_UPKEEP), p.get(id::CONN_UPKEEP));
+    let (at_defaults, ..) = loss(neuron_upkeep, conn_upkeep);
+    let want = TICKS * (neuron_upkeep * neurons + conn_upkeep * conns);
+    assert!(
+        want > 1.0 && near(at_defaults, want),
+        "{at_defaults} {want}"
+    );
+}
+
 /// What one hungry adult of the given length takes in one tick from a plant of the given reserve
 /// under it.
 fn one_tick_of_intake(len: f32, reserve: f32, setup: impl FnOnce(&mut World)) -> f64 {

@@ -36,7 +36,6 @@ pub fn see(world: &mut World, slot: usize) {
     } = world;
     let (eye_range, gain) = (params.get(id::EYE_RANGE), params.get(id::EYE_GAIN));
     let (px, py, hc, hs) = (c.x[slot], c.y[slot], c.hc[slot], c.hs[slot]);
-    let length = c.length(slot);
     let n = (c.n_eyes[slot] as usize).min(MAX_EYES);
     // Of each cone: its axis and the squared cosine of its half angle, its squared range, and the
     // sine of its angle from the heading. `express` holds the axis for a heading of 0, so no sine
@@ -52,7 +51,7 @@ pub fn see(world: &mut World, slot: usize) {
         let (sin_dir, cos_dir) = (c.eye_ay[eye], c.eye_ax[eye]);
         let (ax, ay) = (hc * cos_dir - hs * sin_dir, hs * cos_dir + hc * sin_dir);
         let cos = c.eye_cos[eye];
-        let range = (eye_range * c.eye_size[eye] * length).min(EYE_REACH);
+        let range = c.cone_range(slot, k, eye_range);
         cones[k] = [ax, ay, cos * cos];
         far2[k] = range * range;
         side[k] = sin_dir;

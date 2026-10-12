@@ -116,6 +116,14 @@ fn a_tail_part_pushes_and_a_side_part_does_not() {
     assert!(push_of(0.75) > 0.2 && push_of(0.75) < 0.3);
 }
 
+/// `side_of` is `4a(1 - a)`: a curve, not two straight lines to the middle.
+#[test]
+fn a_part_between_the_middle_and_an_end_works_across_the_body_by_the_curve() {
+    for (anchor, side) in [(0.25, 0.75), (0.75, 0.75), (0.1, 0.36), (0.9, 0.36)] {
+        assert!((side_of(anchor) - side).abs() < 1e-6, "at {anchor}");
+    }
+}
+
 #[test]
 fn the_founder_body_has_a_heft_of_one_at_any_part_mass() {
     for part_mass in [0.0, 0.1, 0.5] {
