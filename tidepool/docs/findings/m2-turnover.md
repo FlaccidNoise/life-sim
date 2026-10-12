@@ -227,3 +227,62 @@ Exit codes: 0, 0, 0, 0, and 1 for the last command.
 - **Seed 8 at tick 144,000 has `len_sd` 4.55** and `len` 14.5. That spread is 2 to 4 times the other
   rows. Not looked into.
 - **The 12 trials of the plan are used.** What comes next is the owner's choice.
+
+### Trial 12 on all 10 seeds. A reading, not a trial
+
+```
+$ target/release/tidepool-headless probe-census --seeds 1,2,3,4,5,6,7,8,9,10 --ticks 144000 --every 36000 --param part_upkeep=0.0001
+seed=1 tick=36000 creatures=1577 plants=2229 juv=0.36 len=11.1 wid=0.50 egg=0.67 old=4061 area=62.0 flagellum=0.54 cilia=0.35 filter=0.81 chemo=0.30 fin=0.00 eye=0.22 parts=5.1 senseless=0.00 speed=1.14 turn=0.108 eaten=180.57 reserve01=0.36
+seed=1 tick=144000 creatures=1839 plants=2229 juv=0.37 len=9.6 wid=0.49 egg=0.67 old=3080 area=42.0 flagellum=0.37 cilia=0.43 filter=0.95 chemo=0.14 fin=0.00 eye=0.28 parts=6.4 senseless=0.00 speed=0.81 turn=0.124 eaten=172.59 reserve01=0.24
+seed=2 tick=36000 creatures=1487 plants=2076 juv=0.38 len=11.6 wid=0.50 egg=0.67 old=3668 area=70.0 flagellum=0.47 cilia=0.43 filter=0.70 chemo=0.16 fin=0.00 eye=0.19 parts=4.7 senseless=0.03 speed=1.14 turn=0.118 eaten=165.77 reserve01=0.33
+seed=2 tick=144000 creatures=1736 plants=2076 juv=0.37 len=10.4 wid=0.42 egg=0.67 old=3547 area=47.6 flagellum=0.32 cilia=0.39 filter=0.87 chemo=0.05 fin=0.01 eye=0.24 parts=4.8 senseless=0.00 speed=0.86 turn=0.112 eaten=158.54 reserve01=0.26
+seed=3 tick=36000 creatures=1502 plants=1965 juv=0.37 len=11.4 wid=0.46 egg=0.68 old=3630 area=61.1 flagellum=0.47 cilia=0.31 filter=0.75 chemo=0.26 fin=0.00 eye=0.24 parts=4.9 senseless=0.00 speed=1.03 turn=0.096 eaten=164.73 reserve01=0.33
+seed=3 tick=144000 creatures=1747 plants=1965 juv=0.39 len=10.4 wid=0.39 egg=0.66 old=3138 area=41.5 flagellum=0.25 cilia=0.50 filter=0.87 chemo=0.17 fin=0.02 eye=0.24 parts=7.4 senseless=0.00 speed=0.73 turn=0.120 eaten=151.73 reserve01=0.23
+seed=4 tick=36000 creatures=1206 plants=1764 juv=0.38 len=12.8 wid=0.51 egg=0.66 old=4118 area=83.1 flagellum=0.50 cilia=0.32 filter=0.73 chemo=0.16 fin=0.00 eye=0.20 parts=4.8 senseless=0.01 speed=1.12 turn=0.095 eaten=153.33 reserve01=0.34
+seed=4 tick=144000 creatures=1478 plants=1764 juv=0.37 len=11.7 wid=0.42 egg=0.66 old=3639 area=54.7 flagellum=0.26 cilia=0.42 filter=0.78 chemo=0.13 fin=0.02 eye=0.23 parts=5.4 senseless=0.03 speed=0.71 turn=0.104 eaten=142.77 reserve01=0.24
+seed=5 tick=36000 creatures=1563 plants=2178 juv=0.37 len=12.3 wid=0.46 egg=0.68 old=4095 area=71.4 flagellum=0.45 cilia=0.36 filter=0.74 chemo=0.19 fin=0.00 eye=0.18 parts=4.7 senseless=0.03 speed=1.10 turn=0.098 eaten=188.99 reserve01=0.34
+seed=5 tick=144000 creatures=1768 plants=2178 juv=0.36 len=9.7 wid=0.48 egg=0.67 old=3260 area=42.9 flagellum=0.30 cilia=0.40 filter=0.92 chemo=0.09 fin=0.01 eye=0.27 parts=6.0 senseless=0.00 speed=0.73 turn=0.115 eaten=171.16 reserve01=0.25
+seed=6 tick=36000 creatures=1324 plants=1851 juv=0.39 len=12.3 wid=0.47 egg=0.66 old=4050 area=72.0 flagellum=0.47 cilia=0.31 filter=0.78 chemo=0.28 fin=0.00 eye=0.20 parts=5.5 senseless=0.00 speed=0.98 turn=0.089 eaten=156.85 reserve01=0.35
+seed=6 tick=144000 creatures=1484 plants=1851 juv=0.37 len=9.9 wid=0.53 egg=0.65 old=3525 area=49.2 flagellum=0.33 cilia=0.36 filter=0.88 chemo=0.14 fin=0.00 eye=0.28 parts=6.2 senseless=0.00 speed=0.81 turn=0.110 eaten=148.54 reserve01=0.26
+seed=7 tick=36000 creatures=1515 plants=2058 juv=0.37 len=11.5 wid=0.48 egg=0.67 old=3839 area=65.9 flagellum=0.47 cilia=0.39 filter=0.90 chemo=0.17 fin=0.01 eye=0.22 parts=5.1 senseless=0.00 speed=1.06 turn=0.109 eaten=180.13 reserve01=0.33
+seed=7 tick=144000 creatures=1851 plants=2058 juv=0.38 len=10.1 wid=0.39 egg=0.67 old=3067 area=40.3 flagellum=0.21 cilia=0.45 filter=0.91 chemo=0.08 fin=0.01 eye=0.25 parts=6.1 senseless=0.00 speed=0.67 turn=0.111 eaten=162.76 reserve01=0.24
+seed=8 tick=36000 creatures=1286 plants=1731 juv=0.38 len=13.9 wid=0.49 egg=0.67 old=4500 area=95.6 flagellum=0.54 cilia=0.29 filter=0.67 chemo=0.16 fin=0.00 eye=0.10 parts=4.6 senseless=0.24 speed=1.34 turn=0.091 eaten=170.06 reserve01=0.29
+seed=8 tick=144000 creatures=1330 plants=1731 juv=0.35 len=14.5 wid=0.35 egg=0.66 old=3689 area=77.7 flagellum=0.25 cilia=0.40 filter=0.72 chemo=0.12 fin=0.00 eye=0.18 parts=4.8 senseless=0.20 speed=0.79 turn=0.086 eaten=151.72 reserve01=0.22
+seed=9 tick=36000 creatures=1722 plants=1917 juv=0.40 len=9.6 wid=0.49 egg=0.66 old=3234 area=46.5 flagellum=0.56 cilia=0.39 filter=0.96 chemo=0.15 fin=0.01 eye=0.25 parts=6.4 senseless=0.00 speed=1.17 turn=0.132 eaten=173.58 reserve01=0.27
+seed=9 tick=144000 creatures=1796 plants=1917 juv=0.40 len=10.8 wid=0.35 egg=0.67 old=3226 area=41.9 flagellum=0.25 cilia=0.44 filter=0.95 chemo=0.08 fin=0.00 eye=0.23 parts=5.3 senseless=0.01 speed=0.72 turn=0.104 eaten=156.20 reserve01=0.24
+seed=10 tick=36000 creatures=1405 plants=1884 juv=0.38 len=13.3 wid=0.42 egg=0.67 old=3910 area=74.7 flagellum=0.52 cilia=0.30 filter=0.75 chemo=0.12 fin=0.00 eye=0.21 parts=4.6 senseless=0.01 speed=1.17 turn=0.090 eaten=167.98 reserve01=0.32
+seed=10 tick=144000 creatures=1583 plants=1884 juv=0.38 len=9.8 wid=0.49 egg=0.67 old=3460 area=47.4 flagellum=0.23 cilia=0.42 filter=0.87 chemo=0.19 fin=0.00 eye=0.29 parts=7.0 senseless=0.00 speed=0.67 turn=0.108 eaten=154.13 reserve01=0.23
+
+$ target/release/tidepool-headless gate-evolve --seeds 4,5,6,7,8,9,10 --param part_upkeep=0.0001
+seed=4 creatures=1206 creatures_noscent=1283 creatures_noeye=1398 len=12.8 len_sd=1.83 parts=4.8 chemo=0.16 chemo_blind=0.04 eye=0.20 eye_blind=0.05 plans=3 speed_cv=0.28 PASS
+seed=5 creatures=1563 creatures_noscent=1524 creatures_noeye=1569 len=12.3 len_sd=1.52 parts=4.7 chemo=0.19 chemo_blind=0.02 eye=0.18 eye_blind=0.10 plans=3 speed_cv=0.24 FAIL(eye_gap=0.085 < 0.1)
+seed=6 creatures=1324 creatures_noscent=1300 creatures_noeye=1316 len=12.3 len_sd=1.74 parts=5.5 chemo=0.28 chemo_blind=0.03 eye=0.20 eye_blind=0.06 plans=4 speed_cv=0.29 PASS
+seed=7 creatures=1515 creatures_noscent=1568 creatures_noeye=1473 len=11.5 len_sd=2.28 parts=5.1 chemo=0.17 chemo_blind=0.07 eye=0.22 eye_blind=0.08 plans=4 speed_cv=0.27 FAIL(chemo_gap=0.099 < 0.1)
+seed=8 creatures=1286 creatures_noscent=1437 creatures_noeye=1220 len=13.9 len_sd=2.26 parts=4.6 chemo=0.16 chemo_blind=0.01 eye=0.10 eye_blind=0.04 plans=7 speed_cv=0.27 FAIL(eye_gap=0.055 < 0.1)
+seed=9 creatures=1722 creatures_noscent=1466 creatures_noeye=1525 len=9.6 len_sd=1.91 parts=6.4 chemo=0.15 chemo_blind=0.01 eye=0.25 eye_blind=0.07 plans=4 speed_cv=0.25 PASS
+seed=10 creatures=1405 creatures_noscent=1421 creatures_noeye=1553 len=13.3 len_sd=2.19 parts=4.6 chemo=0.12 chemo_blind=0.05 eye=0.21 eye_blind=0.05 plans=3 speed_cv=0.26 FAIL(chemo_gap=0.076 < 0.1)
+gate-evolve 3/7 FAIL
+```
+
+Exit codes: 0 and 1.
+
+| Reading, seeds 1 to 10 | Default (`m2-long-run.md`, `m2-tuning.md`) | Trial 12 |
+|---|---|---|
+| `gate-evolve` at tick 36,000 | 5 of 10 | 6 of 10 |
+| Scent gap at tick 36,000, at least 0.10 | 5 of 10 | 8 of 10. Seeds 7 and 10 read 0.099 and 0.076 |
+| Eye gap at tick 36,000, at least 0.10 | 10 of 10 | 8 of 10. Seeds 5 and 8 read 0.085 and 0.055 |
+| `chemo` at tick 144,000, at least 0.12 | 4 of 10. The rest read 0.02 to 0.07 | 6 of 10. The rest read 0.05 to 0.09 |
+| `eye` at tick 144,000, at least 0.15 | 9 of 10. Seed 8 reads 0.03 | 10 of 10. 0.18 to 0.29 |
+| `senseless` at tick 144,000 | 0.83 on seed 8 | 0.20 on seed 8. At most 0.03 on the rest |
+| `flagellum` at tick 144,000 | 0.20 to 0.34 | 0.21 to 0.37 |
+| `speed` at tick 144,000 | 0.63 to 0.92 | 0.67 to 0.86 |
+| `creatures` at tick 144,000 | 1,104 to 1,774 | 1,330 to 1,851 |
+
+- **Half the upkeep is a small gain and not a fix.** `make gates` would pass, because it reads seeds 1,
+  2, 3. On 10 seeds the gate reads 6 of 10 against 5 of 10.
+- **The eye gap got worse at tick 36,000 on two seeds.** The blind world keeps more of the eye when
+  the eye costs less (`eye_blind` 0.10 on seed 5).
+- **One run per seed moves a lot.** Seed 2 reads `chemo` 0.13 at the default and 0.05 here, at tick
+  144,000. A count of seeds that changes by 1 or 2 is inside that noise. The mean of `chemo` over the
+  10 seeds is about 0.08 at the default and 0.12 here.
+- **The tail and the speed do not move.** The upkeep of a part is not why every world gets slower.
