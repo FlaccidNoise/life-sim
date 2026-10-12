@@ -117,6 +117,9 @@ each arm:
 The table is at `see_every` 2. At `see_every` 1 the third arm gives 421 creatures and 1,608 plants,
 and the fourth gives 163 and 977.
 
+*Audit correction, 2026-10-12: the next sentence is stronger than its evidence. It rests on one seed,
+one run per arm, read at tick 1,500, and the arms are not fair pairs (`m2-audit.md`, section 4).*
+
 The look wire is the cause. The cost of the eye is not: the blind arm and the arm with no look wire
 hold about the creatures of the world with no eye. With the wire, the world of the fourth arm at
 `see_every` 1 went like this:
