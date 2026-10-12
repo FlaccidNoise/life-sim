@@ -95,6 +95,16 @@ test('an empty part word draws nothing', () => {
   expect(instancesOf(frameOf(0, [word(KIND_FLAGELLUM, 1, 0.6), 0, 0])).length).toBe(1);
 });
 
+test('a part carries the centre of its body', () => {
+  const rows = instancesOf(frameOf(0.7, [word(KIND_FLAGELLUM, 1, 0.6), word(KIND_EYE, 0.2, 0.2)]));
+  expect(rows.length).toBe(3);
+  for (const row of rows) {
+    expect(row.length).toBe(PART_INSTANCE_FLOATS);
+    expect(row[8]).toBe(BODY.x);
+    expect(row[9]).toBe(BODY.y);
+  }
+});
+
 test('anchor 0 is the nose and anchor 1 is the tail', () => {
   expect(anchorPoint(0, 12, 6, 1).x).toBeCloseTo(6, 5);
   expect(anchorPoint(1, 12, 6, 1).x).toBeCloseTo(-6, 5);
