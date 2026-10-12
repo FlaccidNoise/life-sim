@@ -227,9 +227,9 @@ Every gate is proven on a known-bad input before it counts. The proof and its ou
 defines the floor for WASM. It takes the same flags as `bench` and prints the same lines.
 
 `make check` runs the crate count, format for Rust and TypeScript, Clippy, Rust tests, the WASM build,
-type check, ESLint, and Vitest. `make gates` runs `bench`, `scripts/bench-wasm.mjs`, and `gate-health`.
-CI runs `make check`, both benches at a floor of 800, and `gate-health` on every push that touches
-`tidepool/`.
+type check, ESLint, and Vitest. `make gates` runs `bench`, `scripts/bench-wasm.mjs`, `gate-health`, and
+`gate-evolve`. CI runs `make check`, both benches at a floor of 800, `gate-health`, and `gate-evolve` on
+every push that touches `tidepool/`.
 
 ## 11. Later systems
 
