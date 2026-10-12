@@ -59,6 +59,8 @@ pub const KIND_EYE: u8 = 6;
 /// Kinds are `1..=KINDS`. 0 means "no part" in a frame.
 pub const KINDS: u8 = 6;
 
+/// The ranges of the four body genes. Constants by decision (`docs/decisions/INDEX.md`, 2026-10-11,
+/// "gene ranges stay constants"): the `len` band of `gate-evolve` is cut from `LEN_RANGE`.
 pub const LEN_RANGE: (f32, f32) = (6.0, 24.0);
 pub const WID_RANGE: (f32, f32) = (0.3, 0.9);
 pub const EGG_RANGE: (f32, f32) = (0.2, 0.7);
@@ -88,6 +90,8 @@ pub const FOUNDER_PARTS: [(u8, f32, f32); 4] = [
     (KIND_CHEMO, 0.15, 0.5),
 ];
 pub const FOUNDER_EYE_ANCHOR: f32 = 0.2;
+/// Set once, from 0.4: at 0.4 the page showed a blind strip ahead of a founder
+/// (`docs/findings/m2-eyes.md`).
 pub const FOUNDER_EYE_EXTRA: f32 = 0.5;
 /// Where `set_size` puts a fin on a body that has none.
 const FIN_ANCHOR: f32 = 0.6;

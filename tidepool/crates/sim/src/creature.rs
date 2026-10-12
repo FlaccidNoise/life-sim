@@ -9,6 +9,7 @@ use crate::math::{sin_cos, PI};
 use crate::pool::Slots;
 use crate::snapshot::{LoadError, Reader, Writer};
 
+/// A budget of `docs/architecture.md` §2, not a tuned number.
 pub const MAX_CREATURES: u32 = 4096;
 /// The radius of the largest adult the gene ranges allow. Sets the neighbour search box.
 pub const MAX_RADIUS: f32 = LEN_RANGE.1 * (1.0 + WID_RANGE.1) / 4.0;
