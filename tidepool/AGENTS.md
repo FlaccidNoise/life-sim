@@ -18,9 +18,9 @@ M0 (foundation) and M1 (first swim) are built, audited, and pushed. M2 (Bodies) 
 `docs/plans/2026-10-11-m2-bodies.md`, which the owner approved on 2026-10-11. Tasks 1 to 13 are done:
 the M2 rules are on, with the grazing rule and tuned defaults. **`make check` exits 0. `make gates`
 exits non-zero at its last step:** both benches and `gate-health` pass, and `gate-evolve` reads 2 of
-3, because the scent gap of seed 1 is 0.079 against 0.10. No number was found that fixes it: it needs a rule or a
-decision: `docs/findings/m2-tuning.md`, "What needs a rule or a decision". CI would fail at that
-step.
+3, because the scent gap of seed 1 is 0.079 against 0.10. No number was found that fixes it. It needs
+a rule or a decision from the owner: `docs/findings/m2-tuning.md`, "What needs a rule or a decision".
+CI would fail at that step, so do not push in this state.
 
 ## Commands
 
