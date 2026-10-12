@@ -78,10 +78,15 @@ test('a pair sits mirrored across the heading', () => {
   expect(d.dy).toBeCloseTo(b.dx, 4);
 });
 
-test('a small body on screen draws no parts', () => {
+test('a small body on screen draws only its flagella', () => {
+  const small = (PART_LOD_PX - 1) / BODY.length;
   const frame = frameOf(0, [word(KIND_FLAGELLUM, 1, 0.6), word(KIND_EYE, 0.2, 0.2)]);
-  expect(instancesOf(frame, (PART_LOD_PX - 1) / BODY.length).length).toBe(0);
+  const rows = instancesOf(frame, small);
+  expect(rows.length).toBe(1);
+  expect(rows[0]?.[4]).toBe(KIND_FLAGELLUM);
   expect(instancesOf(frame, PART_LOD_PX / BODY.length).length).toBe(3);
+  // A flagellum off the midline is still a pair.
+  expect(instancesOf(frameOf(0, [word(KIND_FLAGELLUM, 0.8, 0.6)]), small).length).toBe(2);
 });
 
 test('an empty part word draws nothing', () => {
