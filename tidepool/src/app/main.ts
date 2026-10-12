@@ -163,6 +163,12 @@ function bindPointer(canvas: HTMLCanvasElement, on: PointerHandlers): void {
   );
 }
 
+// The error panel's text for a world file that did not load. A reason from the worker can carry its
+// own fix.
+const noWorld = (url: string, reason: string): string =>
+  `The world file ${url} did not load: ${reason}` +
+  (reason.includes('Fix:') ? '' : '. Fix: put the address of a Tidepool snapshot after `?world=`.');
+
 // The energy of the creature in `slot`, or null when the frame does not hold it.
 function energyOf(frame: FrameView, slot: number): number | null {
   for (let i = 0; i < frame.creatureCount; i++) {
@@ -496,11 +502,28 @@ function start(): void {
         break;
       }
       case 'error':
-        fail(msg.message);
+        // Before `ready`, the error is of the load of the world file.
+        fail(worldUrl !== null && !ready.peek() ? noWorld(worldUrl, msg.message) : msg.message);
         break;
     }
   };
-  send({ type: 'init', seed: 1, params: initParams });
+  // `?world=<url>` starts from a snapshot file in place of the founders.
+  const worldUrl = query.get('world');
+  if (worldUrl === null) {
+    send({ type: 'init', seed: 1, params: initParams });
+  } else {
+    fetch(worldUrl)
+      .then(async (answer) => {
+        if (!answer.ok) throw new Error(`the server answered ${answer.status}`);
+        // A server of a one-page app answers an address it does not know with the page.
+        if (answer.headers.get('content-type')?.startsWith('text/html')) {
+          throw new Error('the server has no such file and answered with a web page');
+        }
+        const snapshot = await answer.arrayBuffer();
+        send({ type: 'init', seed: 1, snapshot, params: initParams }, [snapshot]);
+      })
+      .catch((e: unknown) => fail(noWorld(worldUrl, e instanceof Error ? e.message : String(e))));
+  }
 
   layout();
   window.addEventListener('resize', layout);
