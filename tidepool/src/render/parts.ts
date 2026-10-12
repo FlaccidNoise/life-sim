@@ -23,7 +23,7 @@ import {
 } from '../protocol';
 
 export const PART_INSTANCE_FLOATS = 8; // x, y, angle, size, kind, hue, energy01, phase
-export const PART_LOD_PX = 14; // a body shorter than this on screen draws no parts
+export const PART_LOD_PX = 14; // a body shorter than this on screen draws only its flagella
 
 const TAU = 2 * Math.PI;
 const MAX_CREATURES = 4096; // the creature pool of the core
@@ -85,7 +85,8 @@ export function buildParts(
   for (let i = 0; i < cur.creatureCount; i++) {
     const r = cur.creatureBase + i * CREATURE_STRIDE;
     const length = f32[r + C_LENGTH] ?? 0;
-    if (length * pxPerUnit < PART_LOD_PX) continue;
+    // A small body keeps its flagella: they are the cue that it swims.
+    const near = length * pxPerUnit >= PART_LOD_PX;
     const x = f32[r + C_X] ?? 0;
     const y = f32[r + C_Y] ?? 0;
     const heading = f32[r + C_HEADING] ?? 0;
@@ -106,8 +107,11 @@ export function buildParts(
     const sin = Math.sin(heading);
     const scale = Math.sqrt(length * width);
     for (let k = 0; k < PART_WORDS; k++) {
-      const part = unpackPart(u32[r + C_PARTS + k] ?? 0);
-      const reach = part && REACH[part.kind];
+      const word = u32[r + C_PARTS + k] ?? 0;
+      // The kind is the low byte of a part word. A word that draws nothing is not unpacked.
+      const kind = word & 0xff;
+      const reach = near || kind === KIND_FLAGELLUM ? REACH[kind] : undefined;
+      const part = reach && unpackPart(word);
       if (!part || !reach) continue;
       for (const side of part.anchor > 0 && part.anchor < 1 ? PAIR : MIDLINE) {
         const at = anchorPoint(part.anchor, length, width, side);

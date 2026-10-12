@@ -172,6 +172,7 @@ layout(location = 0) in vec2 a_corner;
 layout(location = 1) in vec4 a_place; // x, y, the way out of the body in radians, size
 layout(location = 2) in vec4 a_look; // kind (negative: mirrored), hue, energy01, phase
 uniform vec4 u_view;
+uniform float u_px; // world units per device pixel
 out vec2 v_p; // the part frame in sizes: the anchor is at 0, +x is out of the body, +y is back
 flat out vec3 v_rgb;
 flat out vec3 v_part; // kind, size in world units, phase
@@ -180,8 +181,10 @@ void main() {
   float kind = abs(a_look.x);
   // A flagellum is long and thin. Every other kind fits a square round its anchor.
   bool lash = kind == ${KIND_FLAGELLUM}.0;
-  vec2 lo = lash ? vec2(-0.05, -0.3) : vec2(-1.2);
-  vec2 hi = lash ? vec2(1.05, 0.3) : vec2(1.2);
+  // A far flagellum is still a line one pixel wide, and its quad keeps room for that line.
+  float room = 0.3 + 1.5 * u_px / max(a_place.w, u_px);
+  vec2 lo = lash ? vec2(-0.05, -room) : vec2(-1.2);
+  vec2 hi = lash ? vec2(1.05, room) : vec2(1.2);
   v_p = mix(lo, hi, 0.5 + 0.5 * a_corner);
   vec2 axis = vec2(cos(a_place.z), sin(a_place.z));
   // The left part of a pair is the mirror of the right one.
