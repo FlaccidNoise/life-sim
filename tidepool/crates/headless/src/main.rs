@@ -1,5 +1,7 @@
 mod bench;
+mod evolve;
 mod health;
+mod probes;
 
 use std::process::exit;
 use std::str::FromStr;
@@ -7,11 +9,49 @@ use std::str::FromStr;
 use tidepool_sim::params::{Params, DEFS};
 use tidepool_sim::world::{size_ok, World, MAX_WORLD_SIZE};
 
-const USAGE: &str = "usage: tidepool-headless run --seed <u32> --ticks <u32> --creatures <u32> [--plants <u32>] [--world <W>x<H>] [--param <name>=<value>]...
+const USAGE: &str = "usage: tidepool-headless run --seed <u32> --ticks <u32> --creatures <u32> [--plants <u32>] [--world <W>x<H>] [--out <path>] [--param <name>=<value>]...
        tidepool-headless bench [--seed <u32>] [--creatures <u32>] [--plants <u32>] [--world <W>x<H>] [--settle <u32>] [--ticks <u32>] [--runs <u32>] [--reference <u32>] [--floor <n>] [--param <name>=<value>]...
        tidepool-headless gate-health [--seeds <u32>,<u32>,...] [--ticks <u32>] [--param <name>=<value>]...
+       tidepool-headless gate-evolve [--seeds <u32>,<u32>,...] [--ticks <u32>] [--param <name>=<value>]...
        tidepool-headless probe-density [--seed <u32>] [--ticks <u32>] [--param <name>=<value>]...
-       tidepool-headless probe-skip [--seed <u32>] [--ticks <settle ticks>] [--param <name>=<value>]...";
+       tidepool-headless probe-skip [--seed <u32>] [--ticks <settle ticks>] [--param <name>=<value>]...
+       tidepool-headless probe-plants [--seed <u32>] [--ticks <u32>] [--param <name>=<value>]...
+       tidepool-headless probe-heirs [--seed <u32>] [--pick <tick>] [--param <name>=<value>]...
+       tidepool-headless probe-crowd [--seed <u32>] [--param <name>=<value>]...
+       tidepool-headless probe-plans [--seed <u32>] [--ticks <u32>] [--param <name>=<value>]...
+       Every subcommand takes --m2: the Start values of the M2 plan, set before every --param.";
+
+/// `--m2`: the "Start" column of the parameter table in `docs/plans/2026-10-11-m2-bodies.md`, row by
+/// row. Task 13 of that plan writes these into `params.rs` and deletes the flag.
+const M2: &[&str] = &[
+    "part_mass=0.1",
+    "eye_cost=1",
+    "upkeep_curve=1",
+    "intake_curve=1",
+    "motor_curve=1",
+    "push_mass=1",
+    "fin_torque=1.3",
+    "fin_grip=0.3",
+    "old_cost=0.2",
+    "brood_max=4",
+    "parent_reserve=0.25",
+    "grow_floor=0.5",
+    "founder_sigma=0.05",
+    "starter_cruise=0.9",
+    "starter_steer=2",
+    "starter_surge=0.5",
+    "starter_look=1.5",
+    "founder_eye=0.2",
+    "eye_range=16",
+    "eye_gain=1",
+    "see_every=2",
+    "mut_shape_rate=0.15",
+    "mut_life_rate=0.15",
+    "mut_part_add=0.02",
+    "mut_part_remove=0.02",
+    "mut_part_dup=0.02",
+    "part_new_size=0.1",
+];
 
 /// The default world: 1536 by 1024, 400 founder creatures, 1,200 founder plants. The health gate
 /// judges it and the bench times it.
@@ -65,6 +105,7 @@ fn param(flag: &str, v: Option<&str>) -> (usize, f32) {
 fn run(args: &[String]) {
     let (mut seed, mut ticks, mut creatures, mut plants) = (None, None, None, 0u32);
     let (mut w, mut h) = WORLD;
+    let mut out = None;
     let mut params = Vec::new();
     let mut it = args.iter().map(String::as_str);
     while let Some(flag) = it.next() {
@@ -74,6 +115,7 @@ fn run(args: &[String]) {
             "--creatures" => creatures = Some(value::<u32>(flag, it.next())),
             "--plants" => plants = value(flag, it.next()),
             "--world" => (w, h) = world_size(flag, it.next()),
+            "--out" => out = Some(value::<String>(flag, it.next())),
             "--param" => params.push(param(flag, it.next())),
             _ => usage(&format!("unknown flag {flag}")),
         }
@@ -95,16 +137,36 @@ fn run(args: &[String]) {
         world.plants.slots.count(),
         world.state_hash()
     );
+    if let Some(path) = out {
+        if let Err(e) = std::fs::write(&path, world.save()) {
+            eprintln!("error: cannot write the snapshot to {path}: {e}. Fix: give --out a path in a folder that exists and that you can write to.");
+            exit(1);
+        }
+    }
 }
 
 fn main() {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let mut args: Vec<String> = std::env::args().skip(1).collect();
+    // `--m2` stands for one `--param` per row of `M2`, put ahead of every other flag, so a
+    // `--param` on the command line wins.
+    let given = args.len();
+    args.retain(|a| a != "--m2");
+    if args.len() < given {
+        let rows = M2.iter().flat_map(|row| ["--param", row]);
+        let after_subcommand = args.len().min(1);
+        args.splice(after_subcommand..after_subcommand, rows.map(String::from));
+    }
     match args.first().map(String::as_str) {
         Some("run") => run(&args[1..]),
         Some("bench") => bench::bench(&args[1..]),
         Some("gate-health") => health::gate(&args[1..]),
+        Some("gate-evolve") => evolve::gate(&args[1..]),
         Some("probe-density") => health::probe_density(&args[1..]),
         Some("probe-skip") => health::probe_skip(&args[1..]),
-        _ => usage("expected a subcommand: run, bench, gate-health, probe-density, or probe-skip"),
+        Some("probe-plants") => probes::plants(&args[1..]),
+        Some("probe-heirs") => probes::heirs(&args[1..]),
+        Some("probe-crowd") => probes::crowd(&args[1..]),
+        Some("probe-plans") => probes::plans(&args[1..]),
+        _ => usage("expected a subcommand: run, bench, gate-health, gate-evolve, probe-density, probe-skip, probe-plants, probe-heirs, probe-crowd, or probe-plans"),
     }
 }
