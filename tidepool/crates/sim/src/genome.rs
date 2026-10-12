@@ -88,7 +88,7 @@ pub const FOUNDER_PARTS: [(u8, f32, f32); 4] = [
     (KIND_CHEMO, 0.15, 0.5),
 ];
 pub const FOUNDER_EYE_ANCHOR: f32 = 0.2;
-pub const FOUNDER_EYE_EXTRA: f32 = 0.4;
+pub const FOUNDER_EYE_EXTRA: f32 = 0.5;
 /// Where `set_size` puts a fin on a body that has none.
 const FIN_ANCHOR: f32 = 0.6;
 /// The last history id that a founder holds. Its brain connections take `1..=STARTER_CONNS`, its

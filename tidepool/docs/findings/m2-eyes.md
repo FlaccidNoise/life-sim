@@ -292,3 +292,16 @@ build holds fewer creatures, and on an identical world the same build is 1.2% sl
   heading is above 0, and on both sides when it is exactly 0, which holds for anchors 0 and 1.
 - **`math::sin_cos` is slow in WASM.** Measured: about 23 nanoseconds per call inside the scan.
   Guessed: the motor, which calls it once per body per tick, pays about as much.
+
+## After the merge, 2026-10-11
+
+The orchestrator changed three things after this task was merged. None is a tuning step.
+
+- **`FORMAT_VERSION` is 6.** The first item of the list above is closed: an old snapshot now fails
+  with `BadVersion`, which says what is wrong.
+- **The founder eye is wider: `FOUNDER_EYE_EXTRA` is 0.5, a half angle of 0.7 radians.** At 0.4 the two
+  cones sat 0.628 radians each side of the heading with a half angle of 0.6, and so left a blind
+  strip of 0.056 radians dead ahead. The view cone on the page showed it as a dark seam. **Every
+  eyed reading in this file was taken at 0.4.** The eyes-off rows are not affected: the default
+  world has no eye.
+- **The plan's parameter table says `see_every` 2.**
