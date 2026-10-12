@@ -22,8 +22,11 @@ exits non-zero at its last step:** both benches and `gate-health` pass, and `gat
 a rule or a decision from the owner: `docs/findings/m2-tuning.md`, "What needs a rule or a decision".
 CI would fail at that step, so do not push in this state. The fresh-context audit
 (`docs/findings/m2-audit.md`) says M2 does not meet its exit: by tick 144,000 the chemoreceptor is
-lost on 6 of 10 seeds and one seed loses its eyes too. Its test and probe findings are being fixed.
-Its band and rule findings wait for the owner.
+lost on 6 of 10 seeds and one seed loses its eyes too. Its test and probe findings are fixed. Its
+band and rule findings wait for the owner. The cause of the lost senses is measured
+(`docs/findings/m2-senses.md`): with `part_upkeep` at 0 every seed keeps both senses to tick 144,000,
+but the WASM bench then fails its floor. All 12 trials of the plan are used. The default has not
+changed, and the next step is the owner's choice.
 
 ## Commands
 

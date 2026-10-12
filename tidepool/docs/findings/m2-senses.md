@@ -1,7 +1,11 @@
-# M2 turnover: does a world where food comes and goes keep the senses and the tail?
+# M2 senses: what removes them by tick 144,000, and what keeps them
 
 Date: 2026-10-12. Baseline: `m2-long-run.md` (commit e268576, the accepted set at tick 144,000 on 10
 seeds). Every run here is `probe-census` or `gate-evolve` to tick 144,000, one run at a time.
+
+The file began as the record of a turnover rule (food that comes and goes). The cost controls of
+Part 1 came first, as design risk R1 asks, and they changed the question. No turnover rule was built.
+The answer is in "Result" at the end.
 
 The question comes from the audit (`m2-audit.md`, findings H1, H2, M3) and from `m2-long-run.md`: in
 the world that the grazing rule makes, no plant dies, and evolution removes the chemoreceptor on 6 of
