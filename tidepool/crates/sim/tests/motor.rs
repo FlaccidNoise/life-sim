@@ -138,8 +138,10 @@ fn turn_radius_grows_with_speed_and_exceeds_half_a_body_length() {
 
 #[test]
 fn a_slender_body_is_faster() {
+    // The M1 motor. At `motor_curve` 1 top speed does not depend on size.
     let top = |wid: f32| {
         let (mut w, s) = solo(|g| g.wid = wid);
+        w.params.set(id::MOTOR_CURVE, 0.0);
         drive(&mut w, 1.0, 0.0, 200);
         speed(&w, s)
     };

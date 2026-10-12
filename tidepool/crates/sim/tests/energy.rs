@@ -296,10 +296,18 @@ fn resting_loss(setup: impl FnOnce(&mut World), edit: impl FnOnce(&mut Genome)) 
     before - w.creatures.energy[c]
 }
 
-/// The founder is the reference body: the two curves meet at its mass.
+/// The founder with no eye is the reference body: the two curves meet at its mass.
 #[test]
 fn the_founder_pays_the_same_upkeep_on_both_curves() {
-    let loss = |curve: f32| resting_loss(|w| w.params.set(id::UPKEEP_CURVE, curve), |_| {});
+    let loss = |curve: f32| {
+        resting_loss(
+            |w| {
+                w.params.set(id::UPKEEP_CURVE, curve);
+                w.params.set(id::FOUNDER_EYE, 0.0);
+            },
+            |_| {},
+        )
+    };
     let (line, curve) = (loss(0.0), loss(1.0));
     assert!(line > 1.0, "the loss {line} is too small to test");
     assert!((curve / line - 1.0).abs() < 1e-3, "{curve} against {line}");
@@ -317,12 +325,13 @@ fn a_small_body_pays_more_per_unit_of_mass_on_the_curve() {
 
 /// Rule P1. The founder with an eye of size 1 has a part sum of `2.1 + eye_cost`. Upkeep per unit
 /// of mass is `basal + part_upkeep * part_sum`, and `part_mass` makes that body heavier than the
-/// founder by `(1 + part_mass * 3.1) / (1 + part_mass * 2.1)`.
+/// founder by `(1 + part_mass * 3.1) / (1 + part_mass * 2.1)`. Upkeep follows mass here.
 #[test]
 fn an_eye_and_the_mass_of_parts_cost_upkeep() {
     let loss = |eye_cost: f32, part_mass: f32| {
         resting_loss(
             |w| {
+                w.params.set(id::UPKEEP_CURVE, 0.0);
                 w.params.set(id::EYE_COST, eye_cost);
                 w.params.set(id::PART_MASS, part_mass);
             },

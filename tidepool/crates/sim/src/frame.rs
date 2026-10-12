@@ -266,6 +266,8 @@ mod tests {
     #[test]
     fn a_record_holds_one_word_for_each_part_and_zeros_after_them() {
         let mut w = World::new(5, 1536.0, 1024.0);
+        // The founder with no eye: four parts.
+        w.params.set(id::FOUNDER_EYE, 0.0);
         w.seed_founders(50, 0);
         write(&mut w, 0.0, 0.0, 1536.0, 1024.0);
         let parts = &record(&w, 4)[10..];

@@ -358,9 +358,19 @@ runs the default world three times for each seed, one run at a time: as given, w
 with `eye_gain=0`. It prints one row per seed and exits 0 only when every seed is inside every band. A
 usage error exits 2. Built by M2 Task 12 on 2026-10-11.
 
-**It is not in `make gates` or in CI.** Task 13 of the M2 plan wires it in. Until then the M2 rules are
-off by default, and `--m2` sets the Start value of every row of the plan's parameter table, ahead of
-every `--param`. Every subcommand takes `--m2`.
+**It is in `make gates` and in CI, after `gate-health`, on all three seeds.** M2 Task 13 wired it in on
+2026-10-11. One run takes 30 to 32 seconds on the reference machine, and CI runs at about half that
+speed, so the three seeds stay.
+
+**`--m2` is deleted.** Task 13 wrote the Start values of the plan's parameter table into `params.rs`.
+A command below that reads `--m2` was run before that. The same command without the flag now runs
+the same world: `gate-health` and `gate-evolve` print at the new defaults what they printed with
+`--m2` at the old ones, digit for digit (`findings/m2-tuning.md`, "Part 1").
+
+**`make gates` fails at the switched-on defaults, and so would CI.** The bench is void first: the
+default world of seed 1 holds 476 creatures at tick 12,000 and the bench needs a mean of 1,200. Then
+`gate-health` reads 2 of 3 (`max_gen` 7 on seed 1) and `gate-evolve` reads 1 of 3 (`len` on seeds 2
+and 3). The trials of Task 13 are for this. No band, floor, or reference population was changed.
 
 | Measure | Meaning | Band |
 |---|---|---|
@@ -625,7 +635,7 @@ What it says, by kind of claim:
 
 Built by M2 Task 12. Each runs the default world and prints what it reads. None has a band, and none
 has rejected anything. The rows below are seed 1 with `--m2`: the Start values of the M2 plan, not
-tuned.
+tuned. Those values are the defaults since Task 13, and the flag is deleted.
 
 **`probe-plants [--seed n] [--ticks 36000] [--param ...]`.** One row every 4,000 ticks: plants alive,
 plant deaths and seedlings since the last row, 32-unit cells that hold a plant, the mean of

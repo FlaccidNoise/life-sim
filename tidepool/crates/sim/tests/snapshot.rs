@@ -85,6 +85,16 @@ fn possession_and_a_parameter_survive_a_round_trip() {
 fn a_load_expresses_every_body_again() {
     let mut w = World::new(9, 1536.0, 1024.0);
     w.params.set(id::FOUNDER_EYE, 0.2);
+    // Every body keeps the founder's one pair of eyes: no eye is copied, lost, or moved to the
+    // midline.
+    for k in [
+        id::MUT_SHAPE_RATE,
+        id::MUT_PART_ADD,
+        id::MUT_PART_REMOVE,
+        id::MUT_PART_DUP,
+    ] {
+        w.params.set(k, 0.0);
+    }
     w.seed_founders(400, 1200);
     w.run(1500);
     let loaded = World::load(&w.save()).expect("load");

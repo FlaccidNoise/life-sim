@@ -18,40 +18,7 @@ const USAGE: &str = "usage: tidepool-headless run --seed <u32> --ticks <u32> --c
        tidepool-headless probe-plants [--seed <u32>] [--ticks <u32>] [--param <name>=<value>]...
        tidepool-headless probe-heirs [--seed <u32>] [--pick <tick>] [--param <name>=<value>]...
        tidepool-headless probe-crowd [--seed <u32>] [--param <name>=<value>]...
-       tidepool-headless probe-plans [--seed <u32>] [--ticks <u32>] [--param <name>=<value>]...
-       Every subcommand takes --m2: the Start values of the M2 plan, set before every --param.";
-
-/// `--m2`: the "Start" column of the parameter table in `docs/plans/2026-10-11-m2-bodies.md`, row by
-/// row. Task 13 of that plan writes these into `params.rs` and deletes the flag.
-const M2: &[&str] = &[
-    "part_mass=0.1",
-    "eye_cost=1",
-    "upkeep_curve=1",
-    "intake_curve=1",
-    "motor_curve=1",
-    "push_mass=1",
-    "fin_torque=1.3",
-    "fin_grip=0.3",
-    "old_cost=0.2",
-    "brood_max=4",
-    "parent_reserve=0.25",
-    "grow_floor=0.5",
-    "founder_sigma=0.05",
-    "starter_cruise=0.9",
-    "starter_steer=2",
-    "starter_surge=0.5",
-    "starter_look=1.5",
-    "founder_eye=0.2",
-    "eye_range=16",
-    "eye_gain=1",
-    "see_every=2",
-    "mut_shape_rate=0.15",
-    "mut_life_rate=0.15",
-    "mut_part_add=0.02",
-    "mut_part_remove=0.02",
-    "mut_part_dup=0.02",
-    "part_new_size=0.1",
-];
+       tidepool-headless probe-plans [--seed <u32>] [--ticks <u32>] [--param <name>=<value>]...";
 
 /// The default world: 1536 by 1024, 400 founder creatures, 1,200 founder plants. The health gate
 /// judges it and the bench times it.
@@ -146,16 +113,7 @@ fn run(args: &[String]) {
 }
 
 fn main() {
-    let mut args: Vec<String> = std::env::args().skip(1).collect();
-    // `--m2` stands for one `--param` per row of `M2`, put ahead of every other flag, so a
-    // `--param` on the command line wins.
-    let given = args.len();
-    args.retain(|a| a != "--m2");
-    if args.len() < given {
-        let rows = M2.iter().flat_map(|row| ["--param", row]);
-        let after_subcommand = args.len().min(1);
-        args.splice(after_subcommand..after_subcommand, rows.map(String::from));
-    }
+    let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
         Some("run") => run(&args[1..]),
         Some("bench") => bench::bench(&args[1..]),

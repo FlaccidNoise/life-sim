@@ -35,6 +35,7 @@ test('a founder record unpacks to its four parts, and to an eye with `founder_ey
     const words = f.u32.subarray(f.creatureBase + P.C_PARTS, f.creatureBase + P.CREATURE_STRIDE);
     return Array.from(words, P.unpackPart);
   };
+  sim.setParam(eye.index, 0);
   const plain = partsOf(sim);
   expect(plain.map((p) => p?.kind ?? 0)).toEqual([
     P.KIND_FLAGELLUM,

@@ -27,7 +27,7 @@ Run from `tidepool/`. If `cargo` is not found, run `. "$HOME/.cargo/env"`.
 | Command | Does |
 |---|---|
 | `make check` | Crate count, format (Rust and TypeScript), Clippy, Rust tests, WASM build, type check, ESLint, Vitest |
-| `make gates` | Native bench, the throughput gate (`scripts/bench-wasm.mjs`), then the health gate (`gate-health`) |
+| `make gates` | Native bench, the throughput gate (`scripts/bench-wasm.mjs`), the health gate (`gate-health`), then the evolution gate (`gate-evolve`) |
 | `make dev` | Build the WASM and start the dev server |
 
 ## Gotchas

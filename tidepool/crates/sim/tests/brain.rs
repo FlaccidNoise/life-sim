@@ -123,7 +123,9 @@ fn a_neuron_reads_last_steps_values() {
 
 #[test]
 fn the_starter_brain_has_the_documented_shape() {
-    let p = Params::new();
+    // The brain of a founder with no eye.
+    let mut p = Params::new();
+    p.set(id::FOUNDER_EYE, 0.0);
     let g = brain::starter(&mut Rng::new(1), &p);
     assert_eq!(
         (g.n_hidden, g.conns.len(), g.bias.len(), g.alpha.len()),
@@ -143,6 +145,7 @@ fn the_starter_brain_has_the_documented_shape() {
 #[test]
 fn the_starter_brain_of_a_founder_with_an_eye_adds_the_eye_wires() {
     let mut p = Params::new();
+    p.set(id::FOUNDER_EYE, 0.0);
     let plain = brain::starter(&mut Rng::new(1), &p);
     p.set(id::FOUNDER_EYE, 0.2);
     let g = brain::starter(&mut Rng::new(1), &p);
