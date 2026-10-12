@@ -1,9 +1,10 @@
 //! Eating, upkeep, growth, and death.
 //!
 //! A filter mouth feeds on every plant the body touches, with no brain output. A full creature
-//! takes nothing, and no bite takes a plant under its death reserve. Upkeep is paid for mass, for parts, for the brain, and for thrust, and a long
-//! `old` gene raises all of it. A juvenile with a reserve builds mass. A creature with no energy
-//! starves, and one at the age of its `old` gene dies.
+//! takes nothing, and no bite takes a plant under its death reserve. Upkeep is paid for mass, for
+//! parts, for the brain, and for thrust, and a long `old` gene raises all of it. A juvenile with a
+//! reserve builds mass. A creature with no energy starves, and one at the age of its `old` gene
+//! dies.
 //!
 //! Mass is the area times the heft of the parts. Capacity is for area alone: parts are not stores.
 
