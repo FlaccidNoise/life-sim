@@ -2,7 +2,7 @@
 #![allow(clippy::disallowed_methods, clippy::approx_constant)]
 
 use tidepool_sim::brain::{
-    self, Brains, IN_CONST, IN_SEE_FOOD_L, IN_SEE_FOOD_R, N_IN, OUT_THRUST, OUT_TURN,
+    self, Brains, IN_AGE, IN_CONST, IN_SEE_FOOD_L, IN_SEE_FOOD_R, N_IN, OUT_THRUST, OUT_TURN,
 };
 use tidepool_sim::genome::{BrainGenome, ConnGene, Genome, KIND_CHEMO};
 use tidepool_sim::math::act;
@@ -245,4 +245,34 @@ fn creatures_think_on_alternate_ticks() {
     assert!((t0.0 != t1.0) != (t0.1 != t1.1));
     assert!((t1.0 != t2.0) != (t1.1 != t2.1));
     assert!((t0.0 != t1.0) != (t1.0 != t2.0));
+}
+
+/// Two bodies of the same age with a short and a long `old` gene. The `lifespan` parameter is
+/// 4800, and neither input reads it.
+#[test]
+fn the_age_input_is_the_age_over_the_old_gene_of_the_body() {
+    let mut w = World::new(1, 1536.0, 1024.0);
+    w.params.set(id::THINK_EVERY, 1.0);
+    let bodies = [(300.0, 2400.0), (900.0, 9600.0)].map(|(x, old)| {
+        let g = Genome {
+            old,
+            ..Genome::default()
+        };
+        let at = SpawnAt {
+            x,
+            y: 500.0,
+            heading: 0.0,
+            growth: 1.0,
+            energy01: 1.0,
+            parent: 0,
+            generation: 0,
+            mark: 0,
+        };
+        let s = w.spawn(g, at).expect("slot") as usize;
+        w.creatures.age[s] = 1200;
+        s
+    });
+    w.tick();
+    let [short, long] = bodies.map(|s| w.brains.inputs_mut(s)[IN_AGE]);
+    assert_eq!((short, long), (0.5, 0.125));
 }

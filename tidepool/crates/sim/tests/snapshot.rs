@@ -137,12 +137,17 @@ fn every_saved_field_is_in_the_hash_and_survives_a_load() {
     type Edit = fn(&mut World);
     let edits: &[(&str, Edit)] = &[
         ("tick", |w| w.tick += 1),
+        // Half a unit less leaves every grid with the same count of cells, so the maps still fit.
+        ("w", |w| w.w -= 0.5),
+        ("h", |w| w.h -= 0.5),
         ("next_uid", |w| w.next_uid += 1),
         ("next_history", |w| w.next_history += 1),
         ("rng_spawn", |w| w.rng_spawn.0 ^= 1),
         ("rng_mutate", |w| w.rng_mutate.0 ^= 1),
         ("rng_plants", |w| w.rng_plants.0 ^= 1),
         ("params", |w| w.params.set(id::CHEMO_GAIN, 9.0)),
+        // Two founders trade uids, so each uid is still alive once and above its parent.
+        ("uid", |w| w.creatures.uid.swap(S, S + 1)),
         ("x", |w| w.creatures.x[S] += 1.0),
         ("y", |w| w.creatures.y[S] += 1.0),
         ("vx", |w| w.creatures.vx[S] += 1.0),
@@ -173,6 +178,15 @@ fn every_saved_field_is_in_the_hash_and_survives_a_load() {
         }),
         ("genome bias", |w| w.genomes[S].brain.bias[0] += 0.5),
         ("genome alpha", |w| w.genomes[S].brain.alpha[0] = 0.5),
+        // `load` holds the count of hidden neurons to the count of biases, so the count cannot
+        // change alone: the brain gets one more hidden neuron, with its bias and its alpha.
+        ("hidden neuron count", |w| {
+            let brain = &mut w.genomes[S].brain;
+            brain.n_hidden += 1;
+            brain.bias.push(0.0);
+            brain.alpha.push(1.0);
+            w.brains.express(S, &w.genomes[S].brain);
+        }),
         ("brain activation", |w| {
             w.brains.cur[S * MAX_NEURONS + N_IN] += 0.5
         }),

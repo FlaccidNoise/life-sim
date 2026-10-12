@@ -1,7 +1,8 @@
 // Tests run native only, so a banned float method is safe here.
 #![allow(clippy::disallowed_methods)]
 
-use tidepool_sim::genome::{BrainGenome, Genome, KIND_CILIA, KIND_FIN, KIND_FLAGELLUM};
+use tidepool_sim::creature::heft;
+use tidepool_sim::genome::{BrainGenome, Genome, KIND_CHEMO, KIND_CILIA, KIND_FIN, KIND_FLAGELLUM};
 use tidepool_sim::params::id;
 use tidepool_sim::rng::Rng;
 use tidepool_sim::world::{SpawnAt, World};
@@ -53,14 +54,14 @@ fn solo(edit: impl FnOnce(&mut Genome)) -> (World, usize) {
     (w, slot)
 }
 
-/// Two adults of these lengths at rest, 8 apart, so that they overlap by 1. Their brains command
-/// nothing. One tick. The mass of each and the velocity that the push gave it.
-fn bump(lens: [f32; 2], push_mass: f32) -> [(f32, f32, f32); 2] {
+/// Two adults at rest, 8 apart, each changed by its edit. Their brains command nothing. One tick.
+/// The mass of each and the velocity that the push gave it.
+fn bump_of(edits: [&dyn Fn(&mut Genome); 2], push_mass: f32) -> [(f32, f32, f32); 2] {
     let mut w = still_water();
     w.params.set(id::PUSH_MASS, push_mass);
-    let slots = [(lens[0], 0.0, 0.0), (lens[1], 4.8, 6.4)].map(|(len, dx, dy)| {
+    let slots = [(edits[0], 0.0, 0.0), (edits[1], 4.8, 6.4)].map(|(edit, dx, dy)| {
         adult(&mut w, 768.0 + dx, 512.0 + dy, |g| {
-            g.len = len;
+            edit(g);
             g.brain = BrainGenome::default();
         })
     });
@@ -68,6 +69,11 @@ fn bump(lens: [f32; 2], push_mass: f32) -> [(f32, f32, f32); 2] {
     let (part_mass, eye_cost) = (w.params.get(id::PART_MASS), w.params.get(id::EYE_COST));
     let c = &w.creatures;
     slots.map(|s| (c.mass(s, part_mass, eye_cost), c.vx[s], c.vy[s]))
+}
+
+/// `bump_of` for two adults of these lengths. Their radii add up to 9, so they overlap by 1.
+fn bump(lens: [f32; 2], push_mass: f32) -> [(f32, f32, f32); 2] {
+    bump_of([&|g| g.len = lens[0], &|g| g.len = lens[1]], push_mass)
 }
 
 fn drive(w: &mut World, thrust: f32, turn: f32, ticks: u32) {
@@ -200,6 +206,24 @@ fn the_push_is_equal_at_push_mass_0_and_by_mass_at_1() {
     assert!((small.0 * small.2 + big.0 * big.2).abs() < 1e-4);
 }
 
+/// Two bodies of one length and one width, so of one area. One has no chemoreceptor and one has a
+/// chemoreceptor of size 1. The weight of that part is the only difference between them.
+#[test]
+fn the_push_counts_the_mass_of_the_parts() {
+    let len = |(_, vx, vy): (f32, f32, f32)| (vx * vx + vy * vy).sqrt();
+    let [light, heavy] = bump_of(
+        [&|g| g.set_size(KIND_CHEMO, 0.0), &|g| {
+            g.set_size(KIND_CHEMO, 1.0)
+        }],
+        1.0,
+    );
+    assert!(heavy.0 > light.0 * 1.2, "mass {} {}", light.0, heavy.0);
+    let (got, want) = (len(light) / len(heavy), heavy.0 / light.0);
+    assert!((got / want - 1.0).abs() < 0.01, "got {got} want {want}");
+    assert!((light.0 * light.1 + heavy.0 * heavy.1).abs() < 1e-4);
+    assert!((light.0 * light.2 + heavy.0 * heavy.2).abs() < 1e-4);
+}
+
 #[test]
 fn two_equal_bodies_get_the_m1_push_at_any_push_mass() {
     for push_mass in [0.0, 0.5, 1.0] {
@@ -263,6 +287,40 @@ fn a_heavier_load_of_parts_is_slower() {
     };
     let (bare, loaded) = (top(|_| {}), top(|g| g.set_size(KIND_FIN, 1.0)));
     assert!(loaded < bare, "bare {bare} loaded {loaded}");
+}
+
+/// Rule S3 for the turn. Two bodies that differ only in a chemoreceptor, which steers nothing. At
+/// `motor_curve` 1 the turn of a body is over the heft of its parts.
+#[test]
+fn a_heavier_load_of_parts_turns_slower() {
+    let spin = |chemo: f32| {
+        let (mut w, s) = solo(|g| g.set_size(KIND_CHEMO, chemo));
+        drive(&mut w, 0.0, 1.0, 40);
+        let (part_mass, eye_cost) = (w.params.get(id::PART_MASS), w.params.get(id::EYE_COST));
+        let parts = w.creatures.part_sum(s, eye_cost);
+        (w.creatures.omega[s], heft(parts, part_mass))
+    };
+    let ((bare, light), (loaded, heavy)) = (spin(0.0), spin(1.0));
+    assert!(bare > 0.01 && heavy > light * 1.2, "{bare} {light} {heavy}");
+    let (got, want) = (bare / loaded, heavy / light);
+    assert!((got / want - 1.0).abs() < 0.01, "got {got} want {want}");
+}
+
+/// `SIDE_DRAG_MAX` is 0.95. This body's side drag and the grip of its fin add up to 1.5, so a tick
+/// keeps a twentieth of the velocity across the heading. Without the limit the tick would turn
+/// that velocity around.
+#[test]
+fn side_drag_stops_at_its_limit() {
+    let (mut w, s) = solo(|g| g.set_size(KIND_FIN, 1.0));
+    w.params.set(id::DRAG_SIDE, 0.9);
+    w.params.set(id::FIN_GRIP, 0.6);
+    w.creatures.vy[s] = 2.0;
+    drive(&mut w, 0.0, 0.0, 1);
+    let (vx, vy) = (w.creatures.vx[s], w.creatures.vy[s]);
+    assert!(
+        vx.abs() < 1e-3 && (vy - 0.1).abs() < 1e-3,
+        "vx {vx} vy {vy}"
+    );
 }
 
 #[test]
