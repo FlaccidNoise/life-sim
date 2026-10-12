@@ -19,10 +19,11 @@ M0 (foundation) and M1 (first swim) are built, audited, and pushed. M2 (Bodies) 
 and Task 14 (the exit) is open. **`make check` and `make gates` both exit 0.** The fresh-context audit
 (`docs/findings/m2-audit.md`) found that evolution removed the senses by tick 144,000. The cause was
 the upkeep of a part. On 2026-10-12 the owner deleted that rule, and `plant_growth` went to 0.03
-(`docs/findings/m2-senses.md`): every one of 10 seeds now keeps both senses to tick 144,000. Left in
-Task 14: run the failure proofs of `docs/gates.md` again at these defaults, the owner's band
-decisions from the audit, the baked world, `docs/findings/m2-exit.md`, and the owner checks. Not
-pushed: ask the owner first.
+(`docs/findings/m2-senses.md`): every one of 10 seeds now keeps both senses to tick 144,000. The
+failure proofs of `docs/gates.md` ran again at these defaults. The exit record is
+`docs/findings/m2-exit.md`. Left in Task 14: the owner's five checks and nine decisions from the
+audit, both listed in the exit record. No fresh-context audit has run since the rule was deleted.
+Not pushed: ask the owner first.
 
 ## Commands
 
