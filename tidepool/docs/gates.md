@@ -20,7 +20,7 @@ on 2026-10-11.
 | Throughput, WASM in Node | `make gates` (runs `node scripts/bench-wasm.mjs`) | `node scripts/bench-wasm.mjs --floor 1000000000`, and `--reference 5000` | `bench-wasm creatures=1539 median_tps=3761 floor=1000000000 FAIL`, exit 1. `VOID: population fell`, exit 1. The full output is in "Throughput bench" below. | 2026-10-10 |
 | Health | `make gates` (runs `target/release/tidepool-headless gate-health`) | `gate-health --param plant_growth=0`, and `gate-health --param basal=0.01` | Both: every seed `FAIL`, `gate-health 0/3 FAIL`, exit 1. The full output is in "Health gate" below. | 2026-10-10 |
 | CI | `.github/workflows/tidepool.yml` runs `make check`, `bench --floor 800`, `scripts/bench-wasm.mjs --floor 800`, and `gate-health` | Two commits on a throwaway branch `ci-proof`: `pub fn bad(x: f32) -> f32 { x.sin() }` added to `crates/sim/src/lib.rs`, and then, with that reverted, `--floor 1000000000` on the `bench-wasm.mjs` step of the workflow | Run 38179267371 failed at `make check`: ``error: use of a disallowed method `f32::sin` ``. Run 38179352131 failed at the WASM bench step: `bench-wasm creatures=1539 median_tps=1801 floor=1000000000 FAIL`, and the health gate step was skipped | 2026-10-11 |
-| Evolution | `target/release/tidepool-headless gate-evolve`. Not in `make gates` or CI yet: Task 13 of the M2 plan wires it in | One world for each band, each with `--m2`: the M1 size rules (`len`, `len_sd`), parts that can only be lost in a world where no sense works (`parts`), `scent_deposit=0` (scent gap), `eye_range=0` (eye gap), and senses that read almost nothing (both gaps, against chance) | Each run: `gate-evolve 0/3 FAIL`, exit 1, with the named band among the failures of every seed, or of 2 seeds of 3 for `len_sd`. Two changes to the plan: the `parts` proof needed a harder input, and the gap bands went from 0.02 to 0.10. The full output and the limits are in "Gate-evolve" below | 2026-10-11 |
+| Evolution | `target/release/tidepool-headless gate-evolve`. Not in `make gates` or CI yet: Task 13 of the M2 plan wires it in | One world for each band, each with `--m2`: the M1 size rules (`len`, `len_sd`), parts that can only be lost in a world where no sense works (`parts`), `scent_deposit=0` (scent gap), `eye_range=0` (eye gap), senses that read almost nothing (both gaps, against chance), and `fert_radius=40` (`creatures`) | Each run: `gate-evolve 0/3 FAIL`, exit 1, with the named band among the failures of every seed, or of 2 seeds of 3 for `len_sd`. Two changes to the plan: the `parts` proof needed a harder input, and the gap bands went from 0.02 to 0.10. The full output and the limits are in "Gate-evolve" below | 2026-10-11 |
 
 ## Notes
 
@@ -364,7 +364,7 @@ every `--param`. Every subcommand takes `--m2`.
 
 | Measure | Meaning | Band |
 |---|---|---|
-| `creatures` | Alive at the end of the first run | Reported, no band |
+| `creatures` | Alive at the end of the first run | 150 or more: the low end of the same band of the health gate |
 | `creatures_noscent` | Alive at the end of the run with `chemo_gain=0` | 150 or more, or the seed fails with `chemo_blind run died` |
 | `creatures_noeye` | Alive at the end of the run with `eye_gain=0` | 150 or more, or the seed fails with `eye_blind run died` |
 | `len` | Mean length gene of the living | 7.8 to 22.2: a tenth of the range in from each wall |
@@ -404,6 +404,7 @@ took 33 to 39 seconds at a load average of 18 to 22.
 
 | Band | Bad input | Reading on seeds 1, 2, 3 | Seeds that failed the band |
 |---|---|---|---|
+| `creatures` | `fert_radius=40`: too little fertile ground | 0, 12, 2 | 3 of 3 |
 | `len` | `upkeep_curve=0 intake_curve=0 motor_curve=0 push_mass=0`: the M1 size rules | 6.44, 6.03, 6.11 | 3 of 3 |
 | `len_sd` | The same run | 0.78, 0.17, 0.46 | 2 of 3 |
 | `len_sd` | The same, and `mut_rate=0`: no body gene can change | 0.55, 0.43, 0.27 | 2 of 3 |
@@ -414,16 +415,32 @@ took 33 to 39 seconds at a load average of 18 to 22.
 | `chemo_blind run died` | `gate-evolve --ticks 12000 --param fert_blobs=3`, with no `--m2` | `creatures_noscent` 128, 150, 164, against 258, 195, 220 in the seeing run | 1 of 3 |
 | `eye_blind run died` | `fert_radius=40` | `creatures_noeye` 22, 41, 24 | 3 of 3, but every run of that world died |
 
-No proof of a band on genes failed for a reason that hides the band. The thinnest of those worlds is
-the first one, with 57 to 112 creatures. It lives, and its means are means of bodies.
+No proof of a band on genes failed because a mean was taken over no bodies. The thinnest of those
+worlds is the M1 size rules, with 57 to 112 creatures. Its means are means of bodies, but it is under
+the `creatures` floor on every seed. `len` and `len_sd` have also rejected worlds over the floor:
+`len` in the eye proof (927 and 958 creatures) and in the first reading, and `len_sd` in the run with
+`mut_rate=0` (305 and 334 creatures).
+
+`creatures`, and `eye_blind run died`, on a world with too little fertile ground for any run. Seed 2
+holds 12 creatures and passes `len`, `len_sd`, and `parts`, so only the floor says that its seeing
+run died out. The health gate reads at tick 12,000, and a world that dies after that would pass it:
+
+```
+$ target/release/tidepool-headless gate-evolve --m2 --param fert_radius=40
+seed=1 creatures=0 creatures_noscent=0 creatures_noeye=22 len=0.0 len_sd=0.00 parts=0.0 chemo=0.00 chemo_blind=0.00 eye=0.00 eye_blind=0.17 plans=0 speed_cv=0.00 FAIL(creatures=0 < 150, len=0.00 < 7.8, len_sd=0.00 < 0.5, parts=0.00 < 3, chemo_gap=0.000 < 0.1, chemo_blind run died, eye_gap=-0.170 < 0.1, eye_blind run died)
+seed=2 creatures=12 creatures_noscent=0 creatures_noeye=41 len=9.9 len_sd=1.18 parts=5.0 chemo=0.77 chemo_blind=0.00 eye=0.20 eye_blind=0.11 plans=1 speed_cv=0.01 FAIL(creatures=12 < 150, chemo_blind run died, eye_gap=0.085 < 0.1, eye_blind run died)
+seed=3 creatures=2 creatures_noscent=18 creatures_noeye=24 len=11.3 len_sd=0.00 parts=5.0 chemo=0.60 chemo_blind=0.55 eye=0.25 eye_blind=0.19 plans=1 speed_cv=0.00 FAIL(creatures=2 < 150, len_sd=0.00 < 0.5, chemo_gap=0.047 < 0.1, chemo_blind run died, eye_gap=0.058 < 0.1, eye_blind run died)
+gate-evolve 0/3 FAIL
+exit=1
+```
 
 `len`, and `len_sd` in the same run:
 
 ```
 $ target/release/tidepool-headless gate-evolve --m2 --param upkeep_curve=0 --param intake_curve=0 --param motor_curve=0 --param push_mass=0
-seed=1 creatures=57 creatures_noscent=169 creatures_noeye=1113 len=6.4 len_sd=0.78 parts=5.2 chemo=0.28 chemo_blind=0.41 eye=0.36 eye_blind=0.08 plans=2 speed_cv=0.08 FAIL(len=6.44 < 7.8, chemo_gap=-0.124 < 0.1)
-seed=2 creatures=112 creatures_noscent=236 creatures_noeye=673 len=6.0 len_sd=0.17 parts=5.9 chemo=0.59 chemo_blind=0.24 eye=0.35 eye_blind=0.08 plans=4 speed_cv=0.11 FAIL(len=6.03 < 7.8, len_sd=0.17 < 0.5)
-seed=3 creatures=98 creatures_noscent=114 creatures_noeye=864 len=6.1 len_sd=0.46 parts=5.0 chemo=0.45 chemo_blind=0.44 eye=0.30 eye_blind=0.18 plans=1 speed_cv=0.20 FAIL(len=6.11 < 7.8, len_sd=0.46 < 0.5, chemo_gap=0.013 < 0.1, chemo_blind run died)
+seed=1 creatures=57 creatures_noscent=169 creatures_noeye=1113 len=6.4 len_sd=0.78 parts=5.2 chemo=0.28 chemo_blind=0.41 eye=0.36 eye_blind=0.08 plans=2 speed_cv=0.08 FAIL(creatures=57 < 150, len=6.44 < 7.8, chemo_gap=-0.124 < 0.1)
+seed=2 creatures=112 creatures_noscent=236 creatures_noeye=673 len=6.0 len_sd=0.17 parts=5.9 chemo=0.59 chemo_blind=0.24 eye=0.35 eye_blind=0.08 plans=4 speed_cv=0.11 FAIL(creatures=112 < 150, len=6.03 < 7.8, len_sd=0.17 < 0.5)
+seed=3 creatures=98 creatures_noscent=114 creatures_noeye=864 len=6.1 len_sd=0.46 parts=5.0 chemo=0.45 chemo_blind=0.44 eye=0.30 eye_blind=0.18 plans=1 speed_cv=0.20 FAIL(creatures=98 < 150, len=6.11 < 7.8, len_sd=0.46 < 0.5, chemo_gap=0.013 < 0.1, chemo_blind run died)
 gate-evolve 0/3 FAIL
 exit=1
 ```
@@ -498,21 +515,15 @@ gate-evolve 0/3 FAIL
 exit=1
 ```
 
-`eye_blind run died`, on a world with too little fertile ground for any run:
-
-```
-$ target/release/tidepool-headless gate-evolve --m2 --param fert_radius=40
-seed=1 creatures=0 creatures_noscent=0 creatures_noeye=22 len=0.0 len_sd=0.00 parts=0.0 chemo=0.00 chemo_blind=0.00 eye=0.00 eye_blind=0.17 plans=0 speed_cv=0.00 FAIL(len=0.00 < 7.8, len_sd=0.00 < 0.5, parts=0.00 < 3, chemo_gap=0.000 < 0.1, chemo_blind run died, eye_gap=-0.170 < 0.1, eye_blind run died)
-seed=2 creatures=12 creatures_noscent=0 creatures_noeye=41 len=9.9 len_sd=1.18 parts=5.0 chemo=0.77 chemo_blind=0.00 eye=0.20 eye_blind=0.11 plans=1 speed_cv=0.01 FAIL(chemo_blind run died, eye_gap=0.085 < 0.1, eye_blind run died)
-seed=3 creatures=2 creatures_noscent=18 creatures_noeye=24 len=11.3 len_sd=0.00 parts=5.0 chemo=0.60 chemo_blind=0.55 eye=0.25 eye_blind=0.19 plans=1 speed_cv=0.00 FAIL(len_sd=0.00 < 0.5, chemo_gap=0.047 < 0.1, chemo_blind run died, eye_gap=0.058 < 0.1, eye_blind run died)
-gate-evolve 0/3 FAIL
-exit=1
-```
+`eye_blind run died` is in the `creatures` proof above.
 
 ### What the proofs show, and what they do not
 
-**`len` has rejected a living world on 3 of 3 seeds.** Under the M1 size rules the mean length runs to
-6.0 to 6.4. The gene's floor is 6.
+**`creatures` has rejected a world that died out, on 3 of 3 seeds.** It has not rejected a world that
+passes the health gate at tick 12,000 and dies after it: no such world was looked for.
+
+**`len` has rejected a world of bodies on 3 of 3 seeds.** Under the M1 size rules the mean length runs
+to 6.0 to 6.4. The gene's floor is 6. That world also fails the `creatures` floor.
 
 **`len_sd` has rejected 2 of 3 seeds of each bad input, and seed 1 passed it both times.** It read 0.78
 with the gene at its floor, in a world of 57 creatures. It read 0.55 in a world where no body gene can
@@ -572,12 +583,9 @@ only a world where every run died.**
 - No input was found that kills only the run with `eye_gain=0`. Five worlds were tried on seed 1.
   In every world where eyes see, that run holds more creatures than the seeing run. So `eye_blind run
   died` fired only where all three runs died.
-- Seed 2 of that world shows what the check is for. The run with no direction is empty, so
+- Seed 2 of the `fert_radius=40` world shows what the check is for. The run with no direction is empty, so
   `chemo_blind` prints 0.00 and the scent gap reads 0.77 and passes its band. The seed fails on
   `chemo_blind run died`.
-
-**The gate has no band on `creatures`.** In the same world, seed 2 holds 12 creatures in the seeing run
-and passes `len`, `len_sd`, and `parts`. The health gate holds that line, at 150.
 
 `plans` and `speed_cv` have no band and have rejected nothing.
 
