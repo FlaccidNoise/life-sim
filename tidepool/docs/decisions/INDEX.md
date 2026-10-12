@@ -68,6 +68,11 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
   maturity-age gene, brood size is not a gene, eyes feed four fixed brain inputs until M3, three part
   kinds ignore their place, parts ride in every frame record, gene ranges stay constants, and no taper
   gene or part-type mutation. → `../plans/2026-10-11-m2-bodies.md`
+- 2026-10-11: **The bands of `gate-evolve` follow their proofs.** The two "evolution keeps the sense" bands
+  are 0.10, not 0.02: two worlds with the same useless sense gave gaps up to +0.07 by chance. The
+  `parts` band stays at 3.0 and is proven on a harder bad world, because a world that can smell and
+  see kept 4.6 to 4.8 parts under removal with no gain. A blind run that dies out fails its seed.
+  → `../gates.md` "Gate-evolve"
 
 ## Architecture
 
