@@ -32,10 +32,10 @@ These numbers are the contract. Changing one is a decision, logged in `docs/deci
 | Time-skip target | 24,000 ticks (20 minutes of world time). M1 measured about 11 generations per skip: a generation is about 2,200 ticks. The design assumed about 30. M5 decides the skip length. | `design.md` §4, `findings/m1-tuning.md` |
 | Time-skip wall time | 10 seconds on the reference machine. Hard stop at 30 seconds on any machine. | The report says how many generations passed |
 | **Throughput floor** | **2,400 ticks per second** at the reference world, WASM in Node, reference machine (Apple M4 Pro). A run with a mean below 80% of the reference population of 1,500 creatures is void. | 24,000 ticks in 10 s |
-| Reference world | The default world (1536 by 1024, 400 founder creatures, 1,200 founder plants, seed 1) after 12,000 ticks | It holds 1,148 to 1,477 creatures on seeds 1 to 3. The floor is a seed 1 reading: seeds 3 and 4 would be void (`gates.md`). Measured at M1: 3,757 ticks per second in WASM and 4,381 native, at a mean of 1,539 creatures (`gates.md`). That is a 24,000-tick skip in 6.4 s. M1 has no eyes, so it understates M2. M2 gives the first full reading. |
+| Reference world | The default world (1536 by 1024, 400 founder creatures, 1,200 founder plants, seed 1) after 12,000 ticks | It holds 1,148 to 1,477 creatures on seeds 1 to 3. The floor is a seed 1 reading: seeds 3 and 4 would be void (`gates.md`). Reading at the head of M2 (every body has eyes), 2026-10-12, seed 1, mean of 1,320 creatures over the timed ticks: native 3,188 to 3,411 ticks per second and WASM in Node 2,933 to 3,127. That is a 24,000-tick skip in 7.7 to 8.2 s. An older world is under the floor: after 108,000 settle ticks it holds 1,665 creatures and WASM reads 2,357 at a load average of 4.3, so the true number is somewhat higher by an unknown amount. No gate times that world. Measured at M1, with no eyes: 3,757 in WASM and 4,381 native, at a mean of 1,539 creatures. All readings: `gates.md` "Throughput readings", `findings/m2-senses.md`. |
 | Creature pool | 4,096 slots. Budding fails when the pool is full. | Bounds the worst case |
 | Plant pool | 8,192 slots | |
-| Parts per genome | 12 genes (up to 24 parts when mirrored) | Enforced from M2 |
+| Parts per genome | 12 genes (up to 24 parts when mirrored) | `MAX_PART_GENES`. Enforced from M2. |
 | Brain | 96 neurons and 384 connections per creature | About 1.4 ns per connection per tick |
 | Frame | 60 fps render on a mid-range laptop with the sim in a worker | |
 | Baked snapshot | Under 2 MB gzipped | `tech-feasibility.md` |
@@ -128,7 +128,51 @@ The same build, seed, parameters, and inputs give the same state hash, in native
 If native and WASM cannot be made to agree, the headless runner switches to running the `.wasm` and the
 native binary is dropped. M0 answers this.
 
-### 5.4 Brains
+### 5.4 Genome and parts
+
+- A genome holds the body genes `len`, `wid`, `egg`, `old`, and `hue`, a list of part genes, and a
+  brain genome. `egg` is the growth of a newborn that this body buds. `old` is the age of death by
+  old age, in ticks. A body is mature when it is full-grown. The ranges are constants in
+  `genome.rs`: `LEN_RANGE` 6 to 24, `WID_RANGE` 0.3 to 0.9, `EGG_RANGE` 0.2 to 0.7, and `OLD_RANGE`
+  1,200 to 9,600. The width of a body is `len * wid`. Neither brood size nor maturity age is a gene.
+- The part list has at most `MAX_PART_GENES` (12) genes, in gene order. A part gene holds a kind, an
+  `anchor`, a `size`, an `extra`, and a history id. The kinds are Flagellum, Cilia, Filter,
+  Chemoreceptor, Fin, and Eye, numbered 1 to 6. The anchor runs from 0 at the nose to 1 at the tail.
+  An anchor of exactly 0 or 1 is on the midline and makes one part. Any other value makes a mirrored
+  pair, and the size counts once. Sizes run from 0 to 1. A Filter has a floor of 0.2. Only an Eye
+  reads `extra`, which sets the width of its cone.
+- Only two kinds use their place. A Flagellum splits its size into push, by `push_of(anchor)`, and
+  turning, by `side_of(anchor)`. An Eye turns its anchor into the angle of its cone from the
+  heading. Cilia, Fin, Filter, and Chemoreceptor use their size alone. The place is drawn and has no
+  effect.
+- `Creatures::express` makes the arrays the rules read from a genome, at spawn and at load. They are
+  not saved. A value that is not finite counts as 0, and every part value is held in 0 to 1.
+- `Genome::mutated` has the M1 draws first: len, wid, part sizes, hue, weights, biases, and time
+  constants. Five M2 groups follow, in this order: shape (anchors, and the `extra` of eyes), life
+  (`egg` and `old`), remove, duplicate, and add. Each group has a rate in the parameter table, and a
+  rate of 0 makes no draw. Remove loses one part chosen evenly. Duplicate copies one part to the end
+  with a nudged anchor. Add puts a new part of a random kind on the end, with size `part_new_size`.
+  Duplicate and add need room. The brain keeps its shape.
+- Every part gene and every connection gene has a history id. A founder takes ids 1 to
+  `FOUNDER_HISTORIES`. `World::next_history` gives a new id to each duplicate and add. It is in the
+  snapshot. M3 lines genes up by id for crossover.
+- A part has no upkeep of its own. It costs through mass. Mass is the area times
+  `heft = (1 + part_mass * S) / (1 + part_mass * REF_PARTS)`, where `S` is the sum of the part sizes
+  and an eye counts `eye_cost` times. Energy capacity follows the area alone. Growth costs
+  `build_cost` times the mass gained. Upkeep is paid for mass to the power 3/4, scaled so that the
+  reference body pays `basal` per unit of mass (`energy.rs`). The mouth follows the area. Top speed
+  does not depend on size, because the force follows the area and the mass follows area times heft.
+  The push between two overlapping bodies is split by mass: the lighter body takes more
+  (`motor.rs`).
+- An Eye makes one cone on the midline and two elsewhere, at most `MAX_EYES` (8) cones on a body.
+  Genes past that still cost their size. The half angle is `EYE_HALF_MIN + EYE_HALF_SPAN * extra`.
+  The range is `eye_range * size * length`, held to `EYE_REACH` (64). Eyes feed four fixed brain
+  inputs, `IN_SEE_FOOD_L`, `IN_SEE_FOOD_R`, `IN_SEE_BODY_L`, and `IN_SEE_BODY_R`: the nearness of
+  the nearest plant or body in a cone of that side, 1 at the eye and 0 at the range, times
+  `eye_gain`. A midline eye feeds both sides. A body scans on one think in `see_every`. Until M3 a
+  part does not declare inputs of its own (`eye.rs`).
+
+### 5.5 Brains
 
 - One arena for the whole population. Each creature has an offset and counts. M1 uses one size class:
   a fixed stride of 96 neurons and 384 connections per slot. The offset indirection stays so that size
@@ -138,12 +182,13 @@ native binary is dropped. M0 answers this.
   double-buffered.
 - Update: `a[j] += alpha[j] * (act(bias[j] + sum(w * a_prev[src])) - a[j])`. `alpha` of 1 is a
   memoryless neuron. `act(x)` is the rational tanh from the spike, clamped to plus or minus 3.
-- The evaluator is final from M1. M1 genomes give every creature the same shape and evolve weights only.
-  M3 adds structural mutation, history ids, and crossover.
+- The evaluator is final from M1. Genomes give every creature the same shape and evolve weights,
+  biases, and time constants only. There are 11 inputs and 2 outputs (`thrust`, `turn`). M3 adds
+  structural mutation and crossover. History ids are in the genome since M2.
 - Layout reserves a per-connection `trace: f32` array for within-life learning. It is not allocated
   while learning is off.
 
-### 5.5 Parameters
+### 5.6 Parameters
 
 Every tunable constant is a named `f32` in one table, with a default, a minimum, and a maximum. The table
 is readable and writable through the ABI and the headless CLI (`--param name=value`). The Lab panel is
@@ -151,11 +196,12 @@ generated from it. A constant that is not in the table cannot be tuned and must 
 
 Parameters are part of the snapshot.
 
-### 5.6 Snapshot
+### 5.7 Snapshot
 
 A little-endian byte buffer: magic `TDPL`, format version, payload length, payload, CRC32 of the payload.
 `World::save` and `World::load`. A load of bad data returns an error and never a half-built world. The format version
-rises on any layout change. M5 adds migration, last-good backup, and export.
+rises on any layout change. It is 7 at the head of M2. A genome with more than `MAX_PART_GENES`
+parts or a kind outside 1 to 6 is a load error. M5 adds migration, last-good backup, and export.
 
 ## 6. ABI
 
@@ -172,10 +218,19 @@ The full list for M0 and M1 is in the plan.
 
 Messages are plain objects with a `type` field, declared in `src/protocol.ts`.
 
-- Page to worker: `init`, `view`, `input`, `possessAt`, `possess`, `release`, `speed`, `param`,
-  `recycle`, `bench`. Later: `skip`, `save`, `load`, god tools.
+- Page to worker: `init` (see below), `view`, `input`, `possessAt`, `possess`, `release`, `speed`,
+  `param`, `recycle`, `bench`. Later: `skip`, `save`, `load`, god tools.
 - Worker to page: `ready`, `frame`, `stats`, `possessed`, `died`, `benchResult`, `error`. Later:
   `skipProgress`, `skipReport`.
+
+`init` carries `seed`, an optional `snapshot`, and an optional `params` list of `{ name, value }`.
+The worker makes the world, sets each named parameter through the ABI (`tp_param_set`), and only
+then seeds the founders, because the fertility map and the founder genomes read the parameters. A
+snapshot has its own parameters, and the named ones replace them after the load. The value is
+clamped to the range of the parameter. A name that is not in the table frees the world and posts an
+`error` that lists the valid names, and no `ready`. The page fills `params` in `?debug` only, from
+each `p=<name>=<value>` of the address, like `p=bud_at=0.3`. A malformed `p` is an error on the
+page. A second `init` is an error.
 
 Rules:
 
@@ -194,11 +249,28 @@ Rules:
 
 - One instanced quad per entity. The fragment shader draws the shape as a signed-distance field.
 - Premultiplied alpha. Device pixel ratio capped at 2.
-- M1 draws a capsule and a tail. M2 adds one instanced quad per part with a second level of detail for
-  small on-screen sizes. M6 adds depth lighting: fog and caustics in the fragment shader, bloom on a
-  5-level mip chain in `RGBA16F`.
-- Appearance that does not change within a life (outline, parts, hue) is sent once per `uid`. Per-frame
-  data is position, heading, energy, and flags. M0 and M1 send one fixed record and do not need the split.
+- M1 draws a capsule and a tail. M2 adds one instanced quad per part (`render/parts.ts`). A body
+  shorter than `PART_LOD_PX` on screen draws only its flagella. In Play the renderer dims the world
+  outside the eye cones of the possessed body. M6 adds depth lighting: fog and caustics in the
+  fragment shader, bloom on a 5-level
+  mip chain in `RGBA16F`.
+- Parts ride in every creature record, so the page needs no cache by `uid`. The frame is
+  `FRAME_HEADER_WORDS` (34) words, then one record of `CREATURE_STRIDE` (22) words for each creature
+  in view, then one record of `PLANT_STRIDE` (4) words for each plant in view. A word is a `u32`,
+  and a float is stored by its bit pattern. `crates/sim/src/frame.rs` writes it and
+  `src/protocol.ts` reads it.
+  - Header: tick, creature records, plant records, creatures alive, plants alive, the possessed slot
+    (`NO_SLOT` for none), 1 when a possessed body is driven by its brain, living creatures with the
+    lineage mark, buds of the possessed body, then the eye cones of the possessed body. That is a
+    count and `MAX_EYES` places of 3 floats: direction in world radians, cosine of the half angle,
+    range in world units.
+  - Creature record: x, y, heading, length, width, hue, energy as a share of capacity, then `uid`,
+    slot, flags (lineage 1, possessed 2, juvenile 4, budded 8), then `PART_WORDS` (12) part words in
+    gene order. A part word is `kind | anchor << 8 | size << 16 | extra << 24`, each of the three
+    values scaled from 0 to 1 onto a byte. A place with no part is 0.
+  - Plant record: x, y, radius, reserve as a share of the cap.
+  - A full frame is at most 4 x (34 + 4,096 x 22 + 8,192 x 4) bytes. The page buffers have that
+    size.
 - `webglcontextlost` shows the error panel with a Reload button. A rebuild on `webglcontextrestored` is
   not built yet. A device with no WebGL2 gets a plain explanation, not a blank page.
 

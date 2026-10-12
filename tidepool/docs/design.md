@@ -132,7 +132,8 @@ Energy is health, growth, and breeding budget. A bite removes energy. There is n
   nudges weights, biases, and time constants.
 - **Wired to the body.** Each part type declares its inputs and outputs. Adding an Eye adds its inputs.
   Removing a Flagellum removes its dash output. A new part arrives with a few weak random connections,
-  because the draft showed that anything wired at zero is never recruited by evolution.
+  because the draft showed that anything wired at zero is never recruited by evolution. In M2 eyes
+  feed four fixed brain inputs. Inputs declared by parts arrive in M3.
 - **Motor outputs.** `thrust` and `turn` always exist. The body's parts decide what force and torque
   those commands can produce. Each ability part adds one trigger output. Also `bite` and
   `accept mate`. A Filter mouth eats on contact with no output: the draft measured brain-gated eating
