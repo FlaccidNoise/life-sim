@@ -1,8 +1,9 @@
 # Gates
 
 A gate counts only after it has rejected a known-bad input. Each row records the bad input and the
-output seen. All proofs ran on 2026-10-10, except the CI row and the evolution row, which were proven
-on 2026-10-11.
+output seen. The fast gates were proven on 2026-10-10 and the CI row on 2026-10-11. The snapshot row
+and every proof of the throughput, health, and evolution gates ran again on 2026-10-12, at the
+defaults of that day: no part upkeep, and `plant_growth` 0.03.
 
 | Gate | Command | Bad input used to prove it | Output seen | Date |
 |---|---|---|---|---|
@@ -14,29 +15,29 @@ on 2026-10-11.
 | Rust format | `cargo fmt --all -- --check` | `pub fn  ugly( )->u32{1}` added to `crates/sim/src/lib.rs` | `Diff in` the path of `lib.rs`, then the bad line and the formatted lines, exit 1 | 2026-10-10 |
 | TypeScript format | `pnpm exec prettier --check src tests scripts` | A file `src/z.ts` that contains `export const  ugly = {a:1,` and ` b:2}` on two lines | `[warn] src/z.ts`, `[warn] Code style issues found in the above file. Run Prettier with --write to fix.`, exit 1 | 2026-10-10 |
 | Type check | `pnpm exec tsc --noEmit` | A file `src/x.ts` that contains `export const n: number = 'a';` | `src/x.ts(1,14): error TS2322: Type 'string' is not assignable to type 'number'.`, exit 2 | 2026-10-10 |
-| Snapshot round trip | `cargo test --test snapshot` | The `vy` line removed from both `Creatures::save` and `Creatures::load` in `crates/sim/src/creature.rs` | 19 of 31 tests fail, exit 101. The round-trip test is `load_then_run_equals_unbroken_run ... FAILED`, with ``assertion `left == right` failed``, `left: 734987217`, `right: 3259364194`. The other 18 are in the notes. | 2026-10-10 |
+| Snapshot round trip | `cargo test --test snapshot` | The `vy` line removed from both `Creatures::save` and `Creatures::load` in `crates/sim/src/creature.rs` | 19 of 32 tests fail, exit 101. The round-trip test is `load_then_run_equals_unbroken_run ... FAILED`, with ``assertion `left == right` failed``, `left: 45388520`, `right: 2115269488`. The other 18 are in the notes. | 2026-10-12 |
 | Native equals WASM | `pnpm exec vitest run tests/determinism.test.ts` | `#[cfg(target_arch = "wasm32")] { self.creatures.vx[0] += 1.0e-6; }` added to `World::tick`, just before `self.tick` is incremented at the end, then `make wasm` | All 3 seeds fail. Seed 1: `AssertionError: expected 1261540159 to be 3031850156 // Object.is equality` | 2026-10-10 |
-| Throughput, native | `make gates` (runs `target/release/tidepool-headless bench`) | `bench --floor 1000000000`, and `bench --reference 5000` | `bench creatures=1539 median_tps=4430 floor=1000000000 FAIL`, exit 1. `VOID: population fell`, exit 1. The full output is in "Throughput bench" below. | 2026-10-10 |
-| Throughput, WASM in Node | `make gates` (runs `node scripts/bench-wasm.mjs`) | `node scripts/bench-wasm.mjs --floor 1000000000`, and `--reference 5000` | `bench-wasm creatures=1539 median_tps=3761 floor=1000000000 FAIL`, exit 1. `VOID: population fell`, exit 1. The full output is in "Throughput bench" below. | 2026-10-10 |
-| Health | `make gates` (runs `target/release/tidepool-headless gate-health`) | `gate-health --param plant_growth=0`, and `gate-health --param basal=0.01` | Both: every seed `FAIL`, `gate-health 0/3 FAIL`, exit 1. The full output is in "Health gate" below. | 2026-10-10 |
+| Throughput, native | `make gates` (runs `target/release/tidepool-headless bench`) | `bench --floor 1000000000`, and `bench --reference 5000` | `bench creatures=1320 median_tps=3309 floor=1000000000 FAIL`, exit 1. `VOID: population fell`, exit 1. The full output is in "Throughput bench" below. | 2026-10-12 |
+| Throughput, WASM in Node | `make gates` (runs `node scripts/bench-wasm.mjs`) | `node scripts/bench-wasm.mjs --floor 1000000000`, and `--reference 5000` | `bench-wasm creatures=1320 median_tps=3131 floor=1000000000 FAIL`, exit 1. `VOID: population fell`, exit 1. The full output is in "Throughput bench" below. | 2026-10-12 |
+| Health | `make gates` (runs `target/release/tidepool-headless gate-health`) | `gate-health --param plant_growth=0`, and `gate-health --param basal=0.01` | Both: every seed `FAIL`, `gate-health 0/3 FAIL`, exit 1. The full output is in "Health gate" below. | 2026-10-12 |
 | CI | `.github/workflows/tidepool.yml` runs `make check`, `bench --floor 800`, `scripts/bench-wasm.mjs --floor 800`, `gate-health`, and `gate-evolve` | Two commits on a throwaway branch `ci-proof`: `pub fn bad(x: f32) -> f32 { x.sin() }` added to `crates/sim/src/lib.rs`, and then, with that reverted, `--floor 1000000000` on the `bench-wasm.mjs` step of the workflow | Run 38179267371 failed at `make check`: ``error: use of a disallowed method `f32::sin` ``. Run 38179352131 failed at the WASM bench step: `bench-wasm creatures=1539 median_tps=1801 floor=1000000000 FAIL`, and the health gate step was skipped | 2026-10-11 |
-| Evolution | `target/release/tidepool-headless gate-evolve`. In `make gates` and in CI since Task 13 of the M2 plan | One world for each band, each with `--m2`: the M1 size rules (`len`, `len_sd`), parts that can only be lost in a world where no sense works (`parts`), `scent_deposit=0` (scent gap), `eye_range=0` (eye gap), senses that read almost nothing (both gaps, against chance), and `fert_radius=40` (`creatures`) | Each run: `gate-evolve 0/3 FAIL`, exit 1, with the named band among the failures of every seed, or of 2 seeds of 3 for `len_sd`. Two changes to the plan: the `parts` proof needed a harder input, and the gap bands went from 0.02 to 0.10. The full output and the limits are in "Gate-evolve" below | 2026-10-11 |
+| Evolution | `target/release/tidepool-headless gate-evolve`. In `make gates` and in CI since Task 13 of the M2 plan | One world for each band: five Start values that let a small body win (`len`), no mutation of a body gene (`len_sd`), parts that can only be lost in a world where no sense works (`parts`), `scent_deposit=0` (scent gap), `eye_range=0` (eye gap), senses that read almost nothing (both gaps, against chance), `fert_radius=25` (`creatures`), `fert_radius=40` (`chemo_blind run died`), and `fert_radius=50 scent_deposit=0` (`eye_blind run died`) | Each run exits 1. The named band is among the failures of every seed, or of 1 seed of 3 for the two blind-run checks and for `len_sd` where the spread drains. Five of these have a new input since 2026-10-11. Two changes to the plan: the `parts` proof needed a harder input, and the gap bands went from 0.02 to 0.10. The full output and the limits are in "Gate-evolve" below | 2026-10-12 |
 
 ## Notes
 
 - **Clippy banned methods.** The list covers `f32` and `f64`. `(x as f64).sin() as f32` and `x.ln()` on an `f32`, added to `crates/sim/src/lib.rs`, give
   ``error: use of a disallowed method `f64::sin` `` and ``error: use of a disallowed method `f32::ln` ``,
   exit 101. A test file under `crates/sim/tests/` runs native only and can allow the lint.
-- **Snapshot round trip.** Run again at the M1 head, after the audit found the old output of an
-  earlier build in this row. Three tests catch a forgotten field by themselves:
+- **Snapshot round trip.** Run again on 2026-10-12, after the M2 audit found an old count and old
+  hashes in this row. The file holds 32 tests now. Three tests catch a forgotten field by themselves:
   `load_then_run_equals_unbroken_run`, `load_then_run_equals_unbroken_run_across_births` (`left:
-  1380643796`, `right: 2738402061`), and `every_saved_field_is_in_the_hash_and_survives_a_load` (`vy is
+  974657296`, `right: 2377157895`), and `every_saved_field_is_in_the_hash_and_survives_a_load` (`vy is
   not in the hash`). The other two round-trip tests (`load_gives_the_same_hash_immediately` and
   `spawning_after_load_matches_spawning_without_it`) still pass with that field missing. The other 16
   tests that fail build a payload by hand in the test file, and that payload now has one creature
-  field too many. Removing the line from `save` alone fails 10 of 31 tests. The 3 tests above and both
-  of the other round-trip tests are among them. 9 of the 10 stop at the load with `Invalid("creature
-  field length")`, and 1 stops with `Invalid("death cause")`.
+  field too many. Removing the line from `save` alone fails 11 of 32 tests. The 3 tests above and both
+  of the other round-trip tests are among them. 9 of the 11 stop with `Invalid("creature field
+  length")`, 1 stops with `Invalid("plant field length")`, and 1 stops with `Truncated`.
 - **Native equals WASM.** Run again at the M1 head for the same reason. 3031850156 is `b4b65cac`, the
   native hash of seed 1.
 - **Throughput.** The floor is 2,400 ticks per second at the reference world, for WASM in Node
@@ -71,13 +72,13 @@ print the same lines. The summary line starts `bench` or `bench-wasm`.
    count is sampled every 100 ticks, outside the timed section.
 4. Exit 0 on `PASS`, 1 on `FAIL` or a void run, 2 on a usage error.
 
-The `settled` line at the defaults matches the seed 1 row of the health gate: 1,477 creatures and
-1,682 plants at tick 12,000.
+The `settled` line at the defaults matches the seed 1 row of the health gate: 1,319 creatures and
+2,229 plants at tick 12,000. The mean over the timed ticks is 1,320. These are the defaults of
+2026-10-12: no part upkeep, and `plant_growth` 0.03.
 
-*Since 2026-10-12 (no part upkeep, `plant_growth` 0.03):* the `settled` line reads 1,319 creatures
-and 2,229 plants, and the mean over the timed ticks is 1,320. The table of seeds below is the M1
-world. At these defaults `gate-health` reads 1,105 to 1,408 creatures at tick 12,000 on seeds 1 to 10,
-and seeds 4, 6, and 8 are under 1,200 there. The gate is still a seed 1 reading.
+The table of seeds below is the M1 world, where the `settled` line read 1,477 creatures and 1,682
+plants. At the defaults of 2026-10-12 `gate-health` reads 1,105 to 1,408 creatures at tick 12,000 on
+seeds 1 to 10, and seeds 4, 6, and 8 are under 1,200 there. The gate is still a seed 1 reading.
 
 **The throughput gate is a seed 1 reading.** `make gates` and the CI workflow time the default world
 on seed 1 and on no other seed. The mean alive count over the timed ticks, from `bench --seed <n>
@@ -96,51 +97,53 @@ Seeds 3 and 4 would be void at the 1,200 line. A thinner world reads faster (nat
 4,479 on seed 1 and 6,524 on seed 4), so seed 1 is on the slow side of these 6. The margin over the
 floor belongs to seed 1. The audit found this (`findings/m1-audit.md`, finding F7).
 
-The proofs. Other work ran on the machine, so the `tps` figures here are not gate readings.
+The proofs, run again on 2026-10-12 at the defaults of that day. Other work held the machine at a
+load average of 2 to 3, so the `tps` figures here are not gate readings.
 
 ```
 $ target/release/tidepool-headless bench --floor 1000000000
-settled tick=12000 creatures=1477 plants=1682
-run 1 creatures=1539 tps=4371
-run 2 creatures=1539 tps=4430
-run 3 creatures=1539 tps=4467
-run 4 creatures=1539 tps=4352
-run 5 creatures=1539 tps=4443
-bench creatures=1539 median_tps=4430 floor=1000000000 FAIL
+settled tick=12000 creatures=1319 plants=2229
+run 1 creatures=1320 tps=3289
+run 2 creatures=1320 tps=3346
+run 3 creatures=1320 tps=3360
+run 4 creatures=1320 tps=3309
+run 5 creatures=1320 tps=3233
+bench creatures=1320 median_tps=3309 floor=1000000000 FAIL
 exit=1
 $ node scripts/bench-wasm.mjs --floor 1000000000
-settled tick=12000 creatures=1477 plants=1682
-run 1 creatures=1539 tps=3714
-run 2 creatures=1539 tps=3739
-run 3 creatures=1539 tps=3793
-run 4 creatures=1539 tps=3770
-run 5 creatures=1539 tps=3761
-bench-wasm creatures=1539 median_tps=3761 floor=1000000000 FAIL
+settled tick=12000 creatures=1319 plants=2229
+run 1 creatures=1320 tps=3173
+run 2 creatures=1320 tps=3157
+run 3 creatures=1320 tps=3093
+run 4 creatures=1320 tps=3131
+run 5 creatures=1320 tps=3102
+bench-wasm creatures=1320 median_tps=3131 floor=1000000000 FAIL
 exit=1
 $ target/release/tidepool-headless bench --reference 5000
-settled tick=12000 creatures=1477 plants=1682
-run 1 creatures=1539 tps=4454
+settled tick=12000 creatures=1319 plants=2229
+run 1 creatures=1320 tps=3396
 VOID: population fell
 exit=1
 $ node scripts/bench-wasm.mjs --reference 5000
-settled tick=12000 creatures=1477 plants=1682
-run 1 creatures=1539 tps=3789
+settled tick=12000 creatures=1319 plants=2229
+run 1 creatures=1320 tps=3051
 VOID: population fell
 exit=1
 ```
 
-The reading responds to work. A world that settles for 200 ticks is young and sparse. It reads about
-3 times as fast as the default, and it is void.
+A world that settles for 200 ticks is young, and it is void. It holds 703 creatures at the settle
+and a mean of 1,041 over the timed ticks, under the void line of 1,200. One run reads about 1.2 times
+as fast as the default. On the M1 world the same input held a mean of 485 and read 3 times as fast.
 
 ```
 $ target/release/tidepool-headless bench --settle 200
-settled tick=200 creatures=493 plants=1295
-run 1 creatures=485 tps=13420
+settled tick=200 creatures=703 plants=1386
+run 1 creatures=1041 tps=3964
 VOID: population fell
 exit=1
 $ node scripts/bench-wasm.mjs --settle 200
-settled tick=200 creatures=493 plants=1295
-run 1 creatures=485 tps=11174
+settled tick=200 creatures=703 plants=1386
+run 1 creatures=1041 tps=3775
 VOID: population fell
 exit=1
 ```
@@ -192,7 +195,8 @@ fin term read the velocity of this tick and so waited for the velocity update (a
 worked out twice. The neighbour box is now the body's own radius plus `MAX_RADIUS`, not twice
 `MAX_RADIUS`. With the M2 motor rules switched on (`--param push_mass=1 --param motor_curve=1 --param
 part_mass=0.1`) the same bench reads 4,432 at a mean of 1,321 creatures: a different world, so not a
-pair with the rows above.
+pair with the rows above. `push_mass` and `motor_curve` were deleted on 2026-10-12, so that command
+is a record and cannot be typed now.
 
 **The two rows after M2 task 10.** `findings/m2-eyes.md` has every reading. The first row reads
 faster than the row before it only because its world holds fewer creatures: on one identical world
@@ -270,98 +274,126 @@ bud is not the length of a generation.
 
 `juv_starved` and `to_bud` came with M2 Task 12 (decision 5 of the M2 plan). Both divide by every birth
 of the run. A creature born near the end has had no time to starve or to bud, so both read low. The
-rows at the defaults, where no founder has an eye:
+rows at the defaults of 2026-10-12:
 
 ```
 $ target/release/tidepool-headless gate-health
-seed=1 creatures=1479 min_late=914 plants=1684 births_late=1468 max_gen=13 mean_chemo=0.47 parked=0.00 first_bud=1590 juv_starved=0.50 to_bud=0.21 PASS
-seed=2 creatures=1286 min_late=792 plants=1689 births_late=1250 max_gen=12 mean_chemo=0.50 parked=0.00 first_bud=1528 juv_starved=0.46 to_bud=0.22 PASS
-seed=3 creatures=1223 min_late=712 plants=1544 births_late=1295 max_gen=11 mean_chemo=0.56 parked=0.00 first_bud=1498 juv_starved=0.47 to_bud=0.20 PASS
+seed=1 creatures=1319 min_late=1252 plants=2229 births_late=1802 max_gen=14 mean_chemo=0.48 parked=0.00 first_bud=916 juv_starved=0.52 to_bud=0.32 PASS
+seed=2 creatures=1253 min_late=1186 plants=2076 births_late=1709 max_gen=16 mean_chemo=0.43 parked=0.00 first_bud=867 juv_starved=0.50 to_bud=0.33 PASS
+seed=3 creatures=1243 min_late=1133 plants=1965 births_late=1670 max_gen=14 mean_chemo=0.47 parked=0.00 first_bud=854 juv_starved=0.51 to_bud=0.33 PASS
 gate-health 3/3 PASS
 exit=0
 ```
 
-The other nine measures are the M2 baseline of `findings/m2-eyes.md`, digit for digit. Every other
-output in this section is older than the two measures and does not show them.
+Every output in this section ran on 2026-10-12 at those defaults.
 
-The three proofs of the plan, on the tuned defaults. The same three ran before the tuning, on the old
-defaults, with the same verdicts.
+The three inputs of the plan. The first two fail every seed, as they did on the M1 world. The third
+no longer fails.
 
 ```
 $ target/release/tidepool-headless gate-health --param plant_growth=0
-seed=1 creatures=0 min_late=0 plants=700 births_late=0 max_gen=0 mean_chemo=0.00 parked=0.00 first_bud=none FAIL(creatures=0 < 150, min_late=0 < 100, births_late=0 < 20, max_gen=0 < 8, mean_chemo=0.00 < 0.15)
-seed=2 creatures=0 min_late=0 plants=779 births_late=0 max_gen=0 mean_chemo=0.00 parked=0.00 first_bud=none FAIL(creatures=0 < 150, min_late=0 < 100, births_late=0 < 20, max_gen=0 < 8, mean_chemo=0.00 < 0.15)
-seed=3 creatures=0 min_late=0 plants=745 births_late=0 max_gen=0 mean_chemo=0.00 parked=0.00 first_bud=none FAIL(creatures=0 < 150, min_late=0 < 100, births_late=0 < 20, max_gen=0 < 8, mean_chemo=0.00 < 0.15)
+seed=1 creatures=0 min_late=0 plants=1261 births_late=0 max_gen=0 mean_chemo=0.00 parked=0.00 first_bud=none juv_starved=0.98 to_bud=0.00 FAIL(creatures=0 < 150, min_late=0 < 100, births_late=0 < 20, max_gen=0 < 8, mean_chemo=0.00 < 0.15)
+seed=2 creatures=0 min_late=0 plants=1295 births_late=0 max_gen=0 mean_chemo=0.00 parked=0.00 first_bud=none juv_starved=0.98 to_bud=0.00 FAIL(creatures=0 < 150, min_late=0 < 100, births_late=0 < 20, max_gen=0 < 8, mean_chemo=0.00 < 0.15)
+seed=3 creatures=0 min_late=0 plants=1277 births_late=0 max_gen=0 mean_chemo=0.00 parked=0.00 first_bud=none juv_starved=0.98 to_bud=0.00 FAIL(creatures=0 < 150, min_late=0 < 100, births_late=0 < 20, max_gen=0 < 8, mean_chemo=0.00 < 0.15)
 gate-health 0/3 FAIL
 exit=1
 $ target/release/tidepool-headless gate-health --param basal=0.01
-seed=1 creatures=0 min_late=0 plants=2229 births_late=0 max_gen=0 mean_chemo=0.00 parked=0.00 first_bud=none FAIL(creatures=0 < 150, min_late=0 < 100, births_late=0 < 20, max_gen=0 < 8, mean_chemo=0.00 < 0.15)
-seed=2 creatures=0 min_late=0 plants=2076 births_late=0 max_gen=0 mean_chemo=0.00 parked=0.00 first_bud=none FAIL(creatures=0 < 150, min_late=0 < 100, births_late=0 < 20, max_gen=0 < 8, mean_chemo=0.00 < 0.15)
-seed=3 creatures=0 min_late=0 plants=1965 births_late=0 max_gen=0 mean_chemo=0.00 parked=0.00 first_bud=none FAIL(creatures=0 < 150, min_late=0 < 100, births_late=0 < 20, max_gen=0 < 8, mean_chemo=0.00 < 0.15)
+seed=1 creatures=0 min_late=0 plants=2229 births_late=0 max_gen=0 mean_chemo=0.00 parked=0.00 first_bud=none juv_starved=0.00 to_bud=0.00 FAIL(creatures=0 < 150, min_late=0 < 100, births_late=0 < 20, max_gen=0 < 8, mean_chemo=0.00 < 0.15)
+seed=2 creatures=0 min_late=0 plants=2076 births_late=0 max_gen=0 mean_chemo=0.00 parked=0.00 first_bud=none juv_starved=0.00 to_bud=0.00 FAIL(creatures=0 < 150, min_late=0 < 100, births_late=0 < 20, max_gen=0 < 8, mean_chemo=0.00 < 0.15)
+seed=3 creatures=0 min_late=0 plants=1965 births_late=0 max_gen=0 mean_chemo=0.00 parked=0.00 first_bud=none juv_starved=0.00 to_bud=0.00 FAIL(creatures=0 < 150, min_late=0 < 100, births_late=0 < 20, max_gen=0 < 8, mean_chemo=0.00 < 0.15)
 gate-health 0/3 FAIL
 exit=1
 $ target/release/tidepool-headless gate-health --seeds 1 --ticks 12000 --param mut_rate=0 --param mut_weight_rate=0
-seed=1 creatures=723 min_late=660 plants=2012 births_late=554 max_gen=7 mean_chemo=0.54 parked=0.00 first_bud=2135 FAIL(max_gen=7 < 8)
-gate-health 0/1 FAIL
-exit=1
+seed=1 creatures=1238 min_late=1140 plants=2229 births_late=2091 max_gen=17 mean_chemo=0.49 parked=0.00 first_bud=694 juv_starved=0.51 to_bud=0.34 PASS
+gate-health 1/1 PASS
+exit=0
 ```
 
-The third proof does not crash, and the gene measures print with no mutation. It also fails, on
-`max_gen` alone. `docs/findings/m1-tuning.md` says what that means for the tuned world.
+The third input does not crash, and the gene measures print with no mutation. **It is not a failure
+proof at these defaults.** On the M1 world it failed on `max_gen` alone, at 7 against 8. With no
+mutation the world of 2026-10-12 reaches generation 17 in 12,000 ticks, and the row passes. The
+M2 audit found this (`findings/m2-audit.md`, finding M1). `max_gen` has other proofs below.
 
 Three more bad worlds, so that each side of each band has rejected something. Seed 1, 12,000 ticks.
 
 ```
 $ target/release/tidepool-headless gate-health --seeds 1 --param fert_blobs=1 --param fert_radius=20
-seed=1 creatures=0 min_late=0 plants=0 births_late=0 max_gen=0 mean_chemo=0.00 parked=0.00 first_bud=none FAIL(creatures=0 < 150, min_late=0 < 100, plants=0 < 300, births_late=0 < 20, max_gen=0 < 8, mean_chemo=0.00 < 0.15)
+seed=1 creatures=4 min_late=3 plants=6 births_late=4 max_gen=6 mean_chemo=0.55 parked=0.00 first_bud=1695 juv_starved=0.38 to_bud=0.46 FAIL(creatures=4 < 150, min_late=3 < 100, plants=6 < 300, births_late=4 < 20, max_gen=6 < 8)
 gate-health 0/1 FAIL
 exit=1
 $ target/release/tidepool-headless gate-health --seeds 1 --param basal=0.01 --param plant_cell_cap=16 --param fert_radius=600 --param plant_seed_chance=1 --param plant_growth=0.1
-seed=1 creatures=0 min_late=0 plants=8192 births_late=0 max_gen=0 mean_chemo=0.00 parked=0.00 first_bud=none FAIL(creatures=0 < 150, min_late=0 < 100, plants=8192 > 7000, births_late=0 < 20, max_gen=0 < 8, mean_chemo=0.00 < 0.15)
+seed=1 creatures=0 min_late=0 plants=8192 births_late=0 max_gen=0 mean_chemo=0.00 parked=0.00 first_bud=none juv_starved=0.00 to_bud=0.00 FAIL(creatures=0 < 150, min_late=0 < 100, plants=8192 > 7000, births_late=0 < 20, max_gen=0 < 8, mean_chemo=0.00 < 0.15)
 gate-health 0/1 FAIL
 exit=1
-$ target/release/tidepool-headless gate-health --seeds 1 --param basal=0 --param part_upkeep=0 --param neuron_upkeep=0 --param conn_upkeep=0 --param move_cost=0 --param lifespan=24000 --param plant_growth=0.1 --param bite_fraction=0.01 --param bud_cooldown=0
-seed=1 creatures=4096 min_late=4096 plants=2229 births_late=0 max_gen=2 mean_chemo=0.50 parked=0.52 first_bud=659 FAIL(creatures=4096 > 3000, births_late=0 < 20, max_gen=2 < 8, parked=0.52 > 0.25)
+$ target/release/tidepool-headless gate-health --seeds 1 --param basal=0 --param neuron_upkeep=0 --param conn_upkeep=0 --param move_cost=0 --param lifespan=24000 --param plant_growth=0.1 --param bite_fraction=0.01 --param bud_cooldown=0
+seed=1 creatures=4096 min_late=4096 plants=2229 births_late=429 max_gen=3 mean_chemo=0.49 parked=0.96 first_bud=223 juv_starved=0.00 to_bud=0.23 FAIL(creatures=4096 > 3000, max_gen=3 < 8, parked=0.96 > 0.25)
 gate-health 0/1 FAIL
 exit=1
 ```
 
-What has rejected a world, and what has not:
+The third command is the world with no upkeep. The record of 2026-10-10 also set `part_upkeep=0`.
+That parameter is deleted, and a part has no upkeep now, so the command without it asks for the same
+thing. `births_late` reads 429 there and no longer fails. It read 0 on the M1 world.
+
+A new input for `max_gen`, in place of the input with no mutation. Why it is bad: at `grow_rate`
+0.0001 a newborn needs 3,000 ticks to be full-grown, and only an adult buds. So 12,000 ticks hold
+about 4 generations. The reason was written before the run. The world lives with 1,484 creatures and
+fails on `max_gen` alone:
+
+```
+$ target/release/tidepool-headless gate-health --seeds 1 --param grow_rate=0.0001
+seed=1 creatures=1484 min_late=1152 plants=2229 births_late=1223 max_gen=4 mean_chemo=0.49 parked=0.00 first_bud=3221 juv_starved=0.60 to_bud=0.21 FAIL(max_gen=4 < 8)
+gate-health 0/1 FAIL
+exit=1
+```
+
+One input ran before that one and did not fail: `--seeds 1 --param bud_cooldown=5000` passes with
+`max_gen=37`. The cooldown does not hold a body's first bud.
+
+What has rejected a world at the defaults of 2026-10-12, and what has not:
 
 - Rejected: `creatures` on both sides, `min_late`, `plants` on both sides, `births_late`, `max_gen`,
-  and `parked`. `max_gen` also rejected worlds with living creatures: the third proof, the baseline on
-  the old defaults, and tuning trial 2. `creatures` above 3,000 rejected a tuning trial on all 3 seeds.
+  and `parked`. `births_late` rejected only worlds that died out or nearly did: it read 0, 0, 4, and 0.
+  `max_gen` rejected two worlds with living creatures: the world with no upkeep, and the world that
+  grows slowly.
+- On older defaults `max_gen` also rejected the input with no mutation, a baseline, and tuning trial
+  2, and `creatures` above 3,000 rejected a tuning trial on all 3 seeds. Those are records.
 - **`mean_chemo` has rejected an empty world**, where the mean of no creatures prints as 0, and no
   living world inside the protocol of the gate. "What the `mean_chemo` band can see" below has the
   readings.
 - A usage error exits 2: an unknown parameter name, a value outside the range of its parameter, or a
-  seed that is not a number.
+  seed that is not a number. `--param part_upkeep=0` and `--m2` are usage errors now.
 
 ### What the `mean_chemo` band can see
 
 The band is the early warning for risk R1 of `design.md`: evolution strips a sense that costs upkeep
 and does not pay. The M1 audit measured what the band does (`findings/m1-audit.md`, finding F3). The
-readings below ran again after the audit and printed the same numbers.
+readings below ran again on 2026-10-12.
 
-- **It does not show that evolution keeps the sense.** With the sense switched off the gate passes 3
-  of 3, and `mean_chemo` reads 0.47, 0.48, 0.49 at 12,000 ticks. A founder holds 0.5. A gene that does
-  nothing drifts too slowly for 12,000 ticks to move its mean under 0.15.
-- **It fired on a living world once, outside the protocol.** That world needed 36,000 ticks, 5 times
-  the part upkeep, and faster mutation of the body genes. At 12,000 ticks the same world reads 0.29 and
-  passes.
-- **So a pass says only that the gene is not gone yet.** A gate that can see whether a sense pays is a
-  question for the M2 plan. The gate, its bands, and its protocol did not change here.
+- **It does not show that evolution keeps the sense.** With the direction of the scent switched off
+  the gate passes 3 of 3, and `mean_chemo` reads 0.38, 0.41, 0.45 at 12,000 ticks. With the sense on
+  it reads 0.48, 0.43, 0.47, and a founder holds 0.5. The gene falls too slowly for 12,000 ticks to
+  move its mean under 0.15.
+- **It fires on a living world outside the protocol.** The same input at 36,000 ticks reads 0.05 and
+  0.07 on seeds 1 and 2, in worlds of 1,456 and 1,380 creatures, and the band rejects both. Seed 3
+  reads 0.16 and passes. Why the input is bad: the direction is off, so the chemoreceptor pays
+  nothing and still has mass. The proof of 2026-10-10 also needed 5 times the part upkeep and faster
+  mutation of the body genes. The part upkeep is deleted, so that command cannot be typed now.
+- **So a pass says only that the gene is not gone yet.** The scent gap of `gate-evolve`, below, reads
+  whether the sense pays. The gate, its bands, and its protocol did not change here.
 
 ```
 $ target/release/tidepool-headless gate-health --param chemo_gain=0
-seed=1 creatures=1251 min_late=739 plants=1952 births_late=1477 max_gen=11 mean_chemo=0.47 parked=0.00 first_bud=1581 PASS
-seed=2 creatures=1048 min_late=679 plants=1818 births_late=1297 max_gen=12 mean_chemo=0.48 parked=0.00 first_bud=1553 PASS
-seed=3 creatures=891 min_late=599 plants=1725 births_late=924 max_gen=10 mean_chemo=0.49 parked=0.00 first_bud=1592 PASS
+seed=1 creatures=1361 min_late=1337 plants=2229 births_late=2090 max_gen=19 mean_chemo=0.38 parked=0.00 first_bud=729 juv_starved=0.51 to_bud=0.33 PASS
+seed=2 creatures=1288 min_late=1240 plants=2076 births_late=1949 max_gen=15 mean_chemo=0.41 parked=0.00 first_bud=764 juv_starved=0.51 to_bud=0.33 PASS
+seed=3 creatures=1237 min_late=1158 plants=1965 births_late=1783 max_gen=17 mean_chemo=0.45 parked=0.00 first_bud=733 juv_starved=0.50 to_bud=0.34 PASS
 gate-health 3/3 PASS
 exit=0
-$ target/release/tidepool-headless gate-health --seeds 1 --ticks 36000 --param chemo_gain=0 --param part_upkeep=0.001 --param mut_rate=0.5 --param mut_sigma=0.2
-seed=1 creatures=1637 min_late=1486 plants=1812 births_late=3386 max_gen=29 mean_chemo=0.09 parked=0.00 first_bud=957 FAIL(mean_chemo=0.09 < 0.15)
-gate-health 0/1 FAIL
+$ target/release/tidepool-headless gate-health --ticks 36000 --param chemo_gain=0
+seed=1 creatures=1456 min_late=1370 plants=2229 births_late=2234 max_gen=36 mean_chemo=0.05 parked=0.00 first_bud=861 juv_starved=0.55 to_bud=0.33 FAIL(mean_chemo=0.05 < 0.15)
+seed=2 creatures=1380 min_late=1276 plants=2076 births_late=1912 max_gen=33 mean_chemo=0.07 parked=0.00 first_bud=908 juv_starved=0.54 to_bud=0.33 FAIL(mean_chemo=0.07 < 0.15)
+seed=3 creatures=1312 min_late=1161 plants=1965 births_late=1895 max_gen=39 mean_chemo=0.16 parked=0.00 first_bud=869 juv_starved=0.53 to_bud=0.34 PASS
+gate-health 1/3 FAIL
 exit=1
 ```
 
@@ -373,21 +405,38 @@ with `eye_gain=0`. It prints one row per seed and exits 0 only when every seed i
 usage error exits 2. Built by M2 Task 12 on 2026-10-11.
 
 **It is in `make gates` and in CI, after `gate-health`, on all three seeds.** M2 Task 13 wired it in on
-2026-10-11. One run takes 30 to 32 seconds on the reference machine, and CI runs at about half that
-speed, so the three seeds stay.
+2026-10-11. The gate took 99 seconds on the reference machine on 2026-10-12, at a load average of 3
+from other work. On the Start values of 2026-10-11 it took 30 to 32 seconds: the world holds about 3
+times the creatures now. The CI runner read about half the speed of the reference machine in the
+benches (the CI note above). The three seeds stay.
 
-**`--m2` is deleted.** Task 13 wrote the Start values of the plan's parameter table into `params.rs`.
-A command below that reads `--m2` was run before that. The same command without the flag now runs
-the same world: `gate-health` and `gate-evolve` print at the new defaults what they printed with
-`--m2` at the old ones, digit for digit (`findings/m2-tuning.md`, "Part 1").
+The rows at the defaults of 2026-10-12:
+
+```
+$ target/release/tidepool-headless gate-evolve
+seed=1 creatures=1448 creatures_noscent=1456 creatures_noeye=1404 len=11.5 len_sd=1.48 parts=5.8 chemo=0.36 chemo_blind=0.05 eye=0.24 eye_blind=0.08 plans=6 speed_cv=0.27 PASS
+seed=2 creatures=1429 creatures_noscent=1380 creatures_noeye=1309 len=10.3 len_sd=1.50 parts=6.1 chemo=0.39 chemo_blind=0.07 eye=0.26 eye_blind=0.07 plans=5 speed_cv=0.29 PASS
+seed=3 creatures=1397 creatures_noscent=1312 creatures_noeye=1314 len=11.0 len_sd=1.69 parts=5.2 chemo=0.33 chemo_blind=0.16 eye=0.22 eye_blind=0.09 plans=3 speed_cv=0.29 PASS
+gate-evolve 3/3 PASS
+exit=0
+```
+
+**`--m2` is deleted, and so are five parameters.** Task 13 wrote the Start values of the plan's
+parameter table into `params.rs` and deleted the flag. The defaults moved twice after that: the
+tuned set of Task 13 (`findings/m2-tuning.md`), and then no part upkeep and `plant_growth` 0.03 on
+2026-10-12 (`findings/m2-senses.md`). `upkeep_curve`, `intake_curve`, `motor_curve`, `push_mass`, and
+`part_upkeep` were deleted on 2026-10-12. So a command recorded with `--m2` or with one of those
+names cannot be typed now, and the same command without them runs a different world. This file
+keeps such a command only where it says that the output is a record.
 
 **`make gates` exits 0 since 2026-10-12.** Task 13 closed on 2026-10-11 with `gate-evolve` at 2 of 3:
 the scent gap of seed 1 read 0.079 against 0.10, and on seeds 1 to 10 it passed on 5. The cause was
 the upkeep of a part. The owner deleted that rule, and `plant_growth` went from 0.035 to 0.03 to
 hold the count (`findings/m2-senses.md`). Now the scent gap reads 0.17 to 0.37 on seeds 1 to 10. On
 those ten seeds the gate reads 9 of 10: seed 7 fails the eye gap at 0.097. No band, floor, or
-reference population was changed. **The failure proofs below were recorded on older worlds and are
-not yet run again at these defaults** (`findings/m2-audit.md`, finding M1).
+reference population was changed. **Every failure proof below ran again at these defaults on
+2026-10-12, and every band and both blind-run checks rejected a bad input** (`findings/m2-audit.md`,
+finding M1). Five proofs have a new input, and "The proofs" says which.
 
 | Measure | Meaning | Band |
 |---|---|---|
@@ -426,71 +475,107 @@ low end of the `creatures` band of the health gate.
 ### The proofs
 
 A bad input fails a band when at least one seed prints that band in its `FAIL`. The table says how
-many seeds did. Every input but one follows `gate-evolve --m2`. A run is 9 runs of 36,000 ticks and
-took 33 to 39 seconds at a load average of 18 to 22.
+many seeds did. Every run below is of 2026-10-12, at the defaults of that day. A run is 9 runs of
+36,000 ticks and took 5 to 122 seconds at a load average of 3 to 5. A world with fewer creatures is
+faster.
 
-| Band | Bad input | Reading on seeds 1, 2, 3 | Seeds that failed the band |
-|---|---|---|---|
-| `creatures` | `fert_radius=40`: too little fertile ground | 0, 12, 2 | 3 of 3 |
-| `len` | `upkeep_curve=0 intake_curve=0 motor_curve=0 push_mass=0`: the M1 size rules | 6.44, 6.03, 6.11 | 3 of 3 |
-| `len_sd` | The same run | 0.78, 0.17, 0.46 | 2 of 3 |
-| `len_sd` | The same, and `mut_rate=0`: no body gene can change | 0.55, 0.43, 0.27 | 2 of 3 |
-| `parts` | `mut_part_add=0 mut_part_dup=0 mut_part_remove=0.3 scent_deposit=0 eye_range=0`: parts can only be lost and no sense works | 2.15, 2.03, 2.06 | 3 of 3 |
-| Scent gap | `scent_deposit=0`: no scent in either run | 0.000, 0.000, 0.000 | 3 of 3 |
-| Eye gap | `eye_range=0`: no eye sees in either run | 0.000, 0.000, 0.000 | 3 of 3 |
-| Both gaps | `chemo_gain=0.0001 eye_gain=0.0001`: both senses read almost nothing in every run | Scent: 0.008, 0.073, -0.069. Eye: -0.046, -0.041, -0.095 | 3 of 3 for each. At the plan's 0.02, seed 2 passed the scent band |
-| `chemo_blind run died` | `gate-evolve --ticks 12000 --param fert_blobs=3`, with no `--m2` | `creatures_noscent` 128, 150, 164, against 258, 195, 220 in the seeing run | 1 of 3 |
-| `eye_blind run died` | `fert_radius=40` | `creatures_noeye` 22, 41, 24 | 3 of 3, but every run of that world died |
+"Input" says whether the bad input is the one recorded on 2026-10-11. A new input has its reason
+with its output below. Each reason was written before the output of its run was read. `fert_radius=40`
+has no new reason: it is the recorded input of the `creatures` band.
 
-No proof of a band on genes failed because a mean was taken over no bodies. The thinnest of those
-worlds is the M1 size rules, with 57 to 112 creatures. Its means are means of bodies, but it is under
-the `creatures` floor on every seed. `len` and `len_sd` have also rejected worlds over the floor:
-`len` in the eye proof (927 and 958 creatures) and in the first reading, and `len_sd` in the run with
-`mut_rate=0` (305 and 334 creatures).
+| Band | Bad input | Reading on seeds 1, 2, 3 | Seeds that failed the band | Input |
+|---|---|---|---|---|
+| `creatures` | `fert_radius=25`: too little fertile ground | 80, 60, 69 | 3 of 3 | New. The old input `fert_radius=40` reads 209, 176, 198 and no longer fails the band |
+| `len` | `part_mass=0.1 neuron_upkeep=0.0002 conn_upkeep=0.00005 birth_growth=0.4 plant_cap=20`: a world where a small body wins | 6.35, 6.48, 6.72 | 3 of 3 | New. The old input names four deleted parameters |
+| `len_sd` | The same, and `mut_rate=0`: no body gene can change | 0.56, 0.32, 0.55 | 1 of 3 | New, for the same reason |
+| `len_sd` | `mut_rate=0 founder_sigma=0`: no two bodies differ in length | 0.00, 0.00, 0.00 | 3 of 3 | New |
+| `parts` | `mut_part_add=0 mut_part_dup=0 mut_part_remove=0.3 scent_deposit=0 eye_range=0`: parts can only be lost and no sense works | 2.11, 2.06, 2.16 | 3 of 3 | Kept |
+| Scent gap | `scent_deposit=0`: no scent in either run | 0.000, 0.000, 0.000 | 3 of 3 | Kept |
+| Eye gap | `eye_range=0`: no eye sees in either run | 0.000, 0.000, 0.000 | 3 of 3 | Kept |
+| Both gaps | `chemo_gain=0.0001 eye_gain=0.0001`: both senses read almost nothing in every run | Scent: 0.008, 0.022, -0.116. Eye: -0.003, -0.015, 0.008 | 3 of 3 for each | Kept |
+| `chemo_blind run died` | `fert_radius=40`: a thin world | `creatures_noscent` 156, 100, 161, against 209, 176, 198 in the seeing run | 1 of 3 | New. The old input `--ticks 12000 --param fert_blobs=3` reads 300, 236, 248 and no longer fails the check |
+| `eye_blind run died` | `fert_radius=50 scent_deposit=0`: a thin world where sight is the only sense | `creatures_noeye` 229, 121, 234, against 312, 237, 321 in the seeing run | 1 of 3 | New. The old input `fert_radius=40` reads 202, 170, 193 and no longer fails the check |
 
-`creatures`, and `eye_blind run died`, on a world with too little fertile ground for any run. Seed 2
-holds 12 creatures and passes `len`, `len_sd`, and `parts`, so only the floor says that its seeing
-run died out. The health gate reads at tick 12,000, and a world that dies after that would pass it:
+Every proof of a band on genes is on a world over the `creatures` floor: `len` on 1,953 to 2,218
+creatures, `len_sd` on 1,198 to 1,376, and `parts` on 1,282 to 1,446. No mean was taken over no
+bodies.
+
+`creatures`, on a world with too little fertile ground. Why it is bad: a patch of radius 25 has a
+sixteenth of the area of a default patch. The seeing runs hold 60 to 80 creatures. Every seed passes
+`len`, `len_sd`, and `parts`, so only the floor says that this world is nearly empty. Both blind-run
+checks fire on every seed here too, but the seeing run is under the floor with them:
 
 ```
-$ target/release/tidepool-headless gate-evolve --m2 --param fert_radius=40
-seed=1 creatures=0 creatures_noscent=0 creatures_noeye=22 len=0.0 len_sd=0.00 parts=0.0 chemo=0.00 chemo_blind=0.00 eye=0.00 eye_blind=0.17 plans=0 speed_cv=0.00 FAIL(creatures=0 < 150, len=0.00 < 7.8, len_sd=0.00 < 0.5, parts=0.00 < 3, chemo_gap=0.000 < 0.1, chemo_blind run died, eye_gap=-0.170 < 0.1, eye_blind run died)
-seed=2 creatures=12 creatures_noscent=0 creatures_noeye=41 len=9.9 len_sd=1.18 parts=5.0 chemo=0.77 chemo_blind=0.00 eye=0.20 eye_blind=0.11 plans=1 speed_cv=0.01 FAIL(creatures=12 < 150, chemo_blind run died, eye_gap=0.085 < 0.1, eye_blind run died)
-seed=3 creatures=2 creatures_noscent=18 creatures_noeye=24 len=11.3 len_sd=0.00 parts=5.0 chemo=0.60 chemo_blind=0.55 eye=0.25 eye_blind=0.19 plans=1 speed_cv=0.00 FAIL(creatures=2 < 150, len_sd=0.00 < 0.5, chemo_gap=0.047 < 0.1, chemo_blind run died, eye_gap=0.058 < 0.1, eye_blind run died)
+$ target/release/tidepool-headless gate-evolve --param fert_radius=25
+seed=1 creatures=80 creatures_noscent=13 creatures_noeye=91 len=12.0 len_sd=1.26 parts=5.2 chemo=0.56 chemo_blind=0.65 eye=0.23 eye_blind=0.13 plans=4 speed_cv=0.27 FAIL(creatures=80 < 150, chemo_gap=-0.096 < 0.1, chemo_blind run died, eye_gap=0.098 < 0.1, eye_blind run died)
+seed=2 creatures=60 creatures_noscent=4 creatures_noeye=66 len=11.2 len_sd=1.50 parts=5.8 chemo=0.67 chemo_blind=0.00 eye=0.27 eye_blind=0.18 plans=6 speed_cv=0.21 FAIL(creatures=60 < 150, chemo_blind run died, eye_gap=0.094 < 0.1, eye_blind run died)
+seed=3 creatures=69 creatures_noscent=0 creatures_noeye=71 len=12.1 len_sd=0.79 parts=5.5 chemo=0.58 chemo_blind=0.00 eye=0.14 eye_blind=0.14 plans=6 speed_cv=0.26 FAIL(creatures=69 < 150, chemo_blind run died, eye_gap=0.002 < 0.1, eye_blind run died)
 gate-evolve 0/3 FAIL
 exit=1
 ```
 
-`len`, and `len_sd` in the same run:
+`chemo_blind run died`, on the old input of the `creatures` band: less fertile ground than the
+default, and more than the world above. On seed 2 the seeing run holds 176 creatures and the run
+with no direction holds 100. The `creatures` band passes on every seed, so this input is no longer a
+proof of that band:
 
 ```
-$ target/release/tidepool-headless gate-evolve --m2 --param upkeep_curve=0 --param intake_curve=0 --param motor_curve=0 --param push_mass=0
-seed=1 creatures=57 creatures_noscent=169 creatures_noeye=1113 len=6.4 len_sd=0.78 parts=5.2 chemo=0.28 chemo_blind=0.41 eye=0.36 eye_blind=0.08 plans=2 speed_cv=0.08 FAIL(creatures=57 < 150, len=6.44 < 7.8, chemo_gap=-0.124 < 0.1)
-seed=2 creatures=112 creatures_noscent=236 creatures_noeye=673 len=6.0 len_sd=0.17 parts=5.9 chemo=0.59 chemo_blind=0.24 eye=0.35 eye_blind=0.08 plans=4 speed_cv=0.11 FAIL(creatures=112 < 150, len=6.03 < 7.8, len_sd=0.17 < 0.5)
-seed=3 creatures=98 creatures_noscent=114 creatures_noeye=864 len=6.1 len_sd=0.46 parts=5.0 chemo=0.45 chemo_blind=0.44 eye=0.30 eye_blind=0.18 plans=1 speed_cv=0.20 FAIL(creatures=98 < 150, len=6.11 < 7.8, len_sd=0.46 < 0.5, chemo_gap=0.013 < 0.1, chemo_blind run died)
+$ target/release/tidepool-headless gate-evolve --param fert_radius=40
+seed=1 creatures=209 creatures_noscent=156 creatures_noeye=202 len=11.3 len_sd=2.17 parts=5.7 chemo=0.49 chemo_blind=0.28 eye=0.26 eye_blind=0.13 plans=5 speed_cv=0.28 PASS
+seed=2 creatures=176 creatures_noscent=100 creatures_noeye=170 len=11.2 len_sd=1.59 parts=5.4 chemo=0.53 chemo_blind=0.31 eye=0.20 eye_blind=0.09 plans=6 speed_cv=0.19 FAIL(chemo_blind run died)
+seed=3 creatures=198 creatures_noscent=161 creatures_noeye=193 len=11.5 len_sd=1.10 parts=5.2 chemo=0.59 chemo_blind=0.43 eye=0.26 eye_blind=0.13 plans=4 speed_cv=0.27 PASS
+gate-evolve 2/3 FAIL
+exit=1
+```
+
+`len`, on a world where a small body wins. Why it is bad: these five values are the Start values that
+trials 5 to 8 of `findings/m2-tuning.md` replaced to hold the size of the body up. With them the
+filter weighs almost nothing, the brain costs little, and the egg is small. Those are the cheap ways
+to a newborn's mouth that trial 7 closed, so a small body wins. Trial 3 read 6.15 to 6.35 with these
+five values, at `plant_growth` 0.035 and with the part upkeep. `len_sd` passes on every seed of this
+run:
+
+```
+$ target/release/tidepool-headless gate-evolve --param part_mass=0.1 --param neuron_upkeep=0.0002 --param conn_upkeep=0.00005 --param birth_growth=0.4 --param plant_cap=20
+seed=1 creatures=2218 creatures_noscent=2288 creatures_noeye=2653 len=6.3 len_sd=0.53 parts=6.4 chemo=0.44 chemo_blind=0.42 eye=0.34 eye_blind=0.13 plans=2 speed_cv=0.29 FAIL(len=6.35 < 7.8, chemo_gap=0.024 < 0.1)
+seed=2 creatures=2092 creatures_noscent=2133 creatures_noeye=2419 len=6.5 len_sd=1.16 parts=8.0 chemo=0.42 chemo_blind=0.19 eye=0.37 eye_blind=0.20 plans=4 speed_cv=0.21 FAIL(len=6.48 < 7.8)
+seed=3 creatures=1953 creatures_noscent=2158 creatures_noeye=2296 len=6.7 len_sd=0.99 parts=6.3 chemo=0.49 chemo_blind=0.05 eye=0.35 eye_blind=0.07 plans=6 speed_cv=0.25 FAIL(len=6.72 < 7.8)
 gate-evolve 0/3 FAIL
 exit=1
 ```
 
-`len_sd` with no mutation of a body gene. The plan asks for this run only if the first one fails `len`
-and not `len_sd`. It ran anyway, because seed 1 passed `len_sd` above:
+`len_sd`, on the same world with no mutation of a body gene. Why it is bad: no spread of length can
+be made, so what is left is the founders' spread, drained by selection. Seed 2 fails. Seeds 1 and 3
+pass at 0.56 and 0.55:
 
 ```
-$ target/release/tidepool-headless gate-evolve --m2 --param upkeep_curve=0 --param intake_curve=0 --param motor_curve=0 --param push_mass=0 --param mut_rate=0
-seed=1 creatures=325 creatures_noscent=337 creatures_noeye=699 len=10.1 len_sd=0.55 parts=5.7 chemo=0.50 chemo_blind=0.14 eye=0.20 eye_blind=0.07 plans=3 speed_cv=0.22 PASS
-seed=2 creatures=305 creatures_noscent=340 creatures_noeye=627 len=10.6 len_sd=0.43 parts=5.3 chemo=0.48 chemo_blind=0.41 eye=0.23 eye_blind=0.14 plans=2 speed_cv=0.16 FAIL(len_sd=0.43 < 0.5, chemo_gap=0.063 < 0.1, eye_gap=0.088 < 0.1)
-seed=3 creatures=334 creatures_noscent=307 creatures_noeye=610 len=10.2 len_sd=0.27 parts=5.4 chemo=0.49 chemo_blind=0.41 eye=0.21 eye_blind=0.12 plans=3 speed_cv=0.17 FAIL(len_sd=0.27 < 0.5, chemo_gap=0.084 < 0.1, eye_gap=0.084 < 0.1)
-gate-evolve 1/3 FAIL
+$ target/release/tidepool-headless gate-evolve --param part_mass=0.1 --param neuron_upkeep=0.0002 --param conn_upkeep=0.00005 --param birth_growth=0.4 --param plant_cap=20 --param mut_rate=0
+seed=1 creatures=1341 creatures_noscent=1403 creatures_noeye=1498 len=10.3 len_sd=0.56 parts=6.1 chemo=0.55 chemo_blind=0.44 eye=0.21 eye_blind=0.20 plans=5 speed_cv=0.15 FAIL(eye_gap=0.010 < 0.1)
+seed=2 creatures=1281 creatures_noscent=1258 creatures_noeye=1410 len=10.6 len_sd=0.32 parts=6.0 chemo=0.51 chemo_blind=0.50 eye=0.21 eye_blind=0.21 plans=4 speed_cv=0.19 FAIL(len_sd=0.32 < 0.5, chemo_gap=0.008 < 0.1, eye_gap=0.005 < 0.1)
+seed=3 creatures=1149 creatures_noscent=1258 creatures_noeye=1364 len=10.8 len_sd=0.55 parts=5.4 chemo=0.52 chemo_blind=0.40 eye=0.21 eye_blind=0.18 plans=2 speed_cv=0.31 FAIL(eye_gap=0.022 < 0.1)
+gate-evolve 0/3 FAIL
+exit=1
+```
+
+`len_sd`, on a world where no two bodies differ in length. Why it is bad: every founder holds the
+default length and no body gene can change. This input ran to have a proof on every seed:
+
+```
+$ target/release/tidepool-headless gate-evolve --param mut_rate=0 --param founder_sigma=0
+seed=1 creatures=1376 creatures_noscent=1405 creatures_noeye=1513 len=12.0 len_sd=0.00 parts=5.1 chemo=0.42 chemo_blind=0.08 eye=0.20 eye_blind=0.14 plans=2 speed_cv=0.14 FAIL(len_sd=0.00 < 0.5, eye_gap=0.066 < 0.1)
+seed=2 creatures=1269 creatures_noscent=1371 creatures_noeye=1460 len=12.0 len_sd=0.00 parts=5.2 chemo=0.44 chemo_blind=0.15 eye=0.20 eye_blind=0.11 plans=5 speed_cv=0.27 FAIL(len_sd=0.00 < 0.5, eye_gap=0.090 < 0.1)
+seed=3 creatures=1198 creatures_noscent=1290 creatures_noeye=1407 len=12.0 len_sd=0.00 parts=5.4 chemo=0.44 chemo_blind=0.08 eye=0.21 eye_blind=0.18 plans=4 speed_cv=0.26 FAIL(len_sd=0.00 < 0.5, eye_gap=0.031 < 0.1)
+gate-evolve 0/3 FAIL
 exit=1
 ```
 
 `parts`, on a world where the count does fall to the least that a body can live with:
 
 ```
-$ target/release/tidepool-headless gate-evolve --m2 --param mut_part_add=0 --param mut_part_dup=0 --param mut_part_remove=0.3 --param scent_deposit=0 --param eye_range=0
-seed=1 creatures=768 creatures_noscent=768 creatures_noeye=768 len=11.2 len_sd=1.55 parts=2.2 chemo=0.00 chemo_blind=0.00 eye=0.01 eye_blind=0.01 plans=4 speed_cv=0.19 FAIL(parts=2.15 < 3, chemo_gap=0.000 < 0.1, eye_gap=0.000 < 0.1)
-seed=2 creatures=719 creatures_noscent=719 creatures_noeye=719 len=10.7 len_sd=1.53 parts=2.0 chemo=0.00 chemo_blind=0.00 eye=0.01 eye_blind=0.01 plans=3 speed_cv=0.24 FAIL(parts=2.03 < 3, chemo_gap=0.000 < 0.1, eye_gap=0.000 < 0.1)
-seed=3 creatures=560 creatures_noscent=560 creatures_noeye=560 len=11.5 len_sd=1.62 parts=2.1 chemo=0.00 chemo_blind=0.00 eye=0.00 eye_blind=0.00 plans=3 speed_cv=0.23 FAIL(parts=2.06 < 3, chemo_gap=0.000 < 0.1, eye_gap=0.000 < 0.1)
+$ target/release/tidepool-headless gate-evolve --param mut_part_add=0 --param mut_part_dup=0 --param mut_part_remove=0.3 --param scent_deposit=0 --param eye_range=0
+seed=1 creatures=1446 creatures_noscent=1446 creatures_noeye=1446 len=14.0 len_sd=1.97 parts=2.1 chemo=0.00 chemo_blind=0.00 eye=0.01 eye_blind=0.01 plans=3 speed_cv=0.39 FAIL(parts=2.11 < 3, chemo_gap=0.000 < 0.1, eye_gap=0.000 < 0.1)
+seed=2 creatures=1421 creatures_noscent=1421 creatures_noeye=1421 len=13.4 len_sd=1.47 parts=2.1 chemo=0.00 chemo_blind=0.00 eye=0.01 eye_blind=0.01 plans=3 speed_cv=0.38 FAIL(parts=2.06 < 3, chemo_gap=0.000 < 0.1, eye_gap=0.000 < 0.1)
+seed=3 creatures=1282 creatures_noscent=1282 creatures_noeye=1282 len=14.2 len_sd=1.74 parts=2.2 chemo=0.00 chemo_blind=0.00 eye=0.00 eye_blind=0.00 plans=3 speed_cv=0.43 FAIL(parts=2.16 < 3, chemo_gap=0.000 < 0.1, eye_gap=0.000 < 0.1)
 gate-evolve 0/3 FAIL
 exit=1
 ```
@@ -498,10 +583,10 @@ exit=1
 The scent gap:
 
 ```
-$ target/release/tidepool-headless gate-evolve --m2 --param scent_deposit=0
-seed=1 creatures=301 creatures_noscent=301 creatures_noeye=659 len=7.8 len_sd=1.19 parts=6.3 chemo=0.25 chemo_blind=0.25 eye=0.44 eye_blind=0.14 plans=5 speed_cv=0.22 FAIL(chemo_gap=0.000 < 0.1)
-seed=2 creatures=447 creatures_noscent=447 creatures_noeye=665 len=7.9 len_sd=1.85 parts=5.5 chemo=0.26 chemo_blind=0.26 eye=0.40 eye_blind=0.09 plans=3 speed_cv=0.23 FAIL(chemo_gap=0.000 < 0.1)
-seed=3 creatures=288 creatures_noscent=288 creatures_noeye=590 len=7.9 len_sd=2.40 parts=5.3 chemo=0.20 chemo_blind=0.20 eye=0.47 eye_blind=0.10 plans=5 speed_cv=0.20 FAIL(chemo_gap=0.000 < 0.1)
+$ target/release/tidepool-headless gate-evolve --param scent_deposit=0
+seed=1 creatures=1612 creatures_noscent=1612 creatures_noeye=1514 len=11.3 len_sd=2.10 parts=4.4 chemo=0.03 chemo_blind=0.03 eye=0.23 eye_blind=0.09 plans=3 speed_cv=0.26 FAIL(chemo_gap=0.000 < 0.1)
+seed=2 creatures=1418 creatures_noscent=1418 creatures_noeye=1325 len=10.8 len_sd=1.46 parts=5.0 chemo=0.07 chemo_blind=0.07 eye=0.27 eye_blind=0.10 plans=4 speed_cv=0.27 FAIL(chemo_gap=0.000 < 0.1)
+seed=3 creatures=1374 creatures_noscent=1374 creatures_noeye=1250 len=12.0 len_sd=1.56 parts=5.1 chemo=0.20 chemo_blind=0.20 eye=0.21 eye_blind=0.09 plans=5 speed_cv=0.22 FAIL(chemo_gap=0.000 < 0.1)
 gate-evolve 0/3 FAIL
 exit=1
 ```
@@ -509,10 +594,10 @@ exit=1
 The eye gap:
 
 ```
-$ target/release/tidepool-headless gate-evolve --m2 --param eye_range=0
-seed=1 creatures=927 creatures_noscent=767 creatures_noeye=927 len=7.0 len_sd=1.14 parts=7.4 chemo=0.80 chemo_blind=0.11 eye=0.16 eye_blind=0.16 plans=6 speed_cv=0.20 FAIL(len=7.00 < 7.8, eye_gap=0.000 < 0.1)
-seed=2 creatures=800 creatures_noscent=565 creatures_noeye=800 len=8.7 len_sd=1.71 parts=5.6 chemo=0.47 chemo_blind=0.22 eye=0.10 eye_blind=0.10 plans=2 speed_cv=0.15 FAIL(eye_gap=0.000 < 0.1)
-seed=3 creatures=958 creatures_noscent=633 creatures_noeye=958 len=7.1 len_sd=1.91 parts=6.6 chemo=0.61 chemo_blind=0.21 eye=0.12 eye_blind=0.12 plans=4 speed_cv=0.19 FAIL(len=7.09 < 7.8, eye_gap=0.000 < 0.1)
+$ target/release/tidepool-headless gate-evolve --param eye_range=0
+seed=1 creatures=1404 creatures_noscent=1423 creatures_noeye=1404 len=12.9 len_sd=1.40 parts=4.8 chemo=0.39 chemo_blind=0.17 eye=0.08 eye_blind=0.08 plans=3 speed_cv=0.22 FAIL(eye_gap=0.000 < 0.1)
+seed=2 creatures=1309 creatures_noscent=1349 creatures_noeye=1309 len=13.1 len_sd=1.55 parts=5.0 chemo=0.46 chemo_blind=0.16 eye=0.07 eye_blind=0.07 plans=4 speed_cv=0.23 FAIL(eye_gap=0.000 < 0.1)
+seed=3 creatures=1314 creatures_noscent=1265 creatures_noeye=1314 len=12.6 len_sd=1.25 parts=5.0 chemo=0.40 chemo_blind=0.19 eye=0.09 eye_blind=0.09 plans=5 speed_cv=0.23 FAIL(eye_gap=0.000 < 0.1)
 gate-evolve 0/3 FAIL
 exit=1
 ```
@@ -521,67 +606,79 @@ Both gaps, on senses that read almost nothing. This input is not in the plan. "T
 below says why it ran:
 
 ```
-$ target/release/tidepool-headless gate-evolve --m2 --param chemo_gain=0.0001 --param eye_gain=0.0001
-seed=1 creatures=774 creatures_noscent=810 creatures_noeye=741 len=10.5 len_sd=2.48 parts=5.2 chemo=0.28 chemo_blind=0.27 eye=0.08 eye_blind=0.12 plans=5 speed_cv=0.17 FAIL(chemo_gap=0.008 < 0.1, eye_gap=-0.046 < 0.1)
-seed=2 creatures=602 creatures_noscent=722 creatures_noeye=653 len=10.3 len_sd=1.93 parts=5.3 chemo=0.26 chemo_blind=0.19 eye=0.13 eye_blind=0.17 plans=4 speed_cv=0.22 FAIL(chemo_gap=0.073 < 0.1, eye_gap=-0.041 < 0.1)
-seed=3 creatures=602 creatures_noscent=648 creatures_noeye=569 len=11.4 len_sd=1.60 parts=4.4 chemo=0.16 chemo_blind=0.23 eye=0.14 eye_blind=0.23 plans=5 speed_cv=0.19 FAIL(chemo_gap=-0.069 < 0.1, eye_gap=-0.095 < 0.1)
+$ target/release/tidepool-headless gate-evolve --param chemo_gain=0.0001 --param eye_gain=0.0001
+seed=1 creatures=1515 creatures_noscent=1502 creatures_noeye=1501 len=12.9 len_sd=1.11 parts=4.7 chemo=0.19 chemo_blind=0.18 eye=0.09 eye_blind=0.09 plans=5 speed_cv=0.20 FAIL(chemo_gap=0.008 < 0.1, eye_gap=-0.003 < 0.1)
+seed=2 creatures=1361 creatures_noscent=1328 creatures_noeye=1432 len=12.9 len_sd=1.24 parts=4.9 chemo=0.17 chemo_blind=0.15 eye=0.07 eye_blind=0.09 plans=5 speed_cv=0.24 FAIL(chemo_gap=0.022 < 0.1, eye_gap=-0.015 < 0.1)
+seed=3 creatures=1303 creatures_noscent=1353 creatures_noeye=1177 len=13.6 len_sd=1.83 parts=4.6 chemo=0.11 chemo_blind=0.22 eye=0.12 eye_blind=0.12 plans=4 speed_cv=0.23 FAIL(chemo_gap=-0.116 < 0.1, eye_gap=0.008 < 0.1)
 gate-evolve 0/3 FAIL
 exit=1
 ```
 
-`chemo_blind run died`, on a poor world at the default rules, read at 12,000 ticks. On seed 1 the
-seeing run holds 258 creatures and the run with no direction holds 128. No founder has an eye here, so
-the run with `eye_gain=0` is the seeing run:
+`eye_blind run died`, on a thin world with no scent. Why it is bad: sight is the only sense that can
+find a plant here, so with `eye_gain=0` a body has no sense left. On seed 2 the seeing run holds 237
+creatures and the run with blind eyes holds 121. The scent gap reads 0.000 on every seed, since
+both scent runs are one world:
 
 ```
-$ target/release/tidepool-headless gate-evolve --ticks 12000 --param fert_blobs=3
-seed=1 creatures=258 creatures_noscent=128 creatures_noeye=258 len=7.1 len_sd=1.76 parts=4.0 chemo=0.55 chemo_blind=0.51 eye=0.00 eye_blind=0.00 plans=1 speed_cv=0.19 FAIL(len=7.05 < 7.8, chemo_gap=0.036 < 0.1, chemo_blind run died, eye_gap=0.000 < 0.1)
-seed=2 creatures=195 creatures_noscent=150 creatures_noeye=195 len=7.2 len_sd=1.12 parts=4.0 chemo=0.54 chemo_blind=0.48 eye=0.00 eye_blind=0.00 plans=1 speed_cv=0.21 FAIL(len=7.20 < 7.8, chemo_gap=0.058 < 0.1, eye_gap=0.000 < 0.1)
-seed=3 creatures=220 creatures_noscent=164 creatures_noeye=220 len=7.2 len_sd=1.13 parts=4.0 chemo=0.53 chemo_blind=0.50 eye=0.00 eye_blind=0.00 plans=1 speed_cv=0.17 FAIL(len=7.23 < 7.8, chemo_gap=0.029 < 0.1, eye_gap=0.000 < 0.1)
+$ target/release/tidepool-headless gate-evolve --param fert_radius=50 --param scent_deposit=0
+seed=1 creatures=312 creatures_noscent=312 creatures_noeye=229 len=12.2 len_sd=1.30 parts=5.3 chemo=0.45 chemo_blind=0.45 eye=0.28 eye_blind=0.19 plans=6 speed_cv=0.26 FAIL(chemo_gap=0.000 < 0.1, eye_gap=0.088 < 0.1)
+seed=2 creatures=237 creatures_noscent=237 creatures_noeye=121 len=12.1 len_sd=1.84 parts=6.1 chemo=0.30 chemo_blind=0.30 eye=0.31 eye_blind=0.20 plans=6 speed_cv=0.22 FAIL(chemo_gap=0.000 < 0.1, eye_blind run died)
+seed=3 creatures=321 creatures_noscent=321 creatures_noeye=234 len=11.8 len_sd=1.20 parts=5.6 chemo=0.39 chemo_blind=0.39 eye=0.26 eye_blind=0.24 plans=5 speed_cv=0.30 FAIL(chemo_gap=0.000 < 0.1, eye_gap=0.023 < 0.1)
 gate-evolve 0/3 FAIL
 exit=1
 ```
-
-`eye_blind run died` is in the `creatures` proof above.
 
 ### What the proofs show, and what they do not
 
-**`creatures` has rejected a world that died out, on 3 of 3 seeds.** It has not rejected a world that
-passes the health gate at tick 12,000 and dies after it: no such world was looked for.
+**`creatures` has rejected a world under the floor on 3 of 3 seeds.** Its seeing runs hold 60 to 80
+creatures at tick 36,000: bodies, not an empty world. On 2026-10-11 the band rejected
+`fert_radius=40`, which read 0, 12, and 2 then. At the defaults of 2026-10-12 that world holds 176 to
+209 creatures and passes the band. The band has not rejected a world that passes the health gate at
+tick 12,000 and dies after it: no such world was looked for.
 
-**`len` has rejected a world of bodies on 3 of 3 seeds.** Under the M1 size rules the mean length runs
-to 6.0 to 6.4. The gene's floor is 6. That world also fails the `creatures` floor.
+**`len` has rejected a world of bodies on 3 of 3 seeds.** With the five Start values the mean length
+runs to 6.35 to 6.72. The gene's floor is 6. That world holds 1,953 to 2,218 creatures. The proof of
+2026-10-11 was on a world under the `creatures` floor, and this one is not.
 
-**`len_sd` has rejected 2 of 3 seeds of each bad input, and seed 1 passed it both times.** It read 0.78
-with the gene at its floor, in a world of 57 creatures. It read 0.55 in a world where no body gene can
-change, and that seed passed every band. There the spread is what is left of the founders': a founder
-draws its length with a spread of 0.9. So the band cannot tell a spread that evolution holds from a
-spread that has not yet drained. With `--seeds 1` this band would have rejected neither world. To
-reject seed 1 of both, the band must be above 0.78. The band did not change: each bad input failed it
-on 2 seeds.
+**`len_sd` has rejected 1 of 3 seeds of a world whose spread drains, and 3 of 3 seeds of a world with
+no spread.**
+
+- With no mutation of a body gene, in the world where a small body wins, the spread reads 0.56, 0.32,
+  and 0.55. Seeds 1 and 3 pass. The spread there is what is left of the founders': a founder draws its
+  length with a spread of 0.9. So the band cannot tell a spread that evolution holds from a spread
+  that has not yet drained. With `--seeds 1` this band would not have rejected that world.
+- The same world with mutation on reads 0.53, 1.16, and 0.99 and passes the band on every seed. So a
+  length gene at its floor does not fail `len_sd` by itself.
+- With no mutation and no spread among the founders, every body holds a length of 12.0 and the band
+  rejects 3 of 3 seeds. That proof shows that the band can fail. It does not show where a spread that
+  is too thin begins.
+- The band did not change.
 
 **`parts` is 3.0, as the plan said, and its proof is not the plan's.** The band is for a fall to the
 least that a body needs.
 
 - The proof is the harder input of the table. With no sense that works and parts that can only be
-  lost, the count falls to 2.03 to 2.15 in a world of 560 to 768 creatures. The band rejects it on 3
-  of 3 seeds.
-- **The plan's input was not bad enough.** It lets a birth lose a part with a chance of 0.3 and never
-  gain one, in a world that can still smell and see. It kept 4.6 to 4.8 parts of the founder's 5 and
-  passed the band on 3 of 3 seeds:
+  lost, the count falls to 2.06 to 2.16 in a world of 1,282 to 1,446 creatures. The band rejects it on
+  3 of 3 seeds.
+- **The plan's input is not bad enough.** It lets a birth lose a part with a chance of 0.3 and never
+  gain one, in a world that can still smell and see. It keeps 3.7 to 4.0 parts of the founder's 5 and
+  passes every band on 3 of 3 seeds:
 
 ```
-$ target/release/tidepool-headless gate-evolve --m2 --param mut_part_add=0 --param mut_part_dup=0 --param mut_part_remove=0.3
-seed=1 creatures=433 creatures_noscent=494 creatures_noeye=685 len=7.5 len_sd=1.15 parts=4.6 chemo=0.32 chemo_blind=0.00 eye=0.36 eye_blind=0.00 plans=2 speed_cv=0.25 FAIL(len=7.50 < 7.8)
-seed=2 creatures=428 creatures_noscent=380 creatures_noeye=672 len=8.1 len_sd=1.27 parts=4.7 chemo=0.33 chemo_blind=0.00 eye=0.31 eye_blind=0.01 plans=3 speed_cv=0.25 PASS
-seed=3 creatures=444 creatures_noscent=377 creatures_noeye=668 len=9.2 len_sd=1.81 parts=4.8 chemo=0.39 chemo_blind=0.00 eye=0.30 eye_blind=0.01 plans=2 speed_cv=0.22 PASS
-gate-evolve 2/3 FAIL
-exit=1
+$ target/release/tidepool-headless gate-evolve --param mut_part_add=0 --param mut_part_dup=0 --param mut_part_remove=0.3
+seed=1 creatures=1515 creatures_noscent=1493 creatures_noeye=1535 len=11.9 len_sd=1.91 parts=3.8 chemo=0.19 chemo_blind=0.00 eye=0.15 eye_blind=0.01 plans=6 speed_cv=0.32 PASS
+seed=2 creatures=1377 creatures_noscent=1383 creatures_noeye=1477 len=11.6 len_sd=1.73 parts=4.0 chemo=0.24 chemo_blind=0.00 eye=0.18 eye_blind=0.01 plans=4 speed_cv=0.37 PASS
+seed=3 creatures=1336 creatures_noscent=1307 creatures_noeye=1396 len=12.9 len_sd=1.52 parts=3.7 chemo=0.18 chemo_blind=0.00 eye=0.14 eye_blind=0.01 plans=5 speed_cv=0.34 PASS
+gate-evolve 3/3 PASS
+exit=0
 ```
 
 - **What that run shows: selection holds the parts that pay against removal.** Where a sense reads, its
-  parts stay at 0.30 to 0.39. In the blind run of that sense, which lives with 377 to 685 creatures,
-  they fall to 0.00 or 0.01. The kind of claim is "evolution uses it", on 3 seeds, one run each.
+  parts stay at 0.14 to 0.24. In the blind run of that sense, which lives with 1,307 to 1,535
+  creatures, they fall to 0.00 or 0.01. The kind of claim is "evolution uses it", on 3 seeds, one run
+  each.
+- This did not hold at the tuned defaults of Task 13, which had the part upkeep. The M2 audit read
+  `parts` 2.01 to 2.54 for this input there, and the band failed (`findings/m2-audit.md`, finding H3).
 - So the band does not reject a world that only loses parts. It rejects a world whose part count fell
   to the minimum.
 
@@ -592,31 +689,44 @@ exit=1
   with eyes of no range, the input of the sense is 0 at every gain. So each gap is exactly 0.000.
   These proofs show that a gap band can fail. They do not show what chance does to a gap.
 - The chance input measures that. Each sense reads at most a ten-thousandth of its input, so no brain
-  can use it, and its three runs are three different worlds. The scent gap read 0.008, 0.073, and
-  -0.069. The eye gap read -0.046, -0.041, and -0.095.
-- **At 0.02 that bad input passed the scent band on seed 2**, with a sense that does nothing. So 0.02
-  was inside the noise.
-- The largest of the 6 chance gaps is 0.073. The band is the next 0.05 above it: 0.10. The number
-  comes from the chance input alone. At 0.10 the input fails both gap bands on 3 of 3 seeds.
-- What 0.10 does not cover: 6 gaps are a small sample, and the largest gap below zero is -0.095. A
-  chance gap of that size above zero would fail by 0.005. What still protects the gate is that all 3
-  seeds must pass. With `--seeds 1` it has less protection.
+  can use it, and its three runs are three different worlds.
+- **The band was set on the Start values of 2026-10-11.** There the scent gap read 0.008, 0.073, and
+  -0.069, and the eye gap read -0.046, -0.041, and -0.095. At 0.02 that bad input passed the scent
+  band on seed 2, with a sense that does nothing. So 0.02 was inside the noise. The largest of those
+  6 chance gaps is 0.073, and the band is the next 0.05 above it: 0.10.
+- **At the defaults of 2026-10-12 the chance input still fails both gap bands on 3 of 3 seeds.** The
+  scent gap reads 0.008, 0.022, and -0.116. The eye gap reads -0.003, -0.015, and 0.008. The largest
+  gap above zero is 0.022.
+- What 0.10 does not cover: 6 gaps are a small sample, and the largest gap below zero is now -0.116. A
+  chance gap of that size above zero would pass the band. What still protects the gate is that all 3
+  seeds must pass. With `--seeds 1` it has less protection. The band did not change here. It is the
+  owner's (`findings/m2-audit.md`, finding H3).
 
-**`chemo_blind run died` has rejected one seed of a living world. `eye_blind run died` has rejected
-only a world where every run died.**
+**`chemo_blind run died` and `eye_blind run died` have each rejected one seed of a living world.**
 
-- In the poor world at the default rules, seed 1 holds 258 creatures with the sense and 128 without
-  its direction. The check fired on that seed alone. Seed 2 sits on the line at 150.
-- No input was found that kills only the run with `eye_gain=0`. Five worlds were tried on seed 1.
-  In every world where eyes see, that run holds more creatures than the seeing run. So `eye_blind run
-  died` fired only where all three runs died.
-- Seed 2 of the `fert_radius=40` world shows what the check is for. The run with no direction is empty, so
-  `chemo_blind` prints 0.00 and the scent gap reads 0.77 and passes its band. The seed fails on
-  `chemo_blind run died`.
+- In the `fert_radius=40` world, seed 2 holds 176 creatures with the sense and 100 without its
+  direction. The check fired on that seed alone. Seeds 1 and 3 hold 156 and 161 without the
+  direction, just over the line of 150.
+- In the thin world with no scent, seed 2 holds 237 creatures with eyes that see and 121 with
+  `eye_gain=0`. `eye_blind run died` fired on that seed alone. On all 3 seeds the run with blind eyes
+  holds fewer creatures than the seeing run: 229, 121, and 234 against 312, 237, and 321. One run per
+  seed.
+- **The record of 2026-10-11 said that no input kills only the run with `eye_gain=0`.** On the Start
+  values that run held more creatures than the seeing run in every world tried. That is not so at the
+  defaults of 2026-10-12, in this world.
+- Both checks also fire on 3 of 3 seeds of the `fert_radius=25` world, where the seeing run is under
+  the floor too.
+- Seed 3 of the `fert_radius=25` world shows what the check is for. The run with no direction is
+  empty, so `chemo_blind` prints 0.00 and the scent gap reads 0.58 and passes its band. The seed fails
+  on `chemo_blind run died`.
 
 `plans` and `speed_cv` have no band and have rejected nothing.
 
 ### The first reading of the M2 rules, not a trial
+
+**A record of 2026-10-11, not the world of today.** `--m2` is deleted and the defaults have moved, so
+the command below cannot be typed now and no command prints these rows at the defaults of
+2026-10-12. The rows of today are at the top of "Gate-evolve".
 
 One run, on the Start values of the plan. No hypothesis was written before it and nothing was tuned.
 The gap band of 0.10 comes from the chance input and not from this reading. An earlier build had
@@ -651,22 +761,24 @@ What it says, by kind of claim:
 ## Probes
 
 Built by M2 Task 12. Each runs the default world and prints what it reads. None has a band, and none
-has rejected anything. The rows below are seed 1 with `--m2`: the Start values of the M2 plan, not
-tuned. Those values are the defaults since Task 13, and the flag is deleted.
+has rejected anything. The rows below are seed 1 at the defaults of 2026-10-12, and they ran on that
+day. The rows recorded before them were on the Start values of the M2 plan, with the deleted flag
+`--m2`.
 
 **`probe-plants [--seed n] [--ticks 36000] [--param ...]`.** One row every 4,000 ticks: plants alive,
 plant deaths and seedlings since the last row, 32-unit cells that hold a plant, the mean of
 `reserve / cap`, and creatures alive. The first and the last row of 9:
 
 ```
-$ target/release/tidepool-headless probe-plants --m2 --seed 1
-seed=1 tick=4000 plants=1665 plant_deaths=1571 seedlings=2036 cells=666 reserve01=0.66 creatures=406
-seed=1 tick=36000 plants=1030 plant_deaths=2100 seedlings=2086 cells=504 reserve01=0.62 creatures=475
+$ target/release/tidepool-headless probe-plants --seed 1
+seed=1 tick=4000 plants=2214 plant_deaths=0 seedlings=1014 cells=741 reserve01=0.41 creatures=1265
+seed=1 tick=36000 plants=2229 plant_deaths=0 seedlings=0 cells=743 reserve01=0.31 creatures=1448
 ```
 
-At the defaults the probe reads 732 cells at tick 4,000 and 508 at tick 36,000 on seed 1. The scratch
-census of the M1 audit read 727 and 480 on the M1 world (`findings/m1-audit.md`, finding F2). The
-default world has changed since then: every brain holds four neurons more.
+`plant_deaths` reads 0 on all 9 rows. Since the grazing rule of Task 13 a bite cannot take a plant
+under its death reserve (`findings/m2-tuning.md`). A record: on the M1 world with four more neurons
+per brain the probe read 732 cells at tick 4,000 and 508 at tick 36,000, and the scratch census of
+the M1 audit read 727 and 480 (`findings/m1-audit.md`, finding F2).
 
 **`probe-heirs [--seed n] [--pick 3000] [--param ...]`.** It runs to the pick tick, takes every creature
 alive then, and follows the world to the death of each. It counts heirs as `write_heirs` would after a
@@ -676,43 +788,39 @@ count to `World::possess` and `World::write_heirs` on about 10 picks, and it fai
 made to skip the living descendants.
 
 ```
-$ target/release/tidepool-headless probe-heirs --m2 --seed 1
-seed=1 pick=3000 group=all picks=429 heir=0.41 median_ticks=1536
-seed=1 pick=3000 group=adults picks=147 heir=0.69 median_ticks=1165
-seed=1 pick=3000 group=juveniles picks=282 heir=0.26 median_ticks=1916
-$ target/release/tidepool-headless probe-heirs --pick 3000 --seed 1
-seed=1 pick=3000 group=all picks=590 heir=0.37 median_ticks=1474
-seed=1 pick=3000 group=adults picks=274 heir=0.62 median_ticks=1395
-seed=1 pick=3000 group=juveniles picks=316 heir=0.16 median_ticks=1651
+$ target/release/tidepool-headless probe-heirs --seed 1
+seed=1 pick=3000 group=all picks=1258 heir=0.52 median_ticks=958
+seed=1 pick=3000 group=adults picks=801 heir=0.67 median_ticks=1144
+seed=1 pick=3000 group=juveniles picks=457 heir=0.24 median_ticks=553
 ```
 
-The second command is the default world. The M1 audit read 0.37 for adults at pick tick 3,000 on seed
-1, 0.26 for all picks, and 0.17 for juveniles (finding F5). **Adults now read 0.62 against 0.37.** The
-probe counts the children that were alive at the pick, and the audit did not: possessing a body
-now marks them (decision 2). A juvenile has no child at the pick, so the two counts agree for it: 0.16
-against 0.17. The world also differs from the audit's by four neurons per brain. This is the brain's
-result, not a player's. The claim is "the mechanism fires": the mark now reaches the living
-descendants.
+A record of 2026-10-11, on the M1 world with four more neurons per brain: the probe read 0.62 for
+adults, 0.37 for all 590 picks, and 0.16 for juveniles. The M1 audit read 0.37 for adults at pick
+tick 3,000 on seed 1, 0.26 for all picks, and 0.17 for juveniles (finding F5). The probe counts the
+children that were alive at the pick, and the audit did not: possessing a body now marks them
+(decision 2). A juvenile has no child at the pick, so the two counts agreed for it. That was the
+brain's result, not a player's. The claim is "the mechanism fires": the mark reaches the living
+descendants. The rows above are a different world, so they are not a pair with the audit's.
 
 **`probe-crowd [--seed n] [--param ...]`.** At tick 3,000 it possesses the adult with the most bodies
 within 30 units, holds full thrust for 200 ticks, and prints its mean speed over the top speed of the
 same body alone, by rule S3.
 
 ```
-$ target/release/tidepool-headless probe-crowd --m2 --seed 1
-seed=1 tick=3000 uid=256 neighbours=10 held=200 mean_speed=1.35 top_speed=1.40 ratio=0.97
+$ target/release/tidepool-headless probe-crowd --seed 1
+seed=1 tick=3000 uid=876 neighbours=22 held=200 mean_speed=0.66 top_speed=1.11 ratio=0.59
 ```
 
 **`probe-plans [--seed n] [--ticks 36000] [--param ...]`.** The 8 most common plans with their share,
 and the means over the bodies that hold each: the length gene, the top speed, the turn rate in radians
 per tick at full thrust and top speed, and the summed angle of the eye cones in radians. The first
-line and the first 2 plans of 13:
+line and the first 2 plans of 54:
 
 ```
-$ target/release/tidepool-headless probe-plans --m2 --seed 1
-seed=1 tick=36000 creatures=475 plans=13
-seed=1 plan=flagellum+cilia+filter+chemo+eye share=0.72 len=7.9 top_speed=1.21 turn_rate=0.177 eye_angle=2.86
-seed=1 plan=flagellum+cilia+2filter+chemo+eye share=0.19 len=7.8 top_speed=1.26 turn_rate=0.172 eye_angle=2.38
+$ target/release/tidepool-headless probe-plans --seed 1
+seed=1 tick=36000 creatures=1448 plans=54
+seed=1 plan=flagellum+cilia+filter+chemo+eye share=0.35 len=11.3 top_speed=1.14 turn_rate=0.111 eye_angle=2.77
+seed=1 plan=flagellum+cilia+2filter+chemo+fin+eye share=0.12 len=11.8 top_speed=0.70 turn_rate=0.092 eye_angle=2.71
 ```
 
 **`probe-census [--seeds 1,2,3] [--ticks 36000] [--every 12000] [--param ...]`.** Added on 2026-10-12
@@ -720,8 +828,7 @@ for findings M3 and M4 of the M2 audit: the tuning record read these numbers fro
 that was not in the repo. It runs the default world of each seed, which is the world that
 `gate-evolve` runs as given, and prints one row for each seed at each multiple of `--every`.
 `--every` is from 1 to `--ticks`. The run stops at the last multiple. It has no band and it has
-rejected nothing. The rows below are the tuned defaults, not the Start values of the other probes
-of this section.
+rejected nothing.
 
 | Column | What it is |
 |---|---|
@@ -746,9 +853,9 @@ column made to read the next kind.
 
 ```
 $ target/release/tidepool-headless probe-census --seeds 1 --ticks 36000
-seed=1 tick=12000 creatures=1321 plants=2229 juv=0.36 len=12.0 wid=0.50 egg=0.68 old=4545 area=72.8 flagellum=0.55 cilia=0.40 filter=0.66 chemo=0.38 fin=0.00 eye=0.20 parts=5.1 senseless=0.00 speed=1.22 turn=0.106 eaten=185.70 reserve01=0.46
-seed=1 tick=24000 creatures=1410 plants=2229 juv=0.36 len=12.0 wid=0.50 egg=0.67 old=4145 area=72.7 flagellum=0.50 cilia=0.34 filter=0.73 chemo=0.26 fin=0.00 eye=0.20 parts=5.1 senseless=0.00 speed=1.16 turn=0.100 eaten=191.95 reserve01=0.41
-seed=1 tick=36000 creatures=1470 plants=2229 juv=0.38 len=11.8 wid=0.52 egg=0.66 old=3650 area=72.4 flagellum=0.46 cilia=0.36 filter=0.74 chemo=0.14 fin=0.00 eye=0.22 parts=5.2 senseless=0.01 speed=1.11 turn=0.104 eaten=191.80 reserve01=0.36
+seed=1 tick=12000 creatures=1319 plants=2229 juv=0.37 len=12.1 wid=0.51 egg=0.68 old=4744 area=74.8 flagellum=0.57 cilia=0.42 filter=0.67 chemo=0.48 fin=0.00 eye=0.21 parts=5.2 senseless=0.00 speed=1.21 turn=0.105 eaten=152.57 reserve01=0.36
+seed=1 tick=24000 creatures=1352 plants=2229 juv=0.38 len=11.8 wid=0.51 egg=0.67 old=4522 area=71.6 flagellum=0.57 cilia=0.41 filter=0.73 chemo=0.40 fin=0.00 eye=0.22 parts=5.2 senseless=0.00 speed=1.18 turn=0.108 eaten=149.97 reserve01=0.35
+seed=1 tick=36000 creatures=1448 plants=2229 juv=0.38 len=11.5 wid=0.48 egg=0.66 old=4203 area=64.5 flagellum=0.56 cilia=0.41 filter=0.80 chemo=0.36 fin=0.02 eye=0.24 parts=5.8 senseless=0.00 speed=1.07 turn=0.108 eaten=149.77 reserve01=0.31
 ```
 
 **`run --out <path>`** writes `World::save()` to the path after the run.
