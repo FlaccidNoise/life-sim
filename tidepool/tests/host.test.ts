@@ -504,7 +504,7 @@ test('a death cause that this build does not know is an error, not a silent paus
 test('a death by the rules of the core pauses the world, and `speed` resumes it', () => {
   const r = rig({ recycle: true });
   // A founder dies at the age of its `old` gene, which is the `lifespan` at its founding.
-  r.host.handle({ type: 'init', seed: 1, params: [{ name: 'lifespan', value: 600 }] });
+  r.host.handle({ type: 'init', seed: 1, params: [{ name: 'lifespan', value: 1200 }] });
   r.advance(100);
   const f = frameOf(r);
   const pos = (i: number) => {
@@ -513,7 +513,7 @@ test('a death by the rules of the core pauses the world, and `speed` resumes it'
   };
   r.host.handle({ type: 'possessAt', ...pos(0) }); // marked by possession: it may outlive the player
   r.host.handle({ type: 'possessAt', ...pos(1) }); // the body the player dies in
-  r.advance(40_000); // 800 ticks: longer than the lifespan
+  r.advance(65_000); // 1,300 ticks: longer than the lifespan
   const died = r.of('died')[0];
   expect(['old age', 'starved']).toContain(died?.cause);
   expect(r.of('died').length).toBe(1);
@@ -528,14 +528,14 @@ test('a death by the rules of the core pauses the world, and `speed` resumes it'
 });
 
 // The rules decide this test, not the path of one seed. Every founder buds on its first tick, lives
-// 600 ticks, and pays no upkeep. So the body buds marked children at once, nothing starves, and the
+// 1,200 ticks, and pays no upkeep. So the body buds marked children at once, nothing starves, and the
 // body dies of old age while children that are younger than it are alive.
 test('picking an heir resumes the world in that body', () => {
   const r = rig({ recycle: true });
   const params = [
     { name: 'bud_at', value: 0.2 },
     { name: 'bud_cooldown', value: 0 },
-    { name: 'lifespan', value: 600 },
+    { name: 'lifespan', value: 1200 },
     ...['basal', 'part_upkeep', 'neuron_upkeep', 'conn_upkeep', 'move_cost'].map((name) => ({
       name,
       value: 0,
@@ -544,10 +544,10 @@ test('picking an heir resumes the world in that body', () => {
   r.host.handle({ type: 'init', seed: 1, params });
   r.host.handle({ type: 'possess', uid: 88 });
   // A founder is younger than half a lifespan when the world starts.
-  r.advance(14_000); // 280 ticks
+  r.advance(29_000); // 580 ticks
   expect(r.of('died')).toEqual([]);
 
-  r.advance(17_000); // 620 ticks in all: longer than the lifespan
+  r.advance(33_000); // 1,240 ticks in all: longer than the lifespan
   const died = r.of('died');
   expect(died.length).toBe(1);
   expect(died[0]?.cause).toBe('old age');

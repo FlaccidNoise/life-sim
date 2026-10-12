@@ -145,10 +145,10 @@ fn old_age_kills_at_lifespan() {
     let mut w = empty();
     still(&mut w);
     no_upkeep(&mut w);
-    w.params.set(id::LIFESPAN, 600.0);
+    w.params.set(id::LIFESPAN, 1200.0);
     let c = add(&mut w, 500.0, 1.0, 1.0, |_| {});
     assert!(w.possess(w.creatures.uid[c]));
-    w.run(599);
+    w.run(1199);
     assert_eq!(w.creatures.slots.count(), 1);
     w.run(1);
     assert_eq!(w.creatures.slots.count(), 0);

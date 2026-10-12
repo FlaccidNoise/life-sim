@@ -249,9 +249,9 @@ fn founders_are_adults_at_half_energy_with_ages_below_half_a_lifespan() {
 #[test]
 fn the_lifespan_parameter_sets_the_founder_ages() {
     let mut w = World::new(2, 1536.0, 1024.0);
-    w.params.set(id::LIFESPAN, 600.0);
+    w.params.set(id::LIFESPAN, 1200.0);
     w.seed_founders(400, 0);
-    assert!(live(&w).into_iter().all(|s| w.creatures.age[s] < 300));
+    assert!(live(&w).into_iter().all(|s| w.creatures.age[s] < 600));
 }
 
 #[test]

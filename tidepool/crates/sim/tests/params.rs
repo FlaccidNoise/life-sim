@@ -1,3 +1,4 @@
+use tidepool_sim::genome::{EGG_RANGE, OLD_RANGE};
 use tidepool_sim::params::{id, Params, DEFS};
 
 #[test]
@@ -35,4 +36,12 @@ fn a_new_table_holds_the_defaults() {
     for (i, d) in DEFS.iter().enumerate() {
         assert_eq!(p.get(i), d.default, "{}", d.name);
     }
+}
+
+/// A founder's `egg` gene is `birth_growth` and its `old` gene is `lifespan`. Past these two walls
+/// a founder would hold a gene that its first mutation moves into the range in one step.
+#[test]
+fn birth_growth_stops_at_the_top_of_egg_and_lifespan_starts_at_the_bottom_of_old() {
+    assert_eq!(DEFS[id::BIRTH_GROWTH].max, EGG_RANGE.1);
+    assert_eq!(DEFS[id::LIFESPAN].min, OLD_RANGE.0);
 }
