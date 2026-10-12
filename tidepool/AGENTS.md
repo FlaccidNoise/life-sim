@@ -20,7 +20,10 @@ the M2 rules are on, with the grazing rule and tuned defaults. **`make check` ex
 exits non-zero at its last step:** both benches and `gate-health` pass, and `gate-evolve` reads 2 of
 3, because the scent gap of seed 1 is 0.079 against 0.10. No number was found that fixes it. It needs
 a rule or a decision from the owner: `docs/findings/m2-tuning.md`, "What needs a rule or a decision".
-CI would fail at that step, so do not push in this state.
+CI would fail at that step, so do not push in this state. The fresh-context audit
+(`docs/findings/m2-audit.md`) says M2 does not meet its exit: by tick 144,000 the chemoreceptor is
+lost on 6 of 10 seeds and one seed loses its eyes too. Its test and probe findings are being fixed.
+Its band and rule findings wait for the owner.
 
 ## Commands
 
