@@ -310,9 +310,9 @@ mod tests {
         assert_eq!(w.frame[7..10], [2, 3, 2]);
         let cones = w.frame[10..HEADER].as_chunks::<3>().0;
         let (heading, turn) = (w.creatures.heading[9], 0.2 * crate::math::PI);
-        // The eye of a founder: a half angle of 0.2 + 0.4, and a range of 16 * 0.2 lengths.
+        // The eye of a founder: a half angle of 0.2 + 0.5, and a range of 16 * 0.2 lengths.
         #[allow(clippy::disallowed_methods)]
-        let (cos_half, range) = (0.6f32.cos(), 3.2 * w.creatures.length(9));
+        let (cos_half, range) = (0.7f32.cos(), 3.2 * w.creatures.length(9));
         for (cone, dir) in cones.iter().zip([heading + turn, heading - turn]) {
             let cone = cone.map(f32::from_bits);
             assert!((cone[0] - dir).abs() < 1e-3, "{cone:?}");

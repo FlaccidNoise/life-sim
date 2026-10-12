@@ -156,6 +156,8 @@ project kept the machine at a load average near 5, so these readings are lower b
 | 2026-10-10 | 16, bench on the settled world | The default world after 12,000 ticks, seed 1 | 1,539 | 4,381 | 3,757 | 2,400 |
 | 2026-10-11 | After M2 task 2 (the genome is a part list, every M2 rule is off) | The same world. The `settled` line and the mean are the M1 ones | 1,539 | 3,993 | 3,594 | 2,400 |
 | 2026-10-11 | M2 task 4 (motor), rules off | The default world after 12,000 ticks, seed 1 | 1,539 | 4,096 | 3,594 to 3,640 | 2,400 |
+| 2026-10-11 | M2 task 10 (eyes), no founder has an eye | The default world after 12,000 ticks, seed 1. Four more input neurons per brain | 1,483 | not read | 4,041 to 4,105 | 2,400 |
+| 2026-10-11 | M2 task 10, every body scans | A probe world, not the default: `founder_eye=0.2 starter_look=0 eye_gain=0`, so every body has eyes and none steers by sight | 1,592 | not read | 2,967 to 2,981 at `see_every` 2. 2,543 to 2,557 at 1 | 2,400 |
 
 **The row after M2 task 2 is a lower bound.** Other projects held the machine at a load average near 7
 during that run of `make gates`. Run back to back at that load, 3 runs each and twice over, the native
@@ -175,6 +177,15 @@ worked out twice. The neighbour box is now the body's own radius plus `MAX_RADIU
 `MAX_RADIUS`. With the M2 motor rules switched on (`--param push_mass=1 --param motor_curve=1 --param
 part_mass=0.1`) the same bench reads 4,432 at a mean of 1,321 creatures: a different world, so not a
 pair with the rows above.
+
+**The two rows after M2 task 10.** `findings/m2-eyes.md` has every reading. The first row reads
+faster than the row before it only because its world holds fewer creatures: on one identical world
+(`neuron_upkeep=0`) the build with eyes is 1.2% slower. The second row is not the default world. An
+eyed world whose founders steer by sight holds 270 to 460 creatures at every `plant_growth` tried, so
+the bench is void there. The probe world makes every body scan and lets none steer by sight, and holds
+1,592. The scan costs 111 microseconds per tick at `see_every` 1 and 56 at the default of 2. One later
+set at a load average of 12.8 read 2,770, 2,986, and 2,957 at `see_every` 2. **With eyes the margin
+over the floor is about 1.2 times, down from 1.6 at the M1 exit.**
 
 **The void row after Task 13.** Both benches print `VOID: population fell` and `make gates` exits 2. The
 gate works as built: it refuses to time a world that has emptied. The bench world falls from 1,500

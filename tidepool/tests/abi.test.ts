@@ -55,7 +55,7 @@ test('a founder record unpacks to its four parts, and to an eye with `founder_ey
   const eyed = fresh();
   eyed.setParam(eye.index, 0.2);
   const fifth = partsOf(eyed)[4];
-  expect(fifth).toEqual({ kind: P.KIND_EYE, anchor: 51 / 255, size: 51 / 255, extra: 102 / 255 });
+  expect(fifth).toEqual({ kind: P.KIND_EYE, anchor: 51 / 255, size: 51 / 255, extra: 128 / 255 });
 });
 
 test('the frame header holds the lineage count, the buds, and the cones of the possessed body', () => {
@@ -83,12 +83,12 @@ test('the frame header holds the lineage count, the buds, and the cones of the p
     }
   }
   const [left, right] = f.cones;
-  // The eye of a founder: 0.2 of a half turn off the heading on each side, a half angle of 0.6
+  // The eye of a founder: 0.2 of a half turn off the heading on each side, a half angle of 0.7
   // radians, and a range of 16 * 0.2 body lengths.
   expect(left?.dir).toBeCloseTo(heading + 0.2 * Math.PI, 3);
   expect(right?.dir).toBeCloseTo(heading - 0.2 * Math.PI, 3);
   for (const cone of f.cones) {
-    expect(cone.cosHalf).toBeCloseTo(Math.cos(0.6), 3);
+    expect(cone.cosHalf).toBeCloseTo(Math.cos(0.7), 3);
     expect(cone.range).toBeCloseTo(3.2 * length, 3);
   }
 });
