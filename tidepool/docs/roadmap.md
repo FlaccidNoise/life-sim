@@ -60,7 +60,12 @@ The smallest world you can live in.
 Exit: a stranger can swim, eat, bud, die, and continue as a descendant with no instructions. The world
 stays alive at 12,000 ticks on 3 seeds.
 
-### M2 — Bodies
+### M2 — Bodies (built 2026-10-12, owner check open)
+
+Status: every task of the plan is built, and `make check` and `make gates` exit 0. The owner checks
+of the exit line below are still to do (`plans/2026-10-11-m2-bodies.md`, Task 14). The fresh-context
+audit found that evolution removed the senses. The cause was the upkeep of a part, and it is deleted
+(`findings/m2-audit.md`, `findings/m2-senses.md`).
 
 Looks and function become one thing.
 
@@ -68,7 +73,8 @@ Looks and function become one thing.
 - Life-history genes: old age and egg size. A body is mature when it is full-grown, and the size of
   a brood follows the egg and the parent's reserve: neither is a gene (`decisions/INDEX.md`,
   2026-10-11). They are world parameters in M1.
-- Part costs: build energy, upkeep, mass.
+- Part costs: build energy, upkeep, mass. A part has no upkeep of its own since 2026-10-12: it costs
+  through its mass alone (`decisions/INDEX.md`).
 - Eye and Fin. The view cone: the player sees what the eyes see.
 - The genome-driven creature renderer: membrane, visible parts, motion.
 
