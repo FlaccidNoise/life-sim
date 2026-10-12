@@ -69,13 +69,7 @@ fn still(w: &mut World) {
 }
 
 fn no_upkeep(w: &mut World) {
-    for k in [
-        id::BASAL,
-        id::PART_UPKEEP,
-        id::NEURON_UPKEEP,
-        id::CONN_UPKEEP,
-        id::MOVE_COST,
-    ] {
+    for k in [id::BASAL, id::NEURON_UPKEEP, id::CONN_UPKEEP, id::MOVE_COST] {
         w.params.set(k, 0.0);
     }
 }
@@ -296,50 +290,36 @@ fn resting_loss(setup: impl FnOnce(&mut World), edit: impl FnOnce(&mut Genome)) 
     before - w.creatures.energy[c]
 }
 
-/// The founder with no eye is the reference body: the two curves meet at its mass.
+/// With no eye the parts are the reference parts, so the mass is the area at any `part_mass`.
+fn eyeless_loss(len: f32) -> f32 {
+    resting_loss(|w| w.params.set(id::FOUNDER_EYE, 0.0), |g| g.len = len)
+}
+
+/// The founder with no eye is the reference body, with an area of 72.
 #[test]
-fn the_founder_pays_the_same_upkeep_on_both_curves() {
-    let loss = |curve: f32| {
-        resting_loss(
-            |w| {
-                w.params.set(id::UPKEEP_CURVE, curve);
-                w.params.set(id::FOUNDER_EYE, 0.0);
-            },
-            |_| {},
-        )
-    };
-    let (line, curve) = (loss(0.0), loss(1.0));
-    assert!(line > 1.0, "the loss {line} is too small to test");
-    assert!((curve / line - 1.0).abs() < 1e-3, "{curve} against {line}");
+fn the_reference_body_pays_basal_for_each_unit_of_its_mass() {
+    let want = 100.0 * empty().params.get(id::BASAL) * 72.0;
+    let loss = eyeless_loss(12.0);
+    assert!(want > 1.0, "the loss {want} is too small to test");
+    assert!((loss / want - 1.0).abs() < 1e-3, "{loss} against {want}");
 }
 
 /// A length of 6 gives an area of 18, a quarter of the founder's 72.
 #[test]
-fn a_small_body_pays_more_per_unit_of_mass_on_the_curve() {
-    // With no eye the parts are the reference parts, so the mass is the area at any `part_mass`.
-    let loss = |curve: f32| {
-        resting_loss(
-            |w| {
-                w.params.set(id::UPKEEP_CURVE, curve);
-                w.params.set(id::FOUNDER_EYE, 0.0);
-            },
-            |g| g.len = 6.0,
-        )
-    };
-    let ratio = loss(1.0) / loss(0.0);
+fn a_small_body_pays_more_per_unit_of_mass() {
+    let ratio = (eyeless_loss(6.0) / 18.0) / (eyeless_loss(12.0) / 72.0);
     let expected = (72.0f32 / 18.0).powf(0.25);
     assert!((ratio / expected - 1.0).abs() < 0.01, "ratio {ratio}");
 }
 
-/// Rule P1. The founder with an eye of size 1 has a part sum of `2.1 + eye_cost`. Upkeep per unit
-/// of mass is `basal + part_upkeep * part_sum`, and `part_mass` makes that body heavier than the
-/// founder by `(1 + part_mass * 3.1) / (1 + part_mass * 2.1)`. Upkeep follows mass here.
+/// Rule P1. The founder with an eye of size 1 has a part sum of `2.1 + eye_cost`. A part costs
+/// through its mass alone: `part_mass` makes that body heavier than the founder by
+/// `(1 + part_mass * 3.1) / (1 + part_mass * 2.1)`, and upkeep is for the mass to the power 3/4.
 #[test]
-fn an_eye_and_the_mass_of_parts_cost_upkeep() {
+fn a_part_costs_upkeep_through_its_mass_alone() {
     let loss = |eye_cost: f32, part_mass: f32| {
         resting_loss(
             |w| {
-                w.params.set(id::UPKEEP_CURVE, 0.0);
                 w.params.set(id::EYE_COST, eye_cost);
                 w.params.set(id::PART_MASS, part_mass);
             },
@@ -347,14 +327,10 @@ fn an_eye_and_the_mass_of_parts_cost_upkeep() {
         )
     };
     let (blind, eyed, heavy) = (loss(0.0, 0.0), loss(1.0, 0.0), loss(1.0, 0.1));
-    let w = empty();
-    let per_mass = |parts: f32| w.params.get(id::BASAL) + w.params.get(id::PART_UPKEEP) * parts;
-    let for_eye = per_mass(3.1) / per_mass(2.1);
-    assert!((eyed / blind / for_eye - 1.0).abs() < 0.01, "eye {eyed}");
-    assert!(
-        (heavy / eyed / (1.31 / 1.21) - 1.0).abs() < 0.01,
-        "mass {heavy}"
-    );
+    assert!(blind > 1.0, "the loss {blind} is too small to test");
+    assert!((eyed / blind - 1.0).abs() < 1e-4, "eye {eyed} {blind}");
+    let for_mass = (1.31f32 / 1.21).powf(0.75);
+    assert!((heavy / eyed / for_mass - 1.0).abs() < 0.01, "mass {heavy}");
 }
 
 /// Two fed juveniles with the same length and width genes at the same growth, with no upkeep. One
@@ -488,27 +464,16 @@ fn one_tick_of_intake(len: f32, reserve: f32, setup: impl FnOnce(&mut World)) ->
 
 /// The plant gives all it holds, so the mouth is the limit.
 #[test]
-fn the_mouth_follows_area_at_intake_curve_1() {
-    let share = |curve: f32| {
-        let intake = |len: f32| {
-            one_tick_of_intake(len, 20.0, |w| {
-                w.params.set(id::BITE_FRACTION, 1.0);
-                w.params.set(id::INTAKE_CURVE, curve);
-            })
-        };
-        intake(6.0) / intake(12.0)
-    };
-    assert!((share(0.0) - 0.5).abs() < 1e-4, "length: {}", share(0.0));
-    assert!((share(1.0) - 0.25).abs() < 1e-4, "area: {}", share(1.0));
+fn the_mouth_follows_area() {
+    let intake = |len: f32| one_tick_of_intake(len, 20.0, |w| w.params.set(id::BITE_FRACTION, 1.0));
+    let share = intake(6.0) / intake(12.0);
+    assert!((share - 0.25).abs() < 1e-4, "share {share}");
 }
 
-/// The largest body has a mouth of 2.3 a tick on the area curve. The bite is still 5% of 4.
+/// The largest body has a mouth of 2.3 a tick. The bite is still 5% of 4.
 #[test]
 fn a_plant_still_limits_a_large_mouth() {
-    let taken = one_tick_of_intake(24.0, 4.0, |w| {
-        w.params.set(id::INTAKE_CURVE, 1.0);
-        w.params.set(id::BITE_FRACTION, 0.05);
-    });
+    let taken = one_tick_of_intake(24.0, 4.0, |w| w.params.set(id::BITE_FRACTION, 0.05));
     assert!((taken - 0.2).abs() < 1e-5, "took {taken}");
 }
 
@@ -610,18 +575,12 @@ fn a_long_life_costs_more_per_tick() {
 /// Two worlds with one lone adult in each. The player holds full thrust, and thrust is the only
 /// cost.
 #[test]
-fn thrust_costs_the_same_per_unit_of_mass_at_motor_curve_1() {
+fn thrust_costs_the_same_per_unit_of_mass() {
     let loss_per_area = |len: f32| {
         let mut w = empty();
-        for k in [
-            id::BASAL,
-            id::PART_UPKEEP,
-            id::NEURON_UPKEEP,
-            id::CONN_UPKEEP,
-        ] {
+        for k in [id::BASAL, id::NEURON_UPKEEP, id::CONN_UPKEEP] {
             w.params.set(k, 0.0);
         }
-        w.params.set(id::MOTOR_CURVE, 1.0);
         let c = add(&mut w, 500.0, 1.0, 0.9, |g| g.len = len);
         assert!(w.possess(w.creatures.uid[c]));
         w.input(true, 1.0, 0.0);

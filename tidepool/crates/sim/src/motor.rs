@@ -59,7 +59,7 @@ pub fn step(world: &mut World) {
         mass,
         heft,
     } = motor;
-    let (repel, push_mass) = (params.get(id::REPEL), params.get(id::PUSH_MASS));
+    let repel = params.get(id::REPEL);
     let (part_mass, eye_cost) = (params.get(id::PART_MASS), params.get(id::EYE_COST));
     for s in 0..c.slots.high_water() as usize {
         if c.slots.is_alive(s as u32) {
@@ -84,9 +84,10 @@ pub fn step(world: &mut World) {
             let d2 = dx * dx + dy * dy;
             if d2 < rs * rs && d2 > 0.0 {
                 let d = d2.sqrt();
-                // The lighter body of a pair takes more of the push. Two equal bodies each
-                // take the same push as at `push_mass` 0.
-                let share = 1.0 + push_mass * (2.0 * mass[j] / (mi + mass[j]) - 1.0);
+                // The lighter body of a pair takes more of the push, and two equal bodies each
+                // take a share of 1. The share is `2 * mass[j] / (mi + mass[j])`, written so
+                // that it rounds as the pinned rows of the gates do.
+                let share = 1.0 + (2.0 * mass[j] / (mi + mass[j]) - 1.0);
                 let f = (rs - d) / d * repel * share;
                 fx += dx * f;
                 fy += dy * f;
@@ -98,9 +99,8 @@ pub fn step(world: &mut World) {
     let (flag_torque, cilia_torque) = (params.get(id::FLAG_TORQUE), params.get(id::CILIA_TORQUE));
     let (fin_torque, fin_grip) = (params.get(id::FIN_TORQUE), params.get(id::FIN_GRIP));
     let (inertia_k, v_max) = (params.get(id::INERTIA_K), params.get(id::V_MAX));
-    let curve = params.get(id::MOTOR_CURVE);
-    // The parts of the rules below that are the same for every body, worked out once per tick.
-    let (ref_width, ref_inertia) = (REF_WIDTH * curve, 2.0 * inertia_k * REF_WIDTH * curve);
+    // The part of the turn rule that is the same for every body, worked out once per tick.
+    let ref_inertia = 2.0 * inertia_k * REF_WIDTH;
     let fin_turn = fin_torque / v_max;
     let keep_fwd = 1.0 - params.get(id::DRAG_FWD);
     let drag_side = params.get(id::DRAG_SIDE);
@@ -116,11 +116,11 @@ pub fn step(world: &mut World) {
         }
         let (thrust, turn) = (c.cmd_thrust[s], c.cmd_turn[s]);
         let (hc, hs) = (c.hc[s], c.hs[s]);
-        // The force is `drive * length` and the mass is `length * width`. At `motor_curve` 1 the
-        // force grows with the area, so the width of the reference body stands in for the width
-        // and top speed does not depend on size. The weight of the parts then slows a body.
+        // The force grows with the area and the mass is the area times the heft, so the width of
+        // the reference body stands in for the width and top speed does not depend on size. The
+        // weight of the parts slows a body.
         let drive = flag_force * c.flag_push[s] + cilia_force * c.cilia[s];
-        let accel = thrust * drive / (width * (1.0 - curve) + ref_width * heft[s]);
+        let accel = thrust * drive / (REF_WIDTH * heft[s]);
         // A fin steers with the water that passes it, so it does nothing at rest or in reverse.
         // It reads the speed that the body had before this tick: a turn that waits for the new
         // velocity made a tick 5% slower in WASM.
@@ -129,8 +129,7 @@ pub fn step(world: &mut World) {
             + flag_torque * c.flag_push[s] * thrust
             + flag_torque * c.flag_side[s]
             + fin_turn * c.fin[s] * swim.max(0.0);
-        let a_ang = turn * steer
-            / (2.0 * inertia_k * width * length * (1.0 - curve) + ref_inertia * length * heft[s]);
+        let a_ang = turn * steer / (ref_inertia * length * heft[s]);
 
         let mut vx = c.vx[s] + hc * accel + push_x[s];
         let mut vy = c.vy[s] + hs * accel + push_y[s];
