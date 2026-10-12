@@ -35,8 +35,9 @@ macro_rules! table {
 // The other defaults are arithmetic, not measurement. The rows from `part_mass` on are for the M2
 // rules (`docs/plans/2026-10-11-m2-bodies.md`).
 table! {
-    /// The founder's `old` gene: ticks until death by old age.
-    LIFESPAN "lifespan" 4800.0 600.0 24000.0;
+    /// The founder's `old` gene: ticks until death by old age. The minimum is the bottom of
+    /// `OLD_RANGE`.
+    LIFESPAN "lifespan" 4800.0 1200.0 24000.0;
     /// A creature senses and thinks every Nth tick.
     THINK_EVERY "think_every" 2.0 1.0 8.0;
     /// Velocity lost per tick along the heading.
@@ -99,7 +100,8 @@ table! {
     CONN_UPKEEP "conn_upkeep" 0.0003 0.0 0.01;
     /// Cost of thrust.
     MOVE_COST "move_cost" 0.006 0.0 1.0;
-    /// Energy per tick per unit filter per unit length.
+    /// Energy per tick per unit filter per unit of mouth. The mouth follows the area at
+    /// `intake_curve` 1: `area / REF_WIDTH`, which is the length for the reference body.
     INTAKE_RATE "intake_rate" 0.08 0.0 1.0;
     /// Largest share of a plant's reserve taken per tick.
     BITE_FRACTION "bite_fraction" 0.05 0.001 1.0;
@@ -109,8 +111,8 @@ table! {
     GROW_RATE "grow_rate" 0.0015 0.0 0.1;
     /// Energy per unit of mass built.
     BUILD_COST "build_cost" 0.5 0.0 5.0;
-    /// The founder's `egg` gene: growth at birth.
-    BIRTH_GROWTH "birth_growth" 0.7 0.1 1.0;
+    /// The founder's `egg` gene: growth at birth. The maximum is the top of `EGG_RANGE`.
+    BIRTH_GROWTH "birth_growth" 0.7 0.1 0.7;
     /// `energy01` needed to bud.
     BUD_AT "bud_at" 0.8 0.2 1.0;
     /// Ticks between buds.

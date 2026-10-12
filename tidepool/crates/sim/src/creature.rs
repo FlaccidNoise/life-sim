@@ -135,6 +135,12 @@ pub fn heft(part_sum: f32, part_mass: f32) -> f32 {
     (1.0 + part_mass * part_sum) / (1.0 + part_mass * REF_PARTS)
 }
 
+/// The radius of the circle that stands for a body in a push, a bite, and a birth: the mean of
+/// its two half axes.
+pub fn radius(length: f32, width: f32) -> f32 {
+    (length + width) / 4.0
+}
+
 /// The values of `a` at the live slots, in slot order.
 fn gather<T: Copy>(live: &[u32], a: &[T]) -> Vec<T> {
     live.iter().map(|&s| a[s as usize]).collect()
@@ -224,7 +230,7 @@ impl Creatures {
     }
 
     pub fn radius(&self, s: usize) -> f32 {
-        (self.length(s) + self.width(s)) / 4.0
+        radius(self.length(s), self.width(s))
     }
 
     /// The part sizes as the upkeep and the mass count them: an eye's size is times `eye_cost`.

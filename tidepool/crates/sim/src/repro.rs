@@ -5,7 +5,7 @@
 //! The parent pays for each child's body and for each child's first energy, so a bud moves energy
 //! and makes none.
 
-use crate::creature::heft;
+use crate::creature::{heft, radius};
 use crate::genome::Genome;
 use crate::math::sin_cos;
 use crate::params::id;
@@ -80,7 +80,7 @@ pub fn step(world: &mut World) {
             // Behind the parent, with the two bodies just touching. Child 0 is straight behind,
             // by the heading as it is. A later child is turned `BROOD_FAN` more with each pair: the
             // odd ones to one side and the even ones to the other.
-            let behind = c.radius(s) + (length + width) / 4.0;
+            let behind = c.radius(s) + radius(length, width);
             let (hc, hs) = if i == 0 {
                 (c.hc[s], c.hs[s])
             } else {
