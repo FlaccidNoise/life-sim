@@ -14,11 +14,12 @@ creature among creatures that each run an evolved neural network. It shares no c
 
 ## Status
 
-M0 (foundation) and M1 (first swim) are built, audited, and pushed. `make check` and `make gates` exit 0,
-and CI has passed on `main`. One half of the M1 exit is not met: the owner swam and died and could not
-continue as a descendant (`docs/findings/m1-exit.md`). The owner decided the five rule questions on
-2026-10-11 (`docs/decisions/INDEX.md`). The plan for M2 (Bodies) is
-`docs/plans/2026-10-11-m2-bodies.md`. The owner approved it on 2026-10-11 and the build follows it.
+M0 (foundation) and M1 (first swim) are built, audited, and pushed. M2 (Bodies) is being built from
+`docs/plans/2026-10-11-m2-bodies.md`, which the owner approved on 2026-10-11. Tasks 1 to 12 are done,
+and Task 13 (switch on and retune) is in progress. **`make check` exits 0. `make gates` does not, on
+purpose:** the M2 rules are switched on at their starting values, the eyed world is thin, and the
+bench and `gate-evolve` fail until the retune is done. `docs/findings/m2-tuning.md` has the readings.
+Do not push in this state: CI would fail at the bench.
 
 ## Commands
 
