@@ -12,6 +12,7 @@ use crate::rng::Rng;
 use crate::snapshot::{LoadError, Reader, Writer};
 use crate::world::World;
 
+/// A budget of `docs/architecture.md` §2, not a tuned number.
 pub const MAX_PLANTS: u32 = 8192;
 /// The radius of a plant with no reserve, and what a reserve of `plant_cap` adds to it.
 const RADIUS_MIN: f32 = 2.0;

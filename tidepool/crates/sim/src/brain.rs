@@ -10,6 +10,7 @@ use crate::rng::Rng;
 use crate::snapshot::{LoadError, Reader, Writer};
 use crate::world::World;
 
+/// Budgets of `docs/architecture.md` §2, not tuned numbers.
 pub const MAX_NEURONS: usize = 96;
 pub const MAX_CONNS: usize = 384;
 pub const N_IN: usize = 11;
