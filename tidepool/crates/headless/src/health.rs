@@ -30,16 +30,17 @@ const DENSITY_CELL: f32 = 32.0;
 /// One time-skip (`docs/architecture.md` section 2).
 const SKIP_TICKS: u32 = 24000;
 
-struct Args {
-    seeds: Vec<u32>,
-    ticks: u32,
-    params: Vec<(usize, f32)>,
+pub struct Args {
+    pub seeds: Vec<u32>,
+    pub ticks: u32,
+    pub params: Vec<(usize, f32)>,
 }
 
-fn args(args: &[String], seeds: &[u32]) -> Args {
+/// `ticks_flag` names the flag that sets `ticks`. A probe of a fixed length passes none.
+pub fn args(args: &[String], seeds: &[u32], ticks_flag: Option<&str>, ticks: u32) -> Args {
     let mut a = Args {
         seeds: seeds.to_vec(),
-        ticks: 12000,
+        ticks,
         params: Vec::new(),
     };
     let mut it = args.iter().map(String::as_str);
@@ -49,18 +50,20 @@ fn args(args: &[String], seeds: &[u32]) -> Args {
                 let list = it.next().unwrap_or("");
                 a.seeds = list.split(',').map(|s| value(flag, Some(s))).collect();
             }
-            "--ticks" => a.ticks = value(flag, it.next()),
             "--param" => a.params.push(param(flag, it.next())),
+            _ if Some(flag) == ticks_flag => {
+                a.ticks = value(flag, it.next());
+                if a.ticks == 0 {
+                    usage(&format!("{flag} needs a value above 0"));
+                }
+            }
             _ => usage(&format!("unknown flag {flag}")),
         }
-    }
-    if a.ticks == 0 {
-        usage("--ticks needs a value above 0");
     }
     a
 }
 
-fn default_world(seed: u32, params: &[(usize, f32)]) -> World {
+pub fn default_world(seed: u32, params: &[(usize, f32)]) -> World {
     let mut world = World::new(seed, WORLD.0, WORLD.1);
     // Before the founders: the fertility map and the founder genomes read the parameters.
     for &(i, x) in params {
@@ -70,7 +73,7 @@ fn default_world(seed: u32, params: &[(usize, f32)]) -> World {
     world
 }
 
-fn live(world: &World) -> impl Iterator<Item = usize> + '_ {
+pub fn live(world: &World) -> impl Iterator<Item = usize> + '_ {
     let slots = &world.creatures.slots;
     (0..slots.high_water() as usize).filter(|&s| slots.is_alive(s as u32))
 }
@@ -147,6 +150,10 @@ fn measure(seed: u32, a: &Args) -> (String, Vec<String>) {
         0 => "none".to_string(),
         n => format!("{:.0}", first_buds.age_sum as f64 / n as f64),
     };
+    // Founders are not births, so both shares are of the creatures born in the run.
+    let births = world.stats.births.max(1) as f64;
+    let juv_starved = world.stats.starved_juv as f64 / births;
+    let to_bud = first_buds.count as f64 / births;
 
     let mut failures = Vec::new();
     let mut band = |ok: bool, what: String| {
@@ -185,17 +192,26 @@ fn measure(seed: u32, a: &Args) -> (String, Vec<String>) {
     );
     band(parked <= PARKED, format!("parked={parked:.2} > {PARKED}"));
     let row = format!(
-        "seed={seed} creatures={creatures} min_late={min_late} plants={plants} births_late={births_late} max_gen={max_gen} mean_chemo={mean_chemo:.2} parked={parked:.2} first_bud={first_bud}"
+        "seed={seed} creatures={creatures} min_late={min_late} plants={plants} births_late={births_late} max_gen={max_gen} mean_chemo={mean_chemo:.2} parked={parked:.2} first_bud={first_bud} juv_starved={juv_starved:.2} to_bud={to_bud:.2}"
     );
     (row, failures)
 }
 
-/// `gate-health`. Exit 0 only when every seed stays inside every band.
+/// `gate-health`.
 pub fn gate(argv: &[String]) {
-    let a = args(argv, &[1, 2, 3]);
+    judge(
+        "gate-health",
+        &args(argv, &[1, 2, 3], Some("--ticks"), 12000),
+        measure,
+    );
+}
+
+/// Prints the row that `measure` makes for each seed, with the bands that the seed left. Exit 0
+/// only when every seed stays inside every band.
+pub fn judge(gate: &str, a: &Args, measure: fn(u32, &Args) -> (String, Vec<String>)) {
     let mut passed = 0;
     for &seed in &a.seeds {
-        let (row, failures) = measure(seed, &a);
+        let (row, failures) = measure(seed, a);
         if failures.is_empty() {
             passed += 1;
             println!("{row} PASS");
@@ -207,7 +223,7 @@ pub fn gate(argv: &[String]) {
     }
     let pass = passed == a.seeds.len();
     println!(
-        "gate-health {passed}/{} {}",
+        "{gate} {passed}/{} {}",
         a.seeds.len(),
         if pass { "PASS" } else { "FAIL" }
     );
@@ -217,7 +233,7 @@ pub fn gate(argv: &[String]) {
 }
 
 /// The middle value. NaN for an empty list.
-fn median(mut v: Vec<f32>) -> f32 {
+pub fn median(mut v: Vec<f32>) -> f32 {
     v.sort_by(f32::total_cmp);
     v.get(v.len() / 2).copied().unwrap_or(f32::NAN)
 }
@@ -278,7 +294,7 @@ fn density_row(seed: u32, world: &World) {
 
 /// `probe-density`. One row at a quarter, a half, and the end of the run.
 pub fn probe_density(argv: &[String]) {
-    let a = args(argv, &[1]);
+    let a = args(argv, &[1], Some("--ticks"), 12000);
     for &seed in &a.seeds {
         let mut world = default_world(seed, &a.params);
         for at in [a.ticks / 4, a.ticks / 2, a.ticks] {
@@ -330,7 +346,7 @@ fn gene_stats(world: &World) -> [(f64, f64); 7] {
 
 /// `probe-skip`. Runs `--ticks` to settle, then one time-skip, and prints how far each mean moved.
 pub fn probe_skip(argv: &[String]) {
-    let a = args(argv, &[1]);
+    let a = args(argv, &[1], Some("--ticks"), 12000);
     for &seed in &a.seeds {
         let mut world = default_world(seed, &a.params);
         world.run(a.ticks);
