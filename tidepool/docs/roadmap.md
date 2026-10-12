@@ -80,6 +80,9 @@ changes how they move and what they see. Part count does not collapse to the min
 - Variable-topology recurrent brains. Inputs and outputs come from parts.
 - Brain upkeep. Mutations that add and remove neurons and connections.
 - Mixing: mate contact, the `accept mate` output, crossover by history id, the mate-choice overlay.
+  Known before the build: `repro.rs` draws the genome of a child, and its history ids, before it knows
+  that the parent can pay. A child that is never born uses up ids. Ids stay unique, so crossover can
+  still line genes up by id (`findings/m2-audit.md`, finding L9).
 - Brain viewer, first version: live graph, part-grouped inputs, strongest path in words.
 
 Exit: brains in a long-run world differ in shape and are not all minimal (risk R1). A player can watch
