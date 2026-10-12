@@ -252,8 +252,7 @@ Rules:
 - M1 draws a capsule and a tail. M2 adds one instanced quad per part (`render/parts.ts`). A body
   shorter than `PART_LOD_PX` on screen draws only its flagella. In Play the renderer dims the world
   outside the eye cones of the possessed body. M6 adds depth lighting: fog and caustics in the
-  fragment shader, bloom on a 5-level
-  mip chain in `RGBA16F`.
+  fragment shader, bloom on a 5-level mip chain in `RGBA16F`.
 - Parts ride in every creature record, so the page needs no cache by `uid`. The frame is
   `FRAME_HEADER_WORDS` (34) words, then one record of `CREATURE_STRIDE` (22) words for each creature
   in view, then one record of `PLANT_STRIDE` (4) words for each plant in view. A word is a `u32`,
