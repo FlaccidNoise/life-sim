@@ -73,6 +73,11 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
   `parts` band stays at 3.0 and is proven on a harder bad world, because a world that can smell and
   see kept 4.6 to 4.8 parts under removal with no gain. A blind run that dies out fails its seed.
   → `../gates.md` "Gate-evolve"
+- 2026-10-11: **The fallback rule for grazing is built.** The two trials of the grazing decision did not
+  close the gap: `bite_fraction` 0.02 read 88%, 87%, 68% of the blind-eye world and put body length on
+  its floor, and `plant_seed_range` 96 changed nothing. So a bite cannot take a plant under
+  `plant_death_reserve`, as that decision said. With sight a plant died 5 to 7 times as often, and the
+  rich ground emptied first. → `../findings/m2-tuning.md`
 
 ## Architecture
 
