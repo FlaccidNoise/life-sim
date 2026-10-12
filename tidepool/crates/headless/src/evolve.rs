@@ -10,6 +10,9 @@ use tidepool_sim::world::World;
 use crate::health::{args, default_world, judge, live, Args};
 
 // The bands of the gate. `docs/gates.md` holds the table.
+/// A run that ends with fewer creatures than this has died out. The same number is the low end of
+/// the `creatures` band of the health gate. A blind run under it makes its gap void.
+const CREATURES: u32 = 150;
 /// A tenth of the range of the length gene in from each wall.
 const LEN: (f64, f64) = (7.8, 22.2);
 const LEN_SD: f64 = 0.5;
@@ -19,9 +22,6 @@ const PARTS: f64 = 3.0;
 /// of that sense. Two worlds with the same useless sense read gaps of up to 0.07 by chance.
 const CHEMO_GAP: f64 = 0.10;
 const EYE_GAP: f64 = 0.10;
-/// A blind run that ends with fewer creatures than this has died, and its gap is void. The same
-/// number is the low end of the `creatures` band of the health gate.
-const BLIND_ALIVE: u32 = 150;
 /// A body plan counts when this share of the living holds it.
 const PLAN_SHARE: f64 = 0.05;
 
@@ -117,6 +117,10 @@ fn measure(seed: u32, a: &Args) -> (String, Vec<String>) {
             failures.push(what);
         }
     };
+    band(
+        creatures >= CREATURES,
+        format!("creatures={creatures} < {CREATURES}"),
+    );
     band(len >= LEN.0, format!("len={len:.2} < {}", LEN.0));
     band(len <= LEN.1, format!("len={len:.2} > {}", LEN.1));
     band(len_sd >= LEN_SD, format!("len_sd={len_sd:.2} < {LEN_SD}"));
@@ -126,7 +130,7 @@ fn measure(seed: u32, a: &Args) -> (String, Vec<String>) {
         format!("chemo_gap={chemo_gap:.3} < {CHEMO_GAP}"),
     );
     band(
-        creatures_noscent >= BLIND_ALIVE,
+        creatures_noscent >= CREATURES,
         "chemo_blind run died".to_string(),
     );
     band(
@@ -134,7 +138,7 @@ fn measure(seed: u32, a: &Args) -> (String, Vec<String>) {
         format!("eye_gap={eye_gap:.3} < {EYE_GAP}"),
     );
     band(
-        creatures_noeye >= BLIND_ALIVE,
+        creatures_noeye >= CREATURES,
         "eye_blind run died".to_string(),
     );
     let row = format!(
