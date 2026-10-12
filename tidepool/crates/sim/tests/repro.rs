@@ -86,6 +86,8 @@ fn a_fed_adult_buds_a_child_that_carries_its_line() {
     let mut w = World::new(1, 1536.0, 1024.0);
     quiet(&mut w);
     w.params.set(id::BROOD_MAX, 1.0);
+    // The egg of these tests: a newborn at 0.4 of its length.
+    w.params.set(id::BIRTH_GROWTH, 0.4);
     let p = fed_adult(&mut w, 1);
     let puid = w.creatures.uid[p];
     w.tick();
@@ -201,6 +203,8 @@ fn a_brood_conserves_energy() {
     w.params.set(id::BROOD_MAX, 8.0);
     // The parts of a child weigh something, so its mass is not its area.
     w.params.set(id::PART_MASS, 0.1);
+    // The egg of these tests: a newborn at 0.4 of its length.
+    w.params.set(id::BIRTH_GROWTH, 0.4);
     let p = fed_adult(&mut w, 0);
     let before = w.creatures.energy[p];
     w.tick();
@@ -227,6 +231,9 @@ fn a_parent_keeps_its_reserve() {
         w.params.set(id::BROOD_MAX, 8.0);
         w.params.set(id::PARENT_RESERVE, reserve);
         w.params.set(id::MUT_RATE, 0.0);
+        // The cost of 11.52 is for an egg of 0.4 and for parts that weigh a tenth.
+        w.params.set(id::BIRTH_GROWTH, 0.4);
+        w.params.set(id::PART_MASS, 0.1);
         let p = fed_adult(&mut w, 0);
         w.tick();
         assert_eq!(children(&w, p).len(), brood, "reserve {reserve}");
@@ -280,6 +287,8 @@ fn the_children_of_a_brood_are_born_apart() {
     let mut w = World::new(1, 1536.0, 1024.0);
     quiet(&mut w);
     w.params.set(id::BROOD_MAX, 4.0);
+    // The egg of these tests: a newborn at 0.4 of its length.
+    w.params.set(id::BIRTH_GROWTH, 0.4);
     let p = fed_adult(&mut w, 0);
     w.tick();
     let (c, brood) = (&w.creatures, children(&w, p));
@@ -311,6 +320,8 @@ fn the_possessed_body_counts_its_buds() {
     let mut w = World::new(1, 1536.0, 1024.0);
     quiet(&mut w);
     w.params.set(id::BROOD_MAX, 2.0);
+    // The egg of these tests: a newborn at 0.4 of its length.
+    w.params.set(id::BIRTH_GROWTH, 0.4);
     let p = fed_adult(&mut w, 0);
     // A second parent, which nobody holds. Its buds do not count.
     let other = fed_adult(&mut w, 0);

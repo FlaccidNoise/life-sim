@@ -29,11 +29,11 @@ macro_rules! table {
     };
 }
 
-// Name, default, minimum, maximum. `plant_growth` and `intake_rate` are tuned against the health
-// gate (`docs/findings/m1-tuning.md`). The other defaults are arithmetic, not measurement. The rows
-// from `part_mass` on are for the M2 rules. Their defaults are the Start values of
-// `docs/plans/2026-10-11-m2-bodies.md`, switched on by its Task 13 and not yet tuned
-// (`docs/findings/m2-tuning.md`).
+// Name, default, minimum, maximum. `intake_rate` is tuned against the health gate
+// (`docs/findings/m1-tuning.md`). `plant_growth`, `plant_cap`, `part_mass`, `neuron_upkeep`,
+// `conn_upkeep`, and `birth_growth` are tuned against both gates (`docs/findings/m2-tuning.md`).
+// The other defaults are arithmetic, not measurement. The rows from `part_mass` on are for the M2
+// rules (`docs/plans/2026-10-11-m2-bodies.md`).
 table! {
     /// The founder's `old` gene: ticks until death by old age.
     LIFESPAN "lifespan" 4800.0 600.0 24000.0;
@@ -60,9 +60,9 @@ table! {
     /// Hard speed limit, world units per tick.
     V_MAX "v_max" 4.0 1.0 8.0;
     /// Plant reserve limit at fertility 1.
-    PLANT_CAP "plant_cap" 20.0 1.0 200.0;
+    PLANT_CAP "plant_cap" 55.0 1.0 200.0;
     /// Logistic growth rate per tick.
-    PLANT_GROWTH "plant_growth" 0.02 0.0 0.1;
+    PLANT_GROWTH "plant_growth" 0.035 0.0 0.1;
     /// Reserve fraction needed to seed.
     PLANT_SEED_AT "plant_seed_at" 0.7 0.1 1.0;
     /// Chance to seed per plant update.
@@ -94,9 +94,9 @@ table! {
     /// Upkeep per unit mass per unit part size per tick.
     PART_UPKEEP "part_upkeep" 0.0002 0.0 0.01;
     /// Upkeep per neuron per tick.
-    NEURON_UPKEEP "neuron_upkeep" 0.0002 0.0 0.01;
+    NEURON_UPKEEP "neuron_upkeep" 0.0012 0.0 0.01;
     /// Upkeep per connection per tick.
-    CONN_UPKEEP "conn_upkeep" 0.00005 0.0 0.01;
+    CONN_UPKEEP "conn_upkeep" 0.0003 0.0 0.01;
     /// Cost of thrust.
     MOVE_COST "move_cost" 0.006 0.0 1.0;
     /// Energy per tick per unit filter per unit length.
@@ -110,7 +110,7 @@ table! {
     /// Energy per unit of mass built.
     BUILD_COST "build_cost" 0.5 0.0 5.0;
     /// The founder's `egg` gene: growth at birth.
-    BIRTH_GROWTH "birth_growth" 0.4 0.1 1.0;
+    BIRTH_GROWTH "birth_growth" 0.7 0.1 1.0;
     /// `energy01` needed to bud.
     BUD_AT "bud_at" 0.8 0.2 1.0;
     /// Ticks between buds.
@@ -130,7 +130,7 @@ table! {
     /// Scent gradient gain.
     CHEMO_GAIN "chemo_gain" 4.0 0.0 50.0;
     /// Mass of a part per unit size, as a share of body area.
-    PART_MASS "part_mass" 0.1 0.0 1.0;
+    PART_MASS "part_mass" 1.0 0.0 1.0;
     /// Weight of an eye's size in the part sum.
     EYE_COST "eye_cost" 1.0 0.0 10.0;
     /// 0: upkeep follows mass. 1: mass to the power 3/4.

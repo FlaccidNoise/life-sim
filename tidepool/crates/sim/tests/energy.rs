@@ -316,8 +316,16 @@ fn the_founder_pays_the_same_upkeep_on_both_curves() {
 /// A length of 6 gives an area of 18, a quarter of the founder's 72.
 #[test]
 fn a_small_body_pays_more_per_unit_of_mass_on_the_curve() {
-    let loss =
-        |curve: f32| resting_loss(|w| w.params.set(id::UPKEEP_CURVE, curve), |g| g.len = 6.0);
+    // With no eye the parts are the reference parts, so the mass is the area at any `part_mass`.
+    let loss = |curve: f32| {
+        resting_loss(
+            |w| {
+                w.params.set(id::UPKEEP_CURVE, curve);
+                w.params.set(id::FOUNDER_EYE, 0.0);
+            },
+            |g| g.len = 6.0,
+        )
+    };
     let ratio = loss(1.0) / loss(0.0);
     let expected = (72.0f32 / 18.0).powf(0.25);
     assert!((ratio / expected - 1.0).abs() < 0.01, "ratio {ratio}");

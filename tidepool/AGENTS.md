@@ -15,11 +15,12 @@ creature among creatures that each run an evolved neural network. It shares no c
 ## Status
 
 M0 (foundation) and M1 (first swim) are built, audited, and pushed. M2 (Bodies) is being built from
-`docs/plans/2026-10-11-m2-bodies.md`, which the owner approved on 2026-10-11. Tasks 1 to 12 are done,
-and Task 13 (switch on and retune) is in progress. **`make check` exits 0. `make gates` does not, on
-purpose:** the M2 rules are switched on at their starting values, the eyed world is thin, and the
-bench and `gate-evolve` fail until the retune is done. `docs/findings/m2-tuning.md` has the readings.
-Do not push in this state: CI would fail at the bench.
+`docs/plans/2026-10-11-m2-bodies.md`, which the owner approved on 2026-10-11. Tasks 1 to 13 are done:
+the M2 rules are on, with the grazing rule and tuned defaults. **`make check` exits 0. `make gates`
+exits non-zero at its last step:** both benches and `gate-health` pass, and `gate-evolve` reads 2 of
+3, because the scent gap of seed 1 is 0.079 against 0.10. No number was found that fixes it: it needs a rule or a
+decision: `docs/findings/m2-tuning.md`, "What needs a rule or a decision". CI would fail at that
+step.
 
 ## Commands
 

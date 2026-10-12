@@ -316,17 +316,35 @@ fn saved(g: &Genome) -> Vec<u8> {
 #[test]
 fn with_every_m2_rate_at_0_a_mutation_makes_the_m1_draws_and_no_more() {
     let g = eyed_founder(&mut Rng::new(7));
-    let (mut default_rng, mut zero_rng, mut on_rng) = (Rng::new(11), Rng::new(11), Rng::new(11));
+    let (mut zero_rng, mut on_rng) = (Rng::new(11), Rng::new(11));
+    // The defaults have the M2 rates on. `zero` is the defaults with each of them set to 0.
     let (mut zero, mut on) = (Params::new(), Params::new());
     for k in M2_RATES {
         zero.set(k, 0.0);
         on.set(k, 1.0);
     }
-    // The defaults of this test are the old ones: Task 13 of the M2 plan switched the rates on.
-    let by_default = g.mutated(&mut default_rng, &off(), &mut 100);
     let by_zero = g.mutated(&mut zero_rng, &zero, &mut 100);
-    assert_eq!(saved(&by_default), saved(&by_zero));
-    assert_eq!(default_rng.0, zero_rng.0);
+    let brain = &g.brain;
+    let brain_draws = brain.conns.len() + brain.bias.len() + brain.alpha.len();
+
+    // The M1 draws, stepped by hand at the M1 rates of the defaults: one draw for the chance of
+    // each gene and a `gauss` for each hit, in the M1 order, and a `gauss` for the hue. The
+    // mutation with every M2 rate at 0 must leave the generator in the same place.
+    let (mut stepped, mut hits) = (Rng::new(11), 0);
+    let mut step = |rng: &mut Rng, rate: f32, genes: usize| {
+        for _ in 0..genes {
+            if rng.unit() < rate {
+                rng.gauss();
+                hits += 1;
+            }
+        }
+    };
+    step(&mut stepped, zero.get(id::MUT_RATE), 2 + g.parts.len());
+    stepped.gauss();
+    step(&mut stepped, zero.get(id::MUT_WEIGHT_RATE), brain_draws);
+    assert!(hits > 0, "no gene mutated, so a hit is not tested");
+    assert_eq!(zero_rng.0, stepped.0);
+    assert_ne!(saved(&by_zero), saved(&g));
 
     // With the M1 rates at 0 too, the count of draws is known: one for each body gene and each
     // brain number, and four for the hue.
@@ -335,8 +353,6 @@ fn with_every_m2_rate_at_0_a_mutation_makes_the_m1_draws_and_no_more() {
     still.set(id::MUT_WEIGHT_RATE, 0.0);
     let (mut still_rng, mut counted) = (Rng::new(11), Rng::new(11));
     g.mutated(&mut still_rng, &still, &mut 100);
-    let brain = &g.brain;
-    let brain_draws = brain.conns.len() + brain.bias.len() + brain.alpha.len();
     for _ in 0..2 + g.parts.len() + 4 + brain_draws {
         counted.next_u64();
     }
@@ -346,14 +362,14 @@ fn with_every_m2_rate_at_0_a_mutation_makes_the_m1_draws_and_no_more() {
     // draw comes after every M1 draw. No part is lost here, so the five sizes line up.
     on.set(id::MUT_PART_REMOVE, 0.0);
     let by_on = g.mutated(&mut on_rng, &on, &mut 100);
-    assert_ne!(on_rng.0, default_rng.0);
+    assert_ne!(on_rng.0, zero_rng.0);
     let m1 = |g: &Genome| {
         let sizes: Vec<f32> = g.parts[..5].iter().map(|x| x.size).collect();
         let weights: Vec<f32> = g.brain.conns.iter().map(|c| c.weight).collect();
         let (bias, alpha) = (g.brain.bias.clone(), g.brain.alpha.clone());
         (g.len, g.wid, g.hue, sizes, weights, bias, alpha)
     };
-    assert_eq!(m1(&by_on), m1(&by_default));
+    assert_eq!(m1(&by_on), m1(&by_zero));
 }
 
 #[test]
