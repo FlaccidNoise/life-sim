@@ -1,0 +1,183 @@
+# M2 turnover: does a world where food comes and goes keep the senses and the tail?
+
+Date: 2026-10-12. Baseline: `m2-long-run.md` (commit e268576, the accepted set at tick 144,000 on 10
+seeds). Every run here is `probe-census` or `gate-evolve` to tick 144,000, one run at a time.
+
+The question comes from the audit (`m2-audit.md`, findings H1, H2, M3) and from `m2-long-run.md`: in
+the world that the grazing rule makes, no plant dies, and evolution removes the chemoreceptor on 6 of
+10 seeds and the tail on 10 of 10.
+
+## What "holds" means here
+
+Read at tick 144,000, per seed, against the baseline at tick 36,000:
+
+| Reading | Holds when |
+|---|---|
+| `chemo` | at least 0.12 |
+| `flagellum` | at least 0.39 |
+| `speed` | at least 0.84 |
+| `eye` | at least 0.15 |
+| `senseless` | at most 0.16 |
+| `plants` | not lower at tick 144,000 than at tick 72,000 by more than 5% |
+| `creatures` | at least 600 |
+
+The screen seeds are 1, 5, and 8. In the baseline at tick 144,000 seed 1 keeps `chemo` 0.13, seed 5
+has lost it, and seed 8 has lost both senses.
+
+## Part 1: two controls with no new rule
+
+Design risk R1 says "If the gate fails, lower the cost before adding mechanisms". So the cost goes
+first.
+
+**Control 1: `part_upkeep=0`.** Hypothesis, written before the run: if the upkeep of a part is what
+removes the chemoreceptor and the tail, then `chemo` and `flagellum` hold on seeds 5 and 8. If they do
+not hold, the upkeep of a part is not the cause.
+
+**Control 2: `part_upkeep=0` and `part_mass=0`.** A part then costs nothing at all: no upkeep and no
+mass. Hypothesis, written before the run: if any cost of a part is the cause, `chemo` and `flagellum`
+hold on seeds 5 and 8. If they do not hold with a part that is free, the loss is not a cost. It is
+mutation with no selection to keep the part, and only a world that pays for the part can keep it.
+Body length is expected to fall, as in trial 5 of `m2-tuning.md` read backwards. That is not the
+question of this control.
+
+### Rows
+
+The baseline, from `m2-long-run.md`:
+
+```
+seed=1 tick=36000 creatures=1470 plants=2229 juv=0.38 len=11.8 wid=0.52 egg=0.66 old=3650 area=72.4 flagellum=0.46 cilia=0.36 filter=0.74 chemo=0.14 fin=0.00 eye=0.22 parts=5.2 senseless=0.01 speed=1.11 turn=0.104 eaten=189.82 reserve01=0.36
+seed=1 tick=144000 creatures=1691 plants=2229 juv=0.39 len=10.4 wid=0.43 egg=0.67 old=3179 area=46.7 flagellum=0.21 cilia=0.49 filter=0.81 chemo=0.13 fin=0.01 eye=0.24 parts=5.7 senseless=0.01 speed=0.64 turn=0.117 eaten=174.43 reserve01=0.29
+seed=5 tick=36000 creatures=1451 plants=2178 juv=0.36 len=12.7 wid=0.51 egg=0.67 old=4150 area=84.3 flagellum=0.44 cilia=0.26 filter=0.70 chemo=0.08 fin=0.00 eye=0.15 parts=4.5 senseless=0.14 speed=1.11 turn=0.089 eaten=195.06 reserve01=0.35
+seed=5 tick=144000 creatures=1774 plants=2178 juv=0.38 len=11.6 wid=0.37 egg=0.67 old=3191 area=49.4 flagellum=0.20 cilia=0.48 filter=0.86 chemo=0.04 fin=0.01 eye=0.22 parts=6.1 senseless=0.00 speed=0.63 turn=0.105 eaten=176.64 reserve01=0.24
+seed=8 tick=36000 creatures=1370 plants=1731 juv=0.37 len=12.9 wid=0.51 egg=0.68 old=3916 area=85.5 flagellum=0.39 cilia=0.21 filter=0.74 chemo=0.03 fin=0.00 eye=0.15 parts=4.0 senseless=0.10 speed=1.01 turn=0.075 eaten=173.43 reserve01=0.29
+seed=8 tick=144000 creatures=1104 plants=1731 juv=0.35 len=19.2 wid=0.35 egg=0.68 old=4166 area=129.6 flagellum=0.34 cilia=0.09 filter=0.65 chemo=0.02 fin=0.01 eye=0.03 parts=3.3 senseless=0.83 speed=0.92 turn=0.042 eaten=159.35 reserve01=0.24
+```
+
+Control 1:
+
+```
+$ target/release/tidepool-headless probe-census --seeds 1,5,8 --ticks 144000 --every 36000 --param part_upkeep=0
+seed=1 tick=36000 creatures=1734 plants=2229 juv=0.38 len=11.3 wid=0.48 egg=0.67 old=3954 area=61.6 flagellum=0.53 cilia=0.40 filter=0.81 chemo=0.31 fin=0.00 eye=0.22 parts=5.2 senseless=0.02 speed=1.09 turn=0.110 eaten=174.46 reserve01=0.31
+seed=1 tick=144000 creatures=2093 plants=2229 juv=0.39 len=8.9 wid=0.40 egg=0.66 old=3082 area=31.8 flagellum=0.34 cilia=0.59 filter=1.23 chemo=0.20 fin=0.00 eye=0.29 parts=7.4 senseless=0.00 speed=0.81 turn=0.139 eaten=162.32 reserve01=0.23
+seed=5 tick=36000 creatures=1660 plants=2178 juv=0.38 len=11.7 wid=0.46 egg=0.66 old=4144 area=62.0 flagellum=0.60 cilia=0.43 filter=0.92 chemo=0.35 fin=0.01 eye=0.23 parts=5.9 senseless=0.00 speed=1.18 turn=0.109 eaten=178.70 reserve01=0.30
+seed=5 tick=144000 creatures=1866 plants=2178 juv=0.37 len=10.0 wid=0.39 egg=0.66 old=3357 area=38.3 flagellum=0.40 cilia=0.54 filter=1.09 chemo=0.17 fin=0.02 eye=0.29 parts=7.7 senseless=0.00 speed=0.77 turn=0.127 eaten=163.28 reserve01=0.20
+seed=8 tick=36000 creatures=1399 plants=1731 juv=0.38 len=13.0 wid=0.48 egg=0.67 old=4159 area=81.8 flagellum=0.58 cilia=0.33 filter=0.75 chemo=0.22 fin=0.00 eye=0.19 parts=5.0 senseless=0.02 speed=1.29 turn=0.095 eaten=160.09 reserve01=0.26
+seed=8 tick=144000 creatures=1541 plants=1731 juv=0.36 len=10.2 wid=0.44 egg=0.65 old=3602 area=45.4 flagellum=0.41 cilia=0.48 filter=0.93 chemo=0.18 fin=0.00 eye=0.27 parts=6.0 senseless=0.00 speed=0.94 turn=0.122 eaten=139.54 reserve01=0.17
+```
+
+Control 2:
+
+```
+$ target/release/tidepool-headless probe-census --seeds 1,5,8 --ticks 144000 --every 36000 --param part_upkeep=0 --param part_mass=0
+seed=1 tick=36000 creatures=1749 plants=2229 juv=0.36 len=10.6 wid=0.50 egg=0.67 old=3937 area=55.9 flagellum=0.77 cilia=0.66 filter=1.22 chemo=0.55 fin=0.00 eye=0.30 parts=6.1 senseless=0.00 speed=1.65 turn=0.196 eaten=167.84 reserve01=0.28
+seed=1 tick=144000 creatures=2135 plants=2229 juv=0.36 len=8.3 wid=0.32 egg=0.67 old=2721 area=22.6 flagellum=1.19 cilia=0.86 filter=3.24 chemo=0.50 fin=0.06 eye=0.43 parts=10.9 senseless=0.00 speed=2.52 turn=0.360 eaten=141.08 reserve01=0.19
+seed=5 tick=36000 creatures=1933 plants=2178 juv=0.37 len=9.2 wid=0.49 egg=0.67 old=3682 area=41.9 flagellum=1.07 cilia=0.50 filter=1.61 chemo=0.68 fin=0.00 eye=0.32 parts=7.6 senseless=0.00 speed=2.08 turn=0.227 eaten=168.78 reserve01=0.23
+seed=5 tick=144000 creatures=2058 plants=2178 juv=0.36 len=8.2 wid=0.33 egg=0.67 old=2796 area=22.7 flagellum=1.02 cilia=0.80 filter=3.20 chemo=0.71 fin=0.02 eye=0.35 parts=10.9 senseless=0.00 speed=2.35 turn=0.315 eaten=139.92 reserve01=0.17
+seed=8 tick=36000 creatures=1581 plants=1731 juv=0.35 len=9.8 wid=0.43 egg=0.67 old=3756 area=41.7 flagellum=1.20 cilia=0.48 filter=1.84 chemo=0.48 fin=0.01 eye=0.30 parts=8.0 senseless=0.00 speed=2.14 turn=0.226 eaten=147.91 reserve01=0.17
+seed=8 tick=144000 creatures=1772 plants=1731 juv=0.37 len=9.2 wid=0.32 egg=0.67 old=3138 area=27.1 flagellum=1.94 cilia=0.85 filter=3.41 chemo=0.51 fin=0.10 eye=0.37 parts=11.2 senseless=0.00 speed=3.36 turn=0.430 eaten=121.07 reserve01=0.15
+```
+
+### What the controls show
+
+| Reading at tick 144,000, seeds 1, 5, 8 | Baseline | Control 1 | Control 2 |
+|---|---|---|---|
+| `chemo` | 0.13, 0.04, 0.02 | 0.20, 0.17, 0.18 | 0.50, 0.71, 0.51 |
+| `flagellum` | 0.21, 0.20, 0.34 | 0.34, 0.40, 0.41 | 1.19, 1.02, 1.94 |
+| `speed` | 0.64, 0.63, 0.92 | 0.81, 0.77, 0.94 | 2.52, 2.35, 3.36 |
+| `eye` | 0.24, 0.22, 0.03 | 0.29, 0.29, 0.27 | 0.43, 0.35, 0.37 |
+| `senseless` | 0.01, 0.00, 0.83 | 0.00, 0.00, 0.00 | 0.00, 0.00, 0.00 |
+| `len` | 10.4, 11.6, 19.2 | 8.9, 10.0, 10.2 | 8.3, 8.2, 9.2 |
+| `area` | 46.7, 49.4, 129.6 | 31.8, 38.3, 45.4 | 22.6, 22.7, 27.1 |
+| `creatures` | 1,691, 1,774, 1,104 | 2,093, 1,866, 1,541 | 2,135, 2,058, 1,772 |
+
+- **Control 1: the hypothesis holds for the chemoreceptor.** With no part upkeep `chemo` holds on 3
+  of 3 seeds, and seed 8 keeps its eyes. `flagellum` holds on 2 of 3 (0.34 on seed 1). `speed` is
+  still lower at tick 144,000 than at tick 36,000 on 3 of 3, and holds on 1 of 3.
+- **The price is a smaller body and a fuller world.** `area` is 31.8 to 45.4. `creatures` on seed 1 is
+  2,093, and a world of 1,734 already read under the throughput floor (`m2-audit.md`, finding M8).
+- **Control 2 does not answer its question.** Every part grows, to 10.9 to 11.2 parts of the 12
+  allowed. A part is added or copied twice as often as it is removed (`mut_part_add` and
+  `mut_part_dup` against `mut_part_remove`), so a part that costs nothing piles up with no selection.
+  The control cannot tell "the sense pays" from that. Only the gaps of `gate-evolve` can.
+- **So the first lever is the cost, as R1 says, and not a new rule.** What I told the owner, that the
+  senses go because "the food never moves", is not shown. What is measured: with the upkeep of a part
+  taken away, `chemo` is not lost on 3 of 3 screen seeds.
+- **Not measured yet:** whether evolution uses the sense in control 1 (the gaps), the health gate, and
+  the throughput.
+
+## Part 2: trial 11, `part_upkeep` 0.0002 to 0
+
+Trials 1 to 10 are in `m2-tuning.md`, which stopped at 10 of the 12 allowed.
+
+Hypothesis, written before the runs:
+
+1. `gate-health` passes 3 of 3. More creatures, because every body pays less.
+2. `gate-evolve` at tick 36,000 on seeds 1, 2, 3 passes the scent gap on 3 of 3. At the default it
+   passes 2 of 3 (seed 1 reads 0.079). The risk: with no upkeep the blind world keeps more of the part
+   too, and the gap does not grow.
+3. `gate-evolve` at tick 144,000 on seeds 1, 5, 8 passes both gaps on 3 of 3. At the default seed 8
+   fails both.
+4. The benches at tick 12,000 pass the floor of 2,400, with less room than now (3,172 native and
+   3,006 WASM at 1,327 creatures).
+
+### Rows
+
+```
+$ target/release/tidepool-headless gate-health --param part_upkeep=0
+seed=1 creatures=1613 min_late=1460 plants=2229 births_late=2171 max_gen=18 mean_chemo=0.40 parked=0.00 first_bud=862 juv_starved=0.51 to_bud=0.33 PASS
+seed=2 creatures=1407 min_late=1382 plants=2076 births_late=2111 max_gen=15 mean_chemo=0.47 parked=0.00 first_bud=859 juv_starved=0.51 to_bud=0.33 PASS
+seed=3 creatures=1362 min_late=1304 plants=1965 births_late=1898 max_gen=16 mean_chemo=0.47 parked=0.00 first_bud=843 juv_starved=0.51 to_bud=0.33 PASS
+gate-health 3/3 PASS
+
+$ target/release/tidepool-headless gate-evolve --param part_upkeep=0
+seed=1 creatures=1734 creatures_noscent=1589 creatures_noeye=1638 len=11.3 len_sd=1.62 parts=5.2 chemo=0.31 chemo_blind=0.04 eye=0.22 eye_blind=0.11 plans=3 speed_cv=0.27 PASS
+seed=2 creatures=1549 creatures_noscent=1599 creatures_noeye=1547 len=11.6 len_sd=1.97 parts=5.0 chemo=0.23 chemo_blind=0.04 eye=0.22 eye_blind=0.10 plans=2 speed_cv=0.27 PASS
+seed=3 creatures=1540 creatures_noscent=1547 creatures_noeye=1479 len=12.1 len_sd=1.48 parts=5.7 chemo=0.37 chemo_blind=0.08 eye=0.24 eye_blind=0.09 plans=3 speed_cv=0.25 PASS
+gate-evolve 3/3 PASS
+
+$ target/release/tidepool-headless bench --param part_upkeep=0
+$ node scripts/bench-wasm.mjs --param part_upkeep=0
+bench creatures=1587 median_tps=2567 floor=2400 PASS
+bench-wasm creatures=1587 median_tps=2385 floor=2400 FAIL
+
+$ target/release/tidepool-headless gate-evolve --seeds 1,5,8 --ticks 144000 --param part_upkeep=0
+seed=1 creatures=2093 creatures_noscent=2052 creatures_noeye=1376 len=8.9 len_sd=1.28 parts=7.4 chemo=0.20 chemo_blind=0.00 eye=0.29 eye_blind=0.02 plans=3 speed_cv=0.25 PASS
+seed=5 creatures=1866 creatures_noscent=2050 creatures_noeye=1430 len=10.0 len_sd=1.51 parts=7.7 chemo=0.17 chemo_blind=0.00 eye=0.29 eye_blind=0.02 plans=4 speed_cv=0.26 PASS
+seed=8 creatures=1541 creatures_noscent=1627 creatures_noeye=1074 len=10.2 len_sd=1.12 parts=6.0 chemo=0.18 chemo_blind=0.00 eye=0.27 eye_blind=0.03 plans=5 speed_cv=0.26 PASS
+gate-evolve 3/3 PASS
+```
+
+The first attempt at these commands ran nothing: the shell passed `--param part_upkeep=0` as one
+word and every step exited 2. The rows above are the second attempt.
+
+### Verdict: rejected as it stands. The senses pass and the WASM floor fails
+
+| Hypothesis | Result |
+|---|---|
+| 1. `gate-health` 3 of 3 | Held. `creatures` 1,613, 1,407, 1,362 against 1,321, 1,274, 1,166 |
+| 2. Scent gap at tick 36,000, 3 of 3 | Held. 0.27, 0.19, 0.29. At the default: 0.079, 0.14, 0.27 |
+| 3. Both gaps at tick 144,000 on seeds 1, 5, 8 | Held. Scent 0.20, 0.17, 0.18. Eye 0.27, 0.27, 0.24 |
+| 4. Both benches over 2,400 | **Failed.** Native 2,567. WASM 2,385 at 1,587 creatures |
+
+- **Evolution uses both senses here, at both ticks, on every seed read.** That is the claim the gaps
+  support. Seeds 2, 3, 4, 6, 7, 9, 10 were not read at tick 144,000.
+- **The eye gap at tick 36,000 is thin on seed 1:** 0.11 against 0.10. The blind world keeps more of
+  the eye than before (`eye_blind` 0.09 to 0.11, against 0.04 to 0.05), as the risk of hypothesis 2
+  said it could.
+- **The world is too full for the floor.** 260 more creatures at tick 12,000 cost 620 ticks per
+  second in WASM.
+- **A default of 0 is also a dead switch.** It would mean the rule "a part has upkeep" is gone, and
+  that is the owner's to decide.
+
+## Part 3: trial 12, `part_upkeep` 0.0002 to 0.0001
+
+The last trial of the 12 allowed. One change, and the parameter stays live.
+
+Hypothesis, written before the runs. The numbers are straight lines between the default and trial 11.
+
+1. `gate-health` passes 3 of 3, with `creatures` near 1,470 on seed 1.
+2. The WASM bench reads 2,600 to 2,750 and passes.
+3. `gate-evolve` at tick 36,000 passes 3 of 3, with the scent gap of seed 1 near 0.17.
+4. `gate-evolve` at tick 144,000 on seeds 1, 5, 8: this is the open one. The default reads `chemo`
+   0.13, 0.04, 0.02 and trial 11 reads 0.20, 0.17, 0.18. Half-way is 0.17, 0.11, 0.10. I expect
+   seed 1 to pass and do not know for seeds 5 and 8. If either fails, half the upkeep is not enough.
