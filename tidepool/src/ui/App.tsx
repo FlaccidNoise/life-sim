@@ -2,7 +2,19 @@
 
 import type { Heir } from '../protocol';
 import { DeathOverlay } from './DeathOverlay';
-import { benchText, brainDriving, death, errorText, hint, mode, ready, stats } from './state';
+import {
+  benchText,
+  brainDriving,
+  death,
+  errorText,
+  hint,
+  lineageAlive,
+  mode,
+  ready,
+  starving,
+  stats,
+  toast,
+} from './state';
 
 function Readout() {
   const s = stats.value;
@@ -13,8 +25,9 @@ function Readout() {
   );
 }
 
-// One line near the foot of the screen. A passing hint comes first, then the line for the mode. The
-// line that asks the player to move says how under it.
+// One line near the foot of the screen. A passing hint comes first (the first one a possession
+// shows), then the line for the mode: in Play the instincts line, then the starving line. The line
+// that asks the player to move says how under it.
 function Hint(props: { touch: boolean }) {
   if (death.value) return null;
   const instincts = hint.value === null && mode.value === 'play' && brainDriving.value;
@@ -24,7 +37,9 @@ function Hint(props: { touch: boolean }) {
       ? 'Click any creature to become it.'
       : instincts
         ? 'Your instincts are steering. Move to take over.'
-        : null);
+        : starving.value
+          ? 'You are starving. Find green.'
+          : null);
   return text === null ? null : (
     <p class="hint" role="status">
       {text}
@@ -36,6 +51,23 @@ function Hint(props: { touch: boolean }) {
         </small>
       )}
     </p>
+  );
+}
+
+// The descendant count, top left, under the debug readout when there is one. The line counts the
+// player's own body in `lineageAlive`, so it shows one less. The toast sits above the hint.
+function Line(props: { debug: boolean }) {
+  return (
+    <>
+      <p class="bench" style={{ top: props.debug ? '100px' : '12px', bottom: 'auto' }}>
+        Descendants alive: {Math.max(lineageAlive.value - 1, 0)}
+      </p>
+      {toast.value !== null && !death.value && (
+        <p class="hint" role="status" style={{ bottom: 'calc(12% + 5rem)' }}>
+          {toast.value}
+        </p>
+      )}
+    </>
   );
 }
 
@@ -65,6 +97,7 @@ export function App(props: {
       {props.debug && <Readout />}
       {benchText.value !== null && <p class="bench">{benchText.value}</p>}
       <Hint touch={props.touch} />
+      {mode.value === 'play' && <Line debug={props.debug} />}
       {mode.value === 'play' && (
         <button type="button" class="leave" onClick={props.onLeave}>
           Leave <kbd>Esc</kbd>

@@ -3,6 +3,9 @@
 import { h, render } from 'preact';
 import {
   BENCH_SETTLE_TICKS,
+  C_ENERGY,
+  C_SLOT,
+  CREATURE_STRIDE,
   TICK_HZ,
   viewFrame,
   type FrameView,
@@ -21,9 +24,13 @@ import {
   focusHeir,
   heirGone,
   hint,
+  lineageAlive,
   mode,
   ready,
+  starving,
   stats,
+  toast,
+  buds,
 } from '../ui/state';
 import {
   PLAY_SCALE,
@@ -62,6 +69,9 @@ const WHEEL_ZOOM = 0.0015; // the zoom exponent per wheel pixel
 const PINCH_WHEEL_ZOOM = 0.01; // a trackpad pinch is a wheel event with ctrlKey and small steps
 const PICK_RADIUS = 24; // CSS pixels around a click in which a creature is picked
 const HINT_MS = 1500;
+const FIRST_HINT_MS = 6000; // how long "Green is food" shows after a possession
+const TOAST_MS = 3000;
+const STARVING_BELOW = 0.25; // of a full store
 const LATENCY_SAMPLES = 20;
 
 interface PointerHandlers {
@@ -151,6 +161,15 @@ function bindPointer(canvas: HTMLCanvasElement, on: PointerHandlers): void {
     },
     { passive: false },
   );
+}
+
+// The energy of the creature in `slot`, or null when the frame does not hold it.
+function energyOf(frame: FrameView, slot: number): number | null {
+  for (let i = 0; i < frame.creatureCount; i++) {
+    const r = frame.creatureBase + i * CREATURE_STRIDE;
+    if (frame.u32[r + C_SLOT] === slot) return frame.f32[r + C_ENERGY] ?? 0;
+  }
+  return null;
 }
 
 function start(): void {
@@ -315,6 +334,9 @@ function start(): void {
   const watch = (): void => {
     mode.value = 'watch';
     possessedUid = 0;
+    hint.value = null;
+    toast.value = null;
+    starving.value = false;
     forget();
   };
   // The Escape key and the Leave button.
@@ -324,6 +346,8 @@ function start(): void {
     watch();
   };
   let hintTimer: ReturnType<typeof setTimeout> | undefined;
+  let toastTimer: ReturnType<typeof setTimeout> | undefined;
+  let lastBuds = 0;
   const flash = (text: string, ms: number): void => {
     hint.value = text;
     clearTimeout(hintTimer);
@@ -409,6 +433,18 @@ function start(): void {
         if (old) send({ type: 'recycle', buffer: old.buffer }, [old.buffer]);
         cur = next;
         brainDriving.value = cur.brainDriving;
+        lineageAlive.value = cur.lineageAlive;
+        buds.value = cur.buds;
+        if (cur.buds > lastBuds && mode.peek() === 'play') {
+          toast.value = 'You budded. That one can carry your line on.';
+          clearTimeout(toastTimer);
+          toastTimer = setTimeout(() => (toast.value = null), TOAST_MS);
+        }
+        lastBuds = cur.buds;
+        if (mode.peek() === 'play') {
+          const energy = energyOf(cur, cur.possessedSlot);
+          if (energy !== null) starving.value = energy < STARVING_BELOW;
+        }
         break;
       }
       case 'possessed': {
@@ -419,7 +455,9 @@ function start(): void {
           possessedUid = msg.uid;
           forget();
           playScale = PLAY_SCALE;
-          hint.value = null;
+          starving.value = false;
+          toast.value = null;
+          flash('Green is food. Fill your ring and you will bud.', FIRST_HINT_MS);
           mode.value = 'play';
           closeDeath();
         } else if (empty === 'heir gone') {
@@ -433,7 +471,6 @@ function start(): void {
         // The worker paused the world. It stays paused until a `possess` or a `speed`.
         heirPick = false;
         watch();
-        hint.value = null;
         closeDeath();
         death.value = { cause: msg.cause, heirs: msg.heirs };
         break;
