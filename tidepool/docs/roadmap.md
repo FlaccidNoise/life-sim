@@ -65,8 +65,9 @@ stays alive at 12,000 ticks on 3 seeds.
 Looks and function become one thing.
 
 - The variable-length part list, history ids, and the add, remove, and duplicate mutations.
-- Life-history genes: maturity age, old age, brood size against egg size. They are world parameters in
-  M1.
+- Life-history genes: old age and egg size. A body is mature when it is full-grown, and the size of
+  a brood follows the egg and the parent's reserve: neither is a gene (`decisions/INDEX.md`,
+  2026-10-11). They are world parameters in M1.
 - Part costs: build energy, upkeep, mass.
 - Eye and Fin. The view cone: the player sees what the eyes see.
 - The genome-driven creature renderer: membrane, visible parts, motion.

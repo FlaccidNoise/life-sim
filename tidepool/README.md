@@ -7,7 +7,8 @@ you. You can leave your body at any time and watch or change the whole simulatio
 
 It is a ground-up rebuild of the simulation in the repo root.
 
-**Status:** M0 (foundation) and M1 (first swim) are built. What remains of M1 is the owner's play check.
+**Status:** M0 (foundation) and M1 (first swim) are built. M2 (Bodies) is built and not yet at its
+exit: `AGENTS.md` has the state.
 Run `make dev` to see it, `make check` to test it, and `make gates` to measure it.
 
 | Document | What it holds |

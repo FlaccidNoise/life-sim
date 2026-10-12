@@ -45,7 +45,8 @@ Run from `tidepool/`. If `cargo` is not found, run `. "$HOME/.cargo/env"`.
   `hypot`, `cbrt`, and `mul_add`. They differ between native and WASM and break the determinism test.
   Use `sim::math`. `sqrt`, `abs`, and rounding are allowed. Clippy rejects the banned calls
   (`clippy.toml`). A test file under `crates/sim/tests/` runs native only and can start with
-  `#![allow(clippy::disallowed_methods)]`.
+  `#![allow(clippy::disallowed_methods)]`. A `#[cfg(test)]` module in `crates/sim/src` can carry the
+  same `allow` on the one function that needs it.
 - **A field that is not in `save` and `load` is a bug.** The state hash is the CRC of the saved bytes.
 - **A number that needs tuning goes in `params.rs`.** Rule code has no magic numbers.
 - **Tune at 12,000 ticks on 3 seeds, one run at a time, against a baseline.** Shorter runs were wrong in

@@ -26,6 +26,29 @@ and `make gates` fails on it.**
 The file is in the order of the work. The first stage is Part 1 to Part 3. The second stage starts
 at "Second stage".
 
+## Corrections after the audit
+
+The audit of 2026-10-12 (`m2-audit.md`, section 4) ran 12 numbers of this file again and each
+matched. It found claims below that are worded more strongly than their evidence. The text below is
+left as it was written. Read it with these corrections.
+
+| Where | The text says | What the evidence supports |
+|---|---|---|
+| Result, trial 6, and "What is still wrong", point 4 | Evolution holds the mouth of a newborn | One trial of four shows it level (trial 6). It falls in trials 7 and 9, and trial 8 reads it higher at the same brain cost. All four readings were from a census outside the repo. It is a guess that fits one trial |
+| Trial 5 | Evolution shrinks the mouth to about 19 and stops | One tick in three worlds. Later rows of this file show it still falling |
+| Trial 8, and the Result | The body holds its size | The length holds. The area does not: it loses 31% to 36% by tick 144,000, by the width |
+| The long reading | The body levels off, on 3 of 3 seeds | Shown for seed 1 only. The area of seeds 2 and 3 still falls at tick 144,000. On seed 8 `len` reads 19.2 |
+| The long reading | The world grows by 26% to 44% and then holds | "Holds" is shown for seed 1. Seed 3 gains 10% in its last 36,000 ticks |
+| Trial 9 | The hold of trial 8 needs the brain cost | The trial changed two things. The audit ran the brain upkeep alone and the claim holds there: `len` 8.2, 7.6, 8.1 |
+| "What is still wrong", point 1 | Evolution does not keep the chemoreceptor in this world | Too flat for tick 36,000, where 7 of 10 seeds hold 0.14 to 0.28. At tick 144,000 it is lost on 6 of 10 seeds |
+| Trial 1 | "This is the arithmetic of rule S2 holding" | The measurement stands. The reason is withdrawn later in this file |
+| Part 2 | A plant dies 5 to 7 times as often | The ratios are 4.6, 6.9, and 6.1 |
+| Part 1, the tests table | `probe-heirs --pick 150 --param lifespan=600` | The minimum of `lifespan` is 1,200 since commit 34bbd77. The command now exits 2 |
+
+The audit also read what this file did not: the accepted set at tick 144,000 on 10 seeds. The
+chemoreceptor is lost on 6 of 10, seed 8 loses its eyes too, and the flagellum falls to between a
+third and a half of a founder's. The census of this file is now `probe-census` (`gates.md`, "Probes").
+
 ## Protocol
 
 - A **reading** is one run of a command on the defaults. It has no hypothesis and it decides nothing.
