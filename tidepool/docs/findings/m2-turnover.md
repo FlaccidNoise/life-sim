@@ -286,3 +286,112 @@ Exit codes: 0 and 1.
   144,000. A count of seeds that changes by 1 or 2 is inside that noise. The mean of `chemo` over the
   10 seeds is about 0.08 at the default and 0.12 here.
 - **The tail and the speed do not move.** The upkeep of a part is not why every world gets slower.
+
+## Part 4: trial 11 on all 10 seeds. A reading, not a trial
+
+Seeds 1, 5, 8 of the census are in Part 1 (control 1). These are the other seven, with every row,
+because the shape over time matters here.
+
+```
+$ target/release/tidepool-headless probe-census --seeds 2,3,4,6,7,9,10 --ticks 144000 --every 36000 --param part_upkeep=0
+seed=2 tick=36000 creatures=1549 plants=2076 juv=0.37 len=11.6 wid=0.51 egg=0.66 old=4011 area=69.2 flagellum=0.51 cilia=0.43 filter=0.73 chemo=0.23 fin=0.00 eye=0.22 parts=5.0 senseless=0.00 speed=1.13 turn=0.116 eaten=156.67 reserve01=0.30
+seed=2 tick=72000 creatures=1616 plants=2076 juv=0.38 len=10.5 wid=0.44 egg=0.67 old=3842 area=48.4 flagellum=0.40 cilia=0.67 filter=0.79 chemo=0.22 fin=0.01 eye=0.23 parts=5.6 senseless=0.00 speed=0.92 turn=0.147 eaten=152.47 reserve01=0.27
+seed=2 tick=108000 creatures=1688 plants=2076 juv=0.37 len=10.9 wid=0.33 egg=0.67 old=3522 area=39.8 flagellum=0.24 cilia=0.74 filter=0.90 chemo=0.23 fin=0.00 eye=0.23 parts=5.9 senseless=0.00 speed=0.77 turn=0.136 eaten=146.50 reserve01=0.24
+seed=2 tick=144000 creatures=1654 plants=2076 juv=0.36 len=11.4 wid=0.33 egg=0.66 old=3439 area=43.3 flagellum=0.26 cilia=0.76 filter=0.89 chemo=0.20 fin=0.01 eye=0.23 parts=5.8 senseless=0.00 speed=0.80 turn=0.137 eaten=144.44 reserve01=0.21
+seed=3 tick=36000 creatures=1540 plants=1965 juv=0.41 len=12.1 wid=0.44 egg=0.65 old=4401 area=65.2 flagellum=0.51 cilia=0.39 filter=0.84 chemo=0.37 fin=0.01 eye=0.24 parts=5.7 senseless=0.00 speed=1.01 turn=0.097 eaten=155.93 reserve01=0.30
+seed=3 tick=72000 creatures=1652 plants=1965 juv=0.40 len=10.4 wid=0.39 egg=0.65 old=3659 area=43.1 flagellum=0.40 cilia=0.62 filter=1.09 chemo=0.22 fin=0.01 eye=0.24 parts=6.8 senseless=0.00 speed=0.87 turn=0.130 eaten=148.48 reserve01=0.25
+seed=3 tick=108000 creatures=1789 plants=1965 juv=0.40 len=9.9 wid=0.38 egg=0.66 old=3296 area=36.1 flagellum=0.39 cilia=0.65 filter=1.08 chemo=0.22 fin=0.02 eye=0.27 parts=7.2 senseless=0.00 speed=0.84 turn=0.142 eaten=145.00 reserve01=0.23
+seed=3 tick=144000 creatures=1735 plants=1965 juv=0.39 len=9.8 wid=0.38 egg=0.67 old=3131 area=36.5 flagellum=0.41 cilia=0.56 filter=1.09 chemo=0.21 fin=0.02 eye=0.27 parts=7.3 senseless=0.00 speed=0.90 turn=0.133 eaten=144.38 reserve01=0.23
+seed=4 tick=36000 creatures=1314 plants=1764 juv=0.37 len=12.0 wid=0.49 egg=0.67 old=4217 area=72.1 flagellum=0.55 cilia=0.39 filter=0.75 chemo=0.35 fin=0.01 eye=0.22 parts=5.4 senseless=0.00 speed=1.11 turn=0.105 eaten=143.43 reserve01=0.32
+seed=4 tick=72000 creatures=1480 plants=1764 juv=0.39 len=10.6 wid=0.49 egg=0.66 old=4026 area=56.0 flagellum=0.55 cilia=0.46 filter=0.76 chemo=0.27 fin=0.04 eye=0.25 parts=6.2 senseless=0.00 speed=0.96 turn=0.130 eaten=139.42 reserve01=0.27
+seed=4 tick=108000 creatures=1574 plants=1764 juv=0.39 len=10.0 wid=0.45 egg=0.66 old=3737 area=46.0 flagellum=0.55 cilia=0.48 filter=0.83 chemo=0.22 fin=0.06 eye=0.24 parts=6.3 senseless=0.00 speed=0.89 turn=0.141 eaten=135.27 reserve01=0.24
+seed=4 tick=144000 creatures=1411 plants=1764 juv=0.36 len=10.1 wid=0.42 egg=0.66 old=3321 area=42.7 flagellum=0.42 cilia=0.52 filter=0.93 chemo=0.21 fin=0.05 eye=0.25 parts=6.4 senseless=0.00 speed=0.86 turn=0.131 eaten=133.93 reserve01=0.24
+seed=6 tick=36000 creatures=1376 plants=1851 juv=0.37 len=12.1 wid=0.48 egg=0.67 old=4111 area=70.5 flagellum=0.46 cilia=0.45 filter=0.74 chemo=0.29 fin=0.00 eye=0.20 parts=5.4 senseless=0.02 speed=1.03 turn=0.107 eaten=146.63 reserve01=0.32
+seed=6 tick=72000 creatures=1486 plants=1851 juv=0.36 len=11.4 wid=0.42 egg=0.66 old=3610 area=55.2 flagellum=0.45 cilia=0.51 filter=0.88 chemo=0.15 fin=0.00 eye=0.24 parts=5.6 senseless=0.00 speed=0.88 turn=0.122 eaten=142.21 reserve01=0.25
+seed=6 tick=108000 creatures=1621 plants=1851 juv=0.40 len=10.0 wid=0.43 egg=0.65 old=3303 area=41.8 flagellum=0.45 cilia=0.50 filter=1.00 chemo=0.20 fin=0.01 eye=0.29 parts=6.2 senseless=0.00 speed=0.85 turn=0.132 eaten=138.67 reserve01=0.23
+seed=6 tick=144000 creatures=1512 plants=1851 juv=0.37 len=9.9 wid=0.42 egg=0.66 old=3207 area=40.4 flagellum=0.39 cilia=0.55 filter=0.98 chemo=0.21 fin=0.00 eye=0.30 parts=6.4 senseless=0.00 speed=0.85 turn=0.131 eaten=136.30 reserve01=0.23
+seed=7 tick=36000 creatures=1777 plants=2058 juv=0.38 len=10.4 wid=0.41 egg=0.68 old=3203 area=47.0 flagellum=0.47 cilia=0.55 filter=1.09 chemo=0.24 fin=0.00 eye=0.23 parts=5.9 senseless=0.00 speed=1.05 turn=0.130 eaten=166.58 reserve01=0.26
+seed=7 tick=72000 creatures=1807 plants=2058 juv=0.38 len=9.8 wid=0.38 egg=0.67 old=3197 area=37.5 flagellum=0.39 cilia=0.63 filter=1.16 chemo=0.22 fin=0.00 eye=0.28 parts=6.4 senseless=0.00 speed=0.83 turn=0.137 eaten=159.40 reserve01=0.24
+seed=7 tick=108000 creatures=1825 plants=2058 juv=0.40 len=10.1 wid=0.34 egg=0.67 old=3004 area=34.7 flagellum=0.35 cilia=0.65 filter=1.26 chemo=0.22 fin=0.01 eye=0.25 parts=6.7 senseless=0.00 speed=0.78 turn=0.130 eaten=156.17 reserve01=0.22
+seed=7 tick=144000 creatures=1836 plants=2058 juv=0.38 len=10.2 wid=0.34 egg=0.67 old=3232 area=35.6 flagellum=0.38 cilia=0.55 filter=1.13 chemo=0.23 fin=0.01 eye=0.25 parts=6.6 senseless=0.00 speed=0.79 turn=0.123 eaten=155.58 reserve01=0.22
+seed=9 tick=36000 creatures=1495 plants=1917 juv=0.36 len=12.1 wid=0.49 egg=0.68 old=4376 area=71.8 flagellum=0.55 cilia=0.44 filter=0.77 chemo=0.34 fin=0.00 eye=0.18 parts=5.2 senseless=0.00 speed=1.20 turn=0.110 eaten=163.23 reserve01=0.28
+seed=9 tick=72000 creatures=1700 plants=1917 juv=0.40 len=11.2 wid=0.40 egg=0.66 old=3456 area=50.5 flagellum=0.52 cilia=0.58 filter=0.92 chemo=0.18 fin=0.01 eye=0.24 parts=5.3 senseless=0.00 speed=1.06 turn=0.133 eaten=158.32 reserve01=0.24
+seed=9 tick=108000 creatures=1765 plants=1917 juv=0.38 len=10.1 wid=0.40 egg=0.67 old=3236 area=40.8 flagellum=0.43 cilia=0.58 filter=0.98 chemo=0.17 fin=0.02 eye=0.24 parts=6.0 senseless=0.00 speed=0.94 turn=0.138 eaten=152.31 reserve01=0.23
+seed=9 tick=144000 creatures=1741 plants=1917 juv=0.40 len=9.7 wid=0.39 egg=0.67 old=3207 area=37.5 flagellum=0.36 cilia=0.59 filter=1.09 chemo=0.23 fin=0.02 eye=0.27 parts=7.0 senseless=0.00 speed=0.83 turn=0.133 eaten=149.37 reserve01=0.22
+seed=10 tick=36000 creatures=1516 plants=1884 juv=0.38 len=12.5 wid=0.43 egg=0.68 old=4112 area=67.1 flagellum=0.52 cilia=0.40 filter=0.86 chemo=0.31 fin=0.00 eye=0.18 parts=5.4 senseless=0.00 speed=1.10 turn=0.098 eaten=158.28 reserve01=0.27
+seed=10 tick=72000 creatures=1744 plants=1884 juv=0.39 len=11.1 wid=0.36 egg=0.66 old=3967 area=44.3 flagellum=0.50 cilia=0.44 filter=1.09 chemo=0.19 fin=0.01 eye=0.22 parts=6.5 senseless=0.00 speed=0.92 turn=0.110 eaten=150.29 reserve01=0.22
+seed=10 tick=108000 creatures=1598 plants=1884 juv=0.38 len=11.0 wid=0.34 egg=0.66 old=3501 area=42.2 flagellum=0.50 cilia=0.44 filter=0.97 chemo=0.23 fin=0.03 eye=0.24 parts=7.0 senseless=0.00 speed=0.92 turn=0.114 eaten=143.72 reserve01=0.21
+seed=10 tick=144000 creatures=1641 plants=1884 juv=0.36 len=10.7 wid=0.37 egg=0.67 old=3364 area=42.1 flagellum=0.55 cilia=0.44 filter=1.02 chemo=0.18 fin=0.02 eye=0.26 parts=7.1 senseless=0.00 speed=0.98 turn=0.119 eaten=142.89 reserve01=0.20
+
+$ target/release/tidepool-headless gate-evolve --seeds 4,5,6,7,8,9,10 --param part_upkeep=0
+seed=4 creatures=1314 creatures_noscent=1333 creatures_noeye=1435 len=12.0 len_sd=1.72 parts=5.4 chemo=0.35 chemo_blind=0.12 eye=0.22 eye_blind=0.09 plans=5 speed_cv=0.25 PASS
+seed=5 creatures=1660 creatures_noscent=1779 creatures_noeye=1715 len=11.7 len_sd=1.58 parts=5.9 chemo=0.35 chemo_blind=0.02 eye=0.23 eye_blind=0.09 plans=6 speed_cv=0.23 PASS
+seed=6 creatures=1376 creatures_noscent=1418 creatures_noeye=1406 len=12.1 len_sd=1.52 parts=5.4 chemo=0.29 chemo_blind=0.18 eye=0.20 eye_blind=0.09 plans=5 speed_cv=0.31 PASS
+seed=7 creatures=1777 creatures_noscent=1650 creatures_noeye=1540 len=10.4 len_sd=2.01 parts=5.9 chemo=0.24 chemo_blind=0.11 eye=0.23 eye_blind=0.12 plans=2 speed_cv=0.22 PASS
+seed=8 creatures=1399 creatures_noscent=1501 creatures_noeye=1434 len=13.0 len_sd=1.38 parts=5.0 chemo=0.22 chemo_blind=0.02 eye=0.19 eye_blind=0.09 plans=3 speed_cv=0.26 PASS
+seed=9 creatures=1495 creatures_noscent=1490 creatures_noeye=1441 len=12.1 len_sd=1.57 parts=5.2 chemo=0.34 chemo_blind=0.02 eye=0.18 eye_blind=0.07 plans=4 speed_cv=0.26 PASS
+seed=10 creatures=1516 creatures_noscent=1490 creatures_noeye=1386 len=12.5 len_sd=1.34 parts=5.4 chemo=0.31 chemo_blind=0.10 eye=0.18 eye_blind=0.12 plans=5 speed_cv=0.31 FAIL(eye_gap=0.064 < 0.1)
+gate-evolve 6/7 FAIL
+```
+
+Exit codes: 0 and 1.
+
+| Reading, seeds 1 to 10 | Default | Trial 12, half | Trial 11, none |
+|---|---|---|---|
+| `gate-evolve` at tick 36,000 | 5 of 10 | 6 of 10 | 9 of 10. Seed 10 fails the eye gap at 0.064 |
+| Scent gap at tick 36,000, at least 0.10 | 5 of 10 | 8 of 10 | 10 of 10. 0.11 to 0.33 |
+| Eye gap at tick 36,000, at least 0.10 | 10 of 10 | 8 of 10 | 9 of 10. Six of the nine read 0.10 to 0.12 |
+| `chemo` at tick 144,000 | 0.12 to 0.15 on 4, 0.02 to 0.07 on 6 | 0.12 to 0.19 on 6, 0.05 to 0.09 on 4 | 0.17 to 0.23 on 10 of 10 |
+| `eye` at tick 144,000 | 0.17 to 0.24 on 9, 0.03 on seed 8 | 0.18 to 0.29 | 0.23 to 0.30 |
+| `senseless` at tick 144,000 | 0.83 on seed 8 | 0.20 on seed 8 | 0.00 on 10 of 10 |
+| `flagellum` at tick 144,000 | 0.20 to 0.34 | 0.21 to 0.37 | 0.26 to 0.55 |
+| `speed` at tick 144,000 | 0.63 to 0.92 | 0.67 to 0.86 | 0.77 to 0.98 |
+| `area` at tick 144,000 | 47 to 77 on 9, 130 on seed 8 | 40 to 55 on 9, 78 on seed 8 | 32 to 45 |
+| `creatures` at tick 144,000 | 1,104 to 1,774 | 1,330 to 1,851 | 1,411 to 2,093 |
+
+`chemo` at ticks 36,000, 72,000, 108,000, 144,000:
+
+| Seed | Default | Trial 11 |
+|---|---|---|
+| 1 | 0.14, 0.14, 0.12, 0.13 | 0.31, 0.23, 0.23, 0.20 |
+| 2 | 0.15, 0.20, 0.13, 0.13 | 0.23, 0.22, 0.23, 0.20 |
+| 3 | 0.28, 0.17, 0.19, 0.15 | 0.37, 0.22, 0.22, 0.21 |
+| 4 | 0.17, 0.07, 0.04, 0.03 | 0.35, 0.27, 0.22, 0.21 |
+| 5 | 0.08, 0.02, 0.04, 0.04 | 0.35, 0.21, 0.14, 0.17 |
+| 6 | 0.20, 0.20, 0.10, 0.07 | 0.29, 0.15, 0.20, 0.21 |
+| 7 | 0.07, 0.04, 0.03, 0.02 | 0.24, 0.22, 0.22, 0.23 |
+| 8 | 0.03, 0.03, 0.02, 0.02 | 0.22, 0.19, 0.22, 0.18 |
+| 9 | 0.15, 0.09, 0.02, 0.02 | 0.34, 0.18, 0.17, 0.23 |
+| 10 | 0.18, 0.16, 0.14, 0.12 | 0.31, 0.19, 0.23, 0.18 |
+
+`speed` at the same ticks, trial 11: seed 1 reads 1.09, 0.83, 0.81, 0.81. Seed 2: 1.13, 0.92, 0.77,
+0.80. Seed 3: 1.01, 0.87, 0.84, 0.90. Seed 4: 1.11, 0.96, 0.89, 0.86. Seed 5: 1.18, 1.01, 0.89, 0.77.
+Seed 6: 1.03, 0.88, 0.85, 0.85. Seed 7: 1.05, 0.83, 0.78, 0.79. Seed 8: 1.29, 0.96, 0.88, 0.94. Seed
+9: 1.20, 1.06, 0.94, 0.83. Seed 10: 1.10, 0.92, 0.92, 0.98.
+
+- **With no part upkeep the scent sense settles near 0.2 on 10 of 10 seeds and stays there from tick
+  72,000.** A founder has 0.5. At the default it runs down to 0.02 on five seeds. This is not inside
+  the noise of one run per seed: ten seeds land in 0.17 to 0.23.
+- **"Evolution uses it" is shown at tick 36,000 on 10 of 10 seeds (scent gap) and at tick 144,000 on
+  seeds 1, 5, 8.** The other seven seeds have no gap reading at tick 144,000.
+- **The speed settles on 8 of 10 seeds, near 0.8 to 1.0.** Seeds 5 and 9 are still falling at tick
+  144,000. So the fall of the speed looks like a level that evolution finds, and not a run to zero.
+  Whether 0.8 looks alive on the page is not measured.
+- **The eye gap is thin at tick 36,000.** A blind world keeps a free eye (`eye_blind` 0.07 to 0.12),
+  so the gap measures less when a part is cheap.
+
+## Result
+
+**The upkeep of a part is what removes the senses in this world. Food that never moves is not shown
+to be the cause.** Removing the upkeep holds the scent sense and the eyes on 10 of 10 seeds to tick
+144,000. Halving it does not.
+
+Trial 11 cannot be the default as it stands:
+
+1. The WASM bench fails: 2,385 against 2,400 at 1,587 creatures. The world needs less food to hold
+   fewer bodies, and that is a trial past the 12 that the plan allows.
+2. A default of 0 is the rule "a part has upkeep" switched off. By "no dead flags" the parameter
+   would go, and a part would cost through its mass alone. Removing a rule is the owner's choice.
+3. The body is smaller: `area` 32 to 45, against 47 to 77.
+
+No turnover rule was built.
