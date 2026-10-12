@@ -181,3 +181,49 @@ Hypothesis, written before the runs. The numbers are straight lines between the 
 4. `gate-evolve` at tick 144,000 on seeds 1, 5, 8: this is the open one. The default reads `chemo`
    0.13, 0.04, 0.02 and trial 11 reads 0.20, 0.17, 0.18. Half-way is 0.17, 0.11, 0.10. I expect
    seed 1 to pass and do not know for seeds 5 and 8. If either fails, half the upkeep is not enough.
+
+### Rows
+
+```
+$ target/release/tidepool-headless gate-health --param part_upkeep=0.0001
+seed=1 creatures=1459 min_late=1316 plants=2229 births_late=2219 max_gen=16 mean_chemo=0.43 parked=0.00 first_bud=774 juv_starved=0.52 to_bud=0.33 PASS
+seed=2 creatures=1312 min_late=1244 plants=2076 births_late=1989 max_gen=16 mean_chemo=0.38 parked=0.00 first_bud=805 juv_starved=0.51 to_bud=0.33 PASS
+seed=3 creatures=1281 min_late=1226 plants=1965 births_late=2078 max_gen=15 mean_chemo=0.42 parked=0.00 first_bud=783 juv_starved=0.52 to_bud=0.32 PASS
+gate-health 3/3 PASS
+
+$ target/release/tidepool-headless bench --param part_upkeep=0.0001
+$ node scripts/bench-wasm.mjs --param part_upkeep=0.0001
+bench creatures=1416 median_tps=2918 floor=2400 PASS
+bench-wasm creatures=1417 median_tps=2730 floor=2400 PASS
+
+$ target/release/tidepool-headless gate-evolve --param part_upkeep=0.0001
+seed=1 creatures=1577 creatures_noscent=1745 creatures_noeye=1588 len=11.1 len_sd=2.23 parts=5.1 chemo=0.30 chemo_blind=0.01 eye=0.22 eye_blind=0.07 plans=4 speed_cv=0.27 PASS
+seed=2 creatures=1487 creatures_noscent=1441 creatures_noeye=1421 len=11.6 len_sd=1.86 parts=4.7 chemo=0.16 chemo_blind=0.03 eye=0.19 eye_blind=0.08 plans=3 speed_cv=0.31 PASS
+seed=3 creatures=1502 creatures_noscent=1338 creatures_noeye=1434 len=11.4 len_sd=1.33 parts=4.9 chemo=0.26 chemo_blind=0.04 eye=0.24 eye_blind=0.07 plans=2 speed_cv=0.28 PASS
+gate-evolve 3/3 PASS
+
+$ target/release/tidepool-headless gate-evolve --seeds 1,5,8 --ticks 144000 --param part_upkeep=0.0001
+seed=1 creatures=1839 creatures_noscent=1972 creatures_noeye=1361 len=9.6 len_sd=1.79 parts=6.4 chemo=0.14 chemo_blind=0.03 eye=0.28 eye_blind=0.02 plans=4 speed_cv=0.32 PASS
+seed=5 creatures=1768 creatures_noscent=1830 creatures_noeye=1291 len=9.7 len_sd=1.72 parts=6.0 chemo=0.09 chemo_blind=0.00 eye=0.27 eye_blind=0.02 plans=6 speed_cv=0.25 FAIL(chemo_gap=0.085 < 0.1)
+seed=8 creatures=1330 creatures_noscent=1654 creatures_noeye=1250 len=14.5 len_sd=4.55 parts=4.8 chemo=0.12 chemo_blind=0.01 eye=0.18 eye_blind=0.02 plans=5 speed_cv=0.37 PASS
+gate-evolve 2/3 FAIL
+```
+
+Exit codes: 0, 0, 0, 0, and 1 for the last command.
+
+### Verdict: every step of `make gates` passes. The long reading is 2 of 3, and thin
+
+| Hypothesis | Result |
+|---|---|
+| 1. `gate-health` 3 of 3, seed 1 near 1,470 | Held. 1,459, 1,312, 1,281 |
+| 2. WASM bench 2,600 to 2,750 | Held. 2,730 at 1,417 creatures. Native 2,918 |
+| 3. Scent gap at tick 36,000, 3 of 3, seed 1 near 0.17 | Held, and larger. 0.29, 0.13, 0.22. Eye gaps 0.15, 0.11, 0.17 |
+| 4. Both gaps at tick 144,000 on seeds 1, 5, 8 | **2 of 3.** Scent gaps 0.11, 0.085, 0.11. Eye gaps 0.26, 0.25, 0.16 |
+
+- **At half the upkeep no screen seed loses a sense, and the scent gap sits on the band.** Seed 8 keeps
+  `eye` 0.18 and `chemo` 0.12, against 0.03 and 0.02 at the default.
+- **The scent sense still shrinks with time.** Seed 1 reads `chemo` 0.30 at tick 36,000 and 0.14 at
+  tick 144,000. Nothing here says where it stops.
+- **Seed 8 at tick 144,000 has `len_sd` 4.55** and `len` 14.5. That spread is 2 to 4 times the other
+  rows. Not looked into.
+- **The 12 trials of the plan are used.** What comes next is the owner's choice.
