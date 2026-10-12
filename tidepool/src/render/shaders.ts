@@ -1,28 +1,68 @@
 // GLSL sources. Four programs: the depth gradient, the plants, the creatures, and their parts. Each
 // entity is one instanced quad, and its fragment shader draws the shape. Colours are premultiplied.
 
-import { KIND_CHEMO, KIND_EYE, KIND_FILTER, KIND_FIN, KIND_FLAGELLUM } from '../protocol';
+import { KIND_CHEMO, KIND_EYE, KIND_FILTER, KIND_FIN, KIND_FLAGELLUM, MAX_EYES } from '../protocol';
+
+// What the possessed body sees. The same test as `seen` in sight.ts: 1 in sight, 0.25 out of it.
+const SIGHT = `
+uniform vec4 u_sight; // the possessed body: x, y, the radius of its near circle, its cones. -1 cones: Watch
+uniform vec4 u_cones[${MAX_EYES}]; // the direction as a unit vector, the cosine of the half angle, the range
+
+float seen(vec2 at) {
+  if (u_sight.w < 0.0) return 1.0;
+  vec2 p = at - u_sight.xy;
+  float r = length(p);
+  // The distance out of what is seen. It is 0 or less in sight.
+  float d = r - u_sight.z;
+  for (int k = 0; k < int(u_sight.w); k++) {
+    vec4 cone = u_cones[k];
+    float sin_half = sqrt(1.0 - cone.z * cone.z);
+    float along = dot(p, cone.xy);
+    float across = abs(p.x * cone.y - p.y * cone.x);
+    // The distance out of the side of the cone.
+    float edge = across * cone.z - along * sin_half;
+    // Behind the eye, the nearest point of the cone is its tip.
+    if (edge > 0.0 && along * cone.z + across * sin_half < 0.0) edge = r;
+    d = min(d, max(edge, r - cone.w));
+  }
+  return 1.0 - 0.75 * smoothstep(0.0, 2.0, d);
+}
+`;
+
+// For the fragment shader of an entity. Out of sight it is a dim grey shape.
+const DIM = `
+flat in float v_seen; // \`seen\` of the centre of the entity
+
+vec4 dim(vec4 c) {
+  vec3 grey = vec3(dot(c.rgb, vec3(0.3, 0.6, 0.1)));
+  return vec4(mix(grey, c.rgb, (v_seen - 0.25) / 0.75), c.a) * v_seen;
+}
+`;
 
 export const BACKGROUND_VERT = `#version 300 es
 layout(location = 0) in vec2 a_corner; // the unit quad, -1 to 1
-uniform vec3 u_depth; // camera y, half the view height in world units, world height
-out float v_depth; // 0 at the top of the world, 1 at the bottom
+uniform vec4 u_view; // camera x, camera y, clip units per world unit on x and on y
+out vec2 v_world;
 
 void main() {
   gl_Position = vec4(a_corner, 0.0, 1.0);
-  // Clip y grows upward and world y grows downward.
-  v_depth = (u_depth.x - a_corner.y * u_depth.y) / u_depth.z;
+  v_world = u_view.xy + a_corner / u_view.zw;
 }
 `;
 
 export const BACKGROUND_FRAG = `#version 300 es
 precision highp float;
-in float v_depth;
+in vec2 v_world;
+uniform float u_height; // of the world
 out vec4 o_color;
-
+${SIGHT}
 void main() {
-  vec3 rgb = mix(vec3(10.0, 42.0, 58.0), vec3(4.0, 18.0, 28.0), clamp(v_depth, 0.0, 1.0)) / 255.0;
-  o_color = vec4(rgb, 1.0);
+  // 0 at the top of the world, 1 at the bottom.
+  float depth = clamp(v_world.y / u_height, 0.0, 1.0);
+  vec3 rgb = mix(vec3(10.0, 42.0, 58.0), vec3(4.0, 18.0, 28.0), depth) / 255.0;
+  // In Play the water in sight is a little lighter, so the cones show.
+  float lit = u_sight.w < 0.0 ? 0.0 : (seen(v_world) - 0.25) / 0.75;
+  o_color = vec4(rgb * (1.0 + 0.4 * lit), 1.0);
 }
 `;
 
@@ -33,10 +73,12 @@ uniform vec4 u_view; // camera x, camera y, clip units per world unit on x and o
 uniform float u_px; // world units per device pixel
 out vec2 v_uv;
 out float v_reserve;
-
+flat out float v_seen;
+${SIGHT}
 void main() {
   v_uv = a_corner;
   v_reserve = a_plant.w;
+  v_seen = seen(a_plant.xy);
   // A far plant stays a visible dot.
   vec2 world = a_plant.xy + a_corner * max(a_plant.z, 1.5 * u_px);
   gl_Position = vec4((world - u_view.xy) * u_view.zw, 0.0, 1.0);
@@ -48,12 +90,12 @@ precision highp float;
 in vec2 v_uv;
 in float v_reserve;
 out vec4 o_color;
-
+${DIM}
 void main() {
   // A full plant is a bright blob. A grazed plant is thin and pale.
   float a = (1.0 - smoothstep(0.3, 1.0, length(v_uv))) * mix(0.2, 0.85, v_reserve);
   vec3 rgb = mix(vec3(0.5, 0.62, 0.5), vec3(0.3, 0.85, 0.35), v_reserve);
-  o_color = vec4(rgb * a, a);
+  o_color = dim(vec4(rgb * a, a));
 }
 `;
 
@@ -69,7 +111,7 @@ vec3 tint(float hue, float energy) {
 // What the creature and part fragment shaders draw with. Distances are in world units.
 const SHAPES = `
 uniform float u_px; // world units per device pixel
-
+${DIM}
 // 1 inside distance 0, with an edge one pixel soft.
 float fill(float d) {
   return 1.0 - smoothstep(-0.5 * u_px, 0.5 * u_px, d);
@@ -95,7 +137,8 @@ out vec2 v_p; // the body frame in world units: +x is forward
 flat out vec3 v_rgb;
 flat out vec4 v_body; // half length, half width, energy01, cilia size
 flat out vec3 v_marks; // 1 for the player's lineage, 1 for the possessed creature, the bud pulse
-${TINT}
+flat out float v_seen;
+${TINT}${SIGHT}
 void main() {
   float len = a_body.x;
   float wid = a_body.y;
@@ -109,6 +152,7 @@ void main() {
   v_body = vec4(0.5 * len, 0.5 * wid, a_body.z, a_life.x);
   int flags = int(a_body.w);
   v_marks = vec3(flags & 1, (flags >> 1) & 1, a_life.y);
+  v_seen = seen(a_pose.xy);
 }
 `;
 
@@ -163,7 +207,7 @@ void main() {
   vec2 at = vec2(cos(6.2831853 * u_bud_at), sin(6.2831853 * u_bud_at));
   float tick = line(at.x * v_p.y - at.y * v_p.x, 0.07 * hw) * step(0.0, dot(at, v_p));
   c = over(c, vec3(1.0), v_marks.y * tick * fill(abs(d - 0.7 * hw) - 0.3 * hw));
-  o_color = c;
+  o_color = dim(c);
 }
 `;
 
@@ -176,7 +220,8 @@ uniform float u_px; // world units per device pixel
 out vec2 v_p; // the part frame in sizes: the anchor is at 0, +x is out of the body, +y is back
 flat out vec3 v_rgb;
 flat out vec3 v_part; // kind, size in world units, phase
-${TINT}
+flat out float v_seen;
+${TINT}${SIGHT}
 void main() {
   float kind = abs(a_look.x);
   // A flagellum is long and thin. Every other kind fits a square round its anchor.
@@ -193,6 +238,7 @@ void main() {
   gl_Position = vec4((world - u_view.xy) * u_view.zw, 0.0, 1.0);
   v_rgb = tint(a_look.y, a_look.z);
   v_part = vec3(kind, a_place.w, a_look.w);
+  v_seen = seen(a_place.xy);
 }
 `;
 
@@ -260,6 +306,6 @@ void main() {
     c = over(c, vec3(0.9, 0.95, 1.0), 0.95 * fill((r - 1.0) * size));
     c = over(c, vec3(0.02, 0.04, 0.07), 0.95 * fill((r - 0.62) * size));
   }
-  o_color = c;
+  o_color = dim(c);
 }
 `;

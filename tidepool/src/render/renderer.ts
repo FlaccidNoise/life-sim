@@ -1,6 +1,6 @@
 // WebGL2 renderer: the depth gradient, then one instanced draw of every plant in a frame, then one of
-// every creature, placed between the last two frames, then one of their parts. It owns the GL
-// context of its canvas.
+// every creature, placed between the last two frames, then one of their parts. In Play each program
+// dims what the possessed body does not see. It owns the GL context of its canvas.
 
 import {
   C_ENERGY,
@@ -18,6 +18,7 @@ import {
   FLAG_BUDDED,
   FRAME_HEADER_WORDS,
   KIND_CILIA,
+  MAX_EYES,
   PART_WORDS,
   PLANT_STRIDE,
   WORLD_H,
@@ -25,6 +26,7 @@ import {
   type FrameView,
 } from '../protocol';
 import { PART_INSTANCE_FLOATS, PART_LOD_PX, buildParts } from './parts';
+import { sightOf } from './sight';
 import {
   BACKGROUND_FRAG,
   BACKGROUND_VERT,
@@ -142,18 +144,19 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
   gl.bindBuffer(gl.ARRAY_BUFFER, quad);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
 
-  const background = link(gl, BACKGROUND_VERT, BACKGROUND_FRAG);
-  const uDepth = gl.getUniformLocation(background, 'u_depth');
-  const backdrop = instancedQuad(gl, quad, [], 0);
   const layer = (vert: string, frag: string, sizes: number[], capacity: number) => {
     const program = link(gl, vert, frag);
     return {
       program,
       uView: gl.getUniformLocation(program, 'u_view'),
       uPx: gl.getUniformLocation(program, 'u_px'),
+      uSight: gl.getUniformLocation(program, 'u_sight'),
+      uCones: gl.getUniformLocation(program, 'u_cones'),
       ...instancedQuad(gl, quad, sizes, capacity),
     };
   };
+  const backdrop = layer(BACKGROUND_VERT, BACKGROUND_FRAG, [], 0);
+  const uHeight = gl.getUniformLocation(backdrop.program, 'u_height');
   const plants = layer(PLANT_VERT, PLANT_FRAG, [PLANT_STRIDE], MAX_PLANTS);
   const creatures = layer(CREATURE_VERT, CREATURE_FRAG, CREATURE_ATTRIBUTES, MAX_CREATURES);
   const uBeat = gl.getUniformLocation(creatures.program, 'u_beat');
@@ -178,10 +181,24 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
   let cssW = 1;
   let cssH = 1;
   let ratio = 1;
+  // The `u_sight` and `u_cones` of the frame being drawn.
+  const sightUniform = new Float32Array(4);
+  const coneUniform = new Float32Array(4 * MAX_EYES);
+
+  // Makes the program of a layer current, with the camera and the sight of the frame.
+  const aim = ({ program, uView, uPx, uSight, uCones, vao }: typeof plants, cam: Camera): void => {
+    gl.useProgram(program);
+    // Clip y grows upward and world y grows downward.
+    gl.uniform4f(uView, cam.x, cam.y, (2 * cam.scale) / cssW, (-2 * cam.scale) / cssH);
+    gl.uniform1f(uPx, 1 / (cam.scale * ratio));
+    gl.uniform4fv(uSight, sightUniform);
+    gl.uniform4fv(uCones, coneUniform);
+    gl.bindVertexArray(vao);
+  };
 
   // Uploads `count` instances of `floats` floats each, from `data` at `start`, and draws them.
   const drawLayer = (
-    { program, uView, uPx, vao, buffer }: typeof plants,
+    to: typeof plants,
     cam: Camera,
     data: Float32Array,
     start: number,
@@ -190,12 +207,8 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
   ): void => {
     // A length of 0 would upload the whole array.
     if (count === 0) return;
-    gl.useProgram(program);
-    // Clip y grows upward and world y grows downward.
-    gl.uniform4f(uView, cam.x, cam.y, (2 * cam.scale) / cssW, (-2 * cam.scale) / cssH);
-    gl.uniform1f(uPx, 1 / (cam.scale * ratio));
-    gl.bindVertexArray(vao);
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    aim(to, cam);
+    gl.bindBuffer(gl.ARRAY_BUFFER, to.buffer);
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, data, start, count * floats);
     gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, count);
   };
@@ -234,6 +247,7 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
         u32: posedU32,
         creatureCount: count,
       };
+      let lag = 0; // how far the possessed body is drawn behind its heading in `cur`, radians
       for (let i = 0; i < count; i++) {
         const r = base + i * CREATURE_STRIDE;
         let x = f32[r + C_X] ?? 0;
@@ -262,6 +276,7 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
         posedF32[r + C_X] = x;
         posedF32[r + C_Y] = y;
         posedF32[r + C_HEADING] = heading;
+        if (slot === cur.possessedSlot) lag = heading - (f32[r + C_HEADING] ?? 0);
 
         // A body too small on screen for its parts has no cilia either.
         let cilia = 0;
@@ -289,10 +304,16 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
       }
       const partCount = buildParts(posed, cam.scale, timeSeconds, partInstances);
 
+      // The cones of the header are those of `cur`. They turn with the body as it is drawn.
+      const sight = sightOf(posed);
+      sightUniform.set([sight?.x ?? 0, sight?.y ?? 0, sight?.near ?? 0, sight?.cones.length ?? -1]);
+      sight?.cones.forEach(({ dir, cosHalf, range }, k) =>
+        coneUniform.set([Math.cos(dir + lag), Math.sin(dir + lag), cosHalf, range], 4 * k),
+      );
+
       // The gradient covers the canvas, so nothing is cleared.
-      gl.useProgram(background);
-      gl.uniform3f(uDepth, cam.y, cssH / (2 * cam.scale), WORLD_H);
-      gl.bindVertexArray(backdrop.vao);
+      aim(backdrop, cam);
+      gl.uniform1f(uHeight, WORLD_H);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
       const plantCount = Math.min(cur.plantCount, MAX_PLANTS);
@@ -309,14 +330,12 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
     },
 
     dispose() {
-      for (const { vao, buffer } of [backdrop, plants, creatures, parts]) {
+      for (const { vao, buffer, program } of [backdrop, plants, creatures, parts]) {
         gl.deleteVertexArray(vao);
         gl.deleteBuffer(buffer);
-      }
-      gl.deleteBuffer(quad);
-      for (const program of [background, plants.program, creatures.program, parts.program]) {
         gl.deleteProgram(program);
       }
+      gl.deleteBuffer(quad);
     },
   };
 }
