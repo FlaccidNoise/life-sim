@@ -26,8 +26,8 @@ function Readout() {
 }
 
 // One line near the foot of the screen. A passing hint comes first (the first one a possession
-// shows), then the line for the mode: in Play the instincts line, then the starving line. The line
-// that asks the player to move says how under it.
+// shows), then the line for the mode: in Play the starving line, then the instincts line. While the
+// brain drives, how to move is under the line, whichever of the two it is.
 function Hint(props: { touch: boolean }) {
   if (death.value) return null;
   const instincts = hint.value === null && mode.value === 'play' && brainDriving.value;
@@ -35,10 +35,10 @@ function Hint(props: { touch: boolean }) {
     hint.value ??
     (mode.value === 'watch'
       ? 'Click any creature to become it.'
-      : instincts
-        ? 'Your instincts are steering. Move to take over.'
-        : starving.value
-          ? 'You are starving. Find green.'
+      : starving.value
+        ? 'You are starving. Find green.'
+        : instincts
+          ? 'Your instincts are steering. Move to take over.'
           : null);
   return text === null ? null : (
     <p class="hint" role="status">
