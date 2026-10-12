@@ -78,6 +78,17 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
   its floor, and `plant_seed_range` 96 changed nothing. So a bite cannot take a plant under
   `plant_death_reserve`, as that decision said. With sight a plant died 5 to 7 times as often, and the
   rich ground emptied first. → `../findings/m2-tuning.md`
+- 2026-10-12: **The M2 retune closed at trial 8 of 12.** Six defaults moved: `plant_growth` 0.035,
+  `plant_cap` 55, `part_mass` 1, `neuron_upkeep` 0.0012, `conn_upkeep` 0.0003, `birth_growth` 0.7. Body
+  length holds on three of them at once, each at an end of its range. → `../findings/m2-tuning.md`
+- 2026-10-12: **A part has no upkeep of its own. `part_upkeep` is deleted, and a part costs through its
+  mass alone.** With the upkeep, evolution removed the chemoreceptor on 6 of 10 seeds by tick 144,000
+  and both senses on one. Without it the chemoreceptor settles at 0.17 to 0.23 on 10 of 10 and no body
+  is without a sense. Design risk R1: lower the cost before adding mechanisms. The world is then too
+  full for the throughput floor, so the food is cut, in at most 3 trials past the 12 of the plan, each
+  read on 10 seeds at ticks 36,000 and 144,000 before it becomes a default. Rejected: half the upkeep
+  (6 of 10 seeds), a rule that makes plants come and go (not built, the controls did not point to it),
+  and a looser band. → `../findings/m2-senses.md`
 
 ## Architecture
 
@@ -122,14 +133,3 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
   baseline. Carried over from the draft's 2026-09-07 rule. → `../roadmap.md`
 - 2026-10-10: Building is done by sub-agents under an orchestrator, one task per agent, with the tier
   named per task. → `../architecture.md` §12
-- 2026-10-12: **The M2 retune closed at trial 8 of 12.** Six defaults moved: `plant_growth` 0.035,
-  `plant_cap` 55, `part_mass` 1, `neuron_upkeep` 0.0012, `conn_upkeep` 0.0003, `birth_growth` 0.7. Body
-  length holds on three of them at once, each at an end of its range. → `../findings/m2-tuning.md`
-- 2026-10-12: **A part has no upkeep of its own. `part_upkeep` is deleted, and a part costs through its
-  mass alone.** With the upkeep, evolution removed the chemoreceptor on 6 of 10 seeds by tick 144,000
-  and both senses on one. Without it the chemoreceptor settles at 0.17 to 0.23 on 10 of 10 and no body
-  is without a sense. Design risk R1: lower the cost before adding mechanisms. The world is then too
-  full for the throughput floor, so the food is cut, in at most 3 trials past the 12 of the plan, each
-  read on 10 seeds at ticks 36,000 and 144,000 before it becomes a default. Rejected: half the upkeep
-  (6 of 10 seeds), a rule that makes plants come and go (not built, the controls did not point to it),
-  and a looser band. → `../findings/m2-senses.md`
