@@ -215,6 +215,7 @@ export const PART_VERT = `#version 300 es
 layout(location = 0) in vec2 a_corner;
 layout(location = 1) in vec4 a_place; // x, y, the way out of the body in radians, size
 layout(location = 2) in vec4 a_look; // kind (negative: mirrored), hue, energy01, phase
+layout(location = 3) in vec2 a_body; // the centre of the body of the part
 uniform vec4 u_view;
 uniform float u_px; // world units per device pixel
 out vec2 v_p; // the part frame in sizes: the anchor is at 0, +x is out of the body, +y is back
@@ -238,7 +239,8 @@ void main() {
   gl_Position = vec4((world - u_view.xy) * u_view.zw, 0.0, 1.0);
   v_rgb = tint(a_look.y, a_look.z);
   v_part = vec3(kind, a_place.w, a_look.w);
-  v_seen = seen(a_place.xy);
+  // A part is in sight when its body is.
+  v_seen = seen(a_body);
 }
 `;
 

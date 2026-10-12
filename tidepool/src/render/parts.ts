@@ -22,7 +22,8 @@ import {
   type FrameView,
 } from '../protocol';
 
-export const PART_INSTANCE_FLOATS = 8; // x, y, angle, size, kind, hue, energy01, phase
+// x, y, angle, size, kind, hue, energy01, phase, and the x and y of the centre of the body
+export const PART_INSTANCE_FLOATS = 10;
 export const PART_LOD_PX = 14; // a body shorter than this on screen draws only its flagella
 
 const TAU = 2 * Math.PI;
@@ -71,7 +72,8 @@ export function anchorPoint(
  * one instance and any other part makes two. Returns the number of instances.
  *
  * The angle of an instance is the way out of the body, in world radians. Its size is in world units.
- * Its kind is negative for the left part of a pair: the shader mirrors that one.
+ * Its kind is negative for the left part of a pair: the shader mirrors that one. It carries the
+ * centre of its body: a part is in sight when its body is.
  */
 export function buildParts(
   cur: FrameView,
@@ -124,6 +126,8 @@ export function buildParts(
         out[o + 5] = hue;
         out[o + 6] = energy;
         out[o + 7] = part.kind === KIND_FLAGELLUM ? (swum[slot] ?? 0) : ripple;
+        out[o + 8] = x;
+        out[o + 9] = y;
       }
     }
   }
