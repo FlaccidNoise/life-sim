@@ -424,3 +424,20 @@ Hypothesis, written before the runs:
 5. `len` stays inside 7.8 to 22.2 on every seed at both ticks. The risk: trial 11 reads 8.9 on seed 1
    at tick 144,000, and less food may take the last unit.
 
+
+### Rows, the fast steps
+
+```
+$ target/release/tidepool-headless gate-health --param part_upkeep=0 --param plant_growth=0.03
+$ target/release/tidepool-headless bench --param part_upkeep=0 --param plant_growth=0.03
+$ node scripts/bench-wasm.mjs --param part_upkeep=0 --param plant_growth=0.03
+seed=1 creatures=1319 min_late=1252 plants=2229 births_late=1802 max_gen=14 mean_chemo=0.48 parked=0.00 first_bud=916 juv_starved=0.52 to_bud=0.32 PASS
+seed=2 creatures=1253 min_late=1186 plants=2076 births_late=1709 max_gen=16 mean_chemo=0.43 parked=0.00 first_bud=867 juv_starved=0.50 to_bud=0.33 PASS
+seed=3 creatures=1243 min_late=1133 plants=1965 births_late=1670 max_gen=14 mean_chemo=0.47 parked=0.00 first_bud=854 juv_starved=0.51 to_bud=0.33 PASS
+gate-health 3/3 PASS
+bench creatures=1320 median_tps=3188 floor=2400 PASS
+bench-wasm creatures=1320 median_tps=2933 floor=2400 PASS
+```
+
+Exit codes: 0, 0, 0. Hypotheses 2 and 3 held. Hypothesis 1 held in direction and the fall was larger:
+1,319 on seed 1, not 1,400. The WASM bench reads 2,933, with more room than the 2,700 expected.
