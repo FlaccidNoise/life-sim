@@ -386,6 +386,8 @@ function start(): void {
       case 'ready':
         world = { w: msg.worldW, h: msg.worldH };
         params = msg.params;
+        // The energy ring shows where a bud happens.
+        for (const p of params) if (p.name === 'bud_at') renderer.setBudAt(p.value);
         cam = fitWorld(world.w, world.h, cssW, cssH);
         ready.value = true;
         if (query.has('bench')) {
