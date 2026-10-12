@@ -9,6 +9,17 @@ use tidepool_sim::rng::Rng;
 use tidepool_sim::snapshot::{LoadError, Reader, Writer};
 use tidepool_sim::world::{SpawnAt, World};
 
+/// The table with no founder eye and with every M2 mutation at rate 0, as it was before Task 13
+/// of the M2 plan switched them on. A test then sets the one that it tests.
+fn off() -> Params {
+    let mut p = Params::new();
+    p.set(id::FOUNDER_EYE, 0.0);
+    for k in M2_RATES {
+        p.set(k, 0.0);
+    }
+    p
+}
+
 fn at(x: f32) -> SpawnAt {
     SpawnAt {
         x,
@@ -24,7 +35,7 @@ fn at(x: f32) -> SpawnAt {
 
 #[test]
 fn a_founder_is_the_m1_body_as_parts() {
-    let p = Params::new();
+    let p = off();
     let g = Genome::founder(&mut Rng::new(7), &p);
     let kinds: Vec<u8> = g.parts.iter().map(|x| x.kind).collect();
     assert_eq!(kinds, [KIND_FLAGELLUM, KIND_CILIA, KIND_FILTER, KIND_CHEMO]);
@@ -36,7 +47,7 @@ fn a_founder_is_the_m1_body_as_parts() {
 
 #[test]
 fn founder_eye_adds_a_fifth_part_and_moves_no_other_draw() {
-    let mut p = Params::new();
+    let mut p = off();
     let (mut plain_rng, mut eyed_rng) = (Rng::new(7), Rng::new(7));
     let plain = Genome::founder(&mut plain_rng, &p);
     p.set(id::FOUNDER_EYE, 0.2);
@@ -311,7 +322,8 @@ fn with_every_m2_rate_at_0_a_mutation_makes_the_m1_draws_and_no_more() {
         zero.set(k, 0.0);
         on.set(k, 1.0);
     }
-    let by_default = g.mutated(&mut default_rng, &Params::new(), &mut 100);
+    // The defaults of this test are the old ones: Task 13 of the M2 plan switched the rates on.
+    let by_default = g.mutated(&mut default_rng, &off(), &mut 100);
     let by_zero = g.mutated(&mut zero_rng, &zero, &mut 100);
     assert_eq!(saved(&by_default), saved(&by_zero));
     assert_eq!(default_rng.0, zero_rng.0);
@@ -360,7 +372,7 @@ fn mutation_changes_a_gene() {
 
 #[test]
 fn add_puts_a_small_new_part_on_the_end_with_a_new_id() {
-    let mut p = Params::new();
+    let mut p = off();
     p.set(id::MUT_PART_ADD, 1.0);
     let mut rng = Rng::new(5);
     let g = Genome::founder(&mut rng, &p);
@@ -386,7 +398,7 @@ fn add_puts_a_small_new_part_on_the_end_with_a_new_id() {
 
 #[test]
 fn a_full_genome_takes_no_more_parts() {
-    let mut p = Params::new();
+    let mut p = off();
     p.set(id::MUT_PART_ADD, 1.0);
     p.set(id::MUT_PART_DUP, 1.0);
     let mut rng = Rng::new(5);
@@ -404,7 +416,7 @@ fn a_full_genome_takes_no_more_parts() {
 
 #[test]
 fn remove_takes_one_part_and_an_empty_list_stays_empty() {
-    let mut p = Params::new();
+    let mut p = off();
     p.set(id::MUT_PART_REMOVE, 1.0);
     // So that a part that stays is equal to the parent's.
     p.set(id::MUT_RATE, 0.0);
@@ -437,7 +449,7 @@ fn remove_takes_one_part_and_an_empty_list_stays_empty() {
 
 #[test]
 fn duplicate_copies_kind_size_and_extra_under_a_new_id() {
-    let mut p = Params::new();
+    let mut p = off();
     p.set(id::MUT_PART_DUP, 1.0);
     let mut rng = Rng::new(5);
     let g = eyed_founder(&mut rng);
@@ -471,7 +483,7 @@ fn duplicate_copies_kind_size_and_extra_under_a_new_id() {
 
 #[test]
 fn shape_and_life_genes_move_and_stay_in_range() {
-    let mut p = Params::new();
+    let mut p = off();
     p.set(id::MUT_SHAPE_RATE, 1.0);
     p.set(id::MUT_LIFE_RATE, 1.0);
     let mut rng = Rng::new(5);

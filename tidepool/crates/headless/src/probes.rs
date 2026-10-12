@@ -283,10 +283,11 @@ mod tests {
 
     /// `follow` hands the lineage mark on by its own count. This holds it to the real thing: for
     /// some picks, possess the pick in a copy of the world, run to its death, and ask
-    /// `write_heirs`. A short `lifespan` keeps the run short.
+    /// `write_heirs`. A short `lifespan` keeps the run short. With a `brood_max` of 1 the picks
+    /// that are checked hold both kinds: at 4 none of the 11 has an heir.
     #[test]
     fn follow_agrees_with_possess_and_write_heirs() {
-        let mut world = default_world(1, &[(id::LIFESPAN, 600.0)]);
+        let mut world = default_world(1, &[(id::LIFESPAN, 600.0), (id::BROOD_MAX, 1.0)]);
         world.run(PICK);
         let snapshot = world.save();
         let ends = follow(&mut world);

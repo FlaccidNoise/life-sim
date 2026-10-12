@@ -85,6 +85,7 @@ fn flags(w: &mut World, slot: usize) -> u32 {
 fn a_fed_adult_buds_a_child_that_carries_its_line() {
     let mut w = World::new(1, 1536.0, 1024.0);
     quiet(&mut w);
+    w.params.set(id::BROOD_MAX, 1.0);
     let p = fed_adult(&mut w, 1);
     let puid = w.creatures.uid[p];
     w.tick();
@@ -103,6 +104,9 @@ fn a_fed_adult_buds_a_child_that_carries_its_line() {
 fn budding_conserves_energy() {
     let mut w = World::new(1, 1536.0, 1024.0);
     quiet(&mut w);
+    // One child, and a mass that is the area: the cost below is for the area.
+    w.params.set(id::BROOD_MAX, 1.0);
+    w.params.set(id::PART_MASS, 0.0);
     let p = fed_adult(&mut w, 0);
     let before = w.creatures.energy[p];
     w.tick();
@@ -115,6 +119,7 @@ fn budding_conserves_energy() {
 fn cooldown_spaces_out_buds() {
     let mut w = World::new(1, 1536.0, 1024.0);
     quiet(&mut w);
+    w.params.set(id::BROOD_MAX, 1.0);
     let p = fed_adult(&mut w, 0);
     w.tick();
     w.creatures.energy[p] = 0.95 * 72.0;
@@ -160,6 +165,8 @@ fn brood_max_1_is_the_m1_bud() {
     let mut w = World::new(1, 1536.0, 1024.0);
     quiet(&mut w);
     w.params.set(id::BROOD_MAX, 1.0);
+    // A mass that is the area: the cost below is for the area.
+    w.params.set(id::PART_MASS, 0.0);
     // An egg this small costs 4.5, and the parent holds 50.4 above its reserve.
     let p = adult_with_egg(&mut w, 0, 0.25);
     let before = w.creatures.energy[p];
@@ -324,6 +331,7 @@ fn the_possessed_body_counts_its_buds() {
 fn a_body_that_just_budded_carries_the_flag() {
     let mut w = World::new(1, 1536.0, 1024.0);
     quiet(&mut w);
+    w.params.set(id::BROOD_MAX, 1.0);
     let p = fed_adult(&mut w, 0);
     assert_eq!(flags(&mut w, p) & FLAG_BUDDED, 0);
     w.tick();
@@ -336,7 +344,17 @@ fn a_body_that_just_budded_carries_the_flag() {
 
 #[test]
 fn mutation_stays_in_range_and_rate_zero_copies() {
-    let p = Params::new();
+    // The M1 mutation alone: no part is lost, added, copied, or moved, and `egg` and `old` stay.
+    let mut p = Params::new();
+    for k in [
+        id::MUT_SHAPE_RATE,
+        id::MUT_LIFE_RATE,
+        id::MUT_PART_ADD,
+        id::MUT_PART_REMOVE,
+        id::MUT_PART_DUP,
+    ] {
+        p.set(k, 0.0);
+    }
     let mut rng = Rng::new(3);
     let mut next_history = 100;
     let mut g = Genome::founder(&mut rng, &p);
@@ -349,7 +367,7 @@ fn mutation_stays_in_range_and_rate_zero_copies() {
         assert!(g.brain.conns.iter().all(|c| c.weight.abs() <= 8.0));
         assert!(g.brain.alpha.iter().all(|a| (0.05..=1.0).contains(a)));
     }
-    let mut frozen = Params::new();
+    let mut frozen = p.clone();
     for k in [id::MUT_RATE, id::MUT_WEIGHT_RATE, id::HUE_SIGMA] {
         frozen.set(k, 0.0);
     }
