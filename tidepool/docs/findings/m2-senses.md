@@ -399,3 +399,28 @@ Trial 11 cannot be the default as it stands:
 3. The body is smaller: `area` 32 to 45, against 47 to 77.
 
 No turnover rule was built.
+
+## Part 5: the owner chose to delete the part upkeep and cut the food
+
+Decision of 2026-10-12, in `docs/decisions/INDEX.md`. At most 3 trials past the 12. Each trial runs
+with `part_upkeep=0`, which is the world that the deletion gives. Order of each trial: the health gate
+and both benches first. If they pass, `gate-evolve` at tick 36,000 on seeds 1 to 10, the census to
+tick 144,000 on seeds 1 to 10, and `gate-evolve` at tick 144,000 on seeds 1, 5, 8.
+
+### Trial 13: `plant_growth` 0.035 to 0.03
+
+Why this lever: trial 3 of `m2-tuning.md` moved `plant_growth` by 1.75 times and the count by 1.64
+times, and it is the one food number that trial did not tie to the size of the body.
+
+Hypothesis, written before the runs:
+
+1. `creatures` at tick 12,000 on seed 1 falls from 1,613 to about 1,400 (0.03 / 0.035 of it, a little
+   less than in proportion).
+2. The WASM bench reads about 2,700 and passes. Trial 12 read 2,730 at 1,417 creatures.
+3. `gate-health` passes 3 of 3.
+4. The senses hold as in trial 11: `chemo` at least 0.12 on 10 of 10 seeds at tick 144,000, and the
+   scent gap at tick 36,000 at least 0.10 on at least 9 of 10. The risk: less food makes every cost
+   weigh more, and the sense shrinks again.
+5. `len` stays inside 7.8 to 22.2 on every seed at both ticks. The risk: trial 11 reads 8.9 on seed 1
+   at tick 144,000, and less food may take the last unit.
+
