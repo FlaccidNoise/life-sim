@@ -1,5 +1,6 @@
 // WebGL2 renderer: the depth gradient, then one instanced draw of every plant in a frame, then one of
-// every creature, placed between the last two frames. It owns the GL context of its canvas.
+// every creature, placed between the last two frames, then one of their parts. It owns the GL
+// context of its canvas.
 
 import {
   C_ENERGY,
@@ -7,22 +8,30 @@ import {
   C_HEADING,
   C_HUE,
   C_LENGTH,
+  C_PARTS,
   C_SLOT,
   C_UID,
   C_WIDTH,
   C_X,
   C_Y,
   CREATURE_STRIDE,
+  FLAG_BUDDED,
+  FRAME_HEADER_WORDS,
+  KIND_CILIA,
+  PART_WORDS,
   PLANT_STRIDE,
-  TICK_HZ,
   WORLD_H,
+  unpackPart,
   type FrameView,
 } from '../protocol';
+import { PART_INSTANCE_FLOATS, PART_LOD_PX, buildParts } from './parts';
 import {
   BACKGROUND_FRAG,
   BACKGROUND_VERT,
   CREATURE_FRAG,
   CREATURE_VERT,
+  PART_FRAG,
+  PART_VERT,
   PLANT_FRAG,
   PLANT_VERT,
 } from './shaders';
@@ -40,7 +49,7 @@ export interface Renderer {
   resize(cssW: number, cssH: number, dpr: number): void;
   /**
    * Draws `cur`, with each creature moved back toward its place in `prev` by (1 - alpha).
-   * `timeSeconds` is a clock that only moves forward. It drives the tails.
+   * `timeSeconds` is a clock that only moves forward. It drives the parts that move.
    */
   draw(
     prev: FrameView | null,
@@ -49,17 +58,22 @@ export interface Renderer {
     cam: Camera,
     timeSeconds: number,
   ): void;
+  /** The share of a full store at which a body buds. The energy ring has its notch there. */
+  setBudAt(share: number): void;
   dispose(): void;
 }
 
 const MAX_CREATURES = 4096; // the creature pool of the core
 const MAX_PLANTS = 8192; // the plant pool of the core
-const CREATURE_ATTRIBUTES = [4, 4, 1]; // a_pose, a_body, a_phase
-const INSTANCE_FLOATS = 9;
+const MAX_PARTS = MAX_CREATURES * PART_WORDS * 2; // a part gene makes a pair at most
+const CREATURE_ATTRIBUTES = [4, 4, 2]; // a_pose, a_body, a_life
+const INSTANCE_FLOATS = 10;
+const PART_ATTRIBUTES = [4, 4]; // a_place, a_look
 const MAX_DPR = 2;
 const TAU = 2 * Math.PI;
-const TAIL_RADIANS_PER_LENGTH = 4; // the tail wave moves this far for each body length swum
-const MAX_STEP_SECONDS = 0.1; // a longer gap between draws does not spin the tails
+const CILIA_BEAT = 6; // radians per second
+// FLAG_BUDDED stays set this long at normal speed: BUD_FLASH in crates/sim/src/frame.rs.
+const PULSE_SECONDS = 2;
 
 function compile(gl: WebGL2RenderingContext, type: GLenum, source: string): WebGLShader {
   const shader = gl.createShader(type);
@@ -142,7 +156,15 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
   };
   const plants = layer(PLANT_VERT, PLANT_FRAG, [PLANT_STRIDE], MAX_PLANTS);
   const creatures = layer(CREATURE_VERT, CREATURE_FRAG, CREATURE_ATTRIBUTES, MAX_CREATURES);
+  const uBeat = gl.getUniformLocation(creatures.program, 'u_beat');
+  const uBudAt = gl.getUniformLocation(creatures.program, 'u_bud_at');
   const instances = new Float32Array(MAX_CREATURES * INSTANCE_FLOATS);
+  const parts = layer(PART_VERT, PART_FRAG, PART_ATTRIBUTES, MAX_PARTS);
+  const partInstances = new Float32Array(MAX_PARTS * PART_INSTANCE_FLOATS);
+  // The creature records of the frame being drawn, with each body placed between the last two
+  // frames. The bodies and their parts are both drawn from it.
+  const posedU32 = new Uint32Array(FRAME_HEADER_WORDS + MAX_CREATURES * CREATURE_STRIDE);
+  const posedF32 = new Float32Array(posedU32.buffer);
 
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
@@ -151,9 +173,8 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
   // The record index in `indexed` of each slot, or -1.
   const prevIndexBySlot = new Int32Array(MAX_CREATURES);
   let indexed: FrameView | null | undefined;
-  // The phase of each slot's tail wave. It only moves while the creature moves.
-  const tailPhase = new Float32Array(MAX_CREATURES);
-  let lastTime = 0;
+  // The time at which each slot's FLAG_BUDDED was first drawn, or 0 while the flag is clear.
+  const pulseFrom = new Float64Array(MAX_CREATURES);
   let cssW = 1;
   let cssH = 1;
   let ratio = 1;
@@ -201,29 +222,36 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
           prevIndexBySlot[slot] = i;
         }
       }
-      // At alpha 1 the bodies have reached `cur` and stand still, so the tails do too.
-      const step = alpha < 1 ? Math.min(Math.max(timeSeconds - lastTime, 0), MAX_STEP_SECONDS) : 0;
-      lastTime = timeSeconds;
 
       const { f32, u32 } = cur;
       const count = Math.min(cur.creatureCount, MAX_CREATURES);
+      const base = cur.creatureBase;
+      posedU32.set(u32.subarray(base, base + count * CREATURE_STRIDE), base);
+      const posed: FrameView = {
+        ...cur,
+        buffer: posedU32.buffer,
+        f32: posedF32,
+        u32: posedU32,
+        creatureCount: count,
+      };
       for (let i = 0; i < count; i++) {
-        const r = cur.creatureBase + i * CREATURE_STRIDE;
+        const r = base + i * CREATURE_STRIDE;
         let x = f32[r + C_X] ?? 0;
         let y = f32[r + C_Y] ?? 0;
         let heading = f32[r + C_HEADING] ?? 0;
         const length = f32[r + C_LENGTH] ?? 0;
         const slot = u32[r + C_SLOT] ?? 0;
-        let moved = 0; // world units in the last tick
+        const flags = u32[r + C_FLAGS] ?? 0;
+        let known = false; // `prev` holds this creature
         const j = prevIndexBySlot[slot] ?? -1;
         if (prev && j >= 0) {
           const q = prev.creatureBase + j * CREATURE_STRIDE;
           // A slot with another uid holds another creature: it is not interpolated.
           if (prev.u32[q + C_UID] === u32[r + C_UID]) {
+            known = true;
             const px = prev.f32[q + C_X] ?? x;
             const py = prev.f32[q + C_Y] ?? y;
             const pHeading = prev.f32[q + C_HEADING] ?? heading;
-            moved = Math.hypot(x - px, y - py);
             x = px + (x - px) * alpha;
             y = py + (y - py) * alpha;
             // The shortest arc.
@@ -231,10 +259,22 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
             heading = pHeading + (turn - TAU * Math.round(turn / TAU)) * alpha;
           }
         }
-        const lengthsPerSecond = (moved * TICK_HZ) / length;
-        const phase =
-          ((tailPhase[slot] ?? 0) + TAIL_RADIANS_PER_LENGTH * lengthsPerSecond * step) % TAU;
-        tailPhase[slot] = phase;
+        posedF32[r + C_X] = x;
+        posedF32[r + C_Y] = y;
+        posedF32[r + C_HEADING] = heading;
+
+        // A body too small on screen for its parts has no cilia either.
+        let cilia = 0;
+        for (let k = 0; length * cam.scale >= PART_LOD_PX && k < PART_WORDS; k++) {
+          const part = unpackPart(u32[r + C_PARTS + k] ?? 0);
+          if (part?.kind === KIND_CILIA) cilia += part.size;
+        }
+        // One pulse for each time the flag is set. A body that comes into view with the flag set
+        // starts its pulse then.
+        const budded = (flags & FLAG_BUDDED) !== 0;
+        if (!budded) pulseFrom[slot] = 0;
+        else if (!known || pulseFrom[slot] === 0) pulseFrom[slot] = timeSeconds;
+        const pulsed = (timeSeconds - (pulseFrom[slot] ?? 0)) / PULSE_SECONDS;
         const o = i * INSTANCE_FLOATS;
         instances[o] = x;
         instances[o + 1] = y;
@@ -243,9 +283,11 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
         instances[o + 4] = length;
         instances[o + 5] = f32[r + C_WIDTH] ?? 0;
         instances[o + 6] = f32[r + C_ENERGY] ?? 0;
-        instances[o + 7] = u32[r + C_FLAGS] ?? 0;
-        instances[o + 8] = phase;
+        instances[o + 7] = flags;
+        instances[o + 8] = Math.min(cilia, 1);
+        instances[o + 9] = budded ? Math.sin(Math.PI * Math.min(pulsed, 1)) : 0;
       }
+      const partCount = buildParts(posed, cam.scale, timeSeconds, partInstances);
 
       // The gradient covers the canvas, so nothing is cleared.
       gl.useProgram(background);
@@ -255,16 +297,24 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
 
       const plantCount = Math.min(cur.plantCount, MAX_PLANTS);
       drawLayer(plants, cam, f32, cur.plantBase, PLANT_STRIDE, plantCount);
+      gl.useProgram(creatures.program);
+      gl.uniform1f(uBeat, (CILIA_BEAT * timeSeconds) % TAU);
       drawLayer(creatures, cam, instances, 0, INSTANCE_FLOATS, count);
+      drawLayer(parts, cam, partInstances, 0, PART_INSTANCE_FLOATS, partCount);
+    },
+
+    setBudAt(share) {
+      gl.useProgram(creatures.program);
+      gl.uniform1f(uBudAt, share);
     },
 
     dispose() {
-      for (const { vao, buffer } of [backdrop, plants, creatures]) {
+      for (const { vao, buffer } of [backdrop, plants, creatures, parts]) {
         gl.deleteVertexArray(vao);
         gl.deleteBuffer(buffer);
       }
       gl.deleteBuffer(quad);
-      for (const program of [background, plants.program, creatures.program]) {
+      for (const program of [background, plants.program, creatures.program, parts.program]) {
         gl.deleteProgram(program);
       }
     },
