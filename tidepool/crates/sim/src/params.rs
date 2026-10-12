@@ -75,7 +75,7 @@ table! {
     PLANT_CELL_CAP "plant_cell_cap" 3.0 1.0 16.0;
     /// Lowest fertility a seed can take.
     PLANT_GERM_MIN "plant_germ_min" 0.15 0.0 1.0;
-    /// A plant below this reserve is removed.
+    /// A plant below this reserve is removed. No bite takes a plant under it.
     PLANT_DEATH_RESERVE "plant_death_reserve" 0.2 0.0 5.0;
     /// Fertile patches in the world.
     FERT_BLOBS "fert_blobs" 14.0 1.0 64.0;
