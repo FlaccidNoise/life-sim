@@ -421,6 +421,85 @@ fn a_plant_still_limits_a_large_mouth() {
     assert!((taken - 0.2).abs() < 1e-5, "took {taken}");
 }
 
+/// A mouth that could take the whole plant takes only what stands above the death reserve. The
+/// plant is then at the reserve, not under it, and the next plant update leaves it alive.
+#[test]
+fn a_bite_stops_at_the_death_reserve() {
+    let mut w = empty();
+    still(&mut w);
+    no_upkeep(&mut w);
+    w.params.set(id::PLANT_DEATH_RESERVE, 0.2);
+    w.params.set(id::BITE_FRACTION, 1.0);
+    w.params.set(id::INTAKE_RATE, 1.0);
+    let c = add(&mut w, 500.0, 1.0, 0.1, |g| g.len = 24.0);
+    let p = plant_at(&mut w, 500.0, 0.5);
+    let before = w.creatures.energy[c];
+    w.tick();
+    assert!((w.stats.eaten - 0.3).abs() < 1e-5, "took {}", w.stats.eaten);
+    assert!((w.plants.reserve[p] - 0.2).abs() < 1e-5);
+    // What the plant lost is what the body gained.
+    assert!((w.creatures.energy[c] - before - 0.3).abs() < 1e-5);
+    // Every plant has had its update after 8 ticks.
+    w.run(8);
+    assert!(w.plants.slots.is_alive(p as u32));
+    assert_eq!(w.stats.plant_deaths, 0);
+    assert!((w.stats.eaten - 0.3).abs() < 1e-5, "took {}", w.stats.eaten);
+}
+
+/// A plant at the reserve gives nothing. A plant under it gives nothing either, and the plant
+/// update still removes it: that plant got there by another way than a bite.
+#[test]
+fn a_plant_at_its_death_reserve_feeds_nobody() {
+    let mut w = empty();
+    still(&mut w);
+    no_upkeep(&mut w);
+    w.params.set(id::PLANT_DEATH_RESERVE, 0.2);
+    w.params.set(id::INTAKE_RATE, 1.0);
+    for x in [500.0, 900.0] {
+        add(&mut w, x, 1.0, 0.1, |_| {});
+    }
+    let (at, under) = (plant_at(&mut w, 500.0, 0.2), plant_at(&mut w, 900.0, 0.1));
+    w.tick();
+    assert_eq!(w.stats.eaten, 0.0);
+    assert_eq!((w.plants.reserve[at], w.plants.reserve[under]), (0.2, 0.1));
+    w.run(8);
+    assert_eq!(w.stats.eaten, 0.0);
+    assert!(w.plants.slots.is_alive(at as u32));
+    assert!(!w.plants.slots.is_alive(under as u32));
+    assert_eq!(w.stats.plant_deaths, 1);
+}
+
+/// Eight hungry bodies sit on one plant that grows at the default rate. They eat it down to the
+/// death reserve and it lives.
+#[test]
+fn grazing_never_removes_a_plant() {
+    let mut w = empty();
+    no_upkeep(&mut w);
+    // The bodies stay where they are put, and on top of each other.
+    for k in [id::FLAG_FORCE, id::CILIA_FORCE, id::REPEL] {
+        w.params.set(k, 0.0);
+    }
+    w.params.set(id::PLANT_SEED_CHANCE, 0.0);
+    let bodies: Vec<usize> = (0..8)
+        .map(|_| add(&mut w, 500.0, 1.0, 0.1, |_| {}))
+        .collect();
+    let p = plant_at(&mut w, 500.0, 20.0);
+    w.run(400);
+    let death_reserve = w.params.get(id::PLANT_DEATH_RESERVE);
+    assert!(w.plants.slots.is_alive(p as u32));
+    assert_eq!(w.stats.plant_deaths, 0);
+    assert!(w.plants.reserve[p] >= death_reserve);
+    // The plant was eaten down to near the reserve.
+    assert!(
+        w.plants.reserve[p] < 2.0 * death_reserve,
+        "{}",
+        w.plants.reserve[p]
+    );
+    // The bodies are still hungry, so it was the rule that stopped them.
+    let c = &w.creatures;
+    assert!(bodies.iter().all(|&s| c.energy[s] < 0.5 * c.area(s)));
+}
+
 /// The `lifespan` parameter is 4800. Upkeep is times `1 + old_cost * (old / lifespan - 1)`.
 #[test]
 fn a_long_life_costs_more_per_tick() {

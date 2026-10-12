@@ -1,7 +1,7 @@
 //! Eating, upkeep, growth, and death.
 //!
 //! A filter mouth feeds on every plant the body touches, with no brain output. A full creature
-//! takes nothing. Upkeep is paid for mass, for parts, for the brain, and for thrust, and a long
+//! takes nothing, and no bite takes a plant under its death reserve. Upkeep is paid for mass, for parts, for the brain, and for thrust, and a long
 //! `old` gene raises all of it. A juvenile with a reserve builds mass. A creature with no energy
 //! starves, and one at the age of its `old` gene dies.
 //!
@@ -23,7 +23,7 @@ pub fn contact(world: &mut World) {
     let p = &world.params;
     let (per_mass, intake_rate) = (p.get(id::ENERGY_PER_MASS), p.get(id::INTAKE_RATE));
     let (bite_fraction, plant_cap) = (p.get(id::BITE_FRACTION), p.get(id::PLANT_CAP));
-    let intake_curve = p.get(id::INTAKE_CURVE);
+    let (intake_curve, death_reserve) = (p.get(id::INTAKE_CURVE), p.get(id::PLANT_DEATH_RESERVE));
     let (c, plants, stats) = (&mut world.creatures, &mut world.plants, &mut world.stats);
     for s in 0..c.slots.high_water() as usize {
         if !c.slots.is_alive(s as u32) {
@@ -45,11 +45,16 @@ pub fn contact(world: &mut World) {
                 let (dx, dy) = (plants.x[j] - x, plants.y[j] - y);
                 let touch =
                     radius + plant::radius(plants.reserve[j], plant_cap).min(plant::MAX_RADIUS);
+                // What stands above the death reserve. A grazer can take no more, so grazing
+                // never kills a plant.
+                let spare = plants.reserve[j] - death_reserve;
                 // Every test is false for NaN, so a body or a plant with a wild value eats and
                 // loses nothing.
-                if budget > 0.0 && room > 0.0 && dx * dx + dy * dy <= touch * touch {
-                    let take = budget.min(room).min(plants.reserve[j] * bite_fraction);
-                    plants.reserve[j] -= take;
+                if budget > 0.0 && room > 0.0 && spare > 0.0 && dx * dx + dy * dy <= touch * touch {
+                    let bite = (plants.reserve[j] * bite_fraction).min(spare);
+                    let take = budget.min(room).min(bite);
+                    // The `max` is for the last bit of the subtraction.
+                    plants.reserve[j] = (plants.reserve[j] - take).max(death_reserve);
                     energy += take;
                     budget -= take;
                     room -= take;
