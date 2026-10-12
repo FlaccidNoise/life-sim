@@ -3,6 +3,7 @@
 
 use tidepool_sim::creature::{heft, push_of, side_of, MAX_EYES};
 use tidepool_sim::genome::*;
+use tidepool_sim::math::sin_cos;
 use tidepool_sim::params::{id, Params};
 use tidepool_sim::rng::Rng;
 use tidepool_sim::snapshot::{LoadError, Reader, Writer};
@@ -48,8 +49,9 @@ fn founder_eye_adds_a_fifth_part_and_moves_no_other_draw() {
         (plain.len, plain.wid, plain.hue)
     );
     let weights = |g: &Genome| g.brain.conns.iter().map(|c| c.weight).collect::<Vec<_>>();
-    assert_eq!(weights(&eyed), weights(&plain));
-    assert_eq!(eyed_rng.0, plain_rng.0);
+    // The eye wires are drawn after every draw of the brain with no eye: `brain::starter`.
+    assert_eq!(weights(&eyed)[..39], weights(&plain)[..]);
+    assert_eq!(eyed.brain.bias, plain.brain.bias);
 }
 
 #[test]
@@ -59,7 +61,7 @@ fn a_founder_holds_the_history_ids_that_the_world_keeps_for_it() {
     let g = Genome::founder(&mut Rng::new(7), &p);
     let conns: Vec<u32> = g.brain.conns.iter().map(|c| c.history).collect();
     let parts: Vec<u32> = g.parts.iter().map(|x| x.history).collect();
-    assert_eq!(conns, (1..=39).collect::<Vec<u32>>());
+    assert_eq!(conns, (1..=57).collect::<Vec<u32>>());
     assert_eq!(parts, [58, 59, 60, 61, 62]);
     assert_eq!(World::new(1, 64.0, 64.0).next_history, 63);
 }
@@ -156,6 +158,10 @@ fn an_eye_makes_a_pair_of_cones_and_a_midline_eye_makes_one() {
         assert!((c.eye_dir[eye] - dir).abs() < 1e-6, "cone {k}");
         assert!((c.eye_cos[eye] - half.cos()).abs() < 1e-4, "cone {k}");
         assert_eq!(c.eye_size[eye], size, "cone {k}");
+        // The axis of the cone for a heading of 0, which `eye::see` turns by the heading.
+        let (sin, cos) = sin_cos(c.eye_dir[eye]);
+        assert!((c.eye_ax[eye] - cos).abs() < 1e-6, "cone {k}");
+        assert!((c.eye_ay[eye] - sin).abs() < 1e-6, "cone {k}");
     }
     assert!((c.eye_sum[s] - 0.9).abs() < 1e-6);
     // The eyes are not in the plain sum.

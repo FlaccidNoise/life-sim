@@ -59,10 +59,13 @@ pub struct Creatures {
     /// The sizes of every part that is not an eye, summed in gene order.
     pub plain_sum: Vec<f32>,
     pub eye_sum: Vec<f32>,
-    /// Eye cones, at most `MAX_EYES`. The three arrays below hold `MAX_EYES` values per slot.
+    /// Eye cones, at most `MAX_EYES`. The five arrays below hold `MAX_EYES` values per slot.
     pub n_eyes: Vec<u8>,
     /// Radians from the heading.
     pub eye_dir: Vec<f32>,
+    /// The cosine and the sine of `eye_dir`: the axis of the cone for a body with heading 0.
+    pub eye_ax: Vec<f32>,
+    pub eye_ay: Vec<f32>,
     /// The cosine of the half angle.
     pub eye_cos: Vec<f32>,
     pub eye_size: Vec<f32>,
@@ -107,6 +110,8 @@ impl Default for Creatures {
             eye_sum: floats(),
             n_eyes: vec![0; n],
             eye_dir: vec![0.0; n * MAX_EYES],
+            eye_ax: vec![0.0; n * MAX_EYES],
+            eye_ay: vec![0.0; n * MAX_EYES],
             eye_cos: vec![0.0; n * MAX_EYES],
             eye_size: vec![0.0; n * MAX_EYES],
         }
@@ -189,6 +194,7 @@ impl Creatures {
                         if cones < MAX_EYES {
                             let k = s * MAX_EYES + cones;
                             self.eye_dir[k] = dir;
+                            (self.eye_ay[k], self.eye_ax[k]) = sin_cos(dir);
                             self.eye_cos[k] = sin_cos(half).1;
                             self.eye_size[k] = size;
                             cones += 1;

@@ -172,7 +172,7 @@ table! {
     /// Scale of the eye inputs.
     EYE_GAIN "eye_gain" 1.0 0.0 10.0;
     /// Eyes scan on every Nth think.
-    SEE_EVERY "see_every" 1.0 1.0 4.0;
+    SEE_EVERY "see_every" 2.0 1.0 4.0;
     /// Chance that an anchor or an eye's `extra` mutates.
     MUT_SHAPE_RATE "mut_shape_rate" 0.0 0.0 1.0;
     /// Chance that `egg` or `old` mutates.

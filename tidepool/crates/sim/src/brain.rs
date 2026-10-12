@@ -12,7 +12,7 @@ use crate::world::World;
 
 pub const MAX_NEURONS: usize = 96;
 pub const MAX_CONNS: usize = 384;
-pub const N_IN: usize = 7;
+pub const N_IN: usize = 11;
 pub const N_OUT: usize = 2;
 pub const IN_CONST: usize = 0;
 pub const IN_ENERGY: usize = 1;
@@ -21,14 +21,21 @@ pub const IN_SPEED: usize = 3;
 pub const IN_SCENT: usize = 4;
 pub const IN_GRAD_FWD: usize = 5;
 pub const IN_GRAD_SIDE: usize = 6;
+/// What the eyes see, summed by side. `L` is the side of negative angles from the heading. `R` is
+/// the side of positive angles, the side that `IN_GRAD_SIDE` calls positive.
+pub const IN_SEE_FOOD_L: usize = 7;
+pub const IN_SEE_FOOD_R: usize = 8;
+pub const IN_SEE_BODY_L: usize = 9;
+pub const IN_SEE_BODY_R: usize = 10;
 pub const OUT_THRUST: usize = 0;
 pub const OUT_TURN: usize = 1;
 
 /// Hidden neurons of the starter brain.
 const STARTER_HIDDEN: usize = 4;
-/// The history ids that a founder brain can hold are `1..=STARTER_CONNS`. The starter brain takes
-/// 1 to 39: the 3 wired connections, each input to each hidden neuron, and each hidden neuron to
-/// each output. 40 to 57 are kept for the eye wires.
+/// The history ids that a founder brain can hold are `1..=STARTER_CONNS`. Every starter brain takes
+/// 1 to 39: the 3 wired connections, each input that is not an eye input to each hidden neuron,
+/// and each hidden neuron to each output. The brain of a founder with an eye also takes 40 to 57:
+/// each eye input to each hidden neuron, and the 2 wired eye connections.
 pub const STARTER_CONNS: u32 = 57;
 /// The size of the random weights and biases. Small, so the three wired weights lead. Not zero:
 /// the draft showed that evolution never recruits a connection that starts at zero.
@@ -146,10 +153,15 @@ pub(crate) fn thinks(tick: u32, slot: usize, every: u32) -> bool {
 }
 
 /// The founder brain. Every founder has the same shape and the same history ids, 1 to 39: inputs
-/// 0 to 6, hidden 7 to 10, thrust 11, turn 12. Three wired weights make it swim and turn up the
+/// 0 to 10, hidden 11 to 14, thrust 15, turn 16. Three wired weights make it swim and turn up the
 /// scent gradient: `starter_cruise` from `IN_CONST` to thrust, `starter_steer` from `IN_GRAD_SIDE`
 /// to turn, and `starter_surge` from `IN_GRAD_FWD` to thrust. Draws the random weights in history
 /// order, then the biases.
+///
+/// With `founder_eye` above 0 the ids 40 to 57 follow: each eye input to each hidden neuron, then
+/// two wired weights that turn the body to a plant it sees, `starter_look` from `IN_SEE_FOOD_R` to
+/// turn and minus `starter_look` from `IN_SEE_FOOD_L` to turn. Their random weights are drawn
+/// after the biases, so an eye moves no draw of the brain with none.
 pub fn starter(rng: &mut Rng, p: &Params) -> BrainGenome {
     let hidden = N_IN..N_IN + STARTER_HIDDEN;
     let (thrust, turn) = (hidden.end + OUT_THRUST, hidden.end + OUT_TURN);
@@ -158,15 +170,29 @@ pub fn starter(rng: &mut Rng, p: &Params) -> BrainGenome {
         (IN_GRAD_SIDE, turn, p.get(id::STARTER_STEER)),
         (IN_GRAD_FWD, thrust, p.get(id::STARTER_SURGE)),
     ];
-    for input in 0..N_IN {
+    for input in 0..IN_SEE_FOOD_L {
         for h in hidden.clone() {
             wires.push((input, h, rng.gauss() * STARTER_WEIGHT_SIGMA));
         }
     }
-    for h in hidden {
+    for h in hidden.clone() {
         for out in [thrust, turn] {
             wires.push((h, out, rng.gauss() * STARTER_WEIGHT_SIGMA));
         }
+    }
+    let non_inputs = STARTER_HIDDEN + N_OUT;
+    let bias = (0..non_inputs)
+        .map(|_| rng.gauss() * STARTER_BIAS_SIGMA)
+        .collect();
+    if p.get(id::FOUNDER_EYE) > 0.0 {
+        for input in IN_SEE_FOOD_L..N_IN {
+            for h in hidden.clone() {
+                wires.push((input, h, rng.gauss() * STARTER_WEIGHT_SIGMA));
+            }
+        }
+        let look = p.get(id::STARTER_LOOK);
+        wires.push((IN_SEE_FOOD_R, turn, look));
+        wires.push((IN_SEE_FOOD_L, turn, -look));
     }
     let conns = (1..)
         .zip(wires)
@@ -177,12 +203,9 @@ pub fn starter(rng: &mut Rng, p: &Params) -> BrainGenome {
             history,
         })
         .collect();
-    let non_inputs = STARTER_HIDDEN + N_OUT;
     BrainGenome {
         n_hidden: STARTER_HIDDEN as u16,
-        bias: (0..non_inputs)
-            .map(|_| rng.gauss() * STARTER_BIAS_SIGMA)
-            .collect(),
+        bias,
         alpha: vec![1.0; non_inputs],
         conns,
     }

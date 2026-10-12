@@ -90,7 +90,7 @@ fn a_load_expresses_every_body_again() {
     let loaded = World::load(&w.save()).expect("load");
     let (a, b) = (&w.creatures, &loaded.creatures);
     let live = a.slots.high_water() as usize;
-    assert!(a.slots.count() > 400, "no births before the save");
+    assert!(w.stats.births > 0, "no births before the save");
     for s in (0..live).filter(|&s| a.slots.is_alive(s as u32)) {
         let floats = |c: &tidepool_sim::creature::Creatures| {
             [

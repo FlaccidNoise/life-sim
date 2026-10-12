@@ -1,7 +1,9 @@
 // Tests run native only, so a banned float method is safe here. 3.14 is "facing away", near enough.
 #![allow(clippy::disallowed_methods, clippy::approx_constant)]
 
-use tidepool_sim::brain::{self, Brains, IN_CONST, N_IN, OUT_THRUST, OUT_TURN};
+use tidepool_sim::brain::{
+    self, Brains, IN_CONST, IN_SEE_FOOD_L, IN_SEE_FOOD_R, N_IN, OUT_THRUST, OUT_TURN,
+};
 use tidepool_sim::genome::{BrainGenome, ConnGene, Genome, KIND_CHEMO};
 use tidepool_sim::math::act;
 use tidepool_sim::params::{id, Params};
@@ -17,7 +19,11 @@ fn conn(src: u16, dst: u16, weight: f32) -> ConnGene {
     }
 }
 
-/// No hidden neurons: thrust is neuron 7, turn is neuron 8.
+/// The neurons of `tiny`.
+const THRUST: u16 = N_IN as u16;
+const TURN: u16 = THRUST + 1;
+
+/// No hidden neurons: the outputs follow the inputs.
 fn tiny(conns: Vec<ConnGene>, alpha: f32) -> BrainGenome {
     BrainGenome {
         n_hidden: 0,
@@ -33,7 +39,11 @@ fn one_step_matches_hand_arithmetic() {
     b.express(
         2,
         &tiny(
-            vec![conn(0, 7, 0.5), conn(1, 7, -1.0), conn(1, 8, 2.0)],
+            vec![
+                conn(0, THRUST, 0.5),
+                conn(1, THRUST, -1.0),
+                conn(1, TURN, 2.0),
+            ],
             1.0,
         ),
     );
@@ -50,14 +60,22 @@ fn connection_order_in_the_genome_does_not_matter() {
     a.express(
         0,
         &tiny(
-            vec![conn(0, 7, 0.5), conn(1, 8, 2.0), conn(1, 7, -1.0)],
+            vec![
+                conn(0, THRUST, 0.5),
+                conn(1, TURN, 2.0),
+                conn(1, THRUST, -1.0),
+            ],
             1.0,
         ),
     );
     b.express(
         0,
         &tiny(
-            vec![conn(1, 8, 2.0), conn(1, 7, -1.0), conn(0, 7, 0.5)],
+            vec![
+                conn(1, TURN, 2.0),
+                conn(1, THRUST, -1.0),
+                conn(0, THRUST, 0.5),
+            ],
             1.0,
         ),
     );
@@ -74,7 +92,7 @@ fn connection_order_in_the_genome_does_not_matter() {
 fn a_slow_neuron_remembers() {
     let after_input_removed = |alpha: f32| {
         let mut b = Brains::new(1);
-        b.express(0, &tiny(vec![conn(0, 7, 3.0)], alpha));
+        b.express(0, &tiny(vec![conn(0, THRUST, 3.0)], alpha));
         b.inputs_mut(0)[0] = 1.0;
         for _ in 0..50 {
             b.step_one(0);
@@ -92,7 +110,7 @@ fn a_slow_neuron_remembers() {
 fn a_neuron_reads_last_steps_values() {
     // thrust feeds turn. After one step, turn has seen thrust's OLD value (0), not its new one.
     let mut b = Brains::new(1);
-    let mut g = tiny(vec![conn(0, 7, 3.0), conn(7, 8, 3.0)], 1.0);
+    let mut g = tiny(vec![conn(0, THRUST, 3.0), conn(THRUST, TURN, 3.0)], 1.0);
     g.bias = vec![0.0, 0.0];
     b.express(0, &g);
     b.inputs_mut(0)[IN_CONST] = 1.0;
@@ -120,6 +138,32 @@ fn the_starter_brain_has_the_documented_shape() {
     let h = brain::starter(&mut Rng::new(2), &p);
     assert_eq!(h.conns[10].history, g.conns[10].history); // founders share ids
     assert_ne!(h.conns[10].weight, g.conns[10].weight);
+}
+
+#[test]
+fn the_starter_brain_of_a_founder_with_an_eye_adds_the_eye_wires() {
+    let mut p = Params::new();
+    let plain = brain::starter(&mut Rng::new(1), &p);
+    p.set(id::FOUNDER_EYE, 0.2);
+    let g = brain::starter(&mut Rng::new(1), &p);
+    let ids: Vec<u32> = g.conns.iter().map(|c| c.history).collect();
+    assert_eq!(ids, (1..=brain::STARTER_CONNS).collect::<Vec<u32>>());
+    // The eye moves no draw of the brain with none.
+    let weights = |g: &BrainGenome| g.conns.iter().map(|c| c.weight).collect::<Vec<_>>();
+    assert_eq!(weights(&g)[..39], weights(&plain)[..]);
+    assert_eq!(g.bias, plain.bias);
+    // 40 to 55: each eye input to each hidden neuron, with a weight that is not 0.
+    let hidden = N_IN..N_IN + 4;
+    assert!(g.conns[39..55].iter().all(|c| {
+        (IN_SEE_FOOD_L..N_IN).contains(&(c.src as usize))
+            && hidden.contains(&(c.dst as usize))
+            && c.weight != 0.0
+    }));
+    // 56 and 57: a plant seen on one side turns the body to that side.
+    let (turn, look) = (hidden.end + OUT_TURN, p.get(id::STARTER_LOOK));
+    let wire = |c: &ConnGene| (c.src as usize, c.dst as usize, c.weight);
+    assert_eq!(wire(&g.conns[55]), (IN_SEE_FOOD_R, turn, look));
+    assert_eq!(wire(&g.conns[56]), (IN_SEE_FOOD_L, turn, -look));
 }
 
 /// A patch of plants at (1000, 500). A creature starts 300 units away, facing away.
