@@ -13,12 +13,15 @@ use crate::health::{args, default_world, judge, live, Args};
 /// A tenth of the range of the length gene in from each wall.
 const LEN: (f64, f64) = (7.8, 22.2);
 const LEN_SD: f64 = 0.5;
-/// The founder of the M2 plan holds 5 part genes. A world that only loses parts reads under 5.
-const PARTS: f64 = 5.0;
-/// The least that the mean sum of a sense's parts must stand above the same mean in a world where
-/// that sense reads nothing.
-const CHEMO_GAP: f64 = 0.02;
-const EYE_GAP: f64 = 0.02;
+/// A body needs 2 parts to live.
+const PARTS: f64 = 3.0;
+/// The least that the mean sum of a sense's parts must stand above the same mean in the blind run
+/// of that sense. Two worlds with the same useless sense read gaps of up to 0.07 by chance.
+const CHEMO_GAP: f64 = 0.10;
+const EYE_GAP: f64 = 0.10;
+/// A blind run that ends with fewer creatures than this has died, and its gap is void. The same
+/// number is the low end of the `creatures` band of the health gate.
+const BLIND_ALIVE: u32 = 150;
 /// A body plan counts when this share of the living holds it.
 const PLAN_SHARE: f64 = 0.05;
 
@@ -101,8 +104,10 @@ fn measure(seed: u32, a: &Args) -> (String, Vec<String>) {
     let speed_cv = if speed > 0.0 { speed_sd / speed } else { 0.0 };
 
     let blind = world_after(seed, a, Some(id::CHEMO_GAIN));
+    let creatures_noscent = blind.creatures.slots.count();
     let chemo_blind = mean_sd(live(&blind).map(|s| blind.creatures.chemo[s])).0;
     let blind = world_after(seed, a, Some(id::EYE_GAIN));
+    let creatures_noeye = blind.creatures.slots.count();
     let eye_blind = mean_sd(live(&blind).map(|s| blind.creatures.eye_sum[s])).0;
     let (chemo_gap, eye_gap) = (chemo - chemo_blind, eye - eye_blind);
 
@@ -121,11 +126,19 @@ fn measure(seed: u32, a: &Args) -> (String, Vec<String>) {
         format!("chemo_gap={chemo_gap:.3} < {CHEMO_GAP}"),
     );
     band(
+        creatures_noscent >= BLIND_ALIVE,
+        "chemo_blind run died".to_string(),
+    );
+    band(
         eye_gap >= EYE_GAP,
         format!("eye_gap={eye_gap:.3} < {EYE_GAP}"),
     );
+    band(
+        creatures_noeye >= BLIND_ALIVE,
+        "eye_blind run died".to_string(),
+    );
     let row = format!(
-        "seed={seed} creatures={creatures} len={len:.1} len_sd={len_sd:.2} parts={parts:.1} chemo={chemo:.2} chemo_blind={chemo_blind:.2} eye={eye:.2} eye_blind={eye_blind:.2} plans={plans} speed_cv={speed_cv:.2}"
+        "seed={seed} creatures={creatures} creatures_noscent={creatures_noscent} creatures_noeye={creatures_noeye} len={len:.1} len_sd={len_sd:.2} parts={parts:.1} chemo={chemo:.2} chemo_blind={chemo_blind:.2} eye={eye:.2} eye_blind={eye_blind:.2} plans={plans} speed_cv={speed_cv:.2}"
     );
     (row, failures)
 }
