@@ -15,18 +15,14 @@ creature among creatures that each run an evolved neural network. It shares no c
 ## Status
 
 M0 (foundation) and M1 (first swim) are built, audited, and pushed. M2 (Bodies) is being built from
-`docs/plans/2026-10-11-m2-bodies.md`, which the owner approved on 2026-10-11. Tasks 1 to 13 are done:
-the M2 rules are on, with the grazing rule and tuned defaults. **`make check` exits 0. `make gates`
-exits non-zero at its last step:** both benches and `gate-health` pass, and `gate-evolve` reads 2 of
-3, because the scent gap of seed 1 is 0.079 against 0.10. No number was found that fixes it. It needs
-a rule or a decision from the owner: `docs/findings/m2-tuning.md`, "What needs a rule or a decision".
-CI would fail at that step, so do not push in this state. The fresh-context audit
-(`docs/findings/m2-audit.md`) says M2 does not meet its exit: by tick 144,000 the chemoreceptor is
-lost on 6 of 10 seeds and one seed loses its eyes too. Its test and probe findings are fixed. Its
-band and rule findings wait for the owner. The cause of the lost senses is measured
-(`docs/findings/m2-senses.md`): with `part_upkeep` at 0 every seed keeps both senses to tick 144,000,
-but the WASM bench then fails its floor. All 12 trials of the plan are used. The default has not
-changed, and the next step is the owner's choice.
+`docs/plans/2026-10-11-m2-bodies.md`, which the owner approved on 2026-10-11. Tasks 1 to 13 are done,
+and Task 14 (the exit) is open. **`make check` and `make gates` both exit 0.** The fresh-context audit
+(`docs/findings/m2-audit.md`) found that evolution removed the senses by tick 144,000. The cause was
+the upkeep of a part. On 2026-10-12 the owner deleted that rule, and `plant_growth` went to 0.03
+(`docs/findings/m2-senses.md`): every one of 10 seeds now keeps both senses to tick 144,000. Left in
+Task 14: run the failure proofs of `docs/gates.md` again at these defaults, the owner's band
+decisions from the audit, the baked world, `docs/findings/m2-exit.md`, and the owner checks. Not
+pushed: ask the owner first.
 
 ## Commands
 

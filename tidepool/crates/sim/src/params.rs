@@ -63,7 +63,7 @@ table! {
     /// Plant reserve limit at fertility 1.
     PLANT_CAP "plant_cap" 55.0 1.0 200.0;
     /// Logistic growth rate per tick.
-    PLANT_GROWTH "plant_growth" 0.035 0.0 0.1;
+    PLANT_GROWTH "plant_growth" 0.03 0.0 0.1;
     /// Reserve fraction needed to seed.
     PLANT_SEED_AT "plant_seed_at" 0.7 0.1 1.0;
     /// Chance to seed per plant update.
