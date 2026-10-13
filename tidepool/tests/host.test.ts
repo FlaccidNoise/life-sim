@@ -682,3 +682,31 @@ test('no brain message comes with watchBrain off', () => {
   r.advance(100);
   expect(r.of('brain').length).toBe(seen);
 });
+
+// The bud card asks for the brains of a parent and of its child. A founder dies of old age at its
+// `old` gene, which is the `lifespan` at its founding, so no founder outlives 1,200 ticks here.
+test('brainOf answers with the brain of a living uid, and with 0 words for a dead one', () => {
+  const r = rig({ recycle: true });
+  r.host.handle({ type: 'init', seed: 1, params: [{ name: 'lifespan', value: 1200 }] });
+  r.host.handle({ type: 'brainOf', uid: 88 });
+  r.host.handle({ type: 'brainOf', uid: 89 });
+  const alive = r.of('brainOf');
+  expect(alive.map((m) => m.uid)).toEqual([88, 89]);
+  expect(alive.map((m) => P.readBrain(m.words)?.uid)).toEqual([88, 89]);
+  expect(P.readBrain(alive[0]?.words ?? new Uint32Array(0))?.connections.length).toBe(60);
+  // Nobody is possessed and the page did not ask to watch: no `brain` message comes of it.
+  expect(r.of('brain')).toEqual([]);
+
+  r.advance(61_000); // 1,220 ticks
+  r.host.handle({ type: 'brainOf', uid: 88 });
+  r.host.handle({ type: 'brainOf', uid: 999_999 }); // a uid that the world never gave out
+  expect(
+    r
+      .of('brainOf')
+      .slice(2)
+      .map((m) => [m.uid, m.words.length]),
+  ).toEqual([
+    [88, 0],
+    [999_999, 0],
+  ]);
+});
