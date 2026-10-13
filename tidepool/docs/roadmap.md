@@ -42,12 +42,12 @@ The empty game, wired end to end.
 Exit: open the page, see moving dots at 60 fps, with the sim in a worker. `make check` is green and each
 gate has been seen to fail on a bad input.
 
-### M1 — First swim (built 2026-10-10, owner check open)
+### M1 — First swim (built 2026-10-10, exit closed 2026-10-12 but for the felt judgments)
 
-Status: every gate passes and a fresh-context audit found nothing that blocks the exit. The first half of
-the exit line below is not met: on 2026-10-11 the owner swam and died and could not continue as a
-descendant. `findings/m1-exit.md` has the record. The M2 plan carries the fixes, and its exit check
-closes this half.
+Status: every gate passes and a fresh-context audit found nothing that blocks the exit. On 2026-10-11
+the owner swam and died and could not continue as a descendant. The M2 plan carried the fixes. On
+2026-10-12 the owner played the M2 build, budded, and played as the descendant
+(`findings/m2-exit.md`, owner check 2). Still open: the four felt judgments of `findings/m1-feel.md`.
 
 The smallest world you can live in.
 
@@ -66,9 +66,12 @@ stays alive at 12,000 ticks on 3 seeds.
 ### M2 — Bodies (built 2026-10-12, owner check open)
 
 Status: every task of the plan is built, pushed on 2026-10-12, and `make check` and `make gates` exit
-0. The owner checks of the exit line below are still to do (`plans/2026-10-11-m2-bodies.md`, Task 14). The fresh-context
-audit found that evolution removed the senses. The cause was the upkeep of a part, and it is deleted
-(`findings/m2-audit.md`, `findings/m2-senses.md`).
+0. The fresh-context audit found that evolution removed the senses. The cause was the upkeep of a
+part, and it is deleted (`findings/m2-audit.md`, `findings/m2-senses.md`). The owner answered the five
+checks of the exit on 2026-10-12 (`findings/m2-exit.md`): the bud and the descendant are done, the
+dimmed view is judged with eyes only, and three are open: the bench on a slower device, the felt
+judgments, and the look of the bodies. The owner's words on the last: bodies need "new shapes too. Not
+just bigger/smaller ovals".
 
 Looks and function become one thing.
 

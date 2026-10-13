@@ -6,7 +6,8 @@ Pro).
 
 ## Verdict
 
-**What a machine can check is met, with the limits below. The owner's checks are open.**
+**What a machine can check is met, with the limits below. Of the owner's five checks, one is done,
+one is half done, and three are open** (the answers of 2026-10-12 are at the end).
 
 The roadmap's M2 exit: "after a long headless run, creatures in one world visibly differ in body plan,
 and the difference changes how they move and what they see. Part count does not collapse to the minimum
@@ -170,3 +171,16 @@ runs. Otherwise run `make dev` in `tidepool/`.
 3. Possess a body with eyes and one without. Is the dimmed world fair, or only annoying?
 4. `/?bench` on a phone and on a slower laptop. Both are still unread.
 5. The four felt judgments of `m1-feel.md`.
+
+### The owner's answers, 2026-10-12
+
+Asked once, after the owner had looked at the fresh game and at two evolved worlds. The owner's words
+on the whole: "I do believe they are all done, but I am not sure!" Check by check:
+
+| # | State | The owner's words | What follows |
+|---|---|---|---|
+| 1 | **Open, with a request** | "As for bodies differing, perhaps we will also need new shapes too. Not just bigger/smaller ovals if that makes sense, for more clear visible game language." | Bodies differ for a machine (`probe-plans`). For a person they read as ovals of different sizes. The outline has two genes, length and width, and the M2 plan left out the taper gene of `design.md` §5.1 (difference 7). An open choice of the M3 plan |
+| 2 | **Done** | "I have played as a creature, given birth/budded, played as the descendent, yes." | Closes the open half of the M1 exit. The words do not name the death step |
+| 3 | **Half done** | "I have noticed the dim world, but so far I've only controllled animals with eyes, so I see the vision cone, but also the dimmed outer part." | A body without eyes is not yet possessed, so "fair, or only annoying" is not judged. The near circle (L7) stays |
+| 4 | **Open** | "I haven't run the bench on anything slower than my current laptop." | `/?bench` on a phone and on a slower laptop is still unread |
+| 5 | **Open** | "Not sure again." | The four felt judgments of `m1-feel.md` still read "not judged" |
