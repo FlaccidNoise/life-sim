@@ -39,7 +39,8 @@ In this order. Steps 1 to 3 need the owner.
    The plan also lists eight differences from the roadmap and the design to approve.
 2. **Three questions from the audit** (`m2-audit-2.md`, "Questions for the owner"). (1) Does R1 read
    the mean of a sense or the share of bodies that hold it? On seeds 1 and 3, 38% of bodies hold no
-   chemoreceptor at tick 144,000. (2) Is a search worth it for a world that passes the short gate and
+   chemoreceptor at tick 144,000. Read on to tick 288,000, seed 1 holds at a third to a half and
+   seed 3 falls back to 8%. (2) Is a search worth it for a world that passes the short gate and
    fails the long one? The one candidate fails on 1 of 5 seeds. (3) The fin is in 26% to 36% of bodies
    at tick 144,000 on two seeds, which the decision to leave its strength to M4 did not know.
 3. **The owner's checks that are open:** bodies visibly differ (check 1, the plan's choice C5), the
@@ -62,7 +63,7 @@ In this order. Steps 1 to 3 need the owner.
 - `motor.rs:90` still holds the arithmetic of a deleted switch (audit finding L1). Fix it with the
   next change to the motor, and pin the gate rows again.
 - Push rule conflict, still open. The root `AGENTS.md` says push at session end. The owner's global
-  rules say push only when asked. Follow the owner's rules. Seven commits are local at this handoff, from `cc0cc99`. The remote is at `9a9a411`.
+  rules say push only when asked. Follow the owner's rules. Nine commits are local at this handoff, from `cc0cc99`. The remote is at `9a9a411`.
 
 ## Key Decisions
 
