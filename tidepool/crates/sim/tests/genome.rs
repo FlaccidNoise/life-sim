@@ -76,8 +76,10 @@ fn founder_eye_adds_a_fifth_part_and_moves_no_other_draw() {
         (plain.len, plain.wid, plain.hue)
     );
     let weights = |g: &Genome| g.brain.conns.iter().map(|c| c.weight).collect::<Vec<_>>();
-    // The eye wires are drawn after every draw of the brain with no eye: `brain::starter`.
-    assert_eq!(weights(&eyed)[..39], weights(&plain)[..]);
+    // The eye wires are drawn after every draw of the brain with no eye: `brain::starter`. They
+    // sit between its first 39 connections and its last 3.
+    assert_eq!(weights(&eyed)[..39], weights(&plain)[..39]);
+    assert_eq!(weights(&eyed)[57..], weights(&plain)[39..]);
     assert_eq!(biases(&eyed), biases(&plain));
 }
 
@@ -89,11 +91,11 @@ fn a_founder_holds_the_history_ids_that_the_world_keeps_for_it() {
     let conns: Vec<u32> = g.brain.conns.iter().map(|c| c.history).collect();
     let parts: Vec<u32> = g.parts.iter().map(|x| x.history).collect();
     let hidden: Vec<u32> = g.brain.hidden.iter().map(|h| h.id).collect();
-    assert_eq!(conns, (1..=57).collect::<Vec<u32>>());
-    assert_eq!(parts, [58, 59, 60, 61, 62]);
+    assert_eq!(conns, (1..=60).collect::<Vec<u32>>());
+    assert_eq!(parts, [61, 62, 63, 64, 65]);
     // The 4 hidden genes of the founder take the 4 ids after its parts.
-    assert_eq!(hidden, [63, 64, 65, 66]);
-    assert_eq!(World::new(1, 64.0, 64.0).next_history, 67);
+    assert_eq!(hidden, [66, 67, 68, 69]);
+    assert_eq!(World::new(1, 64.0, 64.0).next_history, 70);
 }
 
 #[test]
@@ -505,14 +507,18 @@ fn duplicate_copies_kind_size_and_extra_under_a_new_id() {
         let child = g.mutated(&mut rng, &p, &mut next_history);
         assert_eq!(child.parts.len(), 6);
         let (old, copy) = (&child.parts[..5], &child.parts[5]);
-        assert_eq!((copy.history, next_history), (100, 101));
+        // The copy of the eye takes a copy of each of the 18 connections that name the eye, with
+        // a new id each. No connection names another part.
+        let wires = child.brain.conns.len() - g.brain.conns.len();
+        assert_eq!(wires, if copy.kind == KIND_EYE { 18 } else { 0 });
+        assert_eq!((copy.history, next_history), (100, 101 + wires as u32));
         // The copy is of the part as this birth left it. This founder has one part of each kind.
         let from = old.iter().find(|x| x.kind == copy.kind).expect("a source");
         assert_eq!((copy.size, copy.extra), (from.size, from.extra));
         assert!((0.0..=1.0).contains(&copy.anchor));
         moved |= copy.anchor != from.anchor;
         let ids: Vec<u32> = old.iter().map(|x| x.history).collect();
-        assert_eq!(ids, [58, 59, 60, 61, 62]);
+        assert_eq!(ids, [61, 62, 63, 64, 65]);
         kinds[copy.kind as usize] = true;
     }
     assert!(moved, "no copy moved along the outline");
@@ -692,13 +698,14 @@ fn with_every_m3_rate_at_0_a_mutation_makes_the_m2_draws() {
     zero.set(id::PART_WIRES, 0.0);
     on.set(id::PART_WIRES, 2.0);
     let g = eyed_founder(&mut Rng::new(7));
-    // The connections that name no part of the genome, without their weights.
-    let of_the_body = |g: &Genome| {
+    // The connections that name no part of the parent or of the genome, without their weights. A
+    // child that lost a part still holds the connections of that part: `prune` has not run.
+    let of_the_body = |child: &Genome| {
         let part = |c: &ConnGene| {
-            let owners = g.parts.iter().map(|x| x.history);
+            let owners = g.parts.iter().chain(&child.parts).map(|x| x.history);
             owners.filter(|&o| o != BODY).any(|o| names(c, o))
         };
-        let rest = g.brain.conns.iter().filter(|c| !part(c));
+        let rest = child.brain.conns.iter().filter(|c| !part(c));
         rest.map(|c| (c.src, c.dst, c.history)).collect::<Vec<_>>()
     };
     let ids = |g: &Genome| g.brain.hidden.iter().map(|h| h.id).collect::<Vec<_>>();

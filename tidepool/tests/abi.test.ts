@@ -41,12 +41,12 @@ test('a brain readout reads back, and a readout that does not fit its header is 
   const sim = fresh();
   sim.seedFounders(20, 0);
   const brain = P.readBrain(sim.brain(9));
-  expect(brain).toMatchObject({ uid: 9, inputs: 11, hidden: 4, outputs: 2, manual: false });
-  expect([brain?.neurons.length, brain?.connections.length]).toEqual([17, 57]);
+  expect(brain).toMatchObject({ uid: 9, inputs: 13, hidden: 4, outputs: 3, manual: false });
+  expect([brain?.neurons.length, brain?.connections.length]).toEqual([20, 60]);
   // The first wired connection of a founder runs from the constant input to thrust.
   const cruise = brain?.connections.find((c) => c.history === 1);
-  expect([cruise?.src, cruise?.dst]).toEqual([0, 15]);
-  expect(brain?.neurons[15]).toMatchObject({ owner: 0, port: 128 });
+  expect([cruise?.src, cruise?.dst]).toEqual([0, 17]);
+  expect(brain?.neurons[17]).toMatchObject({ owner: 0, port: 128 });
   expect(cruise?.weight).toBeGreaterThan(0);
   expect(sim.brain(999).length).toBe(0);
   expect(P.readBrain(new Uint32Array(0))).toBeNull();
@@ -147,9 +147,10 @@ test('a frame of the whole world holds every creature', () => {
     // A founder starts at 0.5 and has paid 10 ticks of upkeep with nothing to eat.
     expect(f.f32[o + P.C_ENERGY]).toBeGreaterThan(0.45);
     expect(f.f32[o + P.C_ENERGY]).toBeLessThan(0.5);
-    expect(f.u32[o + P.C_FLAGS]).toBe(0);
-    // A founder brain: 4 hidden neurons and 57 connections.
-    expect(f.u32[o + P.C_BRAIN]).toBe(4 | (57 << 16));
+    // A founder accepts a mate from its first thought.
+    expect(f.u32[o + P.C_FLAGS]).toBe(P.FLAG_WILLING);
+    // A founder brain: 4 hidden neurons and 60 connections.
+    expect(f.u32[o + P.C_BRAIN]).toBe(4 | (60 << 16));
     uids.add(f.u32[o + P.C_UID] ?? 0);
   }
   expect(uids.size).toBe(300);
@@ -294,7 +295,8 @@ test('pick, possess, input, and release go through the ABI', () => {
   let flagged = 0;
   for (let i = 0; i < f.creatureCount; i++) {
     const r = f.creatureBase + i * P.CREATURE_STRIDE;
-    const flags = f.u32[r + P.C_FLAGS] ?? 0;
+    // A founder accepts a mate from its first thought, and half of them have thought by now.
+    const flags = (f.u32[r + P.C_FLAGS] ?? 0) & ~P.FLAG_WILLING;
     if (f.u32[r + P.C_UID] === uid) {
       expect(flags).toBe(P.FLAG_LINEAGE | P.FLAG_POSSESSED);
       flagged++;

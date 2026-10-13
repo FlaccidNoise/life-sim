@@ -123,8 +123,8 @@ fn a_newborn_holds_no_connection_that_its_body_does_not_express() {
         conns.iter().map(|c| c.history).collect()
     };
     assert_eq!(histories(p).last(), Some(&900));
-    assert_eq!(histories(1), (1..=57).collect::<Vec<u32>>());
-    assert_eq!(w.brains.n_conn[1], 57);
+    assert_eq!(histories(1), (1..=60).collect::<Vec<u32>>());
+    assert_eq!(w.brains.n_conn[1], 60);
 }
 
 #[test]
@@ -461,6 +461,10 @@ fn a_wild_genome_buds_or_does_not_without_panic() {
             if wild_size {
                 (g.len, g.wid) = (wild, wild);
             }
+            // The inputs of a brain follow the parts of its genome, and a save holds one
+            // activation for each neuron that the genome declares. So the block is that of the
+            // wild genome, as after a load.
+            w.brains.express(p, &w.genomes[p], &w.params);
             w.run(250);
             // Mutation clamps a size gene into its range, so only a wild size that did not mutate
             // is sure to stop the bud.

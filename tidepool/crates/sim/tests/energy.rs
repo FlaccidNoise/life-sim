@@ -414,8 +414,8 @@ fn a_step_of_growth_leaves_grow_floor_of_the_reserve() {
     assert!((c.energy[enough] - (least + 0.01 - cost)).abs() < 1e-4);
 }
 
-/// A resting adult with every other upkeep at 0. The brain of the body of `add` has 17 neurons and
-/// 57 connections, and each of the two rates is paid for its own count.
+/// A resting adult with every other upkeep at 0. The brain of the body of `add` has 20 neurons and
+/// 60 connections, and each of the two rates is paid for its own count.
 #[test]
 fn a_brain_costs_upkeep_for_each_neuron_and_each_connection() {
     const TICKS: f32 = 100.0;
@@ -433,7 +433,7 @@ fn a_brain_costs_upkeep_for_each_neuron_and_each_connection() {
         (before - w.creatures.energy[c], neurons, conns)
     };
     let (free, neurons, conns) = loss(0.0, 0.0);
-    assert_eq!((free, neurons, conns), (0.0, 17.0, 57.0));
+    assert_eq!((free, neurons, conns), (0.0, 20.0, 60.0));
     let near = |got: f32, want: f32| (got / want - 1.0).abs() < 1e-3;
     let (for_neurons, ..) = loss(0.002, 0.0);
     assert!(

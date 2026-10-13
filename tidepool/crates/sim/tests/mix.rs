@@ -181,11 +181,11 @@ fn a_donor_only_part_brings_its_ports_and_a_connection_from_them_can_follow() {
     assert_eq!(child.brain.conns.last(), Some(&wire));
     assert_eq!(wire.src.owner, eye.history);
 
-    // The connection lives exactly when the body of the child declares the port.
-    let declared = brain::ports(&child).inputs.contains(&wire.src);
+    // The body of the child declares the port, so the connection lives.
+    assert!(brain::ports(&child).inputs.contains(&wire.src));
     let mut pruned = child;
     pruned.prune();
-    assert_eq!(pruned.brain.conns.contains(&wire), declared);
+    assert!(pruned.brain.conns.contains(&wire));
 }
 
 #[test]
