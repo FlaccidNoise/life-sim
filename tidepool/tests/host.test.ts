@@ -641,3 +641,44 @@ test('a possessed body that buds shows buds and a lineage in the frame', () => {
   expect(f.buds).toBeGreaterThan(0);
   expect(f.lineageAlive).toBeGreaterThanOrEqual(2);
 });
+
+// The brain of a possessed founder: 11 inputs, 4 hidden neurons, 2 outputs, and 57 connections. The
+// first input is the constant one.
+test('the brain of the possessed body reaches the page, and a release sends 0 words once', () => {
+  const r = rig({ recycle: true });
+  r.host.handle({ type: 'init', seed: 1 });
+  r.host.handle({ type: 'watchBrain', on: true });
+  r.host.handle({ type: 'possess', uid: 88 });
+  r.advance(200);
+  const sent = r.of('brain');
+  const brain = P.readBrain(sent.at(-1)?.words ?? new Uint32Array(0));
+  if (!brain) throw new Error('no brain was sent for the possessed body');
+  expect([brain.uid, brain.neurons.length, brain.connections.length]).toEqual([88, 17, 57]);
+  expect(brain.neurons.filter((n) => n.kind === P.KIND_HIDDEN).map((n) => n.gene)).toEqual([
+    0, 1, 2, 3,
+  ]);
+  expect(brain.neurons[0]).toMatchObject({ owner: 0, port: 0, activation: 1 });
+  // One message with each frame.
+  expect(sent.filter((m) => m.words.length > 0).length).toBe(r.of('frame').length);
+
+  const before = sent.length;
+  r.host.handle({ type: 'release' });
+  r.advance(200);
+  const after = r.of('brain').slice(before);
+  expect(after.map((m) => m.words.length)).toEqual([0]);
+  expect(P.readBrain(after[0]?.words ?? new Uint32Array(1))).toBeNull();
+});
+
+test('no brain message comes with watchBrain off', () => {
+  const r = rig({ recycle: true });
+  r.host.handle({ type: 'init', seed: 1 });
+  r.host.handle({ type: 'possess', uid: 88 });
+  r.advance(100);
+  r.host.handle({ type: 'watchBrain', on: true });
+  r.advance(100);
+  const seen = r.of('brain').length;
+  expect(seen).toBeGreaterThan(0);
+  r.host.handle({ type: 'watchBrain', on: false });
+  r.advance(100);
+  expect(r.of('brain').length).toBe(seen);
+});

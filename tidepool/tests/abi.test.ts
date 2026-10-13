@@ -31,10 +31,22 @@ test('the brain layout constants of the module are those of crates/sim/src/brain
     n('tp_brain_header_words'),
     n('tp_brain_neuron_words'),
     n('tp_brain_conn_words'),
-  ]).toEqual([6, 6, 3]);
+  ]).toEqual([P.BRAIN_HEADER_WORDS, P.BRAIN_NEURON_WORDS, P.BRAIN_CONN_WORDS]);
   for (const name of ['tp_brain_write', 'tp_brain_ptr']) {
     expect(typeof exports[name]).toBe('function');
   }
+});
+
+test('a brain readout reads back, and a readout that does not fit its header is refused', () => {
+  const sim = fresh();
+  sim.seedFounders(20, 0);
+  const brain = P.readBrain(sim.brain(9));
+  expect(brain).toMatchObject({ uid: 9, inputs: 11, hidden: 4, outputs: 2, manual: false });
+  expect([brain?.neurons.length, brain?.connections.length]).toEqual([17, 57]);
+  expect(sim.brain(999).length).toBe(0);
+  expect(P.readBrain(new Uint32Array(0))).toBeNull();
+  expect(() => P.readBrain(sim.brain(9).subarray(0, 40))).toThrow(/Fix: /);
+  expect(() => P.readBrain(new Uint32Array(3))).toThrow(/Fix: /);
 });
 
 test('a founder record unpacks to its four parts, and to an eye with `founder_eye`', () => {
@@ -321,5 +333,6 @@ test('a call after free does nothing', () => {
   expect(sim.possess(1)).toBe(false);
   expect([sim.pick(0, 0, 9999), sim.possessed(), sim.deathCause()]).toEqual([0, 0, 0]);
   expect(sim.heirs()).toEqual([]);
+  expect(sim.brain(1).length).toBe(0);
   expect(sim.params()[0]?.value).toBe(0);
 });

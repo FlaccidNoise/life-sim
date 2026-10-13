@@ -46,6 +46,8 @@ export interface Sim {
   deathCause(): number;
   /** At most 5, highest `energy01` first. */
   heirs(): Heir[];
+  /** The readout of the creature with this uid, as `readBrain` reads it. A copy. 0 words if it is not alive. */
+  brain(uid: number): Uint32Array;
   free(): void;
 }
 
@@ -92,6 +94,8 @@ interface Exports {
   tp_heir_stride(): number;
   tp_heirs_write(world: Ptr): number;
   tp_heirs_ptr(world: Ptr): Ptr;
+  tp_brain_write(world: Ptr, uid: number): number;
+  tp_brain_ptr(world: Ptr): Ptr;
 }
 
 /** Instantiates the module and makes or loads a world. Throws SimError on a wrong ABI version or a bad snapshot. */
@@ -189,6 +193,11 @@ export function createSim(
         });
       }
       return out;
+    },
+    brain(uid) {
+      const words = x.tp_brain_write(world, uid) >>> 0;
+      if (words === 0) return new Uint32Array(0);
+      return new Uint32Array(x.memory.buffer, x.tp_brain_ptr(world) >>> 0, words).slice();
     },
     // The core treats a null world as a no-op, so a call after `free` does nothing.
     free() {
