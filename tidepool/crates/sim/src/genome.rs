@@ -1,6 +1,6 @@
 //! What a creature inherits: a body shape, a life history, a hue, a list of parts, and a brain.
 
-use crate::brain::{self, N_OUT_MAX};
+use crate::brain::{self, Ports, N_OUT_MAX};
 use crate::params::{id, Params, DEFS};
 use crate::rng::Rng;
 use crate::snapshot::{LoadError, Reader, Writer};
@@ -270,6 +270,39 @@ fn count(r: &mut Reader, most: usize, reason: &'static str) -> Result<usize, Loa
 }
 
 impl BrainGenome {
+    /// What a connection can run into: the hidden genes in gene order, then the outputs.
+    fn targets(&self, outputs: Vec<Node>) -> Vec<Node> {
+        let hidden = self.hidden.iter().map(|gene| Node::hidden(gene.id));
+        hidden.chain(outputs).collect()
+    }
+
+    /// A new connection, with room and with both lists not empty: a source chosen evenly, then a
+    /// target chosen evenly, then a weight of `gauss * sigma`. If the pair is joined already, the
+    /// three draws are made and nothing is added. The id is `*next_history`, and the counter rises.
+    fn connect(
+        &mut self,
+        sources: &[Node],
+        targets: &[Node],
+        rng: &mut Rng,
+        sigma: f32,
+        next_history: &mut u32,
+    ) {
+        if self.conns.len() >= MAX_CONN_GENES || sources.is_empty() || targets.is_empty() {
+            return;
+        }
+        let src = sources[rng.below(sources.len() as u32) as usize];
+        let dst = targets[rng.below(targets.len() as u32) as usize];
+        let weight = rng.gauss() * sigma;
+        if !self.conns.iter().any(|c| (c.src, c.dst) == (src, dst)) {
+            self.conns.push(ConnGene {
+                src,
+                dst,
+                weight,
+                history: new_history(next_history),
+            });
+        }
+    }
+
     fn save(&self, w: &mut Writer) {
         w.u32(self.hidden.len() as u32);
         for gene in &self.hidden {
@@ -371,7 +404,7 @@ impl Genome {
     /// Hue: add gauss * hue_sigma, wrap into [0, 1).
     /// Each brain weight, bias: with chance mut_weight_rate, add gauss * mut_weight_sigma.
     /// Each alpha: with chance mut_weight_rate, add gauss * 0.1, clamp to [0.05, 1].
-    /// Weights and biases are clamped to [-8, 8]. The structure of the brain does not change yet.
+    /// Weights and biases are clamped to [-8, 8].
     ///
     /// Draws in this order: len, wid, each part size in gene order, the hue, the weights, the
     /// biases, the alphas. That is the M1 order. The biases are those of the hidden genes and then
@@ -386,14 +419,32 @@ impl Genome {
     /// 3. Remove. With chance mut_part_remove, one part chosen evenly is lost.
     /// 4. Duplicate. With chance mut_part_dup, and with room, one part chosen evenly is copied to
     ///    the end. The anchor of the copy gets gauss * mut_sigma and a clamp to [0, 1]. Its id is
-    ///    `*next_history`, and the counter rises.
+    ///    `*next_history`, and the counter rises. Then each connection that names the original is
+    ///    copied for the copy, in gene order and with room, with a new id each and no draw.
     /// 5. Add. With chance mut_part_add, and with room, a new part goes on the end: a kind chosen
     ///    evenly, then an anchor in [0, 1), then an `extra` in [0, 1). Its size is part_new_size,
-    ///    held in the range of its kind. Its id is `*next_history`, and the counter rises.
+    ///    held in the range of its kind. Its id is `*next_history`, and the counter rises. If the
+    ///    body declares inputs with the part that it did not declare without it, part_wires
+    ///    connections follow: each as in group 8, with a source chosen evenly from those inputs.
     ///
-    /// In groups 3 to 5 the draw of the chance comes first. The other draws are made only if the
-    /// mutation happens: a list with no part loses none and copies none, and a full list takes
-    /// none.
+    /// Four M3 groups follow, in this order. With every M3 rate at 0 and part_wires at 0 the draws
+    /// are the M2 draws.
+    /// 6. Remove a connection. With chance mut_conn_remove, one connection chosen evenly is lost.
+    /// 7. Remove a hidden neuron. With chance mut_neuron_remove, one hidden gene chosen evenly is
+    ///    lost, with each connection that names it.
+    /// 8. Add a connection. With chance mut_conn_add, and with room: a source chosen evenly from
+    ///    every declared neuron in block order, then a target chosen evenly from the hidden genes
+    ///    and then the outputs, then a weight of gauss * new_conn_sigma. If the pair is joined
+    ///    already, the three draws are made and nothing is added. A loop is allowed.
+    /// 9. Add a hidden neuron. With chance mut_neuron_add, with room for one more hidden gene and
+    ///    one more connection, and with a connection to split: one chosen evenly is removed. A
+    ///    hidden gene with bias 0 and alpha 1 goes on the end. A connection from the old source to
+    ///    it has weight 1, and one from it to the old target has the old weight. The three take
+    ///    the next three ids, in that order.
+    ///
+    /// In groups 3 to 9 the draw of the chance comes first. The other draws are made only if the
+    /// mutation happens: an empty list loses none and copies none, and a full list takes none.
+    /// A part that is lost leaves its connections to `prune`.
     pub fn mutated(&self, rng: &mut Rng, p: &Params, next_history: &mut u32) -> Genome {
         let mut g = self.clone();
         let (rate, sigma) = (p.get(id::MUT_RATE), p.get(id::MUT_SIGMA));
@@ -445,10 +496,31 @@ impl Genome {
         if chance(rng, p.get(id::MUT_PART_DUP)) && (1..MAX_PART_GENES).contains(&count) {
             let mut copy = g.parts[rng.below(count as u32) as usize].clone();
             copy.anchor = (copy.anchor + rng.gauss() * sigma).clamp(0.0, 1.0);
-            copy.history = new_history(next_history);
+            let (from, to) = (copy.history, new_history(next_history));
+            copy.history = to;
             g.parts.push(copy);
+            // The body owns every port of owner `BODY`, so a part with that history has no wire.
+            let conns = &mut g.brain.conns;
+            let named =
+                |c: &&ConnGene| from != BODY && (c.src.owner == from || c.dst.owner == from);
+            let renamed = |node: Node| {
+                let owner = if node.owner == from { to } else { node.owner };
+                Node { owner, ..node }
+            };
+            let room = MAX_CONN_GENES.saturating_sub(conns.len());
+            let wire = |c: &ConnGene| ConnGene {
+                src: renamed(c.src),
+                dst: renamed(c.dst),
+                weight: c.weight,
+                history: new_history(next_history),
+            };
+            let copies: Vec<ConnGene> = conns.iter().filter(named).take(room).map(wire).collect();
+            conns.extend(copies);
         }
+        let wire_sigma = p.get(id::NEW_CONN_SIGMA);
         if chance(rng, p.get(id::MUT_PART_ADD)) && g.parts.len() < MAX_PART_GENES {
+            let wires = p.get(id::PART_WIRES) as usize;
+            let before = brain::ports(&g).inputs;
             let kind = 1 + rng.below(KINDS as u32) as u8;
             let (lo, hi) = size_range(kind);
             let (anchor, extra) = (rng.unit(), rng.unit());
@@ -459,6 +531,51 @@ impl Genome {
                 extra,
                 history: new_history(next_history),
             });
+            let Ports {
+                mut inputs,
+                outputs,
+            } = brain::ports(&g);
+            inputs.retain(|node| !before.contains(node));
+            let targets = g.brain.targets(outputs);
+            for _ in 0..wires {
+                g.brain
+                    .connect(&inputs, &targets, rng, wire_sigma, next_history);
+            }
+        }
+
+        let BrainGenome { hidden, conns, .. } = &mut g.brain;
+        if chance(rng, p.get(id::MUT_CONN_REMOVE)) && !conns.is_empty() {
+            conns.remove(rng.below(conns.len() as u32) as usize);
+        }
+        if chance(rng, p.get(id::MUT_NEURON_REMOVE)) && !hidden.is_empty() {
+            let lost = Node::hidden(hidden.remove(rng.below(hidden.len() as u32) as usize).id);
+            conns.retain(|c| c.src != lost && c.dst != lost);
+        }
+        if chance(rng, p.get(id::MUT_CONN_ADD)) {
+            let Ports { inputs, outputs } = brain::ports(&g);
+            let targets = g.brain.targets(outputs);
+            let sources = [inputs, targets.clone()].concat();
+            g.brain
+                .connect(&sources, &targets, rng, wire_sigma, next_history);
+        }
+        let BrainGenome { hidden, conns, .. } = &mut g.brain;
+        let room = hidden.len() < MAX_HIDDEN && conns.len() < MAX_CONN_GENES;
+        if chance(rng, p.get(id::MUT_NEURON_ADD)) && room && !conns.is_empty() {
+            let old = conns.remove(rng.below(conns.len() as u32) as usize);
+            let new = Node::hidden(new_history(next_history));
+            hidden.push(HiddenGene {
+                id: new.owner,
+                bias: 0.0,
+                alpha: 1.0,
+            });
+            for (src, dst, weight) in [(old.src, new, 1.0), (new, old.dst, old.weight)] {
+                conns.push(ConnGene {
+                    src,
+                    dst,
+                    weight,
+                    history: new_history(next_history),
+                });
+            }
         }
         g
     }
