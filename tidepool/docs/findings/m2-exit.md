@@ -50,7 +50,7 @@ Wider than the gates read:
 | `gate-evolve` at tick 36,000 on seeds 1 to 10 | 9 of 10. Seed 7 fails the eye gap at 0.097 against 0.10 |
 | Scent gap at tick 36,000, seeds 1 to 10 | 0.17 to 0.37 |
 | Eye gap at tick 36,000, seeds 1 to 10 | 0.097 to 0.19 |
-| `make gates-long`: `gate-evolve` at tick 144,000 on seeds 1, 5, 8 | 3 of 3. Scent gaps 0.16, 0.26, 0.16. Eye gaps 0.28, 0.24, 0.20. `speed` 0.84, 0.73, 0.91. `area` 34.8, 39.1, 35.0 |
+| `make gates-long`: `gate-evolve` at tick 144,000 on seeds 1, 5, 8 | 3 of 3. Scent gaps 0.16, 0.26, 0.16. Eye gaps 0.28, 0.24, 0.20. `speed` 0.84, 0.73, 0.91. `area` 34.8, 39.1, 35.0. Since 2026-10-13 the target reads seeds 1, 4, 5, 6, 8: 5 of 5 pass, and the chance input fails on 5 of 5 (`gates.md` "The long reading") |
 | `probe-census` at tick 144,000, seeds 1 to 10 | `chemo` 0.16 to 0.27, `eye` 0.25 to 0.31, `senseless` 0.00, `speed` 0.73 to 0.99, `len` 9.2 to 11.3, `area` 33 to 45, `creatures` 1,373 to 1,770 |
 
 The full rows are in `m2-senses.md`, Part 5.

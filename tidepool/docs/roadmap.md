@@ -68,10 +68,11 @@ stays alive at 12,000 ticks on 3 seeds.
 Status: every task of the plan is built, pushed on 2026-10-12, and `make check` and `make gates` exit
 0. The fresh-context audit found that evolution removed the senses. The cause was the upkeep of a
 part, and it is deleted (`findings/m2-audit.md`, `findings/m2-senses.md`). The owner answered the five
-checks of the exit on 2026-10-12 (`findings/m2-exit.md`): the bud and the descendant are done, the
-dimmed view is judged with eyes only, and three are open: the bench on a slower device, the felt
-judgments, and the look of the bodies. The owner's words on the last: bodies need "new shapes too. Not
-just bigger/smaller ovals".
+checks of the exit on 2026-10-12 (`findings/m2-exit.md`), and a second audit ran at the head on
+2026-10-13 with no High finding (`findings/m2-audit-2.md`). The owner's answers: the bud and the
+descendant are done, the dimmed view is judged with eyes only, and three are open: the bench on a
+slower device, the felt judgments, and the look of the bodies. The owner's words on the last: bodies
+need "new shapes too. Not just bigger/smaller ovals".
 
 Looks and function become one thing.
 
@@ -108,7 +109,10 @@ their own brain while they play, let go, and see it take over.
 - Jaw, Spike, Shell plate, Toxin gland. Abilities: dash, lunge, toxin cloud.
 - Contact rules with facing and defended arcs. Energy-conserving transfers.
 - Carried from M2: the strength of the Fin. At the default `fin_grip` of 0.3 a fin raises the slip,
-  and it cuts the slip at 0.6 (`findings/m2-audit.md`, finding L5).
+  and it cuts the slip at 0.6 (`findings/m2-audit.md`, finding L5). That decision rested on a fin in 2%
+  of bodies at tick 36,000. At tick 144,000 a fin is in 26% of the bodies of seed 1 and in 36% or more
+  of seed 8, at about the size a new part gets (`findings/m2-audit-2.md`, question 3). No reading says
+  whether evolution uses it.
 - Corpses become debris. Debris is food for Filter mouths.
 - The death freeze and death card.
 
