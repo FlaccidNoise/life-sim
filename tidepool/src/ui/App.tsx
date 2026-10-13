@@ -3,6 +3,7 @@
 import { useState } from 'preact/hooks';
 import type { Heir } from '../protocol';
 import { BrainPanel, BrainToggle } from './BrainPanel';
+import { BudCard } from './BudCard';
 import { DeathOverlay } from './DeathOverlay';
 import {
   benchText,
@@ -32,7 +33,8 @@ function Readout() {
 }
 
 // The one line near the foot of the screen. Never two: the first of these that is up shows. An
-// answer to a click ("Nothing there."), the toast of a bud, the line of the walkthrough, then the
+// answer to a click ("Nothing there."), the toast of a bud whose child the frame did not hold, the
+// line of the walkthrough, then the
 // starving line, which stands for as long as the body starves and so gives way to the three that
 // pass. How to move is under the line of beat 2. `--foot` is how far the line is from the foot of
 // the screen: the brain panel raises it where the panel is a sheet there.
@@ -123,6 +125,7 @@ export function App(props: {
       {benchText.value !== null && <p class="bench">{benchText.value}</p>}
       <Hint touch={props.touch} />
       {mode.value === 'play' && <Line debug={props.debug} />}
+      {mode.value === 'play' && !dead && <BudCard />}
       <div class="corner">
         {props.debug && <WalkLog />}
         {!dead && <BrainToggle onToggle={props.onBrain} />}
@@ -138,6 +141,7 @@ export function App(props: {
         <DeathOverlay
           cause={dead.cause}
           heirs={dead.heirs}
+          first={dead.first}
           onPick={props.onPick}
           onWatch={props.onWatch}
           onFocus={props.onFocus}

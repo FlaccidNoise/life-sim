@@ -69,6 +69,23 @@ export function unpackPart(word: number): Part | null {
   };
 }
 
+/**
+ * One body of a frame, copied out of it: the buffer of a frame goes back to the worker. A parent or
+ * a child at a bud.
+ */
+export interface Kin {
+  uid: number;
+  x: number;
+  y: number;
+  length: number; // as it is now. A body that is not full-grown is shorter than its genes make it.
+  width: number;
+  hue: number;
+  flags: number;
+  hidden: number; // hidden neurons
+  conns: number; // connections
+  parts: Part[]; // in gene order
+}
+
 /** An eye cone of the possessed body, in world space. */
 export interface Cone {
   dir: number; // radians
@@ -266,7 +283,9 @@ export type ToWorker =
   | { type: 'input'; manual: boolean; thrust: number; turn: number }
   | { type: 'param'; index: number; value: number }
   // With `on`, a `brain` message follows each frame while a body is possessed.
-  | { type: 'watchBrain'; on: boolean };
+  | { type: 'watchBrain'; on: boolean }
+  // Answered by one `brainOf` message, at once.
+  | { type: 'brainOf'; uid: number };
 
 export type FromWorker =
   | { type: 'ready'; abi: number; worldW: number; worldH: number; params: ParamInfo[] }
@@ -275,6 +294,8 @@ export type FromWorker =
   | { type: 'died'; cause: DeathCause; heirs: Heir[] }
   // The readout of the possessed body: see `readBrain`. 0 words when no body is possessed, sent once.
   | { type: 'brain'; words: Uint32Array }
+  // The readout of the body `uid`: see `readBrain`. 0 words when no living body has the uid.
+  | { type: 'brainOf'; uid: number; words: Uint32Array }
   | { type: 'stats'; tick: number; creatures: number; plants: number; tickMicros: number }
   | { type: 'benchResult'; ticks: number; millis: number; creatures: number } // alive at the end
   | { type: 'error'; message: string };

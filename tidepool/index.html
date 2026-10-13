@@ -171,6 +171,11 @@
       .death-gone {
         color: #f0b27a;
       }
+      /* The cause, under the heirs: the first death leads with the line that goes on. */
+      .death .death-after {
+        margin-bottom: 8px;
+        opacity: 0.8;
+      }
       .heirs {
         display: flex;
         flex-wrap: wrap;
@@ -232,6 +237,112 @@
         display: block;
         height: 100%;
         background: #7fd1a8;
+      }
+      /* The bud card: beside the body, which is at the centre of the screen in Play. It takes no
+         pointer, so a click on it goes to the water. */
+      .bud {
+        position: fixed;
+        top: 50%;
+        right: calc(50% + 96px);
+        transform: translateY(-50%);
+        box-sizing: border-box;
+        width: 18rem;
+        padding: 8px 12px 10px;
+        border: 1px solid #3b6377;
+        border-radius: 12px;
+        background: rgb(4 18 28 / 0.85);
+        font-size: 13px;
+        line-height: 1.4;
+      }
+      .bud p,
+      .bud ul,
+      .bud figure {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+      .bud-head {
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .bud-pair {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin: 4px 0;
+        font-size: 12px;
+        text-align: center;
+      }
+      .bud svg {
+        display: block;
+        width: 100%;
+        max-width: 8rem;
+        margin: 0 auto;
+        color: #cfe6ee;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .bud figcaption {
+        opacity: 0.75;
+      }
+      /* The mark of a difference, on a part and on the side of its line: the parent is on the left. */
+      .bud .marked,
+      .bud li::before {
+        color: #f0b27a;
+      }
+      .bud li {
+        position: relative;
+        padding: 0 14px;
+      }
+      .bud li.child {
+        text-align: right;
+      }
+      .bud li.parent::before,
+      .bud li.child::before {
+        content: '';
+        position: absolute;
+        top: 0.5em;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: currentColor;
+      }
+      .bud li.parent::before {
+        left: 0;
+      }
+      .bud li.child::before {
+        right: 0;
+      }
+      .bud .bud-note {
+        margin-top: 2px;
+        font-size: 12px;
+        opacity: 0.7;
+      }
+      /* No room beside the body: the card is under the buttons at the top, above the body. */
+      @media (max-width: 50rem) {
+        .bud {
+          top: 68px;
+          left: 50%;
+          right: auto;
+          transform: translateX(-50%);
+          width: min(19rem, calc(100% - 24px));
+        }
+        .bud svg {
+          max-width: 6rem;
+        }
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        .bud {
+          animation: bud-in 200ms ease-out;
+        }
+        @keyframes bud-in {
+          from {
+            opacity: 0;
+          }
+        }
       }
       .corner {
         position: fixed;

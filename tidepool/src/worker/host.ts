@@ -267,6 +267,9 @@ export function createHost(deps: HostDeps): Host {
             // A paused world posts no frame, so the page gets the brain now.
             postBrain(sim);
             break;
+          case 'brainOf':
+            deps.post({ type: 'brainOf', uid: msg.uid, words: sim.brain(msg.uid) });
+            break;
         }
       } catch (e) {
         fail(e);

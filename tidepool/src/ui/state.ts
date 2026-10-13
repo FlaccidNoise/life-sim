@@ -1,7 +1,7 @@
 // What the overlay shows. `src/app/main.ts` writes these from worker messages.
 
 import { signal } from '@preact/signals';
-import type { BrainView, DeathCause, Heir } from '../protocol';
+import type { BrainView, DeathCause, Heir, Kin } from '../protocol';
 
 export const errorText = signal<string | null>(null);
 export const ready = signal(false);
@@ -14,7 +14,8 @@ export const lineageAlive = signal(0); // frame header word 7: living creatures 
 export const buds = signal(0); // frame header word 8: buds of the possessed body since it was possessed
 export const toast = signal<string | null>(null); // one line, 3 seconds
 export const starving = signal(false); // the possessed body has under a quarter of a full store
-export const death = signal<{ cause: DeathCause; heirs: Heir[] } | null>(null);
+// `first`: the player has not gone on as an heir yet, so the overlay leads with the descendants.
+export const death = signal<{ cause: DeathCause; heirs: Heir[]; first: boolean } | null>(null);
 export const focusHeir = signal<Heir | null>(null); // main.ts moves the camera to it
 export const heirGone = signal(false); // a pick came back empty: the heir was not alive
 export const brainOpen = signal(false); // the brain panel
@@ -33,3 +34,23 @@ export const changesShown = signal(false); // beat 7 is done: the brain panel ha
 export const wiringChanged = signal(0);
 // The playtest log: by beat, the seconds since the page loaded at its first showing and when done.
 export const walkLog = signal<Record<string, { shown?: number; done?: number }>>({});
+
+/** One line of the bud card. `part` is the place of a part in the part list of the body of `side`. */
+export interface Difference {
+  text: string;
+  side: 'parent' | 'child';
+  part?: number;
+}
+
+/** A bud of the possessed body: the two bodies as the frame of the bud held them, and what differs. */
+export interface Bud {
+  parent: Kin;
+  child: Kin; // the nearest of the brood
+  brood: number; // children of this bud
+  lines: Difference[];
+  brainRead: boolean; // the two brains were read, and `lines` counts their connections
+  childDied: boolean; // the child was dead when the worker read its brain
+}
+// The last bud. It stays after its card has left, so the field guide can show it again.
+export const lastBud = signal<Bud | null>(null);
+export const budOpen = signal(false); // the bud card is up

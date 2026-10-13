@@ -13,24 +13,28 @@ import {
   type FrameView,
   type FromWorker,
   type Heir,
+  type Kin,
   type ParamInfo,
   type ToWorker,
 } from '../protocol';
 import { lookOf } from '../render/parts';
 import { createRenderer, type Renderer } from '../render/renderer';
 import { App } from '../ui/App';
+import { BUD } from '../ui/words/lines';
 import {
   benchText,
   brain,
   brainDriving,
   brainError,
   brainOpen,
+  budOpen,
   changesShown,
   death,
   errorText,
   focusHeir,
   heirGone,
   hint,
+  lastBud,
   lineageAlive,
   mode,
   pulse,
@@ -70,6 +74,7 @@ import {
   type Keys,
   type Steer,
 } from './input';
+import { bodyIn, childOf, differences } from './kin';
 import { loadWalk, note, saveWalk } from './walkstore';
 import { begin, split, step, wiringChanges, type Facts, type Walk } from './walkthrough';
 
@@ -84,6 +89,7 @@ const PINCH_WHEEL_ZOOM = 0.01; // a trackpad pinch is a wheel event with ctrlKey
 const PICK_RADIUS = 24; // CSS pixels around a click in which a creature is picked
 const HINT_MS = 1500;
 const TOAST_MS = 3000;
+const BUD_MS = 6000; // the bud card
 const STARVING_BELOW = 0.25; // of a full store
 const LATENCY_SAMPLES = 20;
 // Seconds. A tab that was hidden gives one long frame, and that is no time of play.
@@ -250,10 +256,19 @@ function start(): void {
   // `hands` under the player's input, `alone` since the brain last took over.
   let path = { uid: 0, x: 0, y: 0, hands: 0, alone: 0 };
   const firstBrains = new Map<number, BrainView>(); // by uid: the first readout of each body
+  // A bud of the possessed body while the worker reads the two brains: the `brainOf` answers so far.
+  interface Budding {
+    parent: Kin;
+    child: Kin;
+    brood: number;
+    words: Map<number, Uint32Array>; // by uid
+  }
+  let budding: Budding | null = null;
   if (import.meta.env.DEV) {
     const handle = {
       stats,
       errorText,
+      lastBud,
       get camera(): Camera {
         return cam;
       },
@@ -373,7 +388,36 @@ function start(): void {
     hint.value = null;
     toast.value = null;
     starving.value = false;
+    dropBud();
     forget();
+  };
+  // The card of a bud belongs to the body that budded. It leaves when the player leaves the body.
+  const dropBud = (): void => {
+    budding = null;
+    budOpen.value = false;
+  };
+  // The worker has answered for both bodies of a bud. A readout of 0 words is of a body that died
+  // after the frame of the bud, and one that does not fit its header is not read: the card then
+  // shows what the two frame records differ in, and says that the brain could not be read.
+  const showBud = (bud: Budding, mine: Uint32Array, its: Uint32Array): void => {
+    let brains: [BrainView, BrainView] | null = null;
+    try {
+      const [a, b] = [readBrain(mine), readBrain(its)];
+      if (a && b) brains = [a, b];
+    } catch {
+      // Not read. The card says so.
+    }
+    lastBud.value = {
+      parent: bud.parent,
+      child: bud.child,
+      brood: bud.brood,
+      lines: differences(bud.parent, bud.child, brains),
+      brainRead: brains !== null,
+      childDied: its.length === 0,
+    };
+    budOpen.value = true;
+    clearTimeout(budTimer);
+    budTimer = setTimeout(() => (budOpen.value = false), BUD_MS);
   };
   // The Escape key and the Leave button.
   const leave = (): void => {
@@ -390,6 +434,7 @@ function start(): void {
   };
   let hintTimer: ReturnType<typeof setTimeout> | undefined;
   let toastTimer: ReturnType<typeof setTimeout> | undefined;
+  let budTimer: ReturnType<typeof setTimeout> | undefined;
   let lastBuds = 0;
   const flash = (text: string, ms: number): void => {
     hint.value = text;
@@ -480,9 +525,18 @@ function start(): void {
         lineageAlive.value = cur.lineageAlive;
         buds.value = cur.buds;
         if (cur.buds > lastBuds && mode.peek() === 'play') {
-          toast.value = 'You budded. That one can carry your line on.';
-          clearTimeout(toastTimer);
-          toastTimer = setTimeout(() => (toast.value = null), TOAST_MS);
+          // `prev` is the frame before this one. A brood is born on one tick.
+          const parent = bodyIn(cur, cur.possessedSlot);
+          const child = prev && childOf(prev, cur, cur.possessedSlot);
+          if (parent && child) {
+            budding = { parent, child, brood: cur.buds - lastBuds, words: new Map() };
+            send({ type: 'brainOf', uid: parent.uid });
+            send({ type: 'brainOf', uid: child.uid });
+          } else {
+            toast.value = BUD.noChild;
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => (toast.value = null), TOAST_MS);
+          }
         }
         lastBuds = cur.buds;
         if (mode.peek() === 'play') {
@@ -501,6 +555,7 @@ function start(): void {
           playScale = PLAY_SCALE;
           starving.value = false;
           toast.value = null;
+          dropBud();
           mode.value = 'play';
           closeDeath();
         } else if (empty === 'heir gone') {
@@ -515,8 +570,24 @@ function start(): void {
         heirPick = false;
         watch();
         closeDeath();
-        death.value = { cause: msg.cause, heirs: msg.heirs };
+        death.value = {
+          cause: msg.cause,
+          heirs: msg.heirs,
+          first: !walk.done.includes('firstDeath'),
+        };
         break;
+      case 'brainOf': {
+        // An answer for a bud that a later bud, or a new body, has replaced is dropped.
+        if (!budding || (msg.uid !== budding.parent.uid && msg.uid !== budding.child.uid)) break;
+        budding.words.set(msg.uid, msg.words);
+        const mine = budding.words.get(budding.parent.uid);
+        const its = budding.words.get(budding.child.uid);
+        if (mine && its) {
+          showBud(budding, mine, its);
+          budding = null;
+        }
+        break;
+      }
       case 'brain':
         // A readout that does not fit its header stays in the panel. The world runs on.
         try {
@@ -614,7 +685,8 @@ function start(): void {
       // The readout is of this body, and fresh, only while the panel is open.
       split:
         manual && brainOpen.peek() && read?.uid === possessedUid ? split(read, steer.peek()) : 0,
-      busy: hint.peek() !== null || toast.peek() !== null,
+      // The card of a bud is a line of the page too, from the frame of the bud on.
+      busy: hint.peek() !== null || toast.peek() !== null || budding !== null || budOpen.peek(),
     };
     const out = step(walk, facts, Math.min(dt, WALK_DT_MAX));
     if (out.walk.done !== walk.done || out.walk.shown !== walk.shown) {

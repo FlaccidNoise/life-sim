@@ -1,7 +1,9 @@
-// The death overlay: the cause, then the heirs to continue as, or the end of the line.
+// The death overlay: the cause, then the heirs to continue as, or the end of the line. The first
+// death with a living descendant leads with the descendants, and the cause comes after them.
 
 import type { DeathCause, Heir } from '../protocol';
 import { heirGone } from './state';
+import { FIRST_DEATH } from './words/lines';
 
 const CAUSE_TEXT: Record<DeathCause, string> = {
   starved: 'You starved.',
@@ -10,7 +12,7 @@ const CAUSE_TEXT: Record<DeathCause, string> = {
 
 // The body shader colours a creature in HSV: saturation 0.2 to 0.7 and value 0.5 to 1 with energy.
 // CSS has HSL, so this converts the same colour.
-function swatch(hue: number, energy01: number): string {
+export function swatch(hue: number, energy01: number): string {
   const e = Math.min(Math.max(energy01, 0), 1);
   const s = 0.2 + 0.5 * e;
   const v = 0.5 + 0.5 * e;
@@ -25,13 +27,24 @@ export function DeathOverlay(props: {
   onPick: (uid: number) => void;
   onWatch: () => void;
   onFocus: (heir: Heir | null) => void;
+  first: boolean; // the player has not gone on as an heir yet
 }) {
   const { cause, heirs } = props;
+  const lineFirst = props.first && heirs.length > 0;
+  const causeLine = (
+    <p class={lineFirst ? 'death-after' : 'death-cause'} role={lineFirst ? undefined : 'status'}>
+      {CAUSE_TEXT[cause]}
+    </p>
+  );
   return (
     <section class="death" aria-label="You died">
-      <p class="death-cause" role="status">
-        {CAUSE_TEXT[cause]}
-      </p>
+      {lineFirst ? (
+        <p class="death-cause" role="status">
+          {FIRST_DEATH}
+        </p>
+      ) : (
+        causeLine
+      )}
       <p class="death-next">
         {heirs.length === 0 ? 'Your line has ended.' : 'Continue as a descendant.'}
       </p>
@@ -65,6 +78,7 @@ export function DeathOverlay(props: {
           ))}
         </div>
       )}
+      {lineFirst && causeLine}
       <button type="button" class="watch" onClick={props.onWatch}>
         Keep watching
       </button>
