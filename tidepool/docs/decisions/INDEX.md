@@ -95,6 +95,14 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
   upkeep the world held 260 more creatures and the WASM bench read 2,385 against 2,400. At 0.03 it
   reads 2,933 to 3,127, `make gates` exits 0, and on 10 seeds the chemoreceptor reads 0.16 to 0.27 at
   tick 144,000. → `../findings/m2-senses.md`
+- 2026-10-12: **The nine open questions of the M2 audit are decided, with two small additions and no
+  change to a band, a rule, or a default.** Added: `make gates-long` runs the evolution gate at tick
+  144,000 on seeds 1, 5, 8 at each milestone exit and not in CI (H2), and the row of `gate-evolve`
+  prints `speed` and `area` with no band (M3, M7). Kept: the two sense gaps stay at 0.10 (H3), `plans`
+  and `speed_cv` stay with no band (M5), and the near circle on the page stays until the owner's check
+  3 (L7). Carried: the size rule and the egg gene to M3 with brain upkeep (M7, M9), the strength of the
+  fin to M4 (L5, its test is renamed to say that it holds at a grip of 0.6), and the throughput of an
+  old world to M5 (M8). → `../findings/m2-exit.md`, `../roadmap.md`
 
 ## Architecture
 

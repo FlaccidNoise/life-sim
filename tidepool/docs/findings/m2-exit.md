@@ -49,7 +49,7 @@ Wider than the gates read:
 | `gate-evolve` at tick 36,000 on seeds 1 to 10 | 9 of 10. Seed 7 fails the eye gap at 0.097 against 0.10 |
 | Scent gap at tick 36,000, seeds 1 to 10 | 0.17 to 0.37 |
 | Eye gap at tick 36,000, seeds 1 to 10 | 0.097 to 0.19 |
-| `gate-evolve` at tick 144,000 on seeds 1, 5, 8 | 3 of 3. Scent gaps 0.16, 0.26, 0.16. Eye gaps 0.28, 0.24, 0.20 |
+| `make gates-long`: `gate-evolve` at tick 144,000 on seeds 1, 5, 8 | 3 of 3. Scent gaps 0.16, 0.26, 0.16. Eye gaps 0.28, 0.24, 0.20. `speed` 0.84, 0.73, 0.91. `area` 34.8, 39.1, 35.0 |
 | `probe-census` at tick 144,000, seeds 1 to 10 | `chemo` 0.16 to 0.27, `eye` 0.25 to 0.31, `senseless` 0.00, `speed` 0.73 to 0.99, `len` 9.2 to 11.3, `area` 33 to 45, `creatures` 1,373 to 1,770 |
 
 The full rows are in `m2-senses.md`, Part 5.
@@ -120,19 +120,20 @@ tick 3,000 on 3 of 3 seeds. It is met.
 
 ## Open problems, sorted by who decides
 
-**The owner decides.** Each comes from `m2-audit.md`. None blocks `make gates`.
+**Decided by the owner on 2026-10-12** (`decisions/INDEX.md`). Each comes from `m2-audit.md`. No
+band, rule, or default changed.
 
-| # | Question | What is measured |
-|---|---|---|
-| H2 | Should a gate read a long run? | Nothing in `make gates` reads past tick 36,000. The loss of the senses showed only at tick 144,000 |
-| H3 | Is 0.10 the right band for the two gaps? | It was set from a chance gap of 0.073 in a world that the tuning replaced. At these defaults the chance input reads scent gaps of 0.008, 0.022, -0.116 and eye gaps of -0.003, -0.015, 0.008 (`gates.md`). The real gaps at tick 36,000 on 10 seeds: scent 0.17 to 0.37, eye 0.097 to 0.19 |
-| M3 | Does the fall of the speed matter? | `speed` reads 0.85 to 1.15 at tick 36,000 and 0.73 to 0.99 at tick 144,000. No gate reads it |
-| M5 | Should `plans` and `speed_cv` have bands? | Both are printed with no band |
-| M7 | Should the size band read more than length? | `area` falls from 50 to 76 at tick 36,000 to 33 to 45 at tick 144,000. `len` loses about 1.5, and `wid` reads 0.34 to 0.45 against a founder's 0.50 |
-| M8 | Is an old world under the floor acceptable? | 2,357 against 2,400 at tick 108,000, at a high load |
-| M9 | Should the egg gene be a live choice? | It starts at the top of its range (0.7) and reads 0.64 to 0.68 in every row to tick 144,000 |
-| L5 | The fin: default or claim? | At the default `fin_grip` a fin raises the slip. The test passes only at 0.6 |
-| L7 | The near circle on the page | The page draws a circle of 1.5 body lengths that no sense feeds |
+| # | Question | What is measured | Decision |
+|---|---|---|---|
+| H2 | Should a gate read a long run? | Nothing in `make gates` reads past tick 36,000. The loss of the senses showed only at tick 144,000 | Yes: `make gates-long`, at each milestone exit, not in CI. Its rows are below |
+| H3 | Is 0.10 the right band for the two gaps? | It was set from a chance gap of 0.073 in a world that the tuning replaced. At these defaults the chance input reads scent gaps of 0.008, 0.022, -0.116 and eye gaps of -0.003, -0.015, 0.008 (`gates.md`). The real gaps at tick 36,000 on 10 seeds: scent 0.17 to 0.37, eye 0.097 to 0.19 | Keep 0.10 |
+| M3 | Does the fall of the speed matter? | `speed` reads 0.85 to 1.15 at tick 36,000 and 0.73 to 0.99 at tick 144,000. No gate reads it | `gate-evolve` prints `speed` with no band. The owner judges it by eye in check 1 |
+| M5 | Should `plans` and `speed_cv` have bands? | Both are printed with no band | Not in M2. M3 changes how parts wire to brains |
+| M7 | Should the size band read more than length? | `area` falls from 50 to 76 at tick 36,000 to 33 to 45 at tick 144,000. `len` loses about 1.5, and `wid` reads 0.34 to 0.45 against a founder's 0.50 | `gate-evolve` prints `area` with no band. The rule waits for M3 |
+| M8 | Is an old world under the floor acceptable? | 2,357 against 2,400 at tick 108,000, at a high load | Accepted for now. M5 reads it on a quiet machine |
+| M9 | Should the egg gene be a live choice? | It starts at the top of its range (0.7) and reads 0.64 to 0.68 in every row to tick 144,000 | M3, with brain upkeep |
+| L5 | The fin: default or claim? | At the default `fin_grip` a fin raises the slip. The test passes only at 0.6 | The test is renamed to say so. M4 decides the strength |
+| L7 | The near circle on the page | The page draws a circle of 1.5 body lengths that no sense feeds | Kept until owner check 3 |
 
 **Code and docs.**
 

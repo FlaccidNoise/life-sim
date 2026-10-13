@@ -21,9 +21,9 @@ and Task 14 (the exit) is open. **`make check` and `make gates` both exit 0.** T
 the upkeep of a part. On 2026-10-12 the owner deleted that rule, and `plant_growth` went to 0.03
 (`docs/findings/m2-senses.md`): every one of 10 seeds now keeps both senses to tick 144,000. The
 failure proofs of `docs/gates.md` ran again at these defaults. The exit record is
-`docs/findings/m2-exit.md`. Left in Task 14: the owner's five checks and nine decisions from the
-audit, both listed in the exit record. No fresh-context audit has run since the rule was deleted.
-Not pushed: ask the owner first.
+`docs/findings/m2-exit.md`. The owner decided the nine questions of the audit on 2026-10-12
+(`docs/decisions/INDEX.md`), and M2 is pushed. Left in Task 14: the owner's five checks, listed in the
+exit record. No fresh-context audit has run since the rule was deleted.
 
 ## Commands
 
@@ -33,6 +33,7 @@ Run from `tidepool/`. If `cargo` is not found, run `. "$HOME/.cargo/env"`.
 |---|---|
 | `make check` | Crate count, format (Rust and TypeScript), Clippy, Rust tests, WASM build, type check, ESLint, Vitest |
 | `make gates` | Native bench, the throughput gate (`scripts/bench-wasm.mjs`), the health gate (`gate-health`), then the evolution gate (`gate-evolve`) |
+| `make gates-long` | The evolution gate at tick 144,000 on seeds 1, 5, 8. About 7 minutes on the reference machine. Run it at each milestone exit. It is not in CI |
 | `make dev` | Build the WASM and start the dev server |
 
 ## Gotchas

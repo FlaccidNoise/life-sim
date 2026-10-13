@@ -100,6 +100,9 @@ fn measure(seed: u32, a: &Args) -> (String, Vec<String>) {
     let adults = live(&world).filter(|&s| c.growth[s] >= 1.0);
     let (speed, speed_sd) = mean_sd(adults.map(|s| top_speed(&world, s)));
     let speed_cv = if speed > 0.0 { speed_sd / speed } else { 0.0 };
+    // Two readings with no band. Each is a mean over the living, as `probe-census` prints it.
+    let speed = mean_sd(live(&world).map(|s| top_speed(&world, s))).0;
+    let area = mean_sd(live(&world).map(|s| c.len[s] * c.len[s] * c.wid[s])).0;
 
     let blind = world_after(seed, a, Some(id::CHEMO_GAIN));
     let creatures_noscent = blind.creatures.slots.count();
@@ -140,7 +143,7 @@ fn measure(seed: u32, a: &Args) -> (String, Vec<String>) {
         "eye_blind run died".to_string(),
     );
     let row = format!(
-        "seed={seed} creatures={creatures} creatures_noscent={creatures_noscent} creatures_noeye={creatures_noeye} len={len:.1} len_sd={len_sd:.2} parts={parts:.1} chemo={chemo:.2} chemo_blind={chemo_blind:.2} eye={eye:.2} eye_blind={eye_blind:.2} plans={plans} speed_cv={speed_cv:.2}"
+        "seed={seed} creatures={creatures} creatures_noscent={creatures_noscent} creatures_noeye={creatures_noeye} len={len:.1} len_sd={len_sd:.2} parts={parts:.1} chemo={chemo:.2} chemo_blind={chemo_blind:.2} eye={eye:.2} eye_blind={eye_blind:.2} plans={plans} speed_cv={speed_cv:.2} speed={speed:.2} area={area:.1}"
     );
     (row, failures)
 }

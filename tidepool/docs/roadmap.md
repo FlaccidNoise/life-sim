@@ -20,6 +20,9 @@ one before it ships, because what is learned from playing a milestone changes th
    No off-by-default flags for dead features.
 5. **Mechanism fires is not evolution uses it is not it helps.** Claim only the one that was measured. A
    fresh-context reviewer checks each milestone's claims against its probes.
+6. **Long reading at the exit.** Before a milestone closes, run `make gates-long`: the evolution gate at
+   tick 144,000 on seeds 1, 5, 8. It is not in CI. M2 lost its senses between tick 36,000 and tick
+   144,000, and no gate read that far (`gates.md`).
 
 ## Milestones
 
@@ -62,8 +65,8 @@ stays alive at 12,000 ticks on 3 seeds.
 
 ### M2 — Bodies (built 2026-10-12, owner check open)
 
-Status: every task of the plan is built, and `make check` and `make gates` exit 0. The owner checks
-of the exit line below are still to do (`plans/2026-10-11-m2-bodies.md`, Task 14). The fresh-context
+Status: every task of the plan is built, pushed on 2026-10-12, and `make check` and `make gates` exit
+0. The owner checks of the exit line below are still to do (`plans/2026-10-11-m2-bodies.md`, Task 14). The fresh-context
 audit found that evolution removed the senses. The cause was the upkeep of a part, and it is deleted
 (`findings/m2-audit.md`, `findings/m2-senses.md`).
 
@@ -85,6 +88,9 @@ changes how they move and what they see. Part count does not collapse to the min
 
 - Variable-topology recurrent brains. Inputs and outputs come from parts.
 - Brain upkeep. Mutations that add and remove neurons and connections.
+- Carried from M2 (`decisions/INDEX.md`, 2026-10-12), to decide with the rule of brain upkeep: the size
+  band reads length alone while the area falls, the egg gene sits at the top of its range, and
+  `plans` and `speed_cv` have no band.
 - Mixing: mate contact, the `accept mate` output, crossover by history id, the mate-choice overlay.
   Known before the build: `repro.rs` draws the genome of a child, and its history ids, before it knows
   that the parent can pay. A child that is never born uses up ids. Ids stay unique, so crossover can
@@ -98,6 +104,8 @@ their own brain while they play, let go, and see it take over.
 
 - Jaw, Spike, Shell plate, Toxin gland. Abilities: dash, lunge, toxin cloud.
 - Contact rules with facing and defended arcs. Energy-conserving transfers.
+- Carried from M2: the strength of the Fin. At the default `fin_grip` of 0.3 a fin raises the slip,
+  and it cuts the slip at 0.6 (`findings/m2-audit.md`, finding L5).
 - Corpses become debris. Debris is food for Filter mouths.
 - The death freeze and death card.
 
@@ -107,6 +115,8 @@ something that learned to dash is frightening and its cause is always shown.
 ### M5 — Deep time
 
 - Headless fast-forward in the worker, with progress streamed to the page.
+  Carried from M2: an old world read 2,357 ticks per second against the floor of 2,400, at tick
+  108,000 on a busy machine. Read it on a quiet machine first (`findings/m2-exit.md`).
 - The save format: versioned, checksummed, last-good backup, export and import.
 - The world resumes where the player left it.
 - The skip montage, the skip report, the heir picker with candidates that differ.
