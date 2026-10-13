@@ -123,6 +123,86 @@ export function viewFrame(buffer: ArrayBuffer): FrameView {
   };
 }
 
+// The layout of a brain readout. It mirrors `brain::readout` in crates/sim/src/brain.rs.
+// tests/abi.test.ts fails if the two disagree.
+export const BRAIN_HEADER_WORDS = 6;
+export const BRAIN_NEURON_WORDS = 6;
+export const BRAIN_CONN_WORDS = 3;
+// The kind of a hidden neuron. A neuron of the body has kind 0. Another kind is the kind of the part
+// that owns the port.
+export const KIND_HIDDEN = 255;
+
+export interface BrainNeuron {
+  owner: number; // the history id of the part, or 0 for the body
+  port: number;
+  kind: number; // 0 for the body, KIND_HIDDEN for a hidden neuron, else the kind of the part
+  gene: number; // the index of the hidden gene or of the part gene
+  activation: number;
+  bias: number;
+  alpha: number;
+}
+
+export interface BrainConn {
+  src: number; // an index into `neurons`
+  dst: number; // an index into `neurons`
+  weight: number;
+  history: number;
+}
+
+/** The brain of one body. The neurons are in block order: inputs, then hidden, then outputs. */
+export interface BrainView {
+  uid: number;
+  inputs: number;
+  hidden: number;
+  outputs: number;
+  manual: boolean; // the player steers this body
+  neurons: BrainNeuron[];
+  connections: BrainConn[];
+}
+
+/** Reads the words of a `brain` message. Null for 0 words: no body is possessed. */
+export function readBrain(words: Uint32Array): BrainView | null {
+  if (words.length === 0) return null;
+  const word = (i: number): number => words[i] ?? 0;
+  const [uid, inputs, hidden, outputs, conns] = [word(0), word(1), word(2), word(3), word(4)];
+  const count = inputs + hidden + outputs;
+  const expected = BRAIN_HEADER_WORDS + count * BRAIN_NEURON_WORDS + conns * BRAIN_CONN_WORDS;
+  if (words.length < BRAIN_HEADER_WORDS || words.length !== expected) {
+    throw new Error(
+      `a brain readout of ${words.length} words does not fit its header, which needs ${expected}. Fix: pass the words of one \`brain\` message whole, and keep BRAIN_* in src/protocol.ts equal to crates/sim/src/brain.rs.`,
+    );
+  }
+  const f32 = new Float32Array(words.buffer, words.byteOffset, words.length);
+  const float = (i: number): number => f32[i] ?? 0;
+  const neurons: BrainNeuron[] = [];
+  for (let i = 0; i < count; i++) {
+    const o = BRAIN_HEADER_WORDS + i * BRAIN_NEURON_WORDS;
+    const kind = word(o + 2);
+    neurons.push({
+      owner: word(o),
+      port: word(o + 1),
+      kind: kind & 0xff,
+      gene: kind >>> 8,
+      activation: float(o + 3),
+      bias: float(o + 4),
+      alpha: float(o + 5),
+    });
+  }
+  const connections: BrainConn[] = [];
+  const base = BRAIN_HEADER_WORDS + count * BRAIN_NEURON_WORDS;
+  for (let i = 0; i < conns; i++) {
+    const o = base + i * BRAIN_CONN_WORDS;
+    const ends = word(o);
+    connections.push({
+      src: ends & 0xffff,
+      dst: ends >>> 16,
+      weight: float(o + 1),
+      history: word(o + 2),
+    });
+  }
+  return { uid, inputs, hidden, outputs, manual: word(5) === 1, neurons, connections };
+}
+
 // Word offsets in an heir record (HEIR_STRIDE words). The layout mirrors `write_heirs` in
 // crates/sim/src/control.rs.
 export const HEIR_STRIDE = 7;
@@ -184,13 +264,17 @@ export type ToWorker =
   | { type: 'possess'; uid: number }
   | { type: 'release' }
   | { type: 'input'; manual: boolean; thrust: number; turn: number }
-  | { type: 'param'; index: number; value: number };
+  | { type: 'param'; index: number; value: number }
+  // With `on`, a `brain` message follows each frame while a body is possessed.
+  | { type: 'watchBrain'; on: boolean };
 
 export type FromWorker =
   | { type: 'ready'; abi: number; worldW: number; worldH: number; params: ParamInfo[] }
   | { type: 'frame'; buffer: ArrayBuffer }
   | { type: 'possessed'; uid: number } // 0: nothing there, or released
   | { type: 'died'; cause: DeathCause; heirs: Heir[] }
+  // The readout of the possessed body: see `readBrain`. 0 words when no body is possessed, sent once.
+  | { type: 'brain'; words: Uint32Array }
   | { type: 'stats'; tick: number; creatures: number; plants: number; tickMicros: number }
   | { type: 'benchResult'; ticks: number; millis: number; creatures: number } // alive at the end
   | { type: 'error'; message: string };

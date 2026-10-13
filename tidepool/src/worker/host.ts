@@ -48,6 +48,9 @@ export function createHost(deps: HostDeps): Host {
   let pausedByDeath = false;
   // The latest `input` message. It belongs to one possession: a new body starts without it.
   let input = NO_INPUT;
+  // The page asked for `brain` messages, and the last one had 0 words.
+  let watching = false;
+  let sentEmpty = false;
   let last = 0; // the time of the previous step
   let owed = 0; // milliseconds of world time that have not run yet
   // Since the last `stats` message.
@@ -59,6 +62,17 @@ export function createHost(deps: HostDeps): Host {
   const fail = (e: unknown): void => {
     stop();
     deps.post({ type: 'error', message: e instanceof Error ? e.message : String(e) });
+  };
+
+  // Posts the brain of the possessed body. With no body possessed it posts 0 words, once.
+  const postBrain = (sim: Sim): void => {
+    if (!watching) return;
+    const words = sim.brain(sim.possessed());
+    if (words.length === 0) {
+      if (sentEmpty) return;
+      sentEmpty = true;
+    } else sentEmpty = false;
+    deps.post({ type: 'brain', words });
   };
 
   // Writes the world as it is now for the view and posts it. False when the pool is empty: the
@@ -73,6 +87,7 @@ export function createHost(deps: HostDeps): Host {
     }
     frameDue = false;
     deps.post({ type: 'frame', buffer }, [buffer]);
+    postBrain(sim);
     return true;
   };
 
@@ -245,6 +260,12 @@ export function createHost(deps: HostDeps): Host {
             break;
           case 'param':
             sim.setParam(msg.index, msg.value);
+            break;
+          case 'watchBrain':
+            watching = msg.on;
+            sentEmpty = false;
+            // A paused world posts no frame, so the page gets the brain now.
+            postBrain(sim);
             break;
         }
       } catch (e) {
