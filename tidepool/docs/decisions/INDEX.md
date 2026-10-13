@@ -152,6 +152,12 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
 - 2026-10-13: **No feature is added beyond the roadmap.** Variety comes from M4 (predation) and M6
   (zones, plant genomes). A feature that the owner names is placed in a milestone with a measurement.
   → `../roadmap.md`
+- 2026-10-13: **Provisional, owner to confirm: the default draw of a body stays as it was, and three
+  looks wait behind `?look=1|2|3`.** Look 1 narrows the lighter end, look 2 also draws parts at twice
+  the size with a fan for a mouth and a fork for a chemoreceptor, look 3 also swells the body at each
+  mouth. Looks 2 and 3 are 12% to 59% over today's draw time, against a limit of a tenth. The build
+  agent would pick look 3 with the flagellum at today's size. The owner picks one or none, and the
+  rest is deleted. → `../findings/m3-shapes.md`
 
 ## Architecture
 
