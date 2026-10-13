@@ -242,3 +242,94 @@ Not run again: the CI row, and the fast gates but for the snapshot row (Clippy, 
 - **A second run of an arm.** The sim is deterministic, so every reading is one run per seed.
 
 All run logs are in `/private/tmp/claude-501/-Users-joshtaylor-CodingProjects-life-sim/cccfe1e3-4a52-4366-98f7-c0c5f6392f37/scratchpad/a2/`: `A.log` (claims), `B.log` (proofs), `C.log` and `D.log` (new readings), `mut1.log` to `mut6.log` (breaks), `audit-formula.log` (the scratch test), and `make-check.log`.
+
+## The orchestrator's check, 2026-10-13
+
+The text above is the auditor's, word for word. This part is by the orchestrator of the session, who
+ran the new readings again on `main` at the same code, one run at a time, at a load average of 5 to 7.
+The harness kept the auditor from writing a file, so the orchestrator saved the report from the
+auditor's reply.
+
+| Claim of the audit | Checked how | Result |
+|---|---|---|
+| `make check` and `make gates` exit 0, same rows | Both run again | Exit 0. The 6 gate rows are the same. Native 3,493, WASM 3,200 |
+| `make gates-long` passes, and seeds 4 and 6 pass | `gate-evolve --seeds 1,4,5,6,8 --ticks 144000` | `5/5 PASS`, 622 s. Seeds 1, 5, 8 are the recorded rows. Seeds 4 and 6 read the auditor's gaps |
+| M1: no test holds `eye_cost` in the mass | Read the test, then broke `part_sum` | True. The break now fails one test, the new case, and nothing else |
+| M2: no test holds `top_speed` and `turn_rate` | Broke `top_speed` (the heft squared) | True. The break now fails the new test: `speed 0.810 against 0.761` |
+| M3: a third of seed 1 has no chemoreceptor at tick 144,000 | `probe-plans --seed 1 --ticks 144000`, then the census with two new columns | The 8 plan rows are the same. The census reads `no_chemo=0.38` on seed 1, more than the audit's lower bound of 0.32 |
+| M4: `chemo_gain=1` passes the short gates and fails the long one on seed 8 | The long command on the five seeds | `4/5 FAIL`, exit 1. Seeds 1, 5, 8 are the auditor's rows. Seeds 4 and 6 pass |
+| M5: two new inputs reject a living world | Both commands | The same rows, exit 1 |
+| L2: the void seeds are 4 and 6 | `bench --seed 4 --runs 1`, and seed 6 | Both `VOID`. Seeds 2, 3, 5, 7 to 10 were not run again |
+| L4: speed falls on 10 of 10 | Read the 20 rows | True |
+| L7: the old world reads over the floor | `bench-wasm.mjs --settle 108000 --runs 3` | 2,454, 2,471, 2,493: `PASS` at a load average of 5.1 |
+| Question 3: the fin is common at tick 144,000 | `probe-plans` on seeds 1 and 8 | 26% on seed 1 and 36% on seed 8, among the 8 commonest plans |
+| The 20 census rows are the record | The census on 10 seeds, the new columns cut off, `diff` | No difference |
+
+Not checked again: the 28 recorded proofs of `gates.md` (the auditor's log `B.log` holds them), the
+six breaks other than the two above, `probe-heirs`, `probe-crowd`, `probe-plants`, and the snapshot
+break.
+
+### What the new columns read
+
+`probe-census` now prints `no_chemo` and `no_eye`: the share of bodies with no part of that kind. On
+10 seeds, one run per seed:
+
+| Seed | `no_chemo` at tick 36,000 | 72,000 | 108,000 | 144,000 |
+|---|---|---|---|---|
+| 1 | 0.17 | 0.39 | 0.40 | 0.38 |
+| 2 | 0.01 | 0.01 | 0.04 | 0.02 |
+| 3 | 0.08 | 0.05 | 0.20 | 0.38 |
+| 4 | 0.04 | 0.19 | 0.08 | 0.04 |
+| 5 | 0.15 | 0.18 | 0.17 | 0.08 |
+| 6 | 0.05 | 0.09 | 0.03 | 0.05 |
+| 7 | 0.07 | 0.07 | 0.02 | 0.02 |
+| 8 | 0.09 | 0.60 | 0.29 | 0.11 |
+| 9 | 0.12 | 0.11 | 0.02 | 0.04 |
+| 10 | 0.09 | 0.12 | 0.14 | 0.12 |
+
+- `no_eye` reads 0.00 on every seed from tick 72,000. At tick 36,000 it reads 0.10 on seed 8 and 0.01
+  on seeds 1 and 9.
+- The share with no chemoreceptor is not a one-way loss. On seeds 4, 5, 8, and 9 it rises and then
+  falls. On seed 8 the bodies with no chemoreceptor were 60% of the world at tick 72,000 and 11% at
+  tick 144,000. On seed 1 the share holds near 0.39 for 72,000 ticks, and on seed 3 it still rises at
+  the last row.
+- What this does not show: where seeds 1 and 3 go after tick 144,000, and why the bodies with no
+  chemoreceptor lose ground again. No control ran.
+
+### The long reading and its proof (finding M4)
+
+The target had no bad input of the head on record. Two were run on its five seeds.
+
+1. **The chance input, both senses useless: `0/5 FAIL`.** `--param chemo_gain=0.0001 --param
+   eye_gain=0.0001` fails both gap bands on every seed. The 10 gaps read from -0.022 to 0.021 against
+   a band of 0.10. This is the proof that the target rejects a bad world of the head.
+2. **The auditor's input, `chemo_gain=1`: `4/5 FAIL`, seed 8 alone.** It is weak. Four seeds hold the
+   sense as the default world does. On seed 8 the same input passes at tick 72,000 (`chemo=0.21`),
+   and the default world reads `chemo=0.12` at tick 72,000 on that seed, 0.02 over the band, and 0.17
+   at tick 144,000. The mean of one seed moves by 0.1 or more between two readings in both worlds.
+
+So the reading is proven to reject a world with useless senses. It is not proven to see a slow loss
+that the short gate passes, at the head: the only record of that is the old world with part upkeep.
+The rows are in `gates.md`, "The long reading".
+
+A new fact for the band: the default world passed the scent gap on seed 8 at tick 72,000 by 0.02. The
+gate reads tick 144,000, so nothing fails. The band is the owner's and did not change.
+
+### What was fixed, and what was not
+
+| Finding | State |
+|---|---|
+| M1 | Fixed. `a_part_costs_upkeep_through_its_mass_alone` has a case at `eye_cost` 2 |
+| M2 | Fixed. `evolve::tests::the_formulas_read_what_the_motor_settles_at`: three lone bodies with no fin, 150 ticks, within 1% |
+| M3 | The probe prints the share, and `m2-exit.md` says it. What R1 reads is the owner's question 1 |
+| M4 | Fixed in part. The long reading has a proof at the head: the chance input, 0 of 5. An input that passes the short gate and fails the long one is still weak: `chemo_gain=1` fails on 1 of 5 seeds |
+| M5 | The two new inputs are in `gates.md`. `min_late` and `plants` low are still open, and `gates.md` says so |
+| L1 | Not fixed. The share in `motor.rs` is right, and a plain form of it rounds differently, so the change must pin the gate rows again. It goes with the next change to the motor |
+| L2 | Fixed: `design.md` §5.2 and the reference world of `architecture.md` |
+| L3 | Fixed: the comment in `evolve.rs` |
+| L4 | Fixed: 10 of 10 in `m2-senses.md` |
+| L5 | Fixed: the gate rows of `m2-exit.md` end with `speed` and `area` |
+| L6 | Fixed: reworded in `m2-exit.md` |
+| L7 | Fixed: four readings in `gates.md` "Throughput readings". `m2-exit.md`, `roadmap.md`, and `architecture.md` say "at the floor" |
+
+No rule, band, floor, or default changed. `make check` and `make gates` exit 0 after the fixes.

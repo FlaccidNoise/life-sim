@@ -824,8 +824,49 @@ gate-evolve 5/5 PASS
 exit=0
 ```
 
-**The bad input is the world with the upkeep of a part, and it is a record: `part_upkeep` is deleted,
-so the command cannot be typed at the head.** Two recorded runs of this command rejected it:
+**The reading has rejected a bad world of the head, on 2026-10-13.** The input is the chance input of
+the short gate: both senses read almost nothing, so no body gains from one. The reason was written
+before the run. It fails both gap bands on 5 of 5 seeds, at a load average of 3.4 to 6.5, in 532 s:
+
+```
+$ target/release/tidepool-headless gate-evolve --seeds 1,4,5,6,8 --ticks 144000 --param chemo_gain=0.0001 --param eye_gain=0.0001
+seed=1 creatures=1449 creatures_noscent=1243 creatures_noeye=1322 len=16.5 len_sd=1.82 parts=3.0 chemo=0.00 chemo_blind=0.01 eye=0.01 eye_blind=0.04 plans=4 speed_cv=0.29 speed=1.33 area=92.4 FAIL(chemo_gap=-0.011 < 0.1, eye_gap=-0.022 < 0.1)
+seed=4 creatures=965 creatures_noscent=1005 creatures_noeye=1059 len=18.1 len_sd=2.71 parts=4.3 chemo=0.02 chemo_blind=0.01 eye=0.04 eye_blind=0.05 plans=3 speed_cv=0.26 speed=1.48 area=129.4 FAIL(chemo_gap=0.010 < 0.1, eye_gap=-0.011 < 0.1)
+seed=5 creatures=1267 creatures_noscent=1212 creatures_noeye=1201 len=17.6 len_sd=2.82 parts=4.1 chemo=0.03 chemo_blind=0.01 eye=0.02 eye_blind=0.00 plans=4 speed_cv=0.25 speed=1.55 area=117.8 FAIL(chemo_gap=0.021 < 0.1, eye_gap=0.011 < 0.1)
+seed=6 creatures=1137 creatures_noscent=1098 creatures_noeye=1029 len=16.5 len_sd=2.30 parts=4.8 chemo=0.02 chemo_blind=0.02 eye=0.03 eye_blind=0.03 plans=6 speed_cv=0.30 speed=1.36 area=103.4 FAIL(chemo_gap=-0.003 < 0.1, eye_gap=0.005 < 0.1)
+seed=8 creatures=997 creatures_noscent=1030 creatures_noeye=1100 len=17.0 len_sd=2.60 parts=3.9 chemo=0.00 chemo_blind=0.00 eye=0.02 eye_blind=0.01 plans=4 speed_cv=0.28 speed=1.63 area=147.5 FAIL(chemo_gap=0.003 < 0.1, eye_gap=0.007 < 0.1)
+gate-evolve 0/5 FAIL
+exit=1
+```
+
+The 10 chance gaps at tick 144,000 read from -0.022 to 0.021, against a band of 0.10. At tick 36,000
+the same input read from -0.116 to 0.022 on 3 seeds. In this world the senses are gone (`chemo` 0.00
+to 0.03, `eye` 0.01 to 0.04) and the bodies are long: `len` 16.5 to 18.1.
+
+**Still weak: an input that passes at tick 36,000 and fails at tick 144,000.** That is what the long
+reading is for. One candidate, from the second audit (`findings/m2-audit-2.md`, finding M4):
+`chemo_gain=1`, a quarter of the gain of the scent direction. It passes `gate-health` and `gate-evolve`
+at tick 36,000 on seeds 1, 2, 3 (the auditor's runs). At tick 144,000 it fails on seed 8 alone, in 635 s:
+
+```
+$ target/release/tidepool-headless gate-evolve --seeds 1,4,5,6,8 --ticks 144000 --param chemo_gain=1
+seed=1 creatures=1739 creatures_noscent=1717 creatures_noeye=1235 len=9.8 len_sd=1.09 parts=7.2 chemo=0.17 chemo_blind=0.00 eye=0.27 eye_blind=0.01 plans=7 speed_cv=0.24 speed=0.82 area=31.5 PASS
+seed=4 creatures=1509 creatures_noscent=1405 creatures_noeye=977 len=10.3 len_sd=1.85 parts=7.0 chemo=0.22 chemo_blind=0.01 eye=0.28 eye_blind=0.03 plans=5 speed_cv=0.28 speed=0.88 area=41.0 PASS
+seed=5 creatures=1748 creatures_noscent=1595 creatures_noeye=1215 len=10.3 len_sd=1.56 parts=7.7 chemo=0.18 chemo_blind=0.01 eye=0.28 eye_blind=0.03 plans=5 speed_cv=0.31 speed=0.76 area=37.6 PASS
+seed=6 creatures=1370 creatures_noscent=1364 creatures_noeye=1037 len=9.2 len_sd=1.15 parts=5.8 chemo=0.20 chemo_blind=0.01 eye=0.31 eye_blind=0.02 plans=6 speed_cv=0.28 speed=0.79 area=45.0 PASS
+seed=8 creatures=1289 creatures_noscent=1285 creatures_noeye=933 len=11.5 len_sd=2.34 parts=5.4 chemo=0.05 chemo_blind=0.01 eye=0.26 eye_blind=0.03 plans=5 speed_cv=0.23 speed=0.76 area=50.7 FAIL(chemo_gap=0.045 < 0.1)
+gate-evolve 4/5 FAIL
+exit=1
+```
+
+This does not show that `chemo_gain=1` is a bad world. Four seeds hold the sense as the default world
+does. On seed 8 the same input passes at tick 72,000 with `chemo=0.21`, and the default world reads
+`chemo=0.12` there, a gap of 0.12 against the band of 0.10, and then 0.17 at tick 144,000. So the
+mean of one seed moves by 0.1 or more between two readings in both worlds, and the fail of seed 8 is
+inside that. One more input was tried by the auditor and fails at tick 36,000 already: `eye_cost=3`.
+
+**The older proof is a record.** The world with the upkeep of a part failed this reading twice, on
+seeds 1, 5, 8, and `part_upkeep` is deleted, so the command cannot be typed at the head:
 
 - At the defaults of 2026-10-11 (commit f5b7381, `findings/m2-audit.md` check 14), seeds 5 and 8 fail:
   `FAIL(chemo_gap=0.037 < 0.1)` and `FAIL(chemo_gap=0.014 < 0.1, eye_gap=0.009 < 0.1)`. Seed 1 passes
@@ -833,14 +874,12 @@ so the command cannot be typed at the head.** Two recorded runs of this command 
 - With `--param part_upkeep=0.0001`, half of that upkeep (`findings/m2-senses.md`, trial 12), seed 5
   fails: `FAIL(chemo_gap=0.085 < 0.1)`. Exit 1.
 
-To run the bad input again, check out commit f5b7381.
+To run that input again, check out commit f5b7381.
 
-**What the seeds do and do not show.** Seeds 5 and 8 lost the chemoreceptor in the bad world, and
-seed 1 kept it. But seeds 5 and 8 failed the scent gap at tick 36,000 too. The seeds that passed at
-tick 36,000 and failed at tick 144,000 in the bad world are 4 and 6 (`chemo_gap=0.016` and `0.067`,
-the same check 14). They show that the long reading sees what the short one does not, and they are
-not in this target. **Not proven:** that the reading rejects a bad world of the head. No input of the
-head is known that passes at tick 36,000 and fails at tick 144,000, and none was looked for.
+**Why seeds 4 and 6 are in the target.** In that old bad world seeds 5 and 8 failed the scent gap at
+tick 36,000 too. The seeds that passed at tick 36,000 and failed at tick 144,000 are 4 and 6
+(`chemo_gap=0.016` and `0.067`, the same check 14). They show that the long reading sees what the
+short one does not.
 
 ## Probes
 
