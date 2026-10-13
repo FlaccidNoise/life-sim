@@ -1,7 +1,7 @@
 // What the overlay shows. `src/app/main.ts` writes these from worker messages.
 
 import { signal } from '@preact/signals';
-import type { DeathCause, Heir } from '../protocol';
+import type { BrainView, DeathCause, Heir } from '../protocol';
 
 export const errorText = signal<string | null>(null);
 export const ready = signal(false);
@@ -17,3 +17,11 @@ export const starving = signal(false); // the possessed body has under a quarter
 export const death = signal<{ cause: DeathCause; heirs: Heir[] } | null>(null);
 export const focusHeir = signal<Heir | null>(null); // main.ts moves the camera to it
 export const heirGone = signal(false); // a pick came back empty: the heir was not alive
+export const brainOpen = signal(false); // the brain panel
+// The brain of the possessed body, while the panel is open. Null: no body is possessed. Undefined:
+// the worker has sent none yet.
+export const brain = signal<BrainView | null | undefined>(undefined);
+export const brainError = signal<string | null>(null); // a `brain` message that could not be read
+// What the player's hands ask of the body. The brain panel reads it with `peek` when it draws: a
+// held pointer changes it on every frame.
+export const steer = signal({ thrust: 0, turn: 0 });
