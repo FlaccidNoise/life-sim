@@ -112,6 +112,46 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
   world they passed at tick 36,000 and failed only at tick 144,000, which is what the long reading is
   for. The list ran once before it became the target, on 2026-10-13: 5 of 5 pass, in 10 minutes. No
   band changed. → `../gates.md` "The long reading"
+- 2026-10-13: **The M3 plan is approved, with its eight differences from the roadmap and the design.**
+  The owner took the recommended option of every choice below. → `../plans/2026-10-13-m3-minds.md`
+- 2026-10-13: **Brain upkeep is a fixed cost per body, plus a small cost per hidden neuron and per
+  expressed connection. An input or an output neuron costs nothing (C1).** A founder pays what it pays
+  now, so the body keeps what holds its length, and a sense does not pay for its inputs, so the part
+  upkeep does not come back. Rejected: the M2 rule (dropping the chemoreceptor would save 0.0078 per
+  tick, and the deleted part upkeep removed it at 0.0072), and no cost at all (nothing holds the body
+  or the throughput). → plan rule U1
+- 2026-10-13: **An Eye declares its brain inputs per gene. A Chemoreceptor declares three inputs once
+  for a body, sums its genes, and reads the scent at the centre (C2).** Rejected: per kind for both,
+  and per gene for both. → plan rule B2
+- 2026-10-13: **Mixing is built in M3 as a second stage (C3).** Stage 1 is brains and the viewer, with
+  its own readings. Stage 2 switches mixing on. If mixing fails its measurement it is deleted alone.
+  Rejected: its own milestone, and one switch-on for all of it. → plan "Batches"
+- 2026-10-13: **The long gate reads three brain bands at tick 144,000: mean hidden neurons, mean
+  connections, and brain shapes that 5% of the living hold (C4).** Each band is set from its proof on
+  a bad world. The gap in hidden neurons to a control arm with `hidden_gain` 0 is printed with no band
+  until its chance reading is known. The bands are in `make gates-long` only. → plan Task 9
+- 2026-10-13: **The `shapes` band does not count a connection with an end on a port of a part (soft
+  spot 11).** `shapes_raw` prints the count with them, with no band. 2% to 38% of bodies hold no
+  chemoreceptor at tick 144,000, so brains differ by their ports with no brain mutation, and the bad
+  world of the proof keeps part mutations. → plan Task 9, `../findings/m2-audit-2.md` M3
+- 2026-10-13: **Bodies get a draw-only outline that follows their parts, in M3. The taper gene goes to
+  M4 with the fin (C5).** No new gene and no rule in M3. → plan Task 14
+- 2026-10-13: **The three things carried from M2 are decided at the close of the M3 retune, from its
+  rows: the area band, the egg range, and bands for `plans` and `speed_cv` (C6).** One trial of the
+  retune is kept for a wider egg range. → plan Task 10 part 5
+- 2026-10-13: **R1 reads the two sense gaps. The share of bodies with no chemoreceptor is printed with
+  no band (audit 2, question 1).** The share swings on one seed (seed 8: 9%, 60%, 29%, 11%), so a band
+  on it either fails the default world or rejects nothing. → `../findings/m2-audit-2.md`
+- 2026-10-13: **The chance input is the proof of the long gate, and the search stops (audit 2, question
+  2).** `chemo_gain=0.0001` with `eye_gain=0.0001` fails 5 of 5 seeds. No world of the head is known
+  that passes the short gate and clearly fails the long one, and M3 changes the rules under any
+  that a search would find. → `../gates.md` "The long reading"
+- 2026-10-13: **Evolution only, confirmed. Within-life learning stays a Lab toggle after M8.** The owner
+  asked for brains that "evolve and learn" and kept the decision of 2026-10-09: no new evidence, and
+  a brain has nothing to learn from before M4 brings a hunter. → `../roadmap.md` "Later"
+- 2026-10-13: **No feature is added beyond the roadmap.** Variety comes from M4 (predation) and M6
+  (zones, plant genomes). A feature that the owner names is placed in a milestone with a measurement.
+  → `../roadmap.md`
 
 ## Architecture
 
@@ -156,3 +196,9 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
   baseline. Carried over from the draft's 2026-09-07 rule. → `../roadmap.md`
 - 2026-10-10: Building is done by sub-agents under an orchestrator, one task per agent, with the tier
   named per task. → `../architecture.md` §12
+- 2026-10-13: **The M3 build runs through four of its five owner stops.** At the bands of Task 9, the
+  look of Task 14, the end of stage 1, and the proposals of Task 10 part 5, the orchestrator takes the
+  recommended option, logs it here as "provisional, owner to confirm", and goes on. Hard stops stay: a
+  change to an existing band, a rule, the floor, or the reference population, deleting a feature, a
+  target that is not met after its trial cap, and any push. After M3 the M4 plan is written and waits
+  for the owner. → `../plans/2026-10-13-m3-minds.md` "How the build runs without the owner"
