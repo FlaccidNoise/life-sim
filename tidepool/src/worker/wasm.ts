@@ -40,7 +40,8 @@ export interface Sim {
   release(): void;
   /** The uid of the possessed creature, or 0. */
   possessed(): number;
-  input(manual: boolean, thrust: number, turn: number): void;
+  /** `accept`: the player courts. The core stores it, and no rule reads it yet. */
+  input(manual: boolean, thrust: number, turn: number, accept: boolean): void;
   /** 0 for none. Set when the possessed creature dies. Cleared by the next possess. */
   deathCause(): number;
   /** At most 5, highest `energy01` first. */
@@ -86,7 +87,7 @@ interface Exports {
   tp_possess(world: Ptr, uid: number): number;
   tp_release(world: Ptr): void;
   tp_possessed(world: Ptr): number;
-  tp_input(world: Ptr, manual: number, thrust: number, turn: number): void;
+  tp_input(world: Ptr, manual: number, thrust: number, turn: number, accept: number): void;
   tp_death_cause(world: Ptr): number;
   tp_heir_stride(): number;
   tp_heirs_write(world: Ptr): number;
@@ -167,7 +168,8 @@ export function createSim(
     possess: (uid) => x.tp_possess(world, uid) !== 0,
     release: () => x.tp_release(world),
     possessed: () => x.tp_possessed(world) >>> 0,
-    input: (manual, thrust, turn) => x.tp_input(world, manual ? 1 : 0, thrust, turn),
+    input: (manual, thrust, turn, accept) =>
+      x.tp_input(world, manual ? 1 : 0, thrust, turn, accept ? 1 : 0),
     deathCause: () => x.tp_death_cause(world) >>> 0,
     heirs() {
       const words = (x.tp_heirs_write(world) >>> 0) * HEIR_STRIDE;

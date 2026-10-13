@@ -44,14 +44,14 @@ fn possess_marks_the_creature_and_release_keeps_the_mark() {
 fn manual_input_replaces_the_commands_and_releasing_hands_back() {
     let mut w = world();
     assert!(w.possess(w.creatures.uid[3]));
-    w.input(true, 1.0, -1.0);
+    w.input(true, 1.0, -1.0, false);
     w.tick();
     // control::apply runs after the brain, so motor saw the player's values
     assert_eq!(
         (w.creatures.cmd_thrust[3], w.creatures.cmd_turn[3]),
         (1.0, -1.0)
     );
-    w.input(false, 1.0, -1.0);
+    w.input(false, 1.0, -1.0, false);
     w.run(2); // two ticks: from Task 15 a creature thinks on every second tick
     assert_ne!(
         (w.creatures.cmd_thrust[3], w.creatures.cmd_turn[3]),
@@ -63,7 +63,7 @@ fn manual_input_replaces_the_commands_and_releasing_hands_back() {
 fn manual_input_steers_only_the_possessed_creature() {
     let (mut a, mut b) = (world(), world());
     assert!(a.possess(a.creatures.uid[3]));
-    a.input(true, 0.0, 1.0);
+    a.input(true, 0.0, 1.0, false);
     a.run(20);
     b.run(20);
     assert_ne!(a.creatures.heading[3], b.creatures.heading[3]);
@@ -75,11 +75,11 @@ fn manual_input_steers_only_the_possessed_creature() {
 #[test]
 fn input_is_clamped() {
     let mut w = world();
-    w.input(true, 5.0, -7.0);
+    w.input(true, 5.0, -7.0, false);
     assert_eq!((w.control.thrust, w.control.turn), (1.0, -1.0));
-    w.input(true, -5.0, 0.0);
+    w.input(true, -5.0, 0.0, false);
     assert_eq!(w.control.thrust, 0.0);
-    w.input(true, f32::NAN, f32::NAN);
+    w.input(true, f32::NAN, f32::NAN, false);
     assert_eq!((w.control.thrust, w.control.turn), (0.0, 0.0));
 }
 
@@ -87,12 +87,26 @@ fn input_is_clamped() {
 fn a_new_body_starts_with_its_brain_driving() {
     let mut w = world();
     assert!(w.possess(w.creatures.uid[3]));
-    w.input(true, 1.0, 1.0);
+    w.input(true, 1.0, 1.0, false);
     assert!(w.possess(w.creatures.uid[4]));
     assert!(!w.control.manual);
-    w.input(true, 1.0, 1.0);
+    w.input(true, 1.0, 1.0, false);
     w.release();
     assert!(!w.control.manual);
+}
+
+/// The court input is stored for the mating rule. A new body and a release both start without it.
+#[test]
+fn the_accept_input_is_stored_and_a_new_body_or_a_release_clears_it() {
+    let mut w = world();
+    assert!(w.possess(w.creatures.uid[3]));
+    w.input(true, 0.0, 0.0, true);
+    assert!(w.control.accept);
+    assert!(w.possess(w.creatures.uid[4]));
+    assert!(!w.control.accept);
+    w.input(true, 0.0, 0.0, true);
+    w.release();
+    assert!(!w.control.accept);
 }
 
 #[test]

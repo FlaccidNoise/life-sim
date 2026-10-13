@@ -1,8 +1,6 @@
 //! Brain inputs: the creature's own state, the scent at its centre, and what its eyes see.
 
-use crate::brain::{
-    thinks, IN_AGE, IN_CONST, IN_ENERGY, IN_GRAD_FWD, IN_GRAD_SIDE, IN_SCENT, IN_SPEED,
-};
+use crate::brain::{thinks, IN_AGE, IN_CONST, IN_ENERGY, IN_SPEED, NO_INPUT};
 use crate::eye;
 use crate::params::id;
 use crate::snapshot::{LoadError, Reader, Writer};
@@ -12,12 +10,13 @@ use crate::world::World;
 /// scent gives a gradient of 0 and not a division by zero.
 const SCENT_FLOOR: f32 = 1e-6;
 
-/// Each live creature whose turn it is to think gets its inputs: the 7 below, and the 4 of
-/// `eye::see` if it has an eye. The eyes scan on one think in `see_every`. On the other thinks the
-/// eye inputs keep their last values.
+/// Each live creature whose turn it is to think gets its inputs: the 4 of the body at their fixed
+/// indexes, the 3 of the scent from `Brains::in_scent` (the level, the gradient along the heading,
+/// and the gradient across it), and the 4 of `eye::see` if it has an eye. The eyes scan on one
+/// think in `see_every`. On the other thinks the eye inputs keep their last values.
 ///
 /// The gradient is divided by the local scent level, so a creature far from food still gets a
-/// direction. `IN_GRAD_SIDE` is positive when scent rises on the creature's `+heading` side.
+/// direction. The side gradient is positive when scent rises on the creature's `+heading` side.
 pub fn step(world: &mut World) {
     // `plant::step` runs later in the tick, so a plant added since then is not in the grid yet.
     world.plants.refresh_grid();
@@ -44,14 +43,18 @@ pub fn step(world: &mut World) {
         let level = s0 * chemo;
         let energy01 = c.energy01(s, per_mass);
         let speed = (c.vx[s] * c.vx[s] + c.vy[s] * c.vy[s]).sqrt();
+        let in_scent = brains.in_scent[s];
         let input = brains.inputs_mut(s);
-        input[IN_CONST] = 1.0;
-        input[IN_ENERGY] = energy01;
-        input[IN_AGE] = c.age[s] as f32 / c.old[s];
-        input[IN_SPEED] = speed / v_max;
-        input[IN_SCENT] = level / (1.0 + level);
-        input[IN_GRAD_FWD] = ((gx * hc + gy * hs) * k).clamp(-1.0, 1.0);
-        input[IN_GRAD_SIDE] = ((-gx * hs + gy * hc) * k).clamp(-1.0, 1.0);
+        input[IN_CONST as usize] = 1.0;
+        input[IN_ENERGY as usize] = energy01;
+        input[IN_AGE as usize] = c.age[s] as f32 / c.old[s];
+        input[IN_SPEED as usize] = speed / v_max;
+        if in_scent != NO_INPUT {
+            let input = &mut input[in_scent as usize..][..3];
+            input[0] = level / (1.0 + level);
+            input[1] = ((gx * hc + gy * hs) * k).clamp(-1.0, 1.0);
+            input[2] = ((-gx * hs + gy * hc) * k).clamp(-1.0, 1.0);
+        }
         if c.n_eyes[s] > 0 && thinks(*tick, s, see_every) {
             eye::see(world, s);
         }

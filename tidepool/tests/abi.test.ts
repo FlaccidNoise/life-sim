@@ -21,6 +21,20 @@ test('frame layout constants match the module', () => {
   expect(n('tp_frame_max_eyes')).toBe(P.MAX_EYES);
   expect(n('tp_heir_stride')).toBe(P.HEIR_STRIDE);
   expect(P.C_PARTS + P.PART_WORDS).toBe(P.CREATURE_STRIDE);
+  expect(P.C_BRAIN + 1).toBe(P.C_PARTS);
+});
+
+test('the brain layout constants of the module are those of crates/sim/src/brain.rs', () => {
+  const { exports } = new WebAssembly.Instance(module, {});
+  const n = (name: string) => (exports[name] as () => number)();
+  expect([
+    n('tp_brain_header_words'),
+    n('tp_brain_neuron_words'),
+    n('tp_brain_conn_words'),
+  ]).toEqual([6, 6, 3]);
+  for (const name of ['tp_brain_write', 'tp_brain_ptr']) {
+    expect(typeof exports[name]).toBe('function');
+  }
 });
 
 test('a founder record unpacks to its four parts, and to an eye with `founder_eye`', () => {
@@ -117,6 +131,8 @@ test('a frame of the whole world holds every creature', () => {
     expect(f.f32[o + P.C_ENERGY]).toBeGreaterThan(0.45);
     expect(f.f32[o + P.C_ENERGY]).toBeLessThan(0.5);
     expect(f.u32[o + P.C_FLAGS]).toBe(0);
+    // A founder brain: 4 hidden neurons and 57 connections.
+    expect(f.u32[o + P.C_BRAIN]).toBe(4 | (57 << 16));
     uids.add(f.u32[o + P.C_UID] ?? 0);
   }
   expect(uids.size).toBe(300);
@@ -252,7 +268,7 @@ test('pick, possess, input, and release go through the ABI', () => {
   expect(sim.possessed()).toBe(uid);
   expect(sim.deathCause()).toBe(0);
 
-  sim.input(true, 1, -1);
+  sim.input(true, 1, -1, false);
   sim.tick(1);
   sim.writeFrame(0, 0, 1536, 1024, buf);
   f = P.viewFrame(buf);
@@ -300,7 +316,7 @@ test('a call after free does nothing', () => {
   sim.free();
   sim.seedFounders(10, 0);
   sim.setParam(0, 1);
-  sim.input(true, 1, 1);
+  sim.input(true, 1, 1, true);
   sim.release();
   expect(sim.possess(1)).toBe(false);
   expect([sim.pick(0, 0, 9999), sim.possessed(), sim.deathCause()]).toEqual([0, 0, 0]);

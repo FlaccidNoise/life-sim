@@ -9,7 +9,7 @@ use crate::plant;
 use crate::world::World;
 
 pub const HEADER_WORDS: u32 = 34;
-pub const CREATURE_STRIDE: u32 = 22;
+pub const CREATURE_STRIDE: u32 = 23;
 pub const PLANT_STRIDE: u32 = 4;
 /// Part words in a creature record: one for each part gene that a genome can hold.
 pub const PART_WORDS: u32 = MAX_PART_GENES as u32;
@@ -20,6 +20,12 @@ pub const FLAG_LINEAGE: u32 = 1;
 pub const FLAG_POSSESSED: u32 = 2;
 pub const FLAG_JUVENILE: u32 = 4;
 pub const FLAG_BUDDED: u32 = 8;
+/// The body was born of a cross.
+pub const FLAG_MIXED: u32 = 16;
+/// The body accepts a mate now: its `cmd_accept` is above 0.
+pub const FLAG_WILLING: u32 = 32;
+/// The body holds the genes of a partner for its next bud.
+pub const FLAG_DONOR: u32 = 64;
 /// A body this far outside the view is still in the frame, so a body on the edge is drawn whole.
 const MARGIN: f32 = 32.0;
 /// Ticks that `FLAG_BUDDED` stays set after a bud.
@@ -45,7 +51,8 @@ fn pack(part: &PartGene) -> u32 {
 /// their count, then `MAX_EYES` places of `CONE_WORDS` floats each. A cone is its direction in
 /// world radians, the cosine of its half angle, and its range in world units. A place past the
 /// count holds zeros.
-/// Creature record: x, y, heading, length, width, hue, energy01, then uid, slot, flags, then
+/// Creature record: x, y, heading, length, width, hue, energy01, then uid, slot, flags, and
+/// `hidden | conns << 16` for the hidden neurons and the connections that its brain expresses, then
 /// `PART_WORDS` part words in gene order. A place with no part holds 0.
 /// Plant record: x, y, radius, reserve01.
 pub fn write(world: &mut World, x0: f32, y0: f32, x1: f32, y1: f32) -> u32 {
@@ -57,6 +64,8 @@ pub fn write(world: &mut World, x0: f32, y0: f32, x1: f32, y1: f32) -> u32 {
         tick,
         creatures: c,
         genomes,
+        donors,
+        brains,
         plants,
         control,
         grid,
@@ -136,8 +145,19 @@ pub fn write(world: &mut World, x0: f32, y0: f32, x1: f32, y1: f32) -> u32 {
         if left > 0 && left.saturating_add(BUD_FLASH) > cooldown {
             flags |= FLAG_BUDDED;
         }
+        if c.mixed_with[s] != 0 {
+            flags |= FLAG_MIXED;
+        }
+        if c.cmd_accept[s] > 0.0 {
+            flags |= FLAG_WILLING;
+        }
+        if donors[s].is_some() {
+            flags |= FLAG_DONOR;
+        }
+        let hidden = brains.n_neur[s] - brains.n_in[s] - brains.n_out[s];
+        let brain = hidden as u32 | (brains.n_conn[s] as u32) << 16;
         frame.extend(floats.map(f32::to_bits));
-        frame.extend_from_slice(&[c.uid[s], slot, flags]);
+        frame.extend_from_slice(&[c.uid[s], slot, flags, brain]);
         let mut parts = [0; PART_WORDS as usize];
         for (word, part) in parts.iter_mut().zip(&genomes[s].parts) {
             *word = pack(part);
@@ -231,6 +251,8 @@ mod tests {
         assert_eq!(r[..6], floats.map(f32::to_bits));
         assert!((f32::from_bits(r[6]) - 0.75).abs() < 1e-6);
         assert_eq!(r[7..10], [c.uid[4], 4, 0]);
+        // A founder brain: 4 hidden neurons and 57 connections.
+        assert_eq!(r[10], 4 | 57 << 16);
         assert!(c.heading[4] != 0.0 && c.length(4) > c.width(4));
     }
 
@@ -253,7 +275,7 @@ mod tests {
         assert_eq!(record(&w, 11)[9], FLAG_JUVENILE);
         assert_eq!(record(&w, 0)[9], 0);
 
-        w.input(true, 0.0, 0.0);
+        w.input(true, 0.0, 0.0, false);
         view(&mut w);
         assert_eq!(w.frame[5..7], [9, 0]);
 
@@ -264,13 +286,39 @@ mod tests {
     }
 
     #[test]
+    fn the_mate_flags_follow_the_cross_the_accept_command_and_the_donor() {
+        let mut w = World::new(5, 1536.0, 1024.0);
+        w.seed_founders(50, 0);
+        w.creatures.mixed_with[4] = 2;
+        w.creatures.cmd_accept[5] = 0.1;
+        w.creatures.cmd_accept[7] = -0.1;
+        w.donors[6] = Some((9, w.genomes[8].clone()));
+        // The smallest brain, in slot 50.
+        let at = SpawnAt {
+            x: 10.0,
+            y: 10.0,
+            heading: 0.0,
+            growth: 1.0,
+            energy01: 1.0,
+            parent: 0,
+            generation: 0,
+            mark: 0,
+        };
+        assert_eq!(w.spawn(Genome::default(), at), Some(50));
+        write(&mut w, 0.0, 0.0, 1536.0, 1024.0);
+        let flags = [4, 5, 6, 7].map(|slot| record(&w, slot)[9]);
+        assert_eq!(flags, [FLAG_MIXED, FLAG_WILLING, FLAG_DONOR, 0]);
+        assert_eq!(record(&w, 50)[9..11], [0, 0]);
+    }
+
+    #[test]
     fn a_record_holds_one_word_for_each_part_and_zeros_after_them() {
         let mut w = World::new(5, 1536.0, 1024.0);
         // The founder with no eye: four parts.
         w.params.set(id::FOUNDER_EYE, 0.0);
         w.seed_founders(50, 0);
         write(&mut w, 0.0, 0.0, 1536.0, 1024.0);
-        let parts = &record(&w, 4)[10..];
+        let parts = &record(&w, 4)[11..];
         assert_eq!(parts.len(), PART_WORDS as usize);
         let kinds: Vec<u32> = parts.iter().map(|word| word & 0xFF).collect();
         assert_eq!(kinds, [1, 2, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0]);
@@ -322,7 +370,7 @@ mod tests {
             assert!((cone[2] - range).abs() < 1e-3 && range < EYE_REACH);
         }
         assert_eq!(cones[2..], [[0; 3]; MAX_EYES - 2]);
-        assert_eq!(record(&w, 9)[14] & 0xFF, 6);
+        assert_eq!(record(&w, 9)[15] & 0xFF, 6);
 
         // A long cone stops at `EYE_REACH`.
         w.params.set(id::EYE_RANGE, 64.0);

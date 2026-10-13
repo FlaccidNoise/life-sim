@@ -1,27 +1,76 @@
 //! What a creature inherits: a body shape, a life history, a hue, a list of parts, and a brain.
 
-use crate::brain::{self, MAX_NEURONS, N_IN, N_OUT};
+use crate::brain::{self, N_OUT_MAX};
 use crate::params::{id, Params, DEFS};
 use crate::rng::Rng;
 use crate::snapshot::{LoadError, Reader, Writer};
 
-#[derive(Clone)]
+/// The name of a neuron: who owns it, and which of the owner's ports it is. A connection holds two
+/// names and no index, so two genomes line up by history id and a part that is lost takes its
+/// inputs with it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Node {
+    pub owner: u32,
+    pub port: u8,
+}
+
+/// The owner of every port that the body declares.
+pub const BODY: u32 = 0;
+/// The one port of a hidden neuron. Its owner is the gene's id.
+pub const PORT_HIDDEN: u8 = 255;
+
+impl Node {
+    pub const fn body(port: u8) -> Node {
+        Node { owner: BODY, port }
+    }
+
+    pub const fn hidden(id: u32) -> Node {
+        Node {
+            owner: id,
+            port: PORT_HIDDEN,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct HiddenGene {
+    pub id: u32,
+    pub bias: f32,
+    /// In `(0, 1]`.
+    pub alpha: f32,
+}
+
+/// The bias and the alpha of one output neuron.
+#[derive(Clone, Debug, PartialEq)]
+pub struct OutGene {
+    pub node: Node,
+    pub bias: f32,
+    pub alpha: f32,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct ConnGene {
-    pub src: u16,
-    pub dst: u16,
+    pub src: Node,
+    pub dst: Node,
     pub weight: f32,
     pub history: u32,
 }
 
+/// The id of a hidden gene, the history of a connection, and the history of a part all come from
+/// `World::next_history`. So no two genes of a world share a number, and an owner is never
+/// ambiguous.
 #[derive(Clone)]
 pub struct BrainGenome {
-    pub n_hidden: u16,
-    /// One per non-input neuron: hidden, then outputs.
-    pub bias: Vec<f32>,
-    /// The same length as `bias`. In `(0, 1]`.
-    pub alpha: Vec<f32>,
+    /// At most `MAX_HIDDEN`.
+    pub hidden: Vec<HiddenGene>,
+    /// At most `brain::N_OUT_MAX`.
+    pub outs: Vec<OutGene>,
+    /// At most `MAX_CONN_GENES`.
     pub conns: Vec<ConnGene>,
 }
+
+pub const MAX_HIDDEN: usize = 64;
+pub const MAX_CONN_GENES: usize = brain::MAX_CONNS;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct PartGene {
@@ -95,9 +144,11 @@ pub const FOUNDER_EYE_ANCHOR: f32 = 0.2;
 pub const FOUNDER_EYE_EXTRA: f32 = 0.5;
 /// Where `set_size` puts a fin on a body that has none.
 const FIN_ANCHOR: f32 = 0.6;
-/// The last history id that a founder holds. Its brain connections take `1..=STARTER_CONNS`, its
-/// four parts take the next four ids, and its eye takes this one.
-pub const FOUNDER_HISTORIES: u32 = brain::STARTER_CONNS + FOUNDER_PARTS.len() as u32 + 1;
+/// The history id of the founder's eye. Its brain connections take `1..=STARTER_CONNS`, its four
+/// parts take the next four ids, and its eye takes this one.
+pub const FOUNDER_EYE_HISTORY: u32 = brain::STARTER_CONNS + FOUNDER_PARTS.len() as u32 + 1;
+/// The last history id that a founder holds. Its hidden genes take the ids after its eye.
+pub const FOUNDER_HISTORIES: u32 = FOUNDER_EYE_HISTORY + brain::STARTER_HIDDEN;
 /// The largest size of a brain weight or bias. `math::act` is flat past 3, so a larger number
 /// only hides later mutations.
 const WEIGHT_LIMIT: f32 = 8.0;
@@ -157,13 +208,23 @@ fn founder_parts() -> Vec<PartGene> {
         .collect()
 }
 
+/// The gene that `prune` gives a declared output that has none.
+fn resting(node: Node) -> OutGene {
+    OutGene {
+        node,
+        bias: 0.0,
+        alpha: 1.0,
+    }
+}
+
 /// The smallest brain: no hidden neurons and no connections. Its outputs rest at 0.
 impl Default for BrainGenome {
     fn default() -> BrainGenome {
         BrainGenome {
-            n_hidden: 0,
-            bias: vec![0.0; N_OUT],
-            alpha: vec![1.0; N_OUT],
+            hidden: Vec::new(),
+            outs: brain::BODY_OUTPUTS
+                .map(|port| resting(Node::body(port)))
+                .into(),
             conns: Vec::new(),
         }
     }
@@ -185,50 +246,84 @@ impl Default for Genome {
     }
 }
 
-impl BrainGenome {
-    fn save(&self, w: &mut Writer) {
-        w.u32(self.n_hidden as u32);
-        w.f32s(&self.bias);
-        w.f32s(&self.alpha);
-        w.u16s(&self.conns.iter().map(|c| c.src).collect::<Vec<_>>());
-        w.u16s(&self.conns.iter().map(|c| c.dst).collect::<Vec<_>>());
-        w.f32s(&self.conns.iter().map(|c| c.weight).collect::<Vec<_>>());
-        w.u32s(&self.conns.iter().map(|c| c.history).collect::<Vec<_>>());
+impl Node {
+    fn save(self, w: &mut Writer) {
+        w.u32(self.owner);
+        w.u32(self.port as u32);
     }
 
-    /// The neurons must fit a brain block, `bias` and `alpha` must have one value per non-input
-    /// neuron, and every connection must run from a neuron of this brain to a non-input neuron of
-    /// this brain. So the evaluator can index with a loaded genome without a check.
+    fn load(r: &mut Reader) -> Result<Node, LoadError> {
+        let (owner, port) = (r.u32()?, r.u32()?);
+        let port = u8::try_from(port).map_err(|_| LoadError::Invalid("brain genome port"))?;
+        Ok(Node { owner, port })
+    }
+}
+
+/// A list length. `Invalid` above `most`, so that a load reads no more genes than a genome can
+/// hold.
+fn count(r: &mut Reader, most: usize, reason: &'static str) -> Result<usize, LoadError> {
+    let n = r.u32()? as usize;
+    if n > most {
+        return Err(LoadError::Invalid(reason));
+    }
+    Ok(n)
+}
+
+impl BrainGenome {
+    fn save(&self, w: &mut Writer) {
+        w.u32(self.hidden.len() as u32);
+        for gene in &self.hidden {
+            w.u32(gene.id);
+            w.f32(gene.bias);
+            w.f32(gene.alpha);
+        }
+        w.u32(self.outs.len() as u32);
+        for gene in &self.outs {
+            gene.node.save(w);
+            w.f32(gene.bias);
+            w.f32(gene.alpha);
+        }
+        w.u32(self.conns.len() as u32);
+        for gene in &self.conns {
+            gene.src.save(w);
+            gene.dst.save(w);
+            w.f32(gene.weight);
+            w.u32(gene.history);
+        }
+    }
+
+    /// `Invalid` for more than `MAX_HIDDEN` hidden genes, more than `brain::N_OUT_MAX` out genes,
+    /// or more than `MAX_CONN_GENES` connections. The names and the floats are not checked:
+    /// `Brains::express` drops a connection whose end it cannot find, and it is safe for any float.
     fn load(r: &mut Reader) -> Result<BrainGenome, LoadError> {
-        let n_hidden = r.u32()? as usize;
-        if n_hidden > MAX_NEURONS - N_IN - N_OUT {
-            return Err(LoadError::Invalid("brain genome hidden count"));
+        let mut hidden = Vec::new();
+        for _ in 0..count(r, MAX_HIDDEN, "brain genome hidden count")? {
+            hidden.push(HiddenGene {
+                id: r.u32()?,
+                bias: r.f32()?,
+                alpha: r.f32()?,
+            });
         }
-        let (bias, alpha) = (r.f32s()?, r.f32s()?);
-        if bias.len() != n_hidden + N_OUT || alpha.len() != bias.len() {
-            return Err(LoadError::Invalid("brain genome bias or alpha count"));
+        let mut outs = Vec::new();
+        for _ in 0..count(r, N_OUT_MAX, "brain genome output count")? {
+            outs.push(OutGene {
+                node: Node::load(r)?,
+                bias: r.f32()?,
+                alpha: r.f32()?,
+            });
         }
-        let (src, dst, weight, history) = (r.u16s()?, r.u16s()?, r.f32s()?, r.u32s()?);
-        if [dst.len(), weight.len(), history.len()] != [src.len(); 3] {
-            return Err(LoadError::Invalid("brain genome connection count"));
+        let mut conns = Vec::new();
+        for _ in 0..count(r, MAX_CONN_GENES, "brain genome connection count")? {
+            conns.push(ConnGene {
+                src: Node::load(r)?,
+                dst: Node::load(r)?,
+                weight: r.f32()?,
+                history: r.u32()?,
+            });
         }
-        let neurons = N_IN + n_hidden + N_OUT;
-        let in_brain = |i: &u16| (*i as usize) < neurons;
-        if !src.iter().all(in_brain) || !dst.iter().all(|d| in_brain(d) && *d as usize >= N_IN) {
-            return Err(LoadError::Invalid("brain genome connection out of range"));
-        }
-        let conns = (0..src.len())
-            .map(|i| ConnGene {
-                src: src[i],
-                dst: dst[i],
-                weight: weight[i],
-                history: history[i],
-            })
-            .collect();
         Ok(BrainGenome {
-            n_hidden: n_hidden as u16,
-            bias,
-            alpha,
+            hidden,
+            outs,
             conns,
         })
     }
@@ -257,7 +352,7 @@ impl Genome {
                 anchor: FOUNDER_EYE_ANCHOR,
                 size: eye,
                 extra: FOUNDER_EYE_EXTRA,
-                history: FOUNDER_HISTORIES,
+                history: FOUNDER_EYE_HISTORY,
             });
         }
         let hue = rng.unit();
@@ -279,7 +374,8 @@ impl Genome {
     /// Weights and biases are clamped to [-8, 8]. The structure of the brain does not change yet.
     ///
     /// Draws in this order: len, wid, each part size in gene order, the hue, the weights, the
-    /// biases, the alphas. That is the M1 order.
+    /// biases, the alphas. That is the M1 order. The biases are those of the hidden genes and then
+    /// those of the out genes, each in gene order, and so are the alphas.
     ///
     /// Five M2 groups follow, in this order. A group whose rate is 0 makes no draw, so with every
     /// M2 rate at 0 the draws are the M1 draws.
@@ -316,10 +412,13 @@ impl Genome {
         for conn in &mut g.brain.conns {
             conn.weight = nudged(conn.weight, rng, rate, sigma, limit);
         }
-        for bias in &mut g.brain.bias {
+        let BrainGenome { hidden, outs, .. } = &mut g.brain;
+        let biases = hidden.iter_mut().map(|gene| &mut gene.bias);
+        for bias in biases.chain(outs.iter_mut().map(|gene| &mut gene.bias)) {
             *bias = nudged(*bias, rng, rate, sigma, limit);
         }
-        for alpha in &mut g.brain.alpha {
+        let alphas = hidden.iter_mut().map(|gene| &mut gene.alpha);
+        for alpha in alphas.chain(outs.iter_mut().map(|gene| &mut gene.alpha)) {
             *alpha = nudged(*alpha, rng, rate, ALPHA_SIGMA, ALPHA_RANGE);
         }
 
@@ -362,6 +461,42 @@ impl Genome {
             });
         }
         g
+    }
+
+    /// Makes the brain genes hold what the body expresses. Runs on every genome that a birth
+    /// makes, after crossover and mutation.
+    ///
+    /// Removes each connection with an end that the genome does not declare, or that runs into an
+    /// input. Of the connections between one pair of ends, only the one with the lowest history
+    /// stays. Removes the `OutGene` of an output that is not declared, and adds one with bias 0 and
+    /// alpha 1 for a declared output that has none. The genes that stay keep their order.
+    pub fn prune(&mut self) {
+        let ports = brain::ports(self);
+        let BrainGenome {
+            hidden,
+            outs,
+            conns,
+        } = &mut self.brain;
+        let target = |n: Node| {
+            let hidden = n.port == PORT_HIDDEN && hidden.iter().any(|gene| gene.id == n.owner);
+            hidden || ports.outputs.contains(&n)
+        };
+        conns.retain(|c| target(c.dst) && (target(c.src) || ports.inputs.contains(&c.src)));
+        let mut by_pair: Vec<usize> = (0..conns.len()).collect();
+        by_pair.sort_by_key(|&i| (conns[i].src, conns[i].dst, conns[i].history));
+        let mut second = vec![false; conns.len()];
+        for pair in by_pair.windows(2) {
+            let (first, next) = (&conns[pair[0]], &conns[pair[1]]);
+            second[pair[1]] = (first.src, first.dst) == (next.src, next.dst);
+        }
+        let mut second = second.into_iter();
+        conns.retain(|_| second.next() == Some(false));
+        outs.retain(|gene| ports.outputs.contains(&gene.node));
+        for node in ports.outputs {
+            if !outs.iter().any(|gene| gene.node == node) {
+                outs.push(resting(node));
+            }
+        }
     }
 
     /// The sum over the parts of that kind. A size that is not finite counts as 0, and a size is
@@ -427,8 +562,8 @@ impl Genome {
     }
 
     /// `Invalid` for more than `MAX_PART_GENES` parts or a kind outside `1..=KINDS`. The floats are
-    /// not checked: `Creatures::express` is safe for any float. The brain is checked: see
-    /// `BrainGenome::load`.
+    /// not checked: `Creatures::express` is safe for any float. The lists of the brain are held to
+    /// their caps: see `BrainGenome::load`.
     pub fn load(r: &mut Reader) -> Result<Genome, LoadError> {
         let (len, wid, egg, old, hue) = (r.f32()?, r.f32()?, r.f32()?, r.f32()?, r.f32()?);
         let count = r.u32()? as usize;

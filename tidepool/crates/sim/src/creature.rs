@@ -34,6 +34,11 @@ pub struct Creatures {
     pub cmd_thrust: Vec<f32>,
     /// In `[-1, 1]`.
     pub cmd_turn: Vec<f32>,
+    /// Above 0: the body is willing to exchange genes with a body it touches.
+    pub cmd_accept: Vec<f32>,
+    /// The two mate inputs, as `mate::step` last worked them out. Both 0 with no body in touch.
+    pub mate_size: Vec<f32>,
+    pub mate_kin: Vec<f32>,
     /// From the parent's `egg` to 1.
     pub growth: Vec<f32>,
     pub energy: Vec<f32>,
@@ -41,6 +46,8 @@ pub struct Creatures {
     pub generation: Vec<u32>,
     /// The uid of the budding parent. 0 for a founder.
     pub parent: Vec<u32>,
+    /// The uid of the gene donor of a body that was born of a cross. 0 for none.
+    pub mixed_with: Vec<u32>,
     pub mark: Vec<u8>,
     pub bud_cooldown: Vec<u32>,
     // From here on: what `express` makes of the genome, at spawn and at load. Not saved.
@@ -89,11 +96,15 @@ impl Default for Creatures {
             omega: floats(),
             cmd_thrust: floats(),
             cmd_turn: floats(),
+            cmd_accept: floats(),
+            mate_size: floats(),
+            mate_kin: floats(),
             growth: floats(),
             energy: floats(),
             age: vec![0; n],
             generation: vec![0; n],
             parent: vec![0; n],
+            mixed_with: vec![0; n],
             mark: vec![0; n],
             bud_cooldown: vec![0; n],
             len: floats(),
@@ -272,19 +283,23 @@ impl Creatures {
         w.f32s(&gather(&live, &self.omega));
         w.f32s(&gather(&live, &self.cmd_thrust));
         w.f32s(&gather(&live, &self.cmd_turn));
+        w.f32s(&gather(&live, &self.cmd_accept));
+        w.f32s(&gather(&live, &self.mate_size));
+        w.f32s(&gather(&live, &self.mate_kin));
         w.f32s(&gather(&live, &self.growth));
         w.f32s(&gather(&live, &self.energy));
         w.u32s(&gather(&live, &self.age));
         w.u32s(&gather(&live, &self.generation));
         w.u32s(&gather(&live, &self.parent));
+        w.u32s(&gather(&live, &self.mixed_with));
         w.u8s(&gather(&live, &self.mark));
         w.u32s(&gather(&live, &self.bud_cooldown));
     }
 
     /// Reads what `save` wrote. The slot list must be strictly ascending and below capacity, every
-    /// field must have one value per listed slot, every uid must be above 0 and unique, and every
-    /// parent uid must be below the uid of its child. The float values are not checked. The caller
-    /// calls `express` for each live slot.
+    /// field must have one value per listed slot, every uid must be above 0 and unique, and the
+    /// uid of a parent and of a gene donor must be below the uid of the child. The float values are
+    /// not checked. The caller calls `express` for each live slot.
     pub fn load(r: &mut Reader) -> Result<Creatures, LoadError> {
         let live = r.u32s()?;
         if live.windows(2).any(|p| p[0] >= p[1]) {
@@ -314,11 +329,15 @@ impl Creatures {
         scatter(&live, r.f32s()?, &mut c.omega)?;
         scatter(&live, r.f32s()?, &mut c.cmd_thrust)?;
         scatter(&live, r.f32s()?, &mut c.cmd_turn)?;
+        scatter(&live, r.f32s()?, &mut c.cmd_accept)?;
+        scatter(&live, r.f32s()?, &mut c.mate_size)?;
+        scatter(&live, r.f32s()?, &mut c.mate_kin)?;
         scatter(&live, r.f32s()?, &mut c.growth)?;
         scatter(&live, r.f32s()?, &mut c.energy)?;
         scatter(&live, r.u32s()?, &mut c.age)?;
         scatter(&live, r.u32s()?, &mut c.generation)?;
         scatter(&live, r.u32s()?, &mut c.parent)?;
+        scatter(&live, r.u32s()?, &mut c.mixed_with)?;
         scatter(&live, r.u8s()?, &mut c.mark)?;
         scatter(&live, r.u32s()?, &mut c.bud_cooldown)?;
         for &s in &live {
@@ -326,6 +345,10 @@ impl Creatures {
             // A uid is given out in birth order, so a parent has a lower uid than its child.
             if c.parent[s] >= c.uid[s] {
                 return Err(LoadError::Invalid("creature parent not below its uid"));
+            }
+            // A donor was alive before the bud that made the child.
+            if c.mixed_with[s] >= c.uid[s] {
+                return Err(LoadError::Invalid("creature donor not below its uid"));
             }
             (c.hs[s], c.hc[s]) = sin_cos(c.heading[s]);
         }

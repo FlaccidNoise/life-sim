@@ -2,10 +2,12 @@
 #![allow(clippy::disallowed_methods)]
 
 use std::f32::consts::PI;
-use tidepool_sim::brain::{IN_SEE_BODY_L, IN_SEE_BODY_R, IN_SEE_FOOD_L, IN_SEE_FOOD_R};
+use tidepool_sim::brain::{self, IN_SEE_BODY_L, IN_SEE_BODY_R, IN_SEE_FOOD_L, IN_SEE_FOOD_R};
 use tidepool_sim::creature::MAX_EYES;
 use tidepool_sim::eye::{self, EYE_REACH};
-use tidepool_sim::genome::{Genome, PartGene, FOUNDER_EYE_ANCHOR, FOUNDER_EYE_EXTRA, KIND_EYE};
+use tidepool_sim::genome::{
+    Genome, Node, PartGene, FOUNDER_EYE_ANCHOR, FOUNDER_EYE_EXTRA, KIND_EYE,
+};
 use tidepool_sim::math::sin_cos;
 use tidepool_sim::params::id;
 use tidepool_sim::pool::Slots;
@@ -88,10 +90,20 @@ fn body(w: &mut World, g: Genome, (x, y): (f32, f32)) -> usize {
     s
 }
 
-/// The eye inputs of the body after one tick: food left, food right, body left, body right.
+/// The eye inputs of the body, each found by its name: food left, food right, body left, body
+/// right.
+fn eye_inputs(w: &mut World, s: usize) -> [f32; 4] {
+    let inputs = brain::ports(&w.genomes[s]).inputs;
+    [IN_SEE_FOOD_L, IN_SEE_FOOD_R, IN_SEE_BODY_L, IN_SEE_BODY_R].map(|port| {
+        let at = inputs.iter().position(|n| *n == Node::body(port));
+        w.brains.inputs_mut(s)[at.expect("the body declares the eye input")]
+    })
+}
+
+/// The eye inputs of the body after one tick.
 fn seen(w: &mut World, s: usize) -> [f32; 4] {
     w.tick();
-    [IN_SEE_FOOD_L, IN_SEE_FOOD_R, IN_SEE_BODY_L, IN_SEE_BODY_R].map(|i| w.brains.inputs_mut(s)[i])
+    eye_inputs(w, s)
 }
 
 /// What a viewer with this genome sees of plants at these places.
@@ -333,8 +345,7 @@ fn the_search_box_holds_every_thing_that_a_cone_holds() {
         w.plants.refresh_grid();
         for s in 0..150 {
             eye::see(&mut w, s);
-            let seen = [IN_SEE_FOOD_L, IN_SEE_FOOD_R, IN_SEE_BODY_L, IN_SEE_BODY_R]
-                .map(|i| w.brains.inputs_mut(s)[i]);
+            let seen = eye_inputs(&mut w, s);
             assert_eq!(seen, seen_by_search(&w, s), "round {round}, slot {s}");
             lit += seen.iter().filter(|v| **v > 0.0).count();
         }
@@ -360,7 +371,8 @@ fn a_world_with_eyes_is_the_same_in_a_reload() {
     let seeing = (0..first.creatures.slots.high_water())
         .filter(|&s| first.creatures.slots.is_alive(s))
         .filter(|&s| {
-            first.brains.inputs_mut(s as usize)[IN_SEE_FOOD_L..]
+            let at = first.brains.in_eye[s as usize] as usize;
+            first.brains.inputs_mut(s as usize)[at..]
                 .iter()
                 .any(|v| *v > 0.0)
         })

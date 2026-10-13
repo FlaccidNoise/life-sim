@@ -1,10 +1,10 @@
 // Constants and layouts shared by the page and the worker. The frame layout mirrors
 // crates/sim/src/frame.rs. tests/abi.test.ts fails if the two disagree.
 
-export const ABI_VERSION = 3;
+export const ABI_VERSION = 4;
 export const TICK_HZ = 20;
 export const FRAME_HEADER_WORDS = 34;
-export const CREATURE_STRIDE = 22;
+export const CREATURE_STRIDE = 23;
 export const PLANT_STRIDE = 4;
 export const PART_WORDS = 12;
 export const MAX_EYES = 8;
@@ -18,8 +18,9 @@ const F_LINEAGE_ALIVE = 7,
   F_CONES = 10;
 const CONE_WORDS = 3;
 
-// Word offsets in a creature record. The first seven are floats, the next three are integers, and
-// PART_WORDS part words follow from C_PARTS.
+// Word offsets in a creature record. The first seven are floats, the next four are integers, and
+// PART_WORDS part words follow from C_PARTS. The word at C_BRAIN is `hidden | conns << 16`: the
+// hidden neurons and the connections that the brain of the body expresses.
 export const C_X = 0,
   C_Y = 1,
   C_HEADING = 2,
@@ -29,12 +30,16 @@ export const C_X = 0,
   C_ENERGY = 6;
 export const C_UID = 7,
   C_SLOT = 8,
-  C_FLAGS = 9;
-export const C_PARTS = 10;
+  C_FLAGS = 9,
+  C_BRAIN = 10;
+export const C_PARTS = 11;
 export const FLAG_LINEAGE = 1,
   FLAG_POSSESSED = 2,
   FLAG_JUVENILE = 4,
-  FLAG_BUDDED = 8; // the body budded a short time ago
+  FLAG_BUDDED = 8, // the body budded a short time ago
+  FLAG_MIXED = 16, // the body was born of a cross
+  FLAG_WILLING = 32, // the body accepts a mate now
+  FLAG_DONOR = 64; // the body holds the genes of a partner for its next bud
 
 // The kinds of part. They mirror the `KIND_` constants in crates/sim/src/genome.rs.
 export const KIND_FLAGELLUM = 1,

@@ -7,6 +7,7 @@ use crate::energy;
 use crate::field::{self, Field};
 use crate::genome::{Genome, FOUNDER_HISTORIES};
 use crate::grid::Grid;
+use crate::mate;
 use crate::math::{sin_cos, wrap_angle, PI};
 use crate::motor::{self, Motor};
 use crate::params::{id, Params};
@@ -47,9 +48,12 @@ pub struct World {
     pub creatures: Creatures,
     /// By slot. A dead slot holds a stale genome.
     pub genomes: Vec<Genome>,
+    /// By slot: the uid and the genome of the body that this one took genes from, held until its
+    /// next bud. A dead slot holds a stale donor.
+    pub donors: Vec<Option<(u32, Genome)>>,
     /// Starts at 1. 0 means none.
     pub next_uid: u32,
-    /// The next history id for a new brain connection or a new part.
+    /// The next history id for a new brain connection, a new hidden neuron, or a new part.
     pub next_history: u32,
     pub plants: Plants,
     pub fertility: Fertility,
@@ -64,12 +68,16 @@ pub struct World {
     pub rng_mutate: Rng,
     /// The fertility map, founder plants, and seeding.
     pub rng_plants: Rng,
+    /// The chance that a pair exchanges genes.
+    pub rng_mate: Rng,
     /// Scratch. Rebuilt every tick, never saved.
     pub grid: Grid,
     /// Scratch. Never saved.
     pub motor: Motor,
     /// Scratch. The last frame that `frame::write` made. Never saved.
     pub frame: Vec<u32>,
+    /// Scratch. The last brain that `brain::readout` wrote. Never saved.
+    pub readout: Vec<u32>,
     /// Scratch. The last snapshot that `tp_save` made. Never saved.
     pub save_buf: Vec<u8>,
 }
@@ -93,6 +101,7 @@ impl World {
             params: Params::new(),
             creatures: Creatures::default(),
             genomes: vec![Genome::default(); MAX_CREATURES as usize],
+            donors: vec![None; MAX_CREATURES as usize],
             next_uid: 1,
             next_history: FOUNDER_HISTORIES + 1,
             plants: Plants::new(w, h),
@@ -104,15 +113,17 @@ impl World {
             rng_spawn: root.fork(1),
             rng_mutate: root.fork(2),
             rng_plants: root.fork(3),
+            rng_mate: root.fork(4),
             grid: Grid::new(w, h),
             motor: Motor::default(),
             frame: Vec::new(),
+            readout: Vec::new(),
             save_buf: Vec::new(),
         }
     }
 
     /// Allocates a slot, sets every array from the genome and `at`, and expresses the body and the
-    /// brain.
+    /// brain. The new body accepts no mate, touches none, was born of no cross, and holds no donor.
     /// The heading is wrapped and the place is clamped to the world. A spawn with a parent counts
     /// as a birth. None if the pool is full.
     pub fn spawn(&mut self, genome: Genome, at: SpawnAt) -> Option<u32> {
@@ -128,14 +139,16 @@ impl World {
         (c.vx[s], c.vy[s], c.omega[s]) = (0.0, 0.0, 0.0);
         c.heading[s] = wrap_angle(at.heading);
         (c.hs[s], c.hc[s]) = sin_cos(c.heading[s]);
-        (c.cmd_thrust[s], c.cmd_turn[s]) = (0.0, 0.0);
+        (c.cmd_thrust[s], c.cmd_turn[s], c.cmd_accept[s]) = (0.0, 0.0, 0.0);
+        (c.mate_size[s], c.mate_kin[s], c.mixed_with[s]) = (0.0, 0.0, 0);
         (c.age[s], c.bud_cooldown[s]) = (0, 0);
         (c.generation[s], c.parent[s], c.mark[s]) = (at.generation, at.parent, at.mark);
         c.express(s, &genome);
         c.growth[s] = at.growth;
         c.energy[s] = at.energy01 * self.params.get(id::ENERGY_PER_MASS) * c.area(s);
-        self.brains.express(s, &genome.brain);
+        self.brains.express(s, &genome, &self.params);
         self.genomes[s] = genome;
+        self.donors[s] = None;
         if at.parent != 0 {
             self.stats.births = self.stats.births.saturating_add(1);
         }
@@ -212,6 +225,7 @@ impl World {
         brain::step(self);
         control::apply(self);
         motor::step(self);
+        mate::step(self);
         energy::contact(self);
         energy::life(self);
         repro::step(self);
@@ -240,6 +254,7 @@ impl World {
         self.rng_spawn.save(&mut w);
         self.rng_mutate.save(&mut w);
         self.rng_plants.save(&mut w);
+        self.rng_mate.save(&mut w);
         self.params.save(&mut w);
         self.creatures.save(&mut w);
         let c = &self.creatures;
@@ -251,6 +266,7 @@ impl World {
         brain::save(self, &mut w);
         control::save(self, &mut w);
         motor::save(self, &mut w);
+        mate::save(self, &mut w);
         energy::save(self, &mut w);
         repro::save(self, &mut w);
         plant::save(self, &mut w);
@@ -287,6 +303,7 @@ impl World {
         world.rng_spawn = Rng::load(&mut r)?;
         world.rng_mutate = Rng::load(&mut r)?;
         world.rng_plants = Rng::load(&mut r)?;
+        world.rng_mate = Rng::load(&mut r)?;
         world.params = Params::load(&mut r)?;
         world.creatures = Creatures::load(&mut r)?;
         // A dead slot holds uid 0, so this reads live uids only.
@@ -299,7 +316,7 @@ impl World {
                 // The body, and the bias, alpha, and connections of the brain, are not saved. They
                 // come from the genome.
                 world.creatures.express(s, &world.genomes[s]);
-                world.brains.express(s, &world.genomes[s].brain);
+                world.brains.express(s, &world.genomes[s], &world.params);
             }
         }
         world.stats = Stats::load(&mut r)?;
@@ -307,6 +324,7 @@ impl World {
         brain::load(&mut world, &mut r)?;
         control::load(&mut world, &mut r)?;
         motor::load(&mut world, &mut r)?;
+        mate::load(&mut world, &mut r)?;
         energy::load(&mut world, &mut r)?;
         repro::load(&mut world, &mut r)?;
         plant::load(&mut world, &mut r)?;
