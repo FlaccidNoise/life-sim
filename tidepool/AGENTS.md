@@ -33,7 +33,7 @@ Run from `tidepool/`. If `cargo` is not found, run `. "$HOME/.cargo/env"`.
 |---|---|
 | `make check` | Crate count, format (Rust and TypeScript), Clippy, Rust tests, WASM build, type check, ESLint, Vitest |
 | `make gates` | Native bench, the throughput gate (`scripts/bench-wasm.mjs`), the health gate (`gate-health`), then the evolution gate (`gate-evolve`) |
-| `make gates-long` | The evolution gate at tick 144,000 on seeds 1, 5, 8. About 7 minutes on the reference machine. Run it at each milestone exit. It is not in CI |
+| `make gates-long` | The evolution gate at tick 144,000 on seeds 1, 4, 5, 6, 8. About 10 minutes on the reference machine. Run it at each milestone exit. It is not in CI |
 | `make dev` | Build the WASM and start the dev server |
 
 ## Gotchas

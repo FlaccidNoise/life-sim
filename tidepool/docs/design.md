@@ -89,7 +89,8 @@ two type-specific numbers. Parts are bilateral by default: one gene makes a mirr
 | Gland | Toxin gland, Photophore | Toxin cloud. Light: see in the dark, lure prey, or flash to blind eyes. |
 | Body | Chloroplast, Fat store | Photosynthesis where there is light. Energy capacity. |
 
-Every part costs energy to build, energy to keep, and mass to carry.
+Every part costs energy to build and mass to carry. A part has no upkeep of its own: a heavier body
+pays more upkeep (`decisions/INDEX.md`, 2026-10-12).
 
 ### 5.3 Abilities
 

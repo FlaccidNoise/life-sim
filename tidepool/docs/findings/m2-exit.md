@@ -36,9 +36,9 @@ seed=1 creatures=1319 min_late=1252 plants=2229 births_late=1802 max_gen=14 mean
 seed=2 creatures=1253 min_late=1186 plants=2076 births_late=1709 max_gen=16 mean_chemo=0.43 parked=0.00 first_bud=867 juv_starved=0.50 to_bud=0.33 PASS
 seed=3 creatures=1243 min_late=1133 plants=1965 births_late=1670 max_gen=14 mean_chemo=0.47 parked=0.00 first_bud=854 juv_starved=0.51 to_bud=0.33 PASS
 gate-health 3/3 PASS
-seed=1 creatures=1448 creatures_noscent=1456 creatures_noeye=1404 len=11.5 len_sd=1.48 parts=5.8 chemo=0.36 chemo_blind=0.05 eye=0.24 eye_blind=0.08 plans=6 speed_cv=0.27 PASS
-seed=2 creatures=1429 creatures_noscent=1380 creatures_noeye=1309 len=10.3 len_sd=1.50 parts=6.1 chemo=0.39 chemo_blind=0.07 eye=0.26 eye_blind=0.07 plans=5 speed_cv=0.29 PASS
-seed=3 creatures=1397 creatures_noscent=1312 creatures_noeye=1314 len=11.0 len_sd=1.69 parts=5.2 chemo=0.33 chemo_blind=0.16 eye=0.22 eye_blind=0.09 plans=3 speed_cv=0.29 PASS
+seed=1 creatures=1448 creatures_noscent=1456 creatures_noeye=1404 len=11.5 len_sd=1.48 parts=5.8 chemo=0.36 chemo_blind=0.05 eye=0.24 eye_blind=0.08 plans=6 speed_cv=0.27 speed=1.07 area=64.5 PASS
+seed=2 creatures=1429 creatures_noscent=1380 creatures_noeye=1309 len=10.3 len_sd=1.50 parts=6.1 chemo=0.39 chemo_blind=0.07 eye=0.26 eye_blind=0.07 plans=5 speed_cv=0.29 speed=0.85 area=50.2 PASS
+seed=3 creatures=1397 creatures_noscent=1312 creatures_noeye=1314 len=11.0 len_sd=1.69 parts=5.2 chemo=0.33 chemo_blind=0.16 eye=0.22 eye_blind=0.09 plans=3 speed_cv=0.29 speed=1.05 area=58.2 PASS
 gate-evolve 3/3 PASS
 ```
 
@@ -148,8 +148,9 @@ band, rule, or default changed.
 - Found on the way: the plan and the decision log said a Fin uses its place. It does not, in the
   plan's own rule or in the code. Both are corrected with a dated note.
 - One finding from the proofs: in a starved world (`fert_radius=25`) the seeing runs hold 60 to 80
-  creatures and the runs with `chemo_gain=0` hold 13, 4, and 0. Where food is sparse the scent sense
-  is the difference between a world that lives and one that dies. One run per seed.
+  creatures and the runs with `chemo_gain=0` hold 13, 4, and 0. All six are under the 150 that the
+  gate calls died out, so this does not show a world that lives. One run per seed, at tick 36,000,
+  in a world that is not the default (reworded on 2026-10-13, `m2-audit-2.md` finding L6).
 
 **Known and carried to M3.**
 

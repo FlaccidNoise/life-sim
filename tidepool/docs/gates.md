@@ -766,19 +766,23 @@ What it says, by kind of claim:
 
 ### The long reading
 
-`make gates-long` runs `target/release/tidepool-headless gate-evolve --seeds 1,5,8 --ticks 144000`:
+`make gates-long` runs `target/release/tidepool-headless gate-evolve --seeds 1,4,5,6,8 --ticks 144000`:
 the same gate and the same bands, read at 4 times the tick. The owner added it on 2026-10-12 (audit
-finding H2). **Run it before a milestone closes. It is not in `make gates` and not in CI.** It took 7
-minutes on the reference machine, at a load average of 5.
+finding H2), on seeds 1, 5, 8, and added seeds 4 and 6 the same day. **Run it before a milestone
+closes. It is not in `make gates` and not in CI.** It took 10 minutes 22 seconds on the reference
+machine, at a load average of 5.4 to 5.9. On seeds 1, 5, 8 it took 7 minutes.
 
-The rows at the defaults of 2026-10-12:
+The rows at the defaults of 2026-10-12, run on 2026-10-13 before the seed list became the target. The
+rows of seeds 1, 5, 8 are the rows of 2026-10-12 digit for digit:
 
 ```
-$ make gates-long
+$ target/release/tidepool-headless gate-evolve --seeds 1,4,5,6,8 --ticks 144000
 seed=1 creatures=1770 creatures_noscent=1717 creatures_noeye=1267 len=9.4 len_sd=1.30 parts=6.7 chemo=0.16 chemo_blind=0.00 eye=0.28 eye_blind=0.00 plans=5 speed_cv=0.24 speed=0.84 area=34.8 PASS
+seed=4 creatures=1373 creatures_noscent=1405 creatures_noeye=1113 len=9.9 len_sd=1.41 parts=6.6 chemo=0.20 chemo_blind=0.01 eye=0.28 eye_blind=0.05 plans=4 speed_cv=0.22 speed=0.83 area=43.0 PASS
 seed=5 creatures=1566 creatures_noscent=1595 creatures_noeye=1376 len=10.5 len_sd=1.24 parts=5.7 chemo=0.27 chemo_blind=0.01 eye=0.26 eye_blind=0.02 plans=4 speed_cv=0.29 speed=0.73 area=39.1 PASS
+seed=6 creatures=1378 creatures_noscent=1364 creatures_noeye=1102 len=10.7 len_sd=1.76 parts=6.8 chemo=0.26 chemo_blind=0.01 eye=0.26 eye_blind=0.03 plans=8 speed_cv=0.28 speed=0.88 area=38.7 PASS
 seed=8 creatures=1461 creatures_noscent=1285 creatures_noeye=1065 len=9.9 len_sd=1.29 parts=9.6 chemo=0.17 chemo_blind=0.01 eye=0.25 eye_blind=0.05 plans=4 speed_cv=0.26 speed=0.91 area=35.0 PASS
-gate-evolve 3/3 PASS
+gate-evolve 5/5 PASS
 exit=0
 ```
 
@@ -885,6 +889,7 @@ rejected nothing.
 | `speed`, `turn` | The mean top speed in units per tick and the mean turn rate in radians per tick. Both are the formulas of `probe-plans` (`evolve::top_speed`, `evolve::turn_rate`): the full-grown body, alone, at full thrust. A juvenile counts with its adult body |
 | `eaten` | The energy that all creatures ate per tick, as a mean over the ticks since the row before, or since tick 0 for the first row. It depends on `--every` |
 | `reserve01` | The mean of `reserve / cap` over the plants, as in `probe-plants` |
+| `no_chemo`, `no_eye` | The share of the creatures with no chemoreceptor part, and the share with no eye part. Added on 2026-10-13 (`findings/m2-audit-2.md`, finding M3): a mean part sum does not show how many bodies hold the part. The rows on record before that date end at `reserve01` |
 
 Every mean but `reserve01` is over the living creatures. A mean over nobody prints as `NaN`, not as 0.
 `creatures`, `len`, `parts`, `chemo`, and `eye` are the numbers that `gate-evolve` prints for its

@@ -103,6 +103,15 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
   3 (L7). Carried: the size rule and the egg gene to M3 with brain upkeep (M7, M9), the strength of the
   fin to M4 (L5, its test is renamed to say that it holds at a grip of 0.6), and the throughput of an
   old world to M5 (M8). → `../findings/m2-exit.md`, `../roadmap.md`
+- 2026-10-12: **The owner answered the five checks of the M2 exit.** Done: bud, die, and continue as a
+  descendant (check 2, which also closes the open half of the M1 exit). Half done: the dimmed view,
+  judged with eyes only (check 3). Open: the look of the bodies (check 1, the owner asks for shapes
+  beyond ovals), the bench on a slower device (check 4), and the felt judgments (check 5).
+  → `../findings/m2-exit.md`
+- 2026-10-12: **`make gates-long` reads seeds 1, 4, 5, 6, 8.** The owner added 4 and 6: in the old bad
+  world they passed at tick 36,000 and failed only at tick 144,000, which is what the long reading is
+  for. The list ran once before it became the target, on 2026-10-13: 5 of 5 pass, in 10 minutes. No
+  band changed. → `../gates.md` "The long reading"
 
 ## Architecture
 

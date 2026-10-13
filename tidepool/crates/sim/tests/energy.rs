@@ -331,6 +331,13 @@ fn a_part_costs_upkeep_through_its_mass_alone() {
     assert!((eyed / blind - 1.0).abs() < 1e-4, "eye {eyed} {blind}");
     let for_mass = (1.31f32 / 1.21).powf(0.75);
     assert!((heavy / eyed / for_mass - 1.0).abs() < 0.01, "mass {heavy}");
+    // An eye at `eye_cost` 2 counts twice in the part sum: 2.1 + 2.
+    let for_eye = (1.41f32 / 1.31).powf(0.75);
+    let costly = loss(2.0, 0.1);
+    assert!(
+        (costly / heavy / for_eye - 1.0).abs() < 1e-3,
+        "eye cost {costly}"
+    );
 }
 
 /// Two fed juveniles with the same length and width genes at the same growth, with no upkeep. One
