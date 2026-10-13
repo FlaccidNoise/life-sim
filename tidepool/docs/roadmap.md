@@ -100,6 +100,13 @@ changes how they move and what they see. Part count does not collapse to the min
   that the parent can pay. A child that is never born uses up ids. Ids stay unique, so crossover can
   still line genes up by id (`findings/m2-audit.md`, finding L9).
 - Brain viewer, first version: live graph, part-grouped inputs, strongest path in words.
+- Added by the owner on 2026-10-13: **the walkthrough, first version.** A guided first play that
+  works as a game and also explains, truthfully, the biology, the evolution, the neural networks,
+  and the computer science of what is on screen. It is designed from research on onboarding
+  (`research/onboarding.md`) and has its own plan. It is built after the M3 rules are on, so it
+  teaches what M3 has: steer, eat, bud, let go, read the brain, mix genes. M4, M5, and M6 each add
+  the beats of what they bring, and M8 polishes it into the first-minute flow. Measured by the beats
+  a new player completes and a short check of what they understood.
 
 Exit: brains in a long-run world differ in shape and are not all minimal (risk R1). A player can watch
 their own brain while they play, let go, and see it take over.
