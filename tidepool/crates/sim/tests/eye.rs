@@ -2,11 +2,11 @@
 #![allow(clippy::disallowed_methods)]
 
 use std::f32::consts::PI;
-use tidepool_sim::brain::{self, IN_SEE_BODY_L, IN_SEE_BODY_R, IN_SEE_FOOD_L, IN_SEE_FOOD_R};
+use tidepool_sim::brain::{self, EYE_BODY_A, EYE_BODY_B, EYE_FOOD_A, EYE_FOOD_B};
 use tidepool_sim::creature::MAX_EYES;
 use tidepool_sim::eye::{self, EYE_REACH};
 use tidepool_sim::genome::{
-    Genome, Node, PartGene, FOUNDER_EYE_ANCHOR, FOUNDER_EYE_EXTRA, KIND_EYE,
+    Genome, Node, PartGene, BODY, FOUNDER_EYE_ANCHOR, FOUNDER_EYE_EXTRA, KIND_EYE,
 };
 use tidepool_sim::math::sin_cos;
 use tidepool_sim::params::id;
@@ -20,6 +20,8 @@ const AT: (f32, f32) = (700.0, 500.0);
 const SIDE: f32 = FOUNDER_EYE_ANCHOR * PI;
 /// The range of the founder's eye on the reference body: `eye_range * size * length`.
 const RANGE: f32 = 16.0 * 0.2 * 12.0;
+/// The history id of the eye gene of `eyed`. It owns the ports of that eye.
+const EYE: u32 = 900;
 
 /// A world where nothing grows, eats, pays upkeep, or leaves scent. Only eyes can find food. Every
 /// body thinks and scans on every tick.
@@ -43,17 +45,27 @@ fn world(seed: u32) -> World {
     w
 }
 
-/// The reference body with one eye gene and the smallest brain, so it stays where it is put.
-fn eyed(anchor: f32, size: f32) -> Genome {
-    let mut g = Genome::default();
-    g.parts.push(PartGene {
+fn eye_gene(history: u32, anchor: f32, size: f32) -> PartGene {
+    PartGene {
         kind: KIND_EYE,
         anchor,
         size,
         extra: FOUNDER_EYE_EXTRA,
-        history: 0,
-    });
+        history,
+    }
+}
+
+/// The reference body with one eye gene and the smallest brain, so it stays where it is put.
+fn eyed(anchor: f32, size: f32) -> Genome {
+    let mut g = Genome::default();
+    g.parts.push(eye_gene(EYE, anchor, size));
     g
+}
+
+/// The inputs that the eyes of a genome declare, in block order.
+fn eye_ports(g: &Genome) -> Vec<Node> {
+    let inputs = brain::ports(g).inputs;
+    inputs.into_iter().filter(|n| n.owner != BODY).collect()
 }
 
 /// The reference body with the founder's eye.
@@ -90,14 +102,24 @@ fn body(w: &mut World, g: Genome, (x, y): (f32, f32)) -> usize {
     s
 }
 
-/// The eye inputs of the body, each found by its name: food left, food right, body left, body
-/// right.
+/// The inputs of the first eye gene of the body, which is a pair, each found by its name: food
+/// left, food right, body left, body right. The B cone is on the left and the A cone on the right.
 fn eye_inputs(w: &mut World, s: usize) -> [f32; 4] {
-    let inputs = brain::ports(&w.genomes[s]).inputs;
-    [IN_SEE_FOOD_L, IN_SEE_FOOD_R, IN_SEE_BODY_L, IN_SEE_BODY_R].map(|port| {
-        let at = inputs.iter().position(|n| *n == Node::body(port));
-        w.brains.inputs_mut(s)[at.expect("the body declares the eye input")]
+    let g = &w.genomes[s];
+    let eye = g.parts.iter().find(|part| part.kind == KIND_EYE);
+    let owner = eye.expect("the body has an eye gene").history;
+    let inputs = brain::ports(g).inputs;
+    [EYE_FOOD_B, EYE_FOOD_A, EYE_BODY_B, EYE_BODY_A].map(|port| {
+        let at = inputs.iter().position(|n| *n == Node { owner, port });
+        w.brains.inputs_mut(s)[at.expect("the eye declares the input")]
     })
+}
+
+/// Every eye input of the body, in block order: two for each cone, its plant and then its body.
+fn cone_inputs(w: &mut World, s: usize) -> Vec<f32> {
+    let inputs = brain::ports(&w.genomes[s]).inputs;
+    let first = inputs.iter().position(|n| n.owner != BODY);
+    first.map_or(Vec::new(), |at| w.brains.inputs_mut(s)[at..].to_vec())
 }
 
 /// The eye inputs of the body after one tick.
@@ -117,7 +139,7 @@ fn sees_plants(g: Genome, places: &[(f32, f32)]) -> [f32; 4] {
 }
 
 #[test]
-fn a_plant_in_the_right_cone_lights_the_right_input_only() {
+fn a_plant_on_the_right_lights_the_a_cone_of_a_paired_eye_only() {
     let [l, r, body_l, body_r] = sees_plants(founder_eyed(), &[off(20.0, SIDE)]);
     assert!(r > 0.3 && l == 0.0, "left {l}, right {r}");
     assert_eq!([body_l, body_r], [0.0, 0.0]);
@@ -159,12 +181,122 @@ fn nothing_behind_the_body_is_seen() {
 }
 
 #[test]
-fn a_midline_eye_feeds_both_sides() {
-    let [l, r, ..] = sees_plants(eyed(0.0, 0.2), &[off(20.0, 0.0)]);
-    assert!(l == r && r > 0.3, "left {l}, right {r}");
-    // An eye on the tail looks back, and it is on the midline too.
-    let [l, r, ..] = sees_plants(eyed(1.0, 0.2), &[off(20.0, PI)]);
-    assert!(l == r && r > 0.3, "left {l}, right {r}");
+fn a_midline_eye_declares_two_inputs() {
+    let a_ports = [EYE_FOOD_A, EYE_BODY_A].map(|port| Node { owner: EYE, port });
+    // An eye on the nose looks ahead. An eye on the tail looks back, and it is on the midline too.
+    for (anchor, angle) in [(0.0, 0.0), (1.0, PI)] {
+        let g = eyed(anchor, 0.2);
+        assert_eq!(eye_ports(&g), a_ports, "anchor {anchor}");
+        let mut w = world(1);
+        plant(&mut w, off(20.0, angle));
+        let s = body(&mut w, g.clone(), AT);
+        w.tick();
+        let seen = cone_inputs(&mut w, s);
+        assert!(
+            seen.len() == 2 && seen[0] > 0.3 && seen[1] == 0.0,
+            "{seen:?}"
+        );
+        // Another body in the cone lights the second input.
+        let mut w = world(1);
+        let s = body(&mut w, g, AT);
+        body(&mut w, Genome::default(), off(20.0, angle));
+        w.tick();
+        let seen = cone_inputs(&mut w, s);
+        assert!(
+            seen.len() == 2 && seen[0] == 0.0 && seen[1] > 0.3,
+            "{seen:?}"
+        );
+    }
+    // `Creatures::express` holds an anchor in 0 to 1 and counts one that is not finite as 0. Each
+    // of these is on the midline there, so each declares the inputs of the one cone that it gets.
+    for anchor in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY, -1.0, 2.0] {
+        let g = eyed(anchor, 0.2);
+        assert_eq!(eye_ports(&g), a_ports, "anchor {anchor}");
+        let mut w = world(1);
+        let s = body(&mut w, g, AT);
+        assert_eq!(w.creatures.n_eyes[s], 1, "anchor {anchor}");
+        w.tick();
+    }
+}
+
+#[test]
+fn a_body_with_two_eye_genes_has_eight_eye_inputs_and_each_cone_feeds_its_own() {
+    // Two pairs. A cone is 0.7 radians to each side of its middle, so the two cones of one side
+    // overlap, and the middle of each is outside the other. In M2 both fed one input.
+    let mut g = eyed(0.2, 0.2);
+    g.parts.push(eye_gene(EYE + 1, 0.6, 0.2));
+    let of = |owner: u32| {
+        [EYE_FOOD_A, EYE_BODY_A, EYE_FOOD_B, EYE_BODY_B].map(|port| Node { owner, port })
+    };
+    assert_eq!(eye_ports(&g), [of(EYE), of(EYE + 1)].concat());
+    // The eye inputs follow the 6 inputs of the body and the 3 of the scent.
+    let inputs = brain::ports(&g).inputs;
+    assert_eq!((inputs.len(), inputs[9]), (17, of(EYE)[0]));
+
+    // Cone `k` feeds input `2 * k` with its plant and input `2 * k + 1` with its body.
+    let middles = [0.2 * PI, -0.2 * PI, 0.6 * PI, -0.6 * PI];
+    for (k, angle) in middles.into_iter().enumerate() {
+        for other_body in [false, true] {
+            let mut w = world(1);
+            let s = body(&mut w, g.clone(), AT);
+            if other_body {
+                body(&mut w, Genome::default(), off(20.0, angle));
+            } else {
+                plant(&mut w, off(20.0, angle));
+            }
+            w.tick();
+            assert_eq!(w.brains.in_eye[s], 9);
+            let seen = cone_inputs(&mut w, s);
+            assert_eq!(seen.len(), 8);
+            let lit = 2 * k + other_body as usize;
+            for (i, v) in seen.iter().enumerate() {
+                assert_eq!(*v > 0.3, i == lit, "cone {k}, input {i}: {seen:?}");
+                assert!(*v == 0.0 || i == lit, "cone {k}, input {i}: {seen:?}");
+            }
+        }
+    }
+}
+
+#[test]
+fn an_eye_gene_past_max_eyes_declares_nothing() {
+    // Five pairs are 10 cones. `express` makes 8, so the fifth gene has no cone and no port.
+    let mut g = Genome::default();
+    for k in 0..5 {
+        g.parts.push(eye_gene(EYE + k, 0.1 + 0.15 * k as f32, 0.2));
+    }
+    let ports = eye_ports(&g);
+    assert_eq!(ports.len(), 2 * MAX_EYES);
+    assert!(ports.iter().all(|n| (EYE..EYE + 4).contains(&n.owner)));
+
+    // Three pairs, a midline eye, and two more pairs. The A cone of the fifth gene is the eighth
+    // cone and keeps its ports. Its mirror is not made and declares none, and so does the sixth.
+    let mut g = Genome::default();
+    for (k, anchor) in [0.1, 0.3, 0.5, 0.0, 0.7, 0.9].into_iter().enumerate() {
+        g.parts.push(eye_gene(EYE + k as u32, anchor, 0.2));
+    }
+    let ports = eye_ports(&g);
+    assert_eq!(ports.len(), 2 * MAX_EYES);
+    let last = [
+        (EYE + 3, EYE_FOOD_A),
+        (EYE + 3, EYE_BODY_A),
+        (EYE + 4, EYE_FOOD_A),
+        (EYE + 4, EYE_BODY_A),
+    ];
+    assert_eq!(ports[12..], last.map(|(owner, port)| Node { owner, port }));
+
+    // In a world the body has one pair of inputs for each cone, and the last cone feeds the last
+    // pair. The plant is in that cone alone.
+    let mut w = world(1);
+    plant(&mut w, off(20.0, 0.7 * PI + 0.5));
+    let s = body(&mut w, g, AT);
+    w.tick();
+    assert_eq!(w.creatures.n_eyes[s] as usize, MAX_EYES);
+    let seen = cone_inputs(&mut w, s);
+    assert_eq!(seen.len(), 2 * MAX_EYES);
+    for (i, v) in seen.iter().enumerate() {
+        assert_eq!(*v > 0.3, i == 14, "input {i}: {seen:?}");
+        assert!(*v == 0.0 || i == 14, "input {i}: {seen:?}");
+    }
 }
 
 #[test]
@@ -270,7 +402,7 @@ fn closest(seed: u32, founder_eye: f32) -> f32 {
 }
 
 #[test]
-fn a_founder_with_eyes_swims_to_a_plant_it_can_see_and_an_eyeless_one_does_not() {
+fn a_founder_still_swims_to_a_plant_it_can_see() {
     let mut wins = 0;
     for seed in 1..=5 {
         let (with_eyes, without) = (closest(seed, 0.2), closest(seed, 0.0));
@@ -285,11 +417,11 @@ fn a_founder_with_eyes_swims_to_a_plant_it_can_see_and_an_eyeless_one_does_not()
     assert!(wins >= 4, "eyes beat no eyes on only {wins} of 5 seeds");
 }
 
-/// The four eye inputs of a body, from a search of every plant and every body with the arithmetic
-/// of `eye::see` and no grid.
-fn seen_by_search(w: &World, s: usize) -> [f32; 4] {
+/// The eye inputs of a body, two for each cone, from a search of every plant and every body with
+/// the arithmetic of `eye::see` and no grid.
+fn seen_by_search(w: &World, s: usize) -> Vec<f32> {
     let (c, p) = (&w.creatures, &w.plants);
-    let mut out = [0.0f32; 4];
+    let mut out = Vec::new();
     for eye in s * MAX_EYES..s * MAX_EYES + c.n_eyes[s] as usize {
         let (sin_dir, cos_dir) = sin_cos(c.eye_dir[eye]);
         let ax = c.hc[s] * cos_dir - c.hs[s] * sin_dir;
@@ -311,13 +443,7 @@ fn seen_by_search(w: &World, s: usize) -> [f32; 4] {
                 0.0
             }
         };
-        let (plant, other) = (near(&p.slots, &p.x, &p.y), near(&c.slots, &c.x, &c.y));
-        if sin_dir <= 0.0 {
-            (out[0], out[2]) = (out[0].max(plant), out[2].max(other));
-        }
-        if sin_dir >= 0.0 {
-            (out[1], out[3]) = (out[1].max(plant), out[3].max(other));
-        }
+        out.extend([near(&p.slots, &p.x, &p.y), near(&c.slots, &c.x, &c.y)]);
     }
     out
 }
@@ -345,7 +471,8 @@ fn the_search_box_holds_every_thing_that_a_cone_holds() {
         w.plants.refresh_grid();
         for s in 0..150 {
             eye::see(&mut w, s);
-            let seen = eye_inputs(&mut w, s);
+            let seen = cone_inputs(&mut w, s);
+            assert_eq!(seen.len(), 2 * w.creatures.n_eyes[s] as usize);
             assert_eq!(seen, seen_by_search(&w, s), "round {round}, slot {s}");
             lit += seen.iter().filter(|v| **v > 0.0).count();
         }
@@ -368,14 +495,13 @@ fn a_world_with_eyes_is_the_same_in_a_reload() {
     let mut first = start();
     first.run(300);
     // The eyes are at work in this world: without that, the reload proves nothing about them.
-    let seeing = (0..first.creatures.slots.high_water())
+    // A body that was born with no eye has no eye input.
+    let live: Vec<usize> = (0..first.creatures.slots.high_water())
         .filter(|&s| first.creatures.slots.is_alive(s))
-        .filter(|&s| {
-            let at = first.brains.in_eye[s as usize] as usize;
-            first.brains.inputs_mut(s as usize)[at..]
-                .iter()
-                .any(|v| *v > 0.0)
-        })
+        .map(|s| s as usize)
+        .collect();
+    let seeing = (live.iter())
+        .filter(|&&s| cone_inputs(&mut first, s).iter().any(|v| *v > 0.0))
         .count();
     assert!(seeing > 20, "only {seeing} bodies see a thing");
     let mut second = World::load(&first.save()).expect("the snapshot loads");

@@ -18,11 +18,11 @@ pub const EYE_HALF_SPAN: f32 = 1.0;
 /// of `EYE_REACH` can pass the box of its exact shape by a tenth of a unit.
 const BOX_MARGIN: f32 = 0.25;
 
-/// Writes the four eye inputs of the body in `slot`, from `Brains::in_eye`: food left, food right,
-/// body left, body right. For the plants and for the bodies, each side gets the nearness of the
-/// nearest one in a cone of that side: 1 at the eye, 0 at the range of the cone and with nothing in
-/// it. A cone at a positive angle from the heading is on the right, and an eye on the midline
-/// feeds both sides. A body whose brain has no eye input is not scanned.
+/// Writes the eye inputs of the body in `slot`, from `Brains::in_eye`: two for each cone, in the
+/// order of the cones. The first is the nearness of the nearest plant in the cone and the second
+/// that of the nearest body: 1 at the eye, 0 at the range of the cone and with nothing in it.
+/// Nothing is summed over cones. `brain::ports` declares the two inputs of each cone in the same
+/// order. A body whose brain has no eye input is not scanned.
 ///
 /// Reads the creature grid and the plant grid, so the caller has brought both up to date. Saves
 /// nothing: the inputs are brain activations.
@@ -42,13 +42,11 @@ pub fn see(world: &mut World, slot: usize) {
     let (eye_range, gain) = (params.get(id::EYE_RANGE), params.get(id::EYE_GAIN));
     let (px, py, hc, hs) = (c.x[slot], c.y[slot], c.hc[slot], c.hs[slot]);
     let n = (c.n_eyes[slot] as usize).min(MAX_EYES);
-    // Of each cone: its axis and the squared cosine of its half angle, its squared range, and the
-    // sine of its angle from the heading. `express` holds the axis for a heading of 0, so no sine
-    // or cosine is worked out here: `math::sin_cos` for each cone took a quarter of the scan in
-    // WASM.
+    // Of each cone: its axis and the squared cosine of its half angle, and its squared range.
+    // `express` holds the axis for a heading of 0, so no sine or cosine is worked out here:
+    // `math::sin_cos` for each cone took a quarter of the scan in WASM.
     let mut cones = [[0.0f32; 3]; MAX_EYES];
     let mut far2 = [0.0f32; MAX_EYES];
-    let mut side = [0.0f32; MAX_EYES];
     // The box of every cone, from the body. The eye is at the body's centre, so the box holds it.
     let (mut x0, mut y0, mut x1, mut y1) = (0.0f32, 0.0f32, 0.0f32, 0.0f32);
     for k in 0..n {
@@ -59,7 +57,6 @@ pub fn see(world: &mut World, slot: usize) {
         let range = c.cone_range(slot, k, eye_range);
         cones[k] = [ax, ay, cos * cos];
         far2[k] = range * range;
-        side[k] = sin_dir;
         // A cone goes farthest along a line where that line is inside it, and at one of its two
         // edges where it is not. The half angle is under a quarter turn, so its sine is above 0.
         let sin = (1.0 - cos * cos).sqrt();
@@ -95,8 +92,8 @@ pub fn see(world: &mut World, slot: usize) {
     nearest(&plants.grid, &plants.x, &plants.y, &mut food);
     nearest(grid, &c.x, &c.y, &mut body);
 
-    let (mut food_l, mut food_r, mut body_l, mut body_r) = (0.0f32, 0.0f32, 0.0f32, 0.0f32);
-    for k in 0..n {
+    let (inputs, _) = brains.inputs_mut(slot)[in_eye as usize..].as_chunks_mut::<2>();
+    for (k, input) in inputs.iter_mut().take(n).enumerate() {
         let near = |d2: f32| {
             if d2 < far2[k] {
                 1.0 - (d2 / far2[k]).sqrt()
@@ -104,17 +101,7 @@ pub fn see(world: &mut World, slot: usize) {
                 0.0
             }
         };
-        let (plant, other) = (near(food[k]), near(body[k]));
-        if side[k] <= 0.0 {
-            (food_l, body_l) = (food_l.max(plant), body_l.max(other));
-        }
-        if side[k] >= 0.0 {
-            (food_r, body_r) = (food_r.max(plant), body_r.max(other));
-        }
+        input[0] = (gain * near(food[k])).clamp(0.0, 1.0);
+        input[1] = (gain * near(body[k])).clamp(0.0, 1.0);
     }
-    let input = &mut brains.inputs_mut(slot)[in_eye as usize..][..4];
-    input[0] = (gain * food_l).clamp(0.0, 1.0);
-    input[1] = (gain * food_r).clamp(0.0, 1.0);
-    input[2] = (gain * body_l).clamp(0.0, 1.0);
-    input[3] = (gain * body_r).clamp(0.0, 1.0);
 }

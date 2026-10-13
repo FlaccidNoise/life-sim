@@ -642,7 +642,7 @@ test('a possessed body that buds shows buds and a lineage in the frame', () => {
   expect(f.lineageAlive).toBeGreaterThanOrEqual(2);
 });
 
-// The brain of a possessed founder: 11 inputs, 4 hidden neurons, 2 outputs, and 57 connections. The
+// The brain of a possessed founder: 13 inputs, 4 hidden neurons, 3 outputs, and 60 connections. The
 // first input is the constant one.
 test('the brain of the possessed body reaches the page, and a release sends 0 words once', () => {
   const r = rig({ recycle: true });
@@ -653,7 +653,7 @@ test('the brain of the possessed body reaches the page, and a release sends 0 wo
   const sent = r.of('brain');
   const brain = P.readBrain(sent.at(-1)?.words ?? new Uint32Array(0));
   if (!brain) throw new Error('no brain was sent for the possessed body');
-  expect([brain.uid, brain.neurons.length, brain.connections.length]).toEqual([88, 17, 57]);
+  expect([brain.uid, brain.neurons.length, brain.connections.length]).toEqual([88, 20, 60]);
   expect(brain.neurons.filter((n) => n.kind === P.KIND_HIDDEN).map((n) => n.gene)).toEqual([
     0, 1, 2, 3,
   ]);

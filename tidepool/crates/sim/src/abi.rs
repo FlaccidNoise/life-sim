@@ -473,12 +473,12 @@ mod tests {
         unsafe {
             let w = tp_new(1, 1536.0, 1024.0);
             tp_seed_founders(w, 20, 0);
-            // A founder: 17 neurons and 57 connections.
+            // A founder: 20 neurons and 60 connections.
             let words =
-                tp_brain_header_words() + 17 * tp_brain_neuron_words() + 57 * tp_brain_conn_words();
+                tp_brain_header_words() + 20 * tp_brain_neuron_words() + 60 * tp_brain_conn_words();
             assert_eq!(tp_brain_write(w, 9), words);
             let header = std::slice::from_raw_parts(tp_brain_ptr(w), 6);
-            assert_eq!(header, [9, 11, 4, 2, 57, 0]);
+            assert_eq!(header, [9, 13, 4, 3, 60, 0]);
             assert_eq!(tp_brain_write(w, 999), 0);
             tp_free(w);
         }

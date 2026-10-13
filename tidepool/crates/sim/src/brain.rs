@@ -8,7 +8,11 @@
 
 use std::ops::Range;
 
-use crate::genome::{BrainGenome, ConnGene, Genome, HiddenGene, Node, BODY, FOUNDER_EYE_HISTORY};
+use crate::creature::MAX_EYES;
+use crate::genome::{
+    BrainGenome, ConnGene, Genome, HiddenGene, Node, BODY, FOUNDER_EYE_HISTORY, KIND_CHEMO,
+    KIND_EYE,
+};
 use crate::math::act;
 use crate::params::{id, Params};
 use crate::rng::Rng;
@@ -21,49 +25,54 @@ pub const MAX_CONNS: usize = 384;
 /// The most out genes that a genome can hold.
 pub const N_OUT_MAX: usize = 8;
 
-// The ports of the body. Owner `BODY`.
+// The ports of the body. Owner `BODY`. Every body declares these inputs, each at the index that
+// is its port.
 pub const IN_CONST: u8 = 0;
 pub const IN_ENERGY: u8 = 1;
 pub const IN_AGE: u8 = 2;
 pub const IN_SPEED: u8 = 3;
-/// The two mate inputs. `ports` does not declare them yet.
+/// The two mate inputs.
 pub const IN_MATE_SIZE: u8 = 4;
 pub const IN_MATE_KIN: u8 = 5;
-/// The body inputs once `ports` declares the mate inputs.
 pub const N_BODY_IN: usize = 6;
+/// The three scent inputs, of a body whose chemoreceptors sum to more than 0. Owner `BODY`.
+/// `IN_GRAD_SIDE` is positive when the scent rises on the side of positive angles from the heading.
 pub const IN_SCENT: u8 = 16;
 pub const IN_GRAD_FWD: u8 = 17;
 pub const IN_GRAD_SIDE: u8 = 18;
-/// What the eyes see, summed by side: the M2 layout, which `ports` still declares for every body.
-/// `L` is the side of negative angles from the heading. `R` is the side of positive angles, the
-/// side that `IN_GRAD_SIDE` calls positive.
-pub const IN_SEE_FOOD_L: u8 = 32;
-pub const IN_SEE_FOOD_R: u8 = 33;
-pub const IN_SEE_BODY_L: u8 = 34;
-pub const IN_SEE_BODY_R: u8 = 35;
 /// The ports of one eye gene. Owner: the history id of the gene. `A` is the cone at
 /// `+anchor * PI`, or the one cone of a midline eye. `B` is its mirror. A midline eye has no `B`
-/// ports. `ports` does not declare them yet.
+/// ports.
 pub const EYE_FOOD_A: u8 = 0;
 pub const EYE_BODY_A: u8 = 1;
 pub const EYE_FOOD_B: u8 = 2;
 pub const EYE_BODY_B: u8 = 3;
 pub const OUT_THRUST: u8 = 128;
 pub const OUT_TURN: u8 = 129;
-/// `ports` does not declare it yet.
 pub const OUT_ACCEPT: u8 = 130;
+/// The inputs that every body declares, in block order.
+const BODY_INPUTS: [u8; N_BODY_IN] = [
+    IN_CONST,
+    IN_ENERGY,
+    IN_AGE,
+    IN_SPEED,
+    IN_MATE_SIZE,
+    IN_MATE_KIN,
+];
+const SCENT_INPUTS: [u8; 3] = [IN_SCENT, IN_GRAD_FWD, IN_GRAD_SIDE];
 /// The outputs that every body declares, in block order. Their ports count up from `OUT_THRUST`.
-pub const BODY_OUTPUTS: [u8; 2] = [OUT_THRUST, OUT_TURN];
+pub const BODY_OUTPUTS: [u8; 3] = [OUT_THRUST, OUT_TURN, OUT_ACCEPT];
 /// `Brains::in_scent` or `Brains::in_eye` of a slot whose body does not declare those inputs.
 pub const NO_INPUT: u16 = u16::MAX;
 
 /// Hidden neurons of the starter brain.
 pub const STARTER_HIDDEN: u32 = 4;
 /// The history ids that the connections of a founder brain can hold are `1..=STARTER_CONNS`. Every
-/// starter brain takes 1 to 39: the 3 wired connections, each input that is not an eye input to
-/// each hidden neuron, and each hidden neuron to each output. The brain of a founder with an eye
-/// also takes 40 to 57: each eye input to each hidden neuron, and the 2 wired eye connections.
-pub const STARTER_CONNS: u32 = 57;
+/// starter brain takes 1 to 39: the 3 wired connections, each input of the M2 body and of the
+/// scent to each hidden neuron, and each hidden neuron to thrust and to turn. It also takes 58 to
+/// 60, the 3 connections into `accept`. The brain of a founder with an eye takes 40 to 57 as well:
+/// each eye input to each hidden neuron, and the 2 wired eye connections.
+pub const STARTER_CONNS: u32 = 60;
 const STARTER_BIAS_SIGMA: f32 = 0.05;
 
 /// Words of the readout that `readout` makes: the header, one neuron, and one connection.
@@ -81,24 +90,40 @@ pub struct Ports {
 
 /// Who declares what. The only place that knows.
 ///
-/// The M2 layout, for every body: the 4 body inputs, the 3 scent inputs, and the 4 eye inputs
-/// summed by side, then thrust and turn.
-pub fn ports(_g: &Genome) -> Ports {
-    let inputs = [
-        IN_CONST,
-        IN_ENERGY,
-        IN_AGE,
-        IN_SPEED,
-        IN_SCENT,
-        IN_GRAD_FWD,
-        IN_GRAD_SIDE,
-        IN_SEE_FOOD_L,
-        IN_SEE_FOOD_R,
-        IN_SEE_BODY_L,
-        IN_SEE_BODY_R,
-    ];
+/// Inputs: the 6 of the body. Then the 3 of the scent, if the chemoreceptors sum to more than 0.
+/// Then the eye genes in gene order: for each cone that `Creatures::express` makes, its plant
+/// input and then its body input, `A` before `B`. A cone past `MAX_EYES` declares nothing.
+/// Outputs: thrust, turn, and accept. No part declares an output.
+///
+/// The names are all different when every part has its own history id above `BODY`, as in a
+/// living world. For a hand-made genome where two eye genes share an id, or where one has the id
+/// `BODY`, a name is here more than once. Each cone still has its two inputs, and a connection
+/// reads the first neuron of that name.
+pub fn ports(g: &Genome) -> Ports {
+    let mut inputs: Vec<Node> = BODY_INPUTS.map(Node::body).into();
+    if g.size_of(KIND_CHEMO) > 0.0 {
+        inputs.extend(SCENT_INPUTS.map(Node::body));
+    }
+    let mut room = MAX_EYES;
+    for part in g.parts.iter().filter(|part| part.kind == KIND_EYE) {
+        // As in `Creatures::express`: an anchor is held in 0 to 1, one that is not finite counts
+        // as 0, and an eye at exactly 0 or 1 is on the midline and is one cone.
+        let pair = part.anchor > 0.0 && part.anchor < 1.0;
+        let made = room.min(if pair { 2 } else { 1 });
+        room -= made;
+        let node = |port: u8| Node {
+            owner: part.history,
+            port,
+        };
+        for cone in [[EYE_FOOD_A, EYE_BODY_A], [EYE_FOOD_B, EYE_BODY_B]]
+            .iter()
+            .take(made)
+        {
+            inputs.extend(cone.map(node));
+        }
+    }
     Ports {
-        inputs: inputs.map(Node::body).into(),
+        inputs,
         outputs: BODY_OUTPUTS.map(Node::body).into(),
     }
 }
@@ -228,12 +253,16 @@ impl Brains {
             (self.bias[first + at], self.alpha[first + at]) =
                 gene.map_or((0.0, 1.0), |gene| (gene.bias, gene.alpha));
         }
+        // The scent inputs follow those of the body, and the eye inputs are the rest.
         let inputs = &block.names[..block.n_in];
-        let input = |port: u8| {
-            let at = inputs.iter().position(|n| *n == Node::body(port));
-            at.map_or(NO_INPUT, |i| i as u16)
+        let scent = inputs.get(N_BODY_IN) == Some(&Node::body(IN_SCENT));
+        let eyes = N_BODY_IN + if scent { SCENT_INPUTS.len() } else { 0 };
+        self.in_scent[slot] = if scent { N_BODY_IN as u16 } else { NO_INPUT };
+        self.in_eye[slot] = if eyes < block.n_in {
+            eyes as u16
+        } else {
+            NO_INPUT
         };
-        (self.in_scent[slot], self.in_eye[slot]) = (input(IN_SCENT), input(IN_SEE_FOOD_L));
         self.n_neur[slot] = block.names.len() as u16;
         (self.n_in[slot], self.n_out[slot]) = (block.n_in as u16, block.n_out as u16);
         self.wire(slot, &block, &g.brain, p.get(id::HIDDEN_GAIN));
@@ -297,16 +326,21 @@ pub(crate) fn thinks(tick: u32, slot: usize, every: u32) -> bool {
 }
 
 /// The founder brain. Every founder has the same shape and the same history ids: the connections
-/// take 1 to 39, and the 4 hidden genes take the 4 ids after the founder's eye. Three wired weights
-/// make it swim and turn up the scent gradient: `starter_cruise` from `IN_CONST` to thrust,
-/// `starter_steer` from `IN_GRAD_SIDE` to turn, and `starter_surge` from `IN_GRAD_FWD` to thrust.
-/// Each other weight is `gauss * new_conn_sigma`. Draws the random weights in history order, then
-/// the biases of the hidden genes, then those of the outputs.
+/// take 1 to 39 and 58 to 60, and the 4 hidden genes take the 4 ids after the founder's eye. Three
+/// wired weights make it swim and turn up the scent gradient: `starter_cruise` from `IN_CONST` to
+/// thrust, `starter_steer` from `IN_GRAD_SIDE` to turn, and `starter_surge` from `IN_GRAD_FWD` to
+/// thrust. Each other weight of 1 to 39 is `gauss * new_conn_sigma`. Draws those in history order,
+/// then the biases of the hidden genes, then those of the outputs.
 ///
-/// With `founder_eye` above 0 the ids 40 to 57 follow: each eye input to each hidden neuron, then
-/// two wired weights that turn the body to a plant it sees, `starter_look` from `IN_SEE_FOOD_R` to
-/// turn and minus `starter_look` from `IN_SEE_FOOD_L` to turn. Their random weights are drawn
-/// after the biases, so an eye moves no draw of the brain with none.
+/// 58 to 60 run into `accept`: `starter_accept` from `IN_CONST`, then `gauss * new_conn_sigma`
+/// from each of the two mate inputs, drawn in that order after the biases.
+///
+/// With `founder_eye` above 0 the ids 40 to 57 name the founder's eye, which is a pair: each of
+/// its inputs to each hidden neuron, then two wired weights that turn the body to a plant it sees,
+/// `starter_look` from `EYE_FOOD_A` to turn and minus `starter_look` from `EYE_FOOD_B` to turn.
+/// The inputs are in the order of M2, the left before the right: the plant of `B`, the plant of
+/// `A`, the body of `B`, the body of `A`. Their random weights are drawn last, so an eye moves no
+/// draw of the brain with none.
 pub fn starter(rng: &mut Rng, p: &Params) -> BrainGenome {
     let sigma = p.get(id::NEW_CONN_SIGMA);
     let hidden: Vec<Node> = (1..=STARTER_HIDDEN)
@@ -351,18 +385,29 @@ pub fn starter(rng: &mut Rng, p: &Params) -> BrainGenome {
         out.bias = bias();
     }
     brain.hidden = hidden_genes;
+    let accept = Node::body(OUT_ACCEPT);
+    let accepts = [
+        (Node::body(IN_CONST), accept, p.get(id::STARTER_ACCEPT)),
+        (Node::body(IN_MATE_SIZE), accept, rng.gauss() * sigma),
+        (Node::body(IN_MATE_KIN), accept, rng.gauss() * sigma),
+    ];
     if p.get(id::FOUNDER_EYE) > 0.0 {
-        for input in [IN_SEE_FOOD_L, IN_SEE_FOOD_R, IN_SEE_BODY_L, IN_SEE_BODY_R] {
+        let eye = |port: u8| Node {
+            owner: FOUNDER_EYE_HISTORY,
+            port,
+        };
+        for input in [EYE_FOOD_B, EYE_FOOD_A, EYE_BODY_B, EYE_BODY_A] {
             for &h in &hidden {
-                wires.push((Node::body(input), h, rng.gauss() * sigma));
+                wires.push((eye(input), h, rng.gauss() * sigma));
             }
         }
         let look = p.get(id::STARTER_LOOK);
-        wires.push((Node::body(IN_SEE_FOOD_R), turn, look));
-        wires.push((Node::body(IN_SEE_FOOD_L), turn, -look));
+        wires.push((eye(EYE_FOOD_A), turn, look));
+        wires.push((eye(EYE_FOOD_B), turn, -look));
     }
-    brain.conns = (1..)
-        .zip(wires)
+    let first_accept = STARTER_CONNS + 1 - accepts.len() as u32;
+    let wires = (1..).zip(wires).chain((first_accept..).zip(accepts));
+    brain.conns = wires
         .map(|(history, (src, dst, weight))| ConnGene {
             src,
             dst,
@@ -406,6 +451,7 @@ pub fn step(world: &mut World) {
         brains.step_one(s);
         c.cmd_thrust[s] = brains.output(s, OUT_THRUST).max(0.0);
         c.cmd_turn[s] = brains.output(s, OUT_TURN);
+        c.cmd_accept[s] = brains.output(s, OUT_ACCEPT);
     }
 }
 

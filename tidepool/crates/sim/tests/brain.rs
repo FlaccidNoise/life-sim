@@ -2,10 +2,13 @@
 #![allow(clippy::disallowed_methods, clippy::approx_constant)]
 
 use tidepool_sim::brain::{
-    self, Brains, IN_AGE, IN_CONST, IN_ENERGY, IN_SEE_BODY_R, IN_SEE_FOOD_L, IN_SEE_FOOD_R,
-    OUT_THRUST, OUT_TURN,
+    self, Brains, EYE_BODY_A, EYE_BODY_B, EYE_FOOD_A, EYE_FOOD_B, IN_AGE, IN_CONST, IN_ENERGY,
+    IN_GRAD_FWD, IN_GRAD_SIDE, IN_MATE_KIN, IN_MATE_SIZE, IN_SCENT, IN_SPEED, NO_INPUT, N_BODY_IN,
+    OUT_ACCEPT, OUT_THRUST, OUT_TURN,
 };
-use tidepool_sim::genome::{BrainGenome, ConnGene, Genome, Node, OutGene, BODY, KIND_CHEMO};
+use tidepool_sim::genome::{
+    BrainGenome, ConnGene, Genome, Node, OutGene, FOUNDER_EYE_HISTORY, KIND_CHEMO,
+};
 use tidepool_sim::math::act;
 use tidepool_sim::params::{id, Params};
 use tidepool_sim::rng::Rng;
@@ -148,11 +151,12 @@ fn the_starter_brain_has_the_documented_shape() {
     let mut p = Params::new();
     p.set(id::FOUNDER_EYE, 0.0);
     let g = brain::starter(&mut Rng::new(1), &p);
-    // 4 hidden genes and 2 out genes: 6 biases and 6 alphas.
-    assert_eq!((g.hidden.len(), g.conns.len(), g.outs.len()), (4, 39, 2));
-    assert_eq!(biases(&g).len(), 6);
+    // 4 hidden genes and 3 out genes: 7 biases and 7 alphas.
+    assert_eq!((g.hidden.len(), g.conns.len(), g.outs.len()), (4, 42, 3));
+    assert_eq!(biases(&g).len(), 7);
+    // The ids 40 to 57 are those of the eye wires, which this brain does not have.
     let ids: Vec<u32> = g.conns.iter().map(|c| c.history).collect();
-    assert_eq!(ids, (1..=39).collect::<Vec<u32>>());
+    assert_eq!(ids, (1..=39).chain(58..=60).collect::<Vec<u32>>());
     // Each runs from an input or a hidden neuron to a hidden neuron or an output.
     let ports = brain::ports(&Genome::default());
     let hidden: Vec<Node> = g.hidden.iter().map(|h| Node::hidden(h.id)).collect();
@@ -174,23 +178,155 @@ fn the_starter_brain_of_a_founder_with_an_eye_adds_the_eye_wires() {
     let g = brain::starter(&mut Rng::new(1), &p);
     let ids: Vec<u32> = g.conns.iter().map(|c| c.history).collect();
     assert_eq!(ids, (1..=brain::STARTER_CONNS).collect::<Vec<u32>>());
-    // The eye moves no draw of the brain with none.
+    // The eye moves no draw of the brain with none: not the 39 before its wires, and not the 3
+    // after them.
     let weights = |g: &BrainGenome| g.conns.iter().map(|c| c.weight).collect::<Vec<_>>();
-    assert_eq!(weights(&g)[..39], weights(&plain)[..]);
+    assert_eq!(weights(&g)[..39], weights(&plain)[..39]);
+    assert_eq!(weights(&g)[57..], weights(&plain)[39..]);
     assert_eq!(biases(&g), biases(&plain));
-    // 40 to 55: each eye input to each hidden neuron, with a weight that is not 0.
+    // 40 to 55: each input of the founder's eye to each hidden neuron, with a weight that is not
+    // 0. The inputs are in the order of M2: food left, food right, body left, body right. The B
+    // cone is on the left.
+    let eye = |port: u8| Node {
+        owner: FOUNDER_EYE_HISTORY,
+        port,
+    };
     let hidden: Vec<Node> = g.hidden.iter().map(|h| Node::hidden(h.id)).collect();
-    assert!(g.conns[39..55].iter().all(|c| {
-        c.src.owner == BODY
-            && (IN_SEE_FOOD_L..=IN_SEE_BODY_R).contains(&c.src.port)
-            && hidden.contains(&c.dst)
-            && c.weight != 0.0
-    }));
+    let sources = [EYE_FOOD_B, EYE_FOOD_A, EYE_BODY_B, EYE_BODY_A];
+    for (k, c) in g.conns[39..55].iter().enumerate() {
+        assert_eq!((c.src, c.dst), (eye(sources[k / 4]), hidden[k % 4]), "{k}");
+        assert!(c.weight != 0.0, "{k}");
+    }
     // 56 and 57: a plant seen on one side turns the body to that side.
     let look = p.get(id::STARTER_LOOK);
     let wire = |c: &ConnGene| (c.src, c.dst, c.weight);
-    assert_eq!(wire(&g.conns[55]), (Node::body(IN_SEE_FOOD_R), TURN, look));
-    assert_eq!(wire(&g.conns[56]), (Node::body(IN_SEE_FOOD_L), TURN, -look));
+    assert_eq!(wire(&g.conns[55]), (eye(EYE_FOOD_A), TURN, look));
+    assert_eq!(wire(&g.conns[56]), (eye(EYE_FOOD_B), TURN, -look));
+}
+
+#[test]
+fn the_starter_brain_accepts_a_mate_by_the_last_three_connections() {
+    let p = Params::new();
+    assert_eq!(brain::STARTER_CONNS, 60);
+    let g = brain::starter(&mut Rng::new(1), &p);
+    let accept = Node::body(OUT_ACCEPT);
+    assert_eq!(g.outs.last().map(|out| out.node), Some(accept));
+    // 58: the constant input to `accept`, at `starter_accept`. 59 and 60: each mate input to
+    // `accept`, with a small random weight. Nothing else runs into `accept`.
+    let wire = |c: &ConnGene| (c.history, c.src, c.dst);
+    assert_eq!(wire(&g.conns[57]), (58, Node::body(IN_CONST), accept));
+    assert_eq!(wire(&g.conns[58]), (59, Node::body(IN_MATE_SIZE), accept));
+    assert_eq!(wire(&g.conns[59]), (60, Node::body(IN_MATE_KIN), accept));
+    assert_eq!(g.conns[57].weight, p.get(id::STARTER_ACCEPT));
+    assert!(g.conns[58..].iter().all(|c| c.weight != 0.0));
+    assert_eq!(g.conns.iter().filter(|c| c.dst == accept).count(), 3);
+}
+
+/// A founder alone in a world, thinking on every tick. Gives its `cmd_accept` after 4 ticks, and
+/// its two mate inputs.
+fn accepts(starter_accept: f32) -> (f32, [f32; 2]) {
+    let mut w = World::new(1, 1536.0, 1024.0);
+    w.params.set(id::THINK_EVERY, 1.0);
+    w.params.set(id::STARTER_ACCEPT, starter_accept);
+    let g = Genome::founder(&mut Rng::new(1), &w.params);
+    let at = SpawnAt {
+        x: 700.0,
+        y: 500.0,
+        heading: 0.0,
+        growth: 1.0,
+        energy01: 1.0,
+        parent: 0,
+        generation: 0,
+        mark: 0,
+    };
+    let s = w.spawn(g, at).expect("slot") as usize;
+    assert_eq!(w.creatures.cmd_accept[s], 0.0);
+    w.run(4);
+    let accept = w.creatures.cmd_accept[s];
+    assert_eq!(accept, w.brains.output(s, OUT_ACCEPT));
+    let inputs = w.brains.inputs_mut(s);
+    let mate = [IN_MATE_SIZE, IN_MATE_KIN].map(|port| inputs[port as usize]);
+    (accept, mate)
+}
+
+#[test]
+fn the_accept_output_becomes_the_accept_command() {
+    // No body is in touch, so both mate inputs read 0 and the constant input decides.
+    let (willing, mate) = accepts(1.0);
+    assert!(willing > 0.5, "{willing}");
+    assert_eq!(mate, [0.0, 0.0]);
+    let (unwilling, _) = accepts(-1.0);
+    assert!(unwilling < -0.5, "{unwilling}");
+}
+
+#[test]
+fn a_body_with_no_chemoreceptor_has_no_scent_input() {
+    let body = [
+        IN_CONST,
+        IN_ENERGY,
+        IN_AGE,
+        IN_SPEED,
+        IN_MATE_SIZE,
+        IN_MATE_KIN,
+    ];
+    let scent = [IN_SCENT, IN_GRAD_FWD, IN_GRAD_SIDE];
+    assert_eq!(body.len(), N_BODY_IN);
+    let with = Genome::founder(&mut Rng::new(1), &Params::new());
+    let mut zero = with.clone();
+    zero.set_size(KIND_CHEMO, 0.0);
+    let mut none = with.clone();
+    none.parts.retain(|part| part.kind != KIND_CHEMO);
+
+    // The inputs of the body come first, at the indexes that are their ports. The scent inputs
+    // follow, for a body whose chemoreceptors sum to more than 0.
+    let inputs = brain::ports(&with).inputs;
+    assert_eq!(inputs[..N_BODY_IN], body.map(Node::body));
+    assert_eq!(inputs[N_BODY_IN..][..3], scent.map(Node::body));
+    let is_scent = |n: &Node| scent.map(Node::body).contains(n);
+    for g in [&zero, &none] {
+        let inputs = brain::ports(g).inputs;
+        assert_eq!(inputs[..N_BODY_IN], body.map(Node::body));
+        assert!(!inputs.iter().any(is_scent));
+        // It still declares its eye.
+        assert_eq!(inputs.len(), N_BODY_IN + 4);
+    }
+
+    // The block has no scent neuron, and the 14 connections from one are not expressed: 12 to the
+    // hidden neurons and the 2 that steer.
+    let p = Params::new();
+    let mut b = Brains::new(2);
+    b.express(0, &with, &p);
+    b.express(1, &zero, &p);
+    assert_eq!((b.n_in[0], b.in_scent[0], b.in_eye[0]), (13, 6, 9));
+    assert_eq!((b.n_in[1], b.in_scent[1], b.in_eye[1]), (10, NO_INPUT, 6));
+    assert_eq!((b.n_conn[0], b.n_conn[1]), (60, 46));
+    // `prune` takes them out of the genome.
+    let mut pruned = zero.clone();
+    pruned.prune();
+    assert_eq!(pruned.brain.conns.len(), 46);
+    assert!(!pruned.brain.conns.iter().any(|c| is_scent(&c.src)));
+
+    // In a world with scent the nose reads it, and the body with none is safe to sense.
+    let mut w = World::new(1, 1536.0, 1024.0);
+    w.params.set(id::THINK_EVERY, 1.0);
+    w.seed_founders(0, 600);
+    w.run(200);
+    let at = |x: f32| SpawnAt {
+        x,
+        y: 500.0,
+        heading: 0.0,
+        growth: 1.0,
+        energy01: 1.0,
+        parent: 0,
+        generation: 0,
+        mark: 0,
+    };
+    let (x, y) = (w.plants.x[0], w.plants.y[0]);
+    let nosed = w.spawn(with, SpawnAt { x, y, ..at(0.0) }).expect("slot") as usize;
+    let noseless = w.spawn(zero, SpawnAt { x, y, ..at(0.0) }).expect("slot") as usize;
+    w.tick();
+    assert!(w.brains.inputs_mut(nosed)[6] > 0.0, "no scent at a plant");
+    assert_eq!(w.brains.inputs_mut(noseless).len(), 10);
 }
 
 /// A patch of plants at (1000, 500). A creature starts 300 units away, facing away.
@@ -239,7 +375,7 @@ fn seeker(seed: u32, chemo: f32) -> f32 {
 }
 
 #[test]
-fn a_founder_follows_scent_to_food_and_a_noseless_one_does_not() {
+fn a_founder_still_follows_scent_to_food() {
     let mut wins = 0;
     for seed in 1..=5 {
         let (with_nose, without) = (seeker(seed, 0.6), seeker(seed, 0.0));

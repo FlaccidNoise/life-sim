@@ -11,9 +11,10 @@ use tidepool_sim::snapshot::{seal, LoadError, Writer, FORMAT_VERSION};
 use tidepool_sim::stats::{STAT_BIRTHS, STAT_DEATHS, STAT_MEAN_ENERGY01};
 use tidepool_sim::world::{SpawnAt, World, MAX_WORLD_SIZE};
 
-/// The inputs and the outputs that every body declares: `brain::ports`.
-const N_IN: usize = 11;
-const N_OUT: usize = 2;
+/// The inputs and the outputs that the default body declares: `brain::ports`. It has a
+/// chemoreceptor and no eye.
+const N_IN: usize = 9;
+const N_OUT: usize = 3;
 
 /// Founders, plants, a changed parameter, a possessed creature, and held manual input.
 fn world_at(ticks: u32) -> World {
@@ -179,13 +180,19 @@ fn every_saved_field_is_in_the_hash_and_survives_a_load() {
         ("genome egg", |w| w.genomes[S].egg += 0.1),
         ("genome old", |w| w.genomes[S].old += 1.0),
         ("genome hue", |w| w.genomes[S].hue += 0.1),
-        ("part kind", |w| w.genomes[S].parts[0].kind = KIND_EYE),
+        // A part that changes what the body declares. `brain::load` reads one activation for
+        // each neuron that the loaded genome expresses, so the block is expressed again.
+        ("part kind", |w| {
+            w.genomes[S].parts[0].kind = KIND_EYE;
+            w.brains.express(S, &w.genomes[S], &w.params);
+        }),
         ("part anchor", |w| w.genomes[S].parts[1].anchor += 0.1),
         ("part size", |w| w.genomes[S].parts[2].size += 0.1),
         ("part extra", |w| w.genomes[S].parts[3].extra += 0.1),
         ("part history", |w| w.genomes[S].parts[3].history += 1),
         ("part count", |w| {
             w.genomes[S].parts.pop();
+            w.brains.express(S, &w.genomes[S], &w.params);
         }),
         ("genome bias", |w| w.genomes[S].brain.hidden[0].bias += 0.5),
         ("genome alpha", |w| w.genomes[S].brain.hidden[0].alpha = 0.5),
@@ -198,8 +205,7 @@ fn every_saved_field_is_in_the_hash_and_survives_a_load() {
         ("output count", |w| {
             w.genomes[S].brain.outs.pop();
         }),
-        // The brain gets one more hidden neuron. `brain::load` reads one activation for each
-        // neuron that the loaded genome expresses, so the block is expressed again.
+        // The brain gets one more hidden neuron, so the block is expressed again.
         ("hidden neuron count", |w| {
             w.genomes[S].brain.hidden.push(HiddenGene {
                 id: 900,
@@ -208,8 +214,9 @@ fn every_saved_field_is_in_the_hash_and_survives_a_load() {
             });
             w.brains.express(S, &w.genomes[S], &w.params);
         }),
+        // The first hidden neuron.
         ("brain activation", |w| {
-            w.brains.cur[S * MAX_NEURONS + N_IN] += 0.5
+            w.brains.cur[S * MAX_NEURONS + w.brains.n_in[S] as usize] += 0.5
         }),
         ("genome connections", |w| {
             let gene = ConnGene {
@@ -419,6 +426,8 @@ impl Crafted {
         p.u32s(&self.mixed_with);
         p.u8s(&vec![0; self.field.len()]); // mark
         p.u32s(&vec![0; self.field.len()]); // bud_cooldown
+                                            // The neurons of every block. The inputs follow the parts of each genome.
+        let mut neurons = 0;
         for i in 0..self.live.len() {
             // A field of the wrong length has failed the load before a genome is read.
             let v = self.field.get(i).copied().unwrap_or(0.0);
@@ -435,6 +444,8 @@ impl Crafted {
                 // An eye, so that the cones are made from wild values as well.
                 genome.parts[0].kind = KIND_EYE;
             }
+            let ports = brain::ports(&genome);
+            neurons += ports.inputs.len() + self.brain.hidden.len() + ports.outputs.len();
             genome.save(&mut p);
         }
         p.u64(self.births);
@@ -442,8 +453,7 @@ impl Crafted {
         p.u64(0f64.to_bits()); // eaten
         p.u64(0); // starved_juv
         p.u64(0); // plant_deaths
-        let neurons = N_IN + self.brain.hidden.len() + N_OUT;
-        let zeros = vec![0.0; self.live.len() * neurons];
+        let zeros = vec![0.0; neurons];
         p.f32s(self.activations.as_ref().unwrap_or(&zeros));
         let (possessed, manual, thrust, turn, cause) = self.control;
         p.u32(possessed);
@@ -667,7 +677,7 @@ fn a_bad_brain_genome_is_invalid() {
     // Input to hidden, hidden to output, and an output that feeds a hidden neuron: all in range.
     let good = brain(2, &[(0, N_IN), (N_IN, last), (last, N_IN + 1)]);
     let w = with_brain(good).load().expect("load");
-    assert_eq!((w.brains.n_neur[0], w.brains.n_conn[0]), (15, 3));
+    assert_eq!((w.brains.n_neur[0], w.brains.n_conn[0]), (14, 3));
     assert!(with_brain(brain(most, &[])).load().is_ok());
 
     // A list of a brain genome holds no more than its cap. A genome has one bias and one alpha
@@ -714,8 +724,8 @@ fn a_bad_brain_genome_is_invalid() {
 
 #[test]
 fn a_brain_part_of_the_wrong_length_is_invalid() {
-    // Two creatures with the smallest brain hold 18 activations.
-    for count in [0, 17, 19] {
+    // Two creatures with the smallest brain hold 24 activations.
+    for count in [0, 23, 25] {
         let p = Crafted {
             activations: Some(vec![0.0; count]),
             ..Crafted::new(&[0, 1], &[1.0, 2.0])
