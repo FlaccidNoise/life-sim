@@ -159,6 +159,15 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
   measurement: a first version in M3 after the rules are on, more beats with M4 to M6, and the polish
   in M8. Measured by the beats that a new player completes and a short check of what they understood.
   → `../roadmap.md` M3, `../research/onboarding.md`
+- 2026-10-13: **Provisional, owner to confirm: the walkthrough is built from twelve principles of the
+  research, and its eight open questions are answered for the build.** No step for steering or
+  eating, and no step that blocks play: a randomized study of 45,000 players found that a tutorial
+  pays only for unfamiliar mechanics. Each beat is act first, then one true sentence. No line gives a
+  cause a purpose, and a test in `make check` holds that. The first life keeps its length, and the
+  first death leads with the living descendants. The game says that the player's heir and mate
+  choices are selection by a chooser, and that the founders' brains were wired by hand. Every note is
+  also in one field guide, which never opens by itself. Not taken: a voice, and a guess before the
+  time-skip (M5). → `../plans/2026-10-13-walkthrough.md`, `../research/onboarding.md` section 5
 - 2026-10-13: **Provisional, owner to confirm: the default draw of a body stays as it was, and four
   looks wait behind `?look=1|2|3|4`.** Look 1 narrows the lighter end, look 2 also draws parts at twice
   the size with a fan for a mouth and a fork for a chemoreceptor, look 3 also swells the body at each
