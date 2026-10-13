@@ -116,3 +116,96 @@ machine.
   Only `set_size` and a hand-made snapshot can make one. It does not panic.
 - The orchestrator's break (`cmd_accept` read from the turn output) fails one test, in `frame.rs`.
   No test in `tests/brain.rs` holds the third output to its port. Task 8 tests it through mating.
+
+## The rule of brain upkeep (Task 7)
+
+Date: 2026-10-13. Commit `5fea147`. Rule U1:
+`upkeep = basal * m + fixed_upkeep + neuron_upkeep * hidden + conn_upkeep * conns + move`, times the
+old-age factor. An input neuron and an output neuron cost nothing. No default changed: `fixed_upkeep`
+is still 0, so the default world has a brain that is too cheap until the retune of Task 10.
+
+`make check` exits 0. The orchestrator ran the four readings again on `main`: every row is the build
+agent's, digit for digit. The load average was 12 to 20, which moves no count.
+
+### At the Start values
+
+`fixed_upkeep=0.0337 neuron_upkeep=0.0002 conn_upkeep=0.00005`: a founder pays what it paid in M2.
+
+```
+$ target/release/tidepool-headless gate-health --param fixed_upkeep=0.0337 --param neuron_upkeep=0.0002 --param conn_upkeep=0.00005
+seed=1 creatures=1309 min_late=1260 plants=2229 births_late=1788 max_gen=16 mean_chemo=0.49 parked=0.00 first_bud=882 juv_starved=0.52 to_bud=0.33 PASS
+seed=2 creatures=1198 min_late=1175 plants=2076 births_late=1688 max_gen=14 mean_chemo=0.45 parked=0.00 first_bud=897 juv_starved=0.51 to_bud=0.33 PASS
+seed=3 creatures=1290 min_late=1169 plants=1965 births_late=1908 max_gen=19 mean_chemo=0.46 parked=0.00 first_bud=829 juv_starved=0.52 to_bud=0.32 PASS
+gate-health 3/3 PASS
+$ target/release/tidepool-headless gate-evolve --seeds 1,2,3,4,5,6,7,8,9,10 --param fixed_upkeep=0.0337 --param neuron_upkeep=0.0002 --param conn_upkeep=0.00005
+seed=1 creatures=1456 creatures_noscent=1479 creatures_noeye=1465 len=12.2 len_sd=1.66 parts=5.2 chemo=0.34 chemo_blind=0.06 eye=0.26 eye_blind=0.06 plans=4 speed_cv=0.21 speed=1.19 area=67.9 PASS
+seed=2 creatures=1389 creatures_noscent=1318 creatures_noeye=1359 len=10.9 len_sd=1.56 parts=5.7 chemo=0.39 chemo_blind=0.14 eye=0.24 eye_blind=0.07 plans=3 speed_cv=0.27 speed=1.02 area=58.5 PASS
+seed=3 creatures=1373 creatures_noscent=1296 creatures_noeye=1295 len=10.6 len_sd=1.19 parts=7.0 chemo=0.31 chemo_blind=0.15 eye=0.28 eye_blind=0.07 plans=3 speed_cv=0.29 speed=1.02 area=46.0 PASS
+seed=4 creatures=1251 creatures_noscent=1249 creatures_noeye=1210 len=11.7 len_sd=1.20 parts=5.2 chemo=0.32 chemo_blind=0.09 eye=0.28 eye_blind=0.08 plans=6 speed_cv=0.24 speed=1.06 area=60.4 PASS
+seed=5 creatures=1424 creatures_noscent=1488 creatures_noeye=1477 len=11.7 len_sd=1.31 parts=5.5 chemo=0.33 chemo_blind=0.08 eye=0.22 eye_blind=0.08 plans=4 speed_cv=0.22 speed=1.27 area=65.3 PASS
+seed=6 creatures=1311 creatures_noscent=1177 creatures_noeye=1293 len=10.9 len_sd=1.53 parts=5.2 chemo=0.37 chemo_blind=0.14 eye=0.26 eye_blind=0.12 plans=4 speed_cv=0.26 speed=0.97 area=56.6 PASS
+seed=7 creatures=1419 creatures_noscent=1397 creatures_noeye=1488 len=10.6 len_sd=1.58 parts=5.7 chemo=0.45 chemo_blind=0.10 eye=0.28 eye_blind=0.06 plans=5 speed_cv=0.22 speed=1.12 area=59.6 PASS
+seed=8 creatures=1317 creatures_noscent=1246 creatures_noeye=1279 len=11.0 len_sd=1.85 parts=5.4 chemo=0.21 chemo_blind=0.00 eye=0.26 eye_blind=0.03 plans=3 speed_cv=0.21 speed=1.20 area=65.9 PASS
+seed=9 creatures=1444 creatures_noscent=1295 creatures_noeye=1241 len=10.7 len_sd=1.23 parts=5.3 chemo=0.34 chemo_blind=0.24 eye=0.24 eye_blind=0.08 plans=4 speed_cv=0.34 speed=0.85 area=50.1 FAIL(chemo_gap=0.099 < 0.1)
+seed=10 creatures=1187 creatures_noscent=1518 creatures_noeye=1366 len=13.2 len_sd=1.70 parts=5.5 chemo=0.45 chemo_blind=0.01 eye=0.22 eye_blind=0.08 plans=3 speed_cv=0.24 speed=1.09 area=75.1 PASS
+gate-evolve 9/10 FAIL
+```
+
+**9 of 10 seeds pass. Seed 9 fails the scent gap at 0.099 against 0.10.** Its seeing world holds the
+sense well (`chemo` 0.34). Its blind world kept 0.24 of a sense that does nothing there, and that is
+what closes the gap. M2 also read 9 of 10, with seed 7 at an eye gap of 0.097. Seeds 1 to 3, which
+are the reading that the plan asks for, pass.
+
+| | M2 rows | Task 6: inputs from parts, M2 upkeep | Task 7: rule U1 at Start |
+|---|---|---|---|
+| `chemo`, seeing world | 0.33 to 0.39 (seeds 1 to 3) | 0.12 to 0.31 | 0.21 to 0.45 |
+| `eye`, seeing world | 0.22 to 0.26 (seeds 1 to 3) | 0.10 to 0.18 | 0.22 to 0.28 |
+| `parts` | 5.2 to 6.1 (seeds 1 to 3) | 3.9 to 4.9 | 5.2 to 7.0 |
+| `chemo_blind` | 0.05 to 0.16 (seeds 1 to 3) | 0.00 to 0.04 | 0.00 to 0.24 |
+| Scent gap | 0.17 to 0.37 | 0.11 to 0.28 | 0.099 to 0.44 |
+| Eye gap | 0.097 to 0.19 | 0.10 to 0.16 | 0.14 to 0.23 |
+| World with no scent holds more creatures | 1 of 3 | 9 of 10 | 3 of 10 |
+| World with blind eyes holds more creatures | 0 of 3 | 8 of 10 | 4 of 10 |
+
+**What this shows.** The cause named under Task 6 is supported: with an input free, the senses and
+the part count come back to the M2 values on 10 seeds, and a blind world no longer gains by shedding
+its sense. This is "the mechanism fires" and "evolution keeps it". It is one run per seed.
+
+**What it does not show.** "It helps." A blind world still holds more creatures on 3 and 4 of 10
+seeds, and each arm evolved alone. The eye gap has more room than in M2 (0.14 at the least, against
+0.097). The scent gap does not: seed 9 is under the band and seeds 3, 4, 6, 8 read 0.16 to 0.23.
+
+### With no parameter: the default world until Task 10
+
+```
+$ target/release/tidepool-headless gate-health
+seed=1 creatures=1600 min_late=1451 plants=2229 births_late=2004 max_gen=14 mean_chemo=0.42 parked=0.00 first_bud=960 juv_starved=0.49 to_bud=0.34 PASS
+seed=2 creatures=1498 min_late=1357 plants=2076 births_late=1843 max_gen=14 mean_chemo=0.43 parked=0.00 first_bud=973 juv_starved=0.48 to_bud=0.34 PASS
+seed=3 creatures=1427 min_late=1310 plants=1965 births_late=1840 max_gen=14 mean_chemo=0.47 parked=0.00 first_bud=911 juv_starved=0.49 to_bud=0.34 PASS
+gate-health 3/3 PASS
+$ target/release/tidepool-headless gate-evolve
+seed=1 creatures=1929 creatures_noscent=1974 creatures_noeye=2044 len=10.5 len_sd=1.58 parts=4.7 chemo=0.21 chemo_blind=0.01 eye=0.17 eye_blind=0.01 plans=5 speed_cv=0.29 speed=1.09 area=50.4 PASS
+seed=2 creatures=1724 creatures_noscent=1735 creatures_noeye=1931 len=10.5 len_sd=1.43 parts=4.7 chemo=0.21 chemo_blind=0.04 eye=0.18 eye_blind=0.01 plans=5 speed_cv=0.25 speed=1.15 area=55.3 PASS
+seed=3 creatures=1701 creatures_noscent=1721 creatures_noeye=1993 len=10.0 len_sd=1.48 parts=5.8 chemo=0.25 chemo_blind=0.01 eye=0.23 eye_blind=0.02 plans=5 speed_cv=0.30 speed=1.05 area=45.3 PASS
+gate-evolve 3/3 PASS
+```
+
+Both gates pass, and this world is not one to keep: a founder pays 0.0228 for its brain against
+0.0375 in M2, so the world is fuller (1,701 to 1,929 creatures at tick 36,000) and both blind worlds
+hold more creatures on 3 of 3 seeds. Task 10 part 1 writes the Start values as defaults.
+
+### Breaks
+
+| By | Break | Tests that fail |
+|---|---|---|
+| Build agent | Both brain terms at 0 | `a_brain_costs_upkeep` (`0 2.2800002`), and three more. This closes break 7 of the first M2 audit |
+| Build agent | An input neuron is charged | `a_hidden_neuron_costs_neuron_upkeep_and_an_input_costs_nothing` (`lost 16.999817, not 4`), and three more |
+| Build agent | `fixed_upkeep` outside the old-age factor | `a_long_life_costs_more_per_tick` |
+| Orchestrator | An output neuron is charged | Three tests, with `at_the_start_values_a_founder_pays_what_the_m2_founder_paid` |
+
+### Still open from this task
+
+- The comment above the parameter table in `params.rs` says that `neuron_upkeep` and `conn_upkeep`
+  are tuned against both gates. It is stale until Task 10 sets the defaults.
+- `hidden` in `energy.rs` is `n_neur - n_in - n_out` on `u16`. It cannot go under 0 while
+  `Block::of` makes the three counts, and nothing in `energy.rs` guards it.

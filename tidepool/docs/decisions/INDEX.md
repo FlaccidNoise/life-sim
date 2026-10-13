@@ -152,6 +152,13 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
 - 2026-10-13: **No feature is added beyond the roadmap.** Variety comes from M4 (predation) and M6
   (zones, plant genomes). A feature that the owner names is placed in a milestone with a measurement.
   → `../roadmap.md`
+- 2026-10-13: **The game gets a walkthrough that teaches as it plays, asked for by the owner.** A full
+  onboarding for a new player: a game first, and a true explanation of the biology, the evolution, the
+  neural networks, and the computer science on screen. It is designed from research on onboarding
+  methods, not improvised. This is a feature that the owner named, so it gets a milestone and a
+  measurement: a first version in M3 after the rules are on, more beats with M4 to M6, and the polish
+  in M8. Measured by the beats that a new player completes and a short check of what they understood.
+  → `../roadmap.md` M3, `../research/onboarding.md`
 - 2026-10-13: **Provisional, owner to confirm: the default draw of a body stays as it was, and four
   looks wait behind `?look=1|2|3|4`.** Look 1 narrows the lighter end, look 2 also draws parts at twice
   the size with a fan for a mouth and a fork for a chemoreceptor, look 3 also swells the body at each
