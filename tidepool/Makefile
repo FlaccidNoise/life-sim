@@ -1,4 +1,4 @@
-.PHONY: wasm headless dev build check gates fmt
+.PHONY: wasm headless dev build check gates gates-long fmt
 
 WASM := target/wasm32-unknown-unknown/release/tidepool_sim.wasm
 HEADLESS := target/release/tidepool-headless
@@ -36,3 +36,6 @@ gates: headless wasm ## Throughput, health, and evolution gates
 	node scripts/bench-wasm.mjs
 	$(HEADLESS) gate-health
 	$(HEADLESS) gate-evolve
+
+gates-long: headless ## The evolution gate at tick 144,000. Run at each milestone exit, not in CI
+	$(HEADLESS) gate-evolve --seeds 1,5,8 --ticks 144000

@@ -313,7 +313,7 @@ fn a_side_flagellum_turns_at_rest_and_does_not_push() {
 }
 
 #[test]
-fn a_fin_turns_only_at_speed_and_cuts_the_slip() {
+fn a_fin_turns_only_at_speed_and_a_grip_of_0_6_cuts_the_slip() {
     let body = |fin: bool| {
         solo(|g| {
             g.set_size(KIND_CILIA, 0.0);

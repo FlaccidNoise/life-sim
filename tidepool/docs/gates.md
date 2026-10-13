@@ -414,12 +414,16 @@ The rows at the defaults of 2026-10-12:
 
 ```
 $ target/release/tidepool-headless gate-evolve
-seed=1 creatures=1448 creatures_noscent=1456 creatures_noeye=1404 len=11.5 len_sd=1.48 parts=5.8 chemo=0.36 chemo_blind=0.05 eye=0.24 eye_blind=0.08 plans=6 speed_cv=0.27 PASS
-seed=2 creatures=1429 creatures_noscent=1380 creatures_noeye=1309 len=10.3 len_sd=1.50 parts=6.1 chemo=0.39 chemo_blind=0.07 eye=0.26 eye_blind=0.07 plans=5 speed_cv=0.29 PASS
-seed=3 creatures=1397 creatures_noscent=1312 creatures_noeye=1314 len=11.0 len_sd=1.69 parts=5.2 chemo=0.33 chemo_blind=0.16 eye=0.22 eye_blind=0.09 plans=3 speed_cv=0.29 PASS
+seed=1 creatures=1448 creatures_noscent=1456 creatures_noeye=1404 len=11.5 len_sd=1.48 parts=5.8 chemo=0.36 chemo_blind=0.05 eye=0.24 eye_blind=0.08 plans=6 speed_cv=0.27 speed=1.07 area=64.5 PASS
+seed=2 creatures=1429 creatures_noscent=1380 creatures_noeye=1309 len=10.3 len_sd=1.50 parts=6.1 chemo=0.39 chemo_blind=0.07 eye=0.26 eye_blind=0.07 plans=5 speed_cv=0.29 speed=0.85 area=50.2 PASS
+seed=3 creatures=1397 creatures_noscent=1312 creatures_noeye=1314 len=11.0 len_sd=1.69 parts=5.2 chemo=0.33 chemo_blind=0.16 eye=0.22 eye_blind=0.09 plans=3 speed_cv=0.29 speed=1.05 area=58.2 PASS
 gate-evolve 3/3 PASS
 exit=0
 ```
+
+**The row has printed `speed` and `area` since 2026-10-12** (the owner's decision on audit findings M3
+and M7). Neither has a band. A row recorded before that date ends at `speed_cv`, and its other
+measures read the same.
 
 **`--m2` is deleted, and so are five parameters.** Task 13 wrote the Start values of the plan's
 parameter table into `params.rs` and deleted the flag. The defaults moved twice after that: the
@@ -450,6 +454,8 @@ finding M1). Five proofs have a new input, and "The proofs" says which.
 | `eye` less `eye_blind` | Mean eye sum, less the same in the run with `eye_gain=0` | 0.10 or more. **The plan said 0.02** |
 | `plans` | Body plans held by 5% or more of the living. A plan is the sorted list of part kinds | Reported, no band |
 | `speed_cv` | Standard deviation over mean of the top speed of adults, by rule S3 of the plan | Reported, no band |
+| `speed` | Mean top speed of the living, by the same rule. The `speed` of `probe-census` | Reported, no band |
+| `area` | Mean of length squared times the width gene, over the living. The `area` of `probe-census` | Reported, no band |
 
 **`chemo_gain=0` takes away only the direction of the scent.** It scales the two gradient inputs. The
 level input (`IN_SCENT`) still reads through the chemoreceptor. So that run is blind to direction
@@ -757,6 +763,42 @@ What it says, by kind of claim:
 - **The direction of the scent: no clear reading for the world.** With `chemo_gain=0` the same seeds
   hold 340, 417, and 322 creatures, against 475, 299, and 296.
 - `parts` reads 5.2, 6.0, and 6.1 against 3.0.
+
+### The long reading
+
+`make gates-long` runs `target/release/tidepool-headless gate-evolve --seeds 1,5,8 --ticks 144000`:
+the same gate and the same bands, read at 4 times the tick. The owner added it on 2026-10-12 (audit
+finding H2). **Run it before a milestone closes. It is not in `make gates` and not in CI.** It took 7
+minutes on the reference machine, at a load average of 5.
+
+The rows at the defaults of 2026-10-12:
+
+```
+$ make gates-long
+seed=1 creatures=1770 creatures_noscent=1717 creatures_noeye=1267 len=9.4 len_sd=1.30 parts=6.7 chemo=0.16 chemo_blind=0.00 eye=0.28 eye_blind=0.00 plans=5 speed_cv=0.24 speed=0.84 area=34.8 PASS
+seed=5 creatures=1566 creatures_noscent=1595 creatures_noeye=1376 len=10.5 len_sd=1.24 parts=5.7 chemo=0.27 chemo_blind=0.01 eye=0.26 eye_blind=0.02 plans=4 speed_cv=0.29 speed=0.73 area=39.1 PASS
+seed=8 creatures=1461 creatures_noscent=1285 creatures_noeye=1065 len=9.9 len_sd=1.29 parts=9.6 chemo=0.17 chemo_blind=0.01 eye=0.25 eye_blind=0.05 plans=4 speed_cv=0.26 speed=0.91 area=35.0 PASS
+gate-evolve 3/3 PASS
+exit=0
+```
+
+**The bad input is the world with the upkeep of a part, and it is a record: `part_upkeep` is deleted,
+so the command cannot be typed at the head.** Two recorded runs of this command rejected it:
+
+- At the defaults of 2026-10-11 (commit f5b7381, `findings/m2-audit.md` check 14), seeds 5 and 8 fail:
+  `FAIL(chemo_gap=0.037 < 0.1)` and `FAIL(chemo_gap=0.014 < 0.1, eye_gap=0.009 < 0.1)`. Seed 1 passes
+  at 0.13. On seeds 1 to 10 the reading rejects 6.
+- With `--param part_upkeep=0.0001`, half of that upkeep (`findings/m2-senses.md`, trial 12), seed 5
+  fails: `FAIL(chemo_gap=0.085 < 0.1)`. Exit 1.
+
+To run the bad input again, check out commit f5b7381.
+
+**What the seeds do and do not show.** Seeds 5 and 8 lost the chemoreceptor in the bad world, and
+seed 1 kept it. But seeds 5 and 8 failed the scent gap at tick 36,000 too. The seeds that passed at
+tick 36,000 and failed at tick 144,000 in the bad world are 4 and 6 (`chemo_gap=0.016` and `0.067`,
+the same check 14). They show that the long reading sees what the short one does not, and they are
+not in this target. **Not proven:** that the reading rejects a bad world of the head. No input of the
+head is known that passes at tick 36,000 and fails at tick 144,000, and none was looked for.
 
 ## Probes
 

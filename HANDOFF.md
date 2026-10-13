@@ -1,4 +1,4 @@
-# Handoff — Tidepool: M2 is built and waits for the owner's checks and nine decisions
+# Handoff — Tidepool: M2 is built and pushed, and waits for the owner's five checks
 
 **Date:** 2026-10-12
 **Project:** life-sim, subproject `tidepool/`
@@ -9,8 +9,8 @@ The previous handoff (the M2 plan waits for approval) is at `git show 67f476f:HA
 ## Current Task
 
 M2 (Bodies) is built from `tidepool/docs/plans/2026-10-11-m2-bodies.md`. Tasks 1 to 13 are done. Task
-14 (the exit) is done except for what needs the owner. **`make check` and `make gates` both exit 0.**
-Nothing from this session is pushed.
+14 (the exit) is done except for the owner's five checks. **`make check`, `make gates`, and
+`make gates-long` all exit 0.** `main` is pushed, and CI passed on it.
 
 ## Completed
 
@@ -22,6 +22,9 @@ Nothing from this session is pushed.
 - The failure proofs of `gates.md` ran again at the new defaults. Every band has rejected a bad input.
 - `architecture.md`, `roadmap.md`, and `design.md` §6 match the head.
 - The exit record, with screenshots of an evolved world: `tidepool/docs/findings/m2-exit.md`.
+- The owner decided the nine questions of the audit on 2026-10-12. Built from them: `make gates-long`
+  (the evolution gate at tick 144,000, for each milestone exit), and `speed` and `area` in the row of
+  `gate-evolve`. The rest is carried to M3, M4, and M5 in `roadmap.md`.
 
 ## Pending
 
@@ -29,9 +32,8 @@ Nothing from this session is pushed.
    open half of the M1 exit. To see the evolved world: in `tidepool/` run
    `target/release/tidepool-headless run --seed 1 --ticks 36000 --creatures 400 --plants 1200 --out public/m2-world.tdpl`,
    then `make dev`, then open `/?world=/m2-world.tdpl`. The baked file is not in git.
-2. **Nine decisions from the audit**, in `m2-exit.md` under "Open problems, sorted by who decides".
-3. **Push.** `main` is about 60 commits ahead of `origin/main`. The owner has not asked for a push.
-4. Then the M3 plan (Minds), written from what M2 measured.
+2. Then the M3 plan (Minds), written from what M2 measured and from the items that `roadmap.md`
+   carries into it.
 
 ## Open Questions
 
@@ -41,7 +43,7 @@ Nothing from this session is pushed.
 - Body length holds on three numbers, each at an end of its range: `part_mass`, the founder's egg, and
   the brain upkeep. M3 decides the rule of brain upkeep, and the body will move with it.
 - Push rule conflict, still open. The root `AGENTS.md` says push at session end. The owner's global
-  rules say push only when asked. This session followed the owner's rules.
+  rules say push only when asked. This session followed the owner's rules and pushed when asked.
 
 ## Key Decisions
 
@@ -52,6 +54,7 @@ All in `tidepool/docs/decisions/INDEX.md`:
 - 2026-10-12: the M2 retune closed at trial 8 of 12.
 - 2026-10-12: a part has no upkeep of its own. It costs through its mass alone.
 - 2026-10-12: `plant_growth` is 0.03.
+- 2026-10-12: the nine questions of the M2 audit. No band, rule, or default changed.
 
 ## Relevant Files
 
@@ -81,4 +84,4 @@ All in `tidepool/docs/decisions/INDEX.md`:
 
 1. Read `m2-exit.md`.
 2. Do the five owner checks.
-3. Decide the nine questions, then ask for the push.
+3. Write the M3 plan.
