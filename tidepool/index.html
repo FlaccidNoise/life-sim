@@ -210,6 +210,176 @@
         height: 100%;
         background: #7fd1a8;
       }
+      .corner {
+        position: fixed;
+        top: 12px;
+        right: 12px;
+        display: flex;
+        gap: 8px;
+      }
+      .corner .leave {
+        position: static;
+      }
+      .brain-toggle[aria-pressed='true'] {
+        border-color: #cfe6ee;
+        background: #12384d;
+      }
+      .brain {
+        position: fixed;
+        top: 68px;
+        right: 12px;
+        box-sizing: border-box;
+        width: min(26rem, calc(100% - 24px));
+        padding: 10px 14px 12px;
+        border: 1px solid #3b6377;
+        border-radius: 12px;
+        background: rgb(4 18 28 / 0.9);
+        font-size: 13px;
+        line-height: 1.4;
+        pointer-events: auto;
+      }
+      .brain header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .brain h2 {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 600;
+      }
+      .brain-count {
+        flex: 1;
+        font-size: 12px;
+        opacity: 0.7;
+      }
+      .brain-close {
+        width: 32px;
+        height: 32px;
+        margin-left: auto;
+        border: 0;
+        border-radius: 8px;
+        background: none;
+        color: inherit;
+        font: inherit;
+        font-size: 20px;
+        line-height: 1;
+        cursor: pointer;
+      }
+      .brain-close:hover {
+        background: #12384d;
+      }
+      .brain-close:focus-visible {
+        outline: 2px solid #cfe6ee;
+        outline-offset: 2px;
+      }
+      .brain p {
+        margin: 4px 0 0;
+      }
+      .brain canvas {
+        display: block;
+        width: 100%;
+        height: clamp(200px, 40vh, 320px);
+        margin-top: 6px;
+      }
+      .brain-state {
+        padding: 28px 8px 32px;
+        font-size: 15px;
+        text-align: center;
+      }
+      .brain-state small {
+        display: block;
+        margin-top: 6px;
+        font-size: 12px;
+        opacity: 0.7;
+        overflow-wrap: anywhere;
+      }
+      .brain-state summary {
+        margin-top: 6px;
+        font-size: 12px;
+        opacity: 0.7;
+        cursor: pointer;
+      }
+      .brain-path {
+        min-height: 2.8em;
+        font-weight: 600;
+      }
+      .brain-mode {
+        font-weight: 600;
+      }
+      .brain-mode span,
+      .brain-key {
+        font-size: 12px;
+        font-weight: 400;
+        opacity: 0.75;
+      }
+      .brain i {
+        display: inline-block;
+        box-sizing: border-box;
+        margin: 0 5px 0 10px;
+        vertical-align: middle;
+      }
+      .brain i:first-child {
+        margin-left: 0;
+      }
+      .brain .wire {
+        width: 14px;
+        height: 3px;
+        border-radius: 2px;
+      }
+      .brain .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #cfe6ee;
+      }
+      .brain .ring {
+        width: 13px;
+        height: 13px;
+        border: 2px solid #fff;
+        border-radius: 50%;
+      }
+      .brain .quiet {
+        width: 10px;
+        height: 10px;
+        border: 1px solid #3b6377;
+        border-radius: 50%;
+      }
+      @media (max-width: 40rem) {
+        .brain {
+          top: auto;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          width: auto;
+          max-height: 46%;
+          overflow-y: auto;
+          border-width: 1px 0 0;
+          border-radius: 12px 12px 0 0;
+        }
+        .brain canvas {
+          height: clamp(140px, 24vh, 200px);
+        }
+        .brain-close {
+          width: 44px;
+          height: 44px;
+          margin-block: -6px;
+        }
+        #ui:has(.brain) {
+          --foot: 60%;
+        }
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        .brain {
+          animation: brain-in 160ms ease-out;
+        }
+        @keyframes brain-in {
+          from {
+            opacity: 0;
+            transform: translateY(8px);
+          }
+        }
+      }
     </style>
   </head>
   <body>

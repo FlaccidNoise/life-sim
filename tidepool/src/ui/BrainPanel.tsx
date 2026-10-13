@@ -3,8 +3,9 @@
 // two empty states come before the graph.
 
 import { useEffect, useRef } from 'preact/hooks';
-import { KIND_CHEMO, KIND_EYE, type BrainNeuron, type BrainView } from '../protocol';
+import { KIND_CHEMO, KIND_EYE, type BrainView } from '../protocol';
 import { KIND_MATE, layout, type Group, type Placed } from './brain/layout';
+import { inputLabel, pickPath } from './brain/words';
 import { brain, brainError, brainOpen, steer } from './state';
 
 const TAU = 2 * Math.PI;
@@ -14,27 +15,12 @@ const WATER = '#04121c';
 const PLUS = '#7fd1a8';
 const MINUS = '#f0b27a';
 const QUIET = 0.02; // a neuron whose activation has stayed under this is drawn dim
+const PATH_WIDTH = 4; // of the strongest path
 const FULL_WEIGHT = 2; // a connection of this weight has the full width
 const LEFT = 108; // CSS pixels left of the input column, for the labels
 const RIGHT = 96; // right of the output column, for the gauges
 const PAD = 10; // above and below the columns
 const LABEL_PITCH = 11; // inputs closer than this get no label of their own
-
-// The inputs of the body by port, as in crates/sim/src/brain.rs. The eye ports: cone A looks to
-// the right of the heading and cone B to the left. A midline eye has cone A only, and it looks ahead.
-const BODY_INPUT: Record<number, string> = {
-  0: 'always on',
-  1: 'energy',
-  2: 'age',
-  3: 'speed',
-  4: 'size',
-  5: 'kin',
-  16: 'strength',
-  17: 'ahead',
-  18: 'side',
-};
-const EYE_INPUT = ['food R', 'body R', 'food L', 'body L'];
-const MIDLINE_EYE_INPUT = ['food', 'body'];
 
 // An output by port: its name, the two ends of its gauge in words, and whether the body uses only
 // the part above 0, as `brain::think` does for the thrust.
@@ -67,12 +53,6 @@ function groupNames(groups: Group[]): string[] {
   );
 }
 
-function inputName(n: BrainNeuron, group: Group): string {
-  if (n.owner === 0) return BODY_INPUT[n.port] ?? '';
-  if (group.kind !== KIND_EYE) return '';
-  return (group.count === 2 ? MIDLINE_EYE_INPUT : EYE_INPUT)[n.port] ?? '';
-}
-
 // The text that stands for the canvas.
 function describe(b: BrainView, groups: Group[]): string {
   const outs = b.neurons
@@ -86,14 +66,16 @@ function describe(b: BrainView, groups: Group[]): string {
 }
 
 /**
- * Draws the brain. `peak` is the largest size of each activation since the panel opened. `hands`
- * is what the player asks for, drawn only while the player steers.
+ * Draws the brain. `peak` is the largest size of each activation since the panel opened. `path` is
+ * the strongest path, drawn bold. `hands` is what the player asks for, drawn only while the player
+ * steers.
  */
 function draw(
   canvas: HTMLCanvasElement,
   b: BrainView,
   placed: { nodes: Placed[]; groups: Group[] },
   peak: number[],
+  path: number[],
   hands: { thrust: number; turn: number },
 ): void {
   const ctx = canvas.getContext('2d');
@@ -117,25 +99,17 @@ function draw(
   const r = Math.min(5, pitch * 0.4);
   const quiet = (i: number): boolean => (peak[i] ?? 0) < QUIET;
 
-  // Connections, the weak ones first so that a strong one lies on top. The colour is the sign and
-  // the width is the size. A connection that carries a signal now is brighter.
-  ctx.lineCap = 'round';
-  const wires = [...b.connections].sort((p, q) => Math.abs(p.weight) - Math.abs(q.weight));
-  for (const c of wires) {
-    const size = Math.min(Math.abs(c.weight) / FULL_WEIGHT, 1);
-    const signal = Math.abs(c.weight * (b.neurons[c.src]?.activation ?? 0));
-    ctx.strokeStyle = c.weight < 0 ? MINUS : PLUS;
-    ctx.globalAlpha = 0.1 + 0.3 * size + 0.6 * Math.min(signal / FULL_WEIGHT, 1);
-    ctx.lineWidth = 0.5 + 2.5 * size;
-    const [x0, y0, x1, y1] = [x(c.src), y(c.src), x(c.dst), y(c.dst)];
+  // The line of a connection: a loop on one neuron, a straight line between columns, or, inside a
+  // column or backwards, a bow to the other side for the other direction.
+  const trace = (src: number, dst: number): void => {
+    const [x0, y0, x1, y1] = [x(src), y(src), x(dst), y(dst)];
     ctx.beginPath();
-    if (c.src === c.dst) {
-      ctx.arc(x0, y0 - r - 4, 5, 0, TAU); // a loop on one neuron
+    if (src === dst) {
+      ctx.arc(x0, y0 - r - 4, 5, 0, TAU);
     } else if (x1 > x0) {
       ctx.moveTo(x0, y0);
       ctx.lineTo(x1, y1);
     } else {
-      // Inside a column, or backwards: a bow, to the other side for the other direction.
       const length = Math.hypot(x1 - x0, y1 - y0) || 1;
       const bow = Math.min(28, length / 2) / length;
       ctx.moveTo(x0, y0);
@@ -146,6 +120,35 @@ function draw(
         y1,
       );
     }
+  };
+
+  // Connections, the weak ones first so that a strong one lies on top. The colour is the sign and
+  // the width is the size. A connection that carries a signal now is brighter.
+  ctx.lineCap = 'round';
+  const wires = [...b.connections].sort((p, q) => Math.abs(p.weight) - Math.abs(q.weight));
+  for (const c of wires) {
+    const size = Math.min(Math.abs(c.weight) / FULL_WEIGHT, 1);
+    const signal = Math.abs(c.weight * (b.neurons[c.src]?.activation ?? 0));
+    ctx.strokeStyle = c.weight < 0 ? MINUS : PLUS;
+    ctx.globalAlpha = 0.1 + 0.3 * size + 0.6 * Math.min(signal / FULL_WEIGHT, 1);
+    ctx.lineWidth = 0.5 + 2.5 * size;
+    trace(c.src, c.dst);
+    ctx.stroke();
+  }
+
+  // The strongest path, bold, over the rest: a dark edge under the colour of the sign of each wire.
+  for (let k = 1; k < path.length; k++) {
+    const [src, dst] = [path[k - 1] ?? 0, path[k] ?? 0];
+    const wire = b.connections.find((c) => c.src === src && c.dst === dst);
+    if (!wire) continue;
+    trace(src, dst);
+    ctx.globalAlpha = 0.85;
+    ctx.strokeStyle = WATER;
+    ctx.lineWidth = PATH_WIDTH + 3;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = wire.weight < 0 ? MINUS : PLUS;
+    ctx.lineWidth = PATH_WIDTH;
     ctx.stroke();
   }
 
@@ -193,10 +196,8 @@ function draw(
     ctx.textAlign = 'right';
     ctx.font = '10px system-ui, sans-serif';
     for (let i = g.first; i < g.first + g.count; i++) {
-      const n = b.neurons[i];
-      if (!n) continue;
       ctx.globalAlpha = quiet(i) ? 0.45 : 0.85;
-      ctx.fillText(inputName(n, g), LEFT - r - 6, y(i));
+      ctx.fillText(inputLabel(b, i), LEFT - r - 6, y(i));
     }
   });
 
@@ -250,53 +251,6 @@ function draw(
   ctx.globalAlpha = 1;
 }
 
-/** The styles of the panel and of its button. `App` renders them once. */
-export const BRAIN_CSS = `
-.corner { position: fixed; top: 12px; right: 12px; display: flex; gap: 8px; }
-.corner .leave { position: static; }
-.brain-toggle[aria-pressed='true'] { border-color: ${INK}; background: #12384d; }
-.brain {
-  position: fixed; top: 68px; right: 12px; box-sizing: border-box;
-  width: min(26rem, calc(100% - 24px)); padding: 10px 14px 12px;
-  border: 1px solid ${EDGE}; border-radius: 12px; background: rgb(4 18 28 / 0.9);
-  font-size: 13px; line-height: 1.4; pointer-events: auto;
-}
-.brain header { display: flex; align-items: center; gap: 10px; }
-.brain h2 { margin: 0; font-size: 16px; font-weight: 600; }
-.brain-count { flex: 1; font-size: 12px; opacity: 0.7; }
-.brain-close {
-  width: 32px; height: 32px; margin-left: auto; border: 0; border-radius: 8px; background: none;
-  color: inherit; font: inherit; font-size: 20px; line-height: 1; cursor: pointer;
-}
-.brain-close:hover { background: #12384d; }
-.brain-close:focus-visible { outline: 2px solid ${INK}; outline-offset: 2px; }
-.brain p { margin: 4px 0 0; }
-.brain canvas { display: block; width: 100%; height: clamp(200px, 40vh, 320px); margin-top: 6px; }
-.brain-state { padding: 28px 8px 32px; font-size: 15px; text-align: center; }
-.brain-state small { display: block; margin-top: 6px; font-size: 12px; opacity: 0.7; overflow-wrap: anywhere; }
-.brain-mode { font-weight: 600; }
-.brain-mode span, .brain-key { font-size: 12px; font-weight: 400; opacity: 0.75; }
-.brain i { display: inline-block; box-sizing: border-box; margin: 0 5px 0 10px; vertical-align: middle; }
-.brain i:first-child { margin-left: 0; }
-.brain .wire { width: 14px; height: 3px; border-radius: 2px; }
-.brain .dot { width: 8px; height: 8px; border-radius: 50%; background: ${INK}; }
-.brain .ring { width: 13px; height: 13px; border: 2px solid #fff; border-radius: 50%; }
-.brain .quiet { width: 10px; height: 10px; border: 1px solid ${EDGE}; border-radius: 50%; }
-@media (max-width: 40rem) {
-  .brain {
-    top: auto; left: 0; right: 0; bottom: 0; width: auto; max-height: 46%; overflow-y: auto;
-    border-width: 1px 0 0; border-radius: 12px 12px 0 0;
-  }
-  .brain canvas { height: clamp(140px, 24vh, 200px); }
-  .brain-close { width: 44px; height: 44px; margin-block: -6px; }
-  #ui:has(.brain) { --foot: 60%; }
-}
-@media (prefers-reduced-motion: no-preference) {
-  .brain { animation: brain-in 160ms ease-out; }
-  @keyframes brain-in { from { opacity: 0; transform: translateY(8px); } }
-}
-`;
-
 /** The button that opens and closes the panel. The key B does the same. */
 export function BrainToggle(props: { onToggle: () => void }) {
   return (
@@ -317,9 +271,14 @@ export function BrainPanel(props: { onClose: () => void }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   // The largest size of each activation of the body `uid` since the panel opened.
   const seen = useRef<{ uid: number; peak: number[] }>({ uid: 0, peak: [] });
+  // The path on show, kept by the body: it stays until another is clearly stronger.
+  const shown = useRef<{ uid: number; nodes: number[] | null }>({ uid: 0, nodes: null });
   const b = brain.value;
   const error = brainError.value;
   const placed = b ? layout(b) : null;
+  if (b && shown.current.uid !== b.uid) shown.current = { uid: b.uid, nodes: null };
+  const path = b ? pickPath(b, shown.current.nodes) : null;
+  shown.current.nodes = path?.nodes ?? null;
 
   useEffect(() => {
     if (!canvas.current || !b || !placed) return;
@@ -328,7 +287,7 @@ export function BrainPanel(props: { onClose: () => void }) {
     }
     const { peak } = seen.current;
     b.neurons.forEach((n, i) => (peak[i] = Math.max(peak[i] ?? 0, Math.abs(n.activation))));
-    draw(canvas.current, b, placed, peak, steer.peek());
+    draw(canvas.current, b, placed, peak, path?.nodes ?? [], steer.peek());
   });
 
   return (
@@ -350,10 +309,13 @@ export function BrainPanel(props: { onClose: () => void }) {
         </button>
       </header>
       {error !== null ? (
-        <p class="brain-state" role="alert">
-          This brain could not be read.
-          <small>{error}</small>
-        </p>
+        <div class="brain-state" role="alert">
+          <p>This brain could not be read. Close the panel and open it again.</p>
+          <details>
+            <summary>Details</summary>
+            <small>{error}</small>
+          </details>
+        </div>
       ) : b === null ? (
         <p class="brain-state">Possess a creature to see its brain.</p>
       ) : b && placed ? (
@@ -376,7 +338,9 @@ export function BrainPanel(props: { onClose: () => void }) {
             )}
           </p>
           <canvas ref={canvas} role="img" aria-label={describe(b, placed.groups)} />
-          {/* The strongest path in words goes here. */}
+          {b.connections.length > 0 && (
+            <p class="brain-path">{path ? path.text : 'Nothing drives this body strongly now.'}</p>
+          )}
           <p class="brain-key">
             <i class="wire" style={{ background: PLUS }} />
             adds
