@@ -109,6 +109,29 @@
         outline: 2px solid #cfe6ee;
         outline-offset: 2px;
       }
+      .leave:disabled {
+        opacity: 0.6;
+        cursor: default;
+      }
+      /* A beat of the walkthrough points at a control: one pulse. With motion off, a steady ring
+         for as long as the beat shows. */
+      .pulse {
+        box-shadow: 0 0 0 2px #cfe6ee;
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        .pulse {
+          box-shadow: none;
+          animation: pulse 1.8s ease-out;
+        }
+        @keyframes pulse {
+          from {
+            box-shadow: 0 0 0 0 rgb(207 230 238 / 0.9);
+          }
+          to {
+            box-shadow: 0 0 0 16px rgb(207 230 238 / 0);
+          }
+        }
+      }
       .leave kbd {
         margin-left: 4px;
         font:
@@ -306,6 +329,9 @@
       }
       .brain-mode {
         font-weight: 600;
+      }
+      .brain-changes b {
+        font-variant-numeric: tabular-nums;
       }
       .brain-mode span,
       .brain-key {

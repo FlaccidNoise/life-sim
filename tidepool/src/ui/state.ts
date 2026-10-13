@@ -25,3 +25,11 @@ export const brainError = signal<string | null>(null); // a `brain` message that
 // What the player's hands ask of the body. The brain panel reads it with `peek` when it draws: a
 // held pointer changes it on every frame.
 export const steer = signal({ thrust: 0, turn: 0 });
+// The walkthrough, docs/plans/2026-10-13-walkthrough.md. `main.ts` writes these on each frame.
+export const walkLine = signal<string | null>(null); // the line of the beat on show
+export const pulse = signal<'brain' | 'score' | null>(null); // the control that a beat points at
+export const changesShown = signal(false); // beat 7 is done: the brain panel has its changes line
+// Connections of the brain on show that differ from the first readout the page got of that body.
+export const wiringChanged = signal(0);
+// The playtest log: by beat, the seconds since the page loaded at its first showing and when done.
+export const walkLog = signal<Record<string, { shown?: number; done?: number }>>({});

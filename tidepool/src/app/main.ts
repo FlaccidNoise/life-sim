@@ -9,6 +9,7 @@ import {
   TICK_HZ,
   readBrain,
   viewFrame,
+  type BrainView,
   type FrameView,
   type FromWorker,
   type Heir,
@@ -24,6 +25,7 @@ import {
   brainDriving,
   brainError,
   brainOpen,
+  changesShown,
   death,
   errorText,
   focusHeir,
@@ -31,12 +33,16 @@ import {
   hint,
   lineageAlive,
   mode,
+  pulse,
   ready,
   starving,
   stats,
   steer,
   toast,
   buds,
+  walkLine,
+  walkLog,
+  wiringChanged,
 } from '../ui/state';
 import {
   PLAY_SCALE,
@@ -64,6 +70,8 @@ import {
   type Keys,
   type Steer,
 } from './input';
+import { loadWalk, note, saveWalk } from './walkstore';
+import { begin, split, step, wiringChanges, type Facts, type Walk } from './walkthrough';
 
 const TICK_MS = 1000 / TICK_HZ;
 const BENCH_TICKS = 2000;
@@ -75,10 +83,11 @@ const WHEEL_ZOOM = 0.0015; // the zoom exponent per wheel pixel
 const PINCH_WHEEL_ZOOM = 0.01; // a trackpad pinch is a wheel event with ctrlKey and small steps
 const PICK_RADIUS = 24; // CSS pixels around a click in which a creature is picked
 const HINT_MS = 1500;
-const FIRST_HINT_MS = 6000; // how long "Green is food" shows after a possession
 const TOAST_MS = 3000;
 const STARVING_BELOW = 0.25; // of a full store
 const LATENCY_SAMPLES = 20;
+// Seconds. A tab that was hidden gives one long frame, and that is no time of play.
+const WALK_DT_MAX = 0.1;
 
 interface PointerHandlers {
   /** The pointers moved their centre by this many CSS pixels. */
@@ -233,6 +242,14 @@ function start(): void {
   let prev: FrameView | null = null;
   let cur: FrameView | null = null;
   const latencies: number[] = []; // milliseconds from a press to the first frame drawn with it
+  // The walkthrough. `?walk=reset` starts it from nothing, for a test.
+  const stored = loadWalk(query.get('walk') === 'reset');
+  let walk: Walk = begin(stored.done, stored.shown);
+  walkLog.value = stored.log;
+  // Where the body was on the last frame, and the body lengths it has moved in this possession:
+  // `hands` under the player's input, `alone` since the brain last took over.
+  let path = { uid: 0, x: 0, y: 0, hands: 0, alone: 0 };
+  const firstBrains = new Map<number, BrainView>(); // by uid: the first readout of each body
   if (import.meta.env.DEV) {
     const handle = {
       stats,
@@ -260,6 +277,9 @@ function start(): void {
       },
       get inputLatencyMs(): number | null {
         return median(latencies);
+      },
+      get walk(): Walk {
+        return walk;
       },
       setParam(name: string, value: number): void {
         const param = params.find((p) => p.name === name);
@@ -481,7 +501,6 @@ function start(): void {
           playScale = PLAY_SCALE;
           starving.value = false;
           toast.value = null;
-          flash('Green is food. Fill your ring and you will bud.', FIRST_HINT_MS);
           mode.value = 'play';
           closeDeath();
         } else if (empty === 'heir gone') {
@@ -501,8 +520,14 @@ function start(): void {
       case 'brain':
         // A readout that does not fit its header stays in the panel. The world runs on.
         try {
-          brain.value = readBrain(msg.words);
+          const read = readBrain(msg.words);
+          brain.value = read;
           brainError.value = null;
+          if (read) {
+            const first = firstBrains.get(read.uid) ?? read;
+            firstBrains.set(read.uid, first);
+            wiringChanged.value = wiringChanges(first, read);
+          }
         } catch (e) {
           brainError.value = e instanceof Error ? e.message : String(e);
         }
@@ -561,6 +586,46 @@ function start(): void {
     // A `speed` message would end the pause of a death. The overlay's buttons end it.
     if (!death.peek()) resume();
   });
+
+  // One frame of the walkthrough: the facts of this frame in, the line and the pulse out.
+  const walkFrame = (frame: FrameView, now: number, dt: number): void => {
+    const play = mode.peek() === 'play';
+    const manual = play && posted?.manual === true;
+    // A frame from before the possession holds another body, or none.
+    const mine = play && body?.uid === possessedUid ? body : null;
+    if (mine && path.uid === mine.uid && mine.length > 0) {
+      const lengths = Math.hypot(mine.x - path.x, mine.y - path.y) / mine.length;
+      path.hands += manual ? lengths : 0;
+      path.alone = manual ? 0 : path.alone + lengths;
+    } else if (mine) path = { ...path, uid: mine.uid, hands: 0, alone: 0 };
+    if (mine) [path.x, path.y] = [mine.x, mine.y];
+    const read = brain.peek();
+    const facts: Facts = {
+      mode: mode.peek(),
+      manual,
+      panelOpen: brainOpen.peek(),
+      dead: death.peek() !== null,
+      uid: mine?.uid ?? 0,
+      energy01: (mine && energyOf(frame, frame.possessedSlot)) ?? 0,
+      lengthsMoved: path.hands,
+      lengthsAlone: path.alone,
+      buds: mine ? frame.buds : 0,
+      lineageAlive: frame.lineageAlive,
+      // The readout is of this body, and fresh, only while the panel is open.
+      split:
+        manual && brainOpen.peek() && read?.uid === possessedUid ? split(read, steer.peek()) : 0,
+      busy: hint.peek() !== null || toast.peek() !== null,
+    };
+    const out = step(walk, facts, Math.min(dt, WALK_DT_MAX));
+    if (out.walk.done !== walk.done || out.walk.shown !== walk.shown) {
+      walkLog.value = note(walkLog.peek(), walk, out.walk, Math.round(now / 100) / 10);
+      saveWalk({ done: out.walk.done, shown: out.walk.shown, log: walkLog.peek() });
+    }
+    walk = out.walk;
+    walkLine.value = out.line;
+    pulse.value = out.pulse;
+    changesShown.value = walk.done.includes('noChange');
+  };
 
   let raf = 0;
   stop = () => {
@@ -624,7 +689,10 @@ function start(): void {
       sent = view;
       send({ type: 'view', ...view });
     }
-    if (cur) renderer.draw(prev, cur, alpha, cam, now / 1000);
+    if (cur) {
+      renderer.draw(prev, cur, alpha, cam, now / 1000);
+      walkFrame(cur, now, dt);
+    }
     drawn++;
     if (now - countedFrom >= 1000) {
       stats.value = { ...stats.peek(), fps: Math.round((drawn * 1000) / (now - countedFrom)) };
