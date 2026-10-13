@@ -1,6 +1,7 @@
 use tidepool_sim::frame::{self, CREATURE_STRIDE, FLAG_BUDDED, HEADER_WORDS};
 use tidepool_sim::genome::{
-    Genome, KIND_CHEMO, KIND_CILIA, KIND_FILTER, KIND_FLAGELLUM, LEN_RANGE, SIZE_RANGE, WID_RANGE,
+    ConnGene, Genome, Node, KIND_CHEMO, KIND_CILIA, KIND_FILTER, KIND_FLAGELLUM, LEN_RANGE,
+    SIZE_RANGE, WID_RANGE,
 };
 use tidepool_sim::params::{id, Params};
 use tidepool_sim::rng::Rng;
@@ -99,6 +100,31 @@ fn a_fed_adult_buds_a_child_that_carries_its_line() {
     assert_eq!(w.creatures.age[c], 0);
     assert!((w.creatures.growth[c] - 0.4).abs() < 1e-6);
     assert_eq!(w.stat(STAT_MAX_GENERATION), 4.0);
+}
+
+/// `Genome::prune` runs on the genome of each newborn.
+#[test]
+fn a_newborn_holds_no_connection_that_its_body_does_not_express() {
+    let mut w = World::new(1, 1536.0, 1024.0);
+    quiet(&mut w);
+    w.params.set(id::BROOD_MAX, 1.0);
+    let p = fed_adult(&mut w, 0);
+    let dangling = ConnGene {
+        src: Node::hidden(9999),
+        dst: w.genomes[p].brain.conns[0].dst,
+        weight: 1.0,
+        history: 900,
+    };
+    w.genomes[p].brain.conns.push(dangling);
+    w.tick();
+    assert_eq!(w.stat(STAT_BIRTHS), 1.0);
+    let histories = |s: usize| -> Vec<u32> {
+        let conns = &w.genomes[s].brain.conns;
+        conns.iter().map(|c| c.history).collect()
+    };
+    assert_eq!(histories(p).last(), Some(&900));
+    assert_eq!(histories(1), (1..=57).collect::<Vec<u32>>());
+    assert_eq!(w.brains.n_conn[1], 57);
 }
 
 #[test]
@@ -375,7 +401,10 @@ fn mutation_stays_in_range_and_rate_zero_copies() {
         }
         assert!((0.0..1.0).contains(&g.hue));
         assert!(g.brain.conns.iter().all(|c| c.weight.abs() <= 8.0));
-        assert!(g.brain.alpha.iter().all(|a| (0.05..=1.0).contains(a)));
+        let brain = &g.brain;
+        let mut alphas =
+            (brain.hidden.iter().map(|h| h.alpha)).chain(brain.outs.iter().map(|o| o.alpha));
+        assert!(alphas.all(|a| (0.05..=1.0).contains(&a)));
     }
     let mut frozen = p.clone();
     for k in [id::MUT_RATE, id::MUT_WEIGHT_RATE, id::HUE_SIGMA] {
@@ -423,8 +452,12 @@ fn a_wild_genome_buds_or_does_not_without_panic() {
                 (part.anchor, part.size, part.extra) = (wild, wild, wild);
             }
             (g.egg, g.old, g.hue) = (wild, wild, wild);
-            g.brain.bias.fill(wild);
-            g.brain.alpha.fill(wild);
+            for gene in &mut g.brain.hidden {
+                (gene.bias, gene.alpha) = (wild, wild);
+            }
+            for gene in &mut g.brain.outs {
+                (gene.bias, gene.alpha) = (wild, wild);
+            }
             if wild_size {
                 (g.len, g.wid) = (wild, wild);
             }

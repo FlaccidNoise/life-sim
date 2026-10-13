@@ -9,13 +9,14 @@ use std::alloc::{alloc, dealloc, Layout};
 use std::cell::RefCell;
 use std::ptr::{self, NonNull};
 
+use crate::brain;
 use crate::control::HEIR_STRIDE;
 use crate::creature::MAX_EYES;
 use crate::frame;
 use crate::params::{ParamDef, DEFS};
 use crate::world::{self, World};
 
-pub const ABI_VERSION: u32 = 3;
+pub const ABI_VERSION: u32 = 4;
 
 thread_local! {
     /// Why the last `tp_new` or `tp_load` returned null.
@@ -172,11 +173,18 @@ pub unsafe extern "C" fn tp_possessed(world: *const World) -> u32 {
     world.as_ref().map_or(0, |w| w.control.possessed)
 }
 
-/// `manual` is 0 for the brain and any other value for the player.
+/// `manual` is 0 for the brain and any other value for the player. `accept` is 0 for a player who
+/// does not court and any other value for one who does.
 #[no_mangle]
-pub unsafe extern "C" fn tp_input(world: *mut World, manual: u32, thrust: f32, turn: f32) {
+pub unsafe extern "C" fn tp_input(
+    world: *mut World,
+    manual: u32,
+    thrust: f32,
+    turn: f32,
+    accept: u32,
+) {
     if let Some(w) = world.as_mut() {
-        w.input(manual != 0, thrust, turn);
+        w.input(manual != 0, thrust, turn, accept != 0);
     }
 }
 
@@ -251,6 +259,34 @@ pub unsafe extern "C" fn tp_frame_write(
 #[no_mangle]
 pub unsafe extern "C" fn tp_frame_ptr(world: *const World) -> *const u32 {
     world.as_ref().map_or(ptr::null(), |w| w.frame.as_ptr())
+}
+
+#[no_mangle]
+pub extern "C" fn tp_brain_header_words() -> u32 {
+    brain::READOUT_HEADER_WORDS
+}
+
+#[no_mangle]
+pub extern "C" fn tp_brain_neuron_words() -> u32 {
+    brain::READOUT_NEURON_WORDS
+}
+
+#[no_mangle]
+pub extern "C" fn tp_brain_conn_words() -> u32 {
+    brain::READOUT_CONN_WORDS
+}
+
+/// Writes the brain of the creature with this uid: see `brain::readout`. Returns the `u32` words
+/// written, and 0 for a uid that is not alive.
+#[no_mangle]
+pub unsafe extern "C" fn tp_brain_write(world: *mut World, uid: u32) -> u32 {
+    world.as_mut().map_or(0, |w| brain::readout(w, uid))
+}
+
+/// Valid until the next `tp_brain_write` or `tp_free`.
+#[no_mangle]
+pub unsafe extern "C" fn tp_brain_ptr(world: *const World) -> *const u32 {
+    world.as_ref().map_or(ptr::null(), |w| w.readout.as_ptr())
 }
 
 /// Null when the memory cannot be had.
@@ -328,7 +364,7 @@ mod tests {
             tp_param_set(a, id::REPEL as u32, 0.5);
             tp_seed_founders(a, 300, 0);
             assert_eq!(tp_possess(a, 7), 1);
-            tp_input(a, 1, 1.0, -1.0);
+            tp_input(a, 1, 1.0, -1.0, 1);
             tp_tick(a, 50);
             assert_eq!((tp_tick_count(a), tp_stat(a, 0)), (50, 300.0));
             assert_eq!((tp_world_w(a), tp_world_h(a)), (1536.0, 1024.0));
@@ -343,6 +379,7 @@ mod tests {
                 (tp_possessed(b), tp_param_get(b, id::REPEL as u32)),
                 (7, 0.5)
             );
+            assert!((*b).control.accept);
             tp_free(a);
             tp_free(b);
         }
@@ -393,7 +430,9 @@ mod tests {
             tp_param_set(null, 0, 1.0);
             assert_eq!(tp_param_get(null, 0), 0.0);
             tp_release(null);
-            tp_input(null, 1, 1.0, 1.0);
+            tp_input(null, 1, 1.0, 1.0, 1);
+            assert_eq!(tp_brain_write(null, 1), 0);
+            assert!(tp_brain_ptr(null).is_null());
             assert_eq!((tp_pick(null, 0.0, 0.0, 9.0), tp_possess(null, 1)), (0, 0));
             assert_eq!((tp_possessed(null), tp_death_cause(null)), (0, 0));
             assert_eq!(tp_heirs_write(null), 0);
@@ -426,6 +465,22 @@ mod tests {
                 assert_eq!((tp_param_get(w, bad), tp_hash(w)), (0.0, before));
                 tp_free(w);
             }
+        }
+    }
+
+    #[test]
+    fn a_brain_reads_through_the_abi() {
+        unsafe {
+            let w = tp_new(1, 1536.0, 1024.0);
+            tp_seed_founders(w, 20, 0);
+            // A founder: 17 neurons and 57 connections.
+            let words =
+                tp_brain_header_words() + 17 * tp_brain_neuron_words() + 57 * tp_brain_conn_words();
+            assert_eq!(tp_brain_write(w, 9), words);
+            let header = std::slice::from_raw_parts(tp_brain_ptr(w), 6);
+            assert_eq!(header, [9, 11, 4, 2, 57, 0]);
+            assert_eq!(tp_brain_write(w, 999), 0);
+            tp_free(w);
         }
     }
 

@@ -33,7 +33,8 @@ macro_rules! table {
 // (`docs/findings/m1-tuning.md`). `plant_growth`, `plant_cap`, `part_mass`, `neuron_upkeep`,
 // `conn_upkeep`, and `birth_growth` are tuned against both gates (`docs/findings/m2-tuning.md`).
 // The other defaults are arithmetic, not measurement. The rows from `part_mass` on are for the M2
-// rules (`docs/plans/2026-10-11-m2-bodies.md`).
+// rules (`docs/plans/2026-10-11-m2-bodies.md`). The rows from `fixed_upkeep` on are for the M3 rules
+// (`docs/plans/2026-10-13-m3-minds.md`). Each of them has the value at which its rule does nothing.
 table! {
     /// The founder's `old` gene: ticks until death by old age. The minimum is the bottom of
     /// `OLD_RANGE`.
@@ -178,6 +179,33 @@ table! {
     MUT_PART_DUP "mut_part_dup" 0.02 0.0 1.0;
     /// Size of a part that a mutation adds.
     PART_NEW_SIZE "part_new_size" 0.1 0.01 1.0;
+    /// Upkeep of a body per tick, whatever its size.
+    FIXED_UPKEEP "fixed_upkeep" 0.0 0.0 0.2;
+    /// Chance per birth of a new connection.
+    MUT_CONN_ADD "mut_conn_add" 0.0 0.0 1.0;
+    /// Chance per birth that a connection is lost.
+    MUT_CONN_REMOVE "mut_conn_remove" 0.0 0.0 1.0;
+    /// Chance per birth that a connection is split by a new hidden neuron.
+    MUT_NEURON_ADD "mut_neuron_add" 0.0 0.0 1.0;
+    /// Chance per birth that a hidden neuron is lost.
+    MUT_NEURON_REMOVE "mut_neuron_remove" 0.0 0.0 1.0;
+    /// Size of the weight of a new connection, and of the random weights of a founder brain. Small,
+    /// so the wired weights of a founder lead. Not zero: the draft showed that evolution never
+    /// recruits a connection that starts at zero.
+    NEW_CONN_SIGMA "new_conn_sigma" 0.1 0.0 2.0;
+    /// Connections that a part with new ports arrives with.
+    PART_WIRES "part_wires" 0.0 0.0 8.0;
+    /// Scale of what a hidden neuron sends. At 0 a hidden neuron still costs and still mutates, and
+    /// nothing reads it: the control arm of the brain gap.
+    HIDDEN_GAIN "hidden_gain" 1.0 0.0 1.0;
+    /// Founder brain: constant to `accept`.
+    STARTER_ACCEPT "starter_accept" 1.0 -3.0 3.0;
+    /// Chance per tick that a pair in touch that both accept exchange genes.
+    MIX_RATE "mix_rate" 0.0 0.0 1.0;
+    /// Chance that a gene both hold comes from the donor.
+    MIX_SWAP "mix_swap" 0.5 0.0 1.0;
+    /// Chance that a gene only the donor holds is taken.
+    MIX_FOREIGN "mix_foreign" 0.25 0.0 1.0;
 }
 
 #[derive(Clone)]

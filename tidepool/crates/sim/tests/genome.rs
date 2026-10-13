@@ -20,6 +20,18 @@ fn off() -> Params {
     p
 }
 
+/// The biases of a brain in the order of its block: the hidden genes, then the outputs.
+fn biases(g: &Genome) -> Vec<f32> {
+    let hidden = g.brain.hidden.iter().map(|h| h.bias);
+    hidden.chain(g.brain.outs.iter().map(|o| o.bias)).collect()
+}
+
+/// The alphas, in the same order.
+fn alphas(g: &Genome) -> Vec<f32> {
+    let hidden = g.brain.hidden.iter().map(|h| h.alpha);
+    hidden.chain(g.brain.outs.iter().map(|o| o.alpha)).collect()
+}
+
 fn at(x: f32) -> SpawnAt {
     SpawnAt {
         x,
@@ -62,7 +74,7 @@ fn founder_eye_adds_a_fifth_part_and_moves_no_other_draw() {
     let weights = |g: &Genome| g.brain.conns.iter().map(|c| c.weight).collect::<Vec<_>>();
     // The eye wires are drawn after every draw of the brain with no eye: `brain::starter`.
     assert_eq!(weights(&eyed)[..39], weights(&plain)[..]);
-    assert_eq!(eyed.brain.bias, plain.brain.bias);
+    assert_eq!(biases(&eyed), biases(&plain));
 }
 
 #[test]
@@ -72,9 +84,12 @@ fn a_founder_holds_the_history_ids_that_the_world_keeps_for_it() {
     let g = Genome::founder(&mut Rng::new(7), &p);
     let conns: Vec<u32> = g.brain.conns.iter().map(|c| c.history).collect();
     let parts: Vec<u32> = g.parts.iter().map(|x| x.history).collect();
+    let hidden: Vec<u32> = g.brain.hidden.iter().map(|h| h.id).collect();
     assert_eq!(conns, (1..=57).collect::<Vec<u32>>());
     assert_eq!(parts, [58, 59, 60, 61, 62]);
-    assert_eq!(World::new(1, 64.0, 64.0).next_history, 63);
+    // The 4 hidden genes of the founder take the 4 ids after its parts.
+    assert_eq!(hidden, [63, 64, 65, 66]);
+    assert_eq!(World::new(1, 64.0, 64.0).next_history, 67);
 }
 
 #[test]
@@ -333,7 +348,9 @@ fn with_every_m2_rate_at_0_a_mutation_makes_the_m1_draws_and_no_more() {
     }
     let by_zero = g.mutated(&mut zero_rng, &zero, &mut 100);
     let brain = &g.brain;
-    let brain_draws = brain.conns.len() + brain.bias.len() + brain.alpha.len();
+    // One draw for each weight, and one for the bias and one for the alpha of each neuron that is
+    // not an input.
+    let brain_draws = brain.conns.len() + 2 * (brain.hidden.len() + brain.outs.len());
 
     // The M1 draws, stepped by hand at the M1 rates of the defaults: one draw for the chance of
     // each gene and a `gauss` for each hit, in the M1 order, and a `gauss` for the hue. The
@@ -374,7 +391,7 @@ fn with_every_m2_rate_at_0_a_mutation_makes_the_m1_draws_and_no_more() {
     let m1 = |g: &Genome| {
         let sizes: Vec<f32> = g.parts[..5].iter().map(|x| x.size).collect();
         let weights: Vec<f32> = g.brain.conns.iter().map(|c| c.weight).collect();
-        let (bias, alpha) = (g.brain.bias.clone(), g.brain.alpha.clone());
+        let (bias, alpha) = (biases(g), alphas(g));
         (g.len, g.wid, g.hue, sizes, weights, bias, alpha)
     };
     assert_eq!(m1(&by_on), m1(&by_zero));

@@ -197,7 +197,7 @@ pub fn crowd(argv: &[String]) {
         };
         let (uid, near, alone) = (c.uid[s], neighbours(s), top_speed(&world, s));
         world.possess(uid);
-        world.input(true, 1.0, 0.0);
+        world.input(true, 1.0, 0.0, false);
         // The body can die while it is held. The mean is over the ticks that it lived.
         let (mut speed_sum, mut held) = (0.0, 0u32);
         while held < CROWD_HOLD {

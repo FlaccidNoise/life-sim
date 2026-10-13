@@ -1,13 +1,19 @@
-use tidepool_sim::brain::{MAX_NEURONS, N_IN, N_OUT};
+use tidepool_sim::brain::{self, IN_CONST, IN_ENERGY, MAX_NEURONS, N_OUT_MAX};
 use tidepool_sim::control::{CAUSE_OLD_AGE, CAUSE_STARVED};
 use tidepool_sim::creature::{MAX_CREATURES, MAX_EYES};
 use tidepool_sim::frame;
-use tidepool_sim::genome::{BrainGenome, ConnGene, Genome, KIND_EYE};
+use tidepool_sim::genome::{
+    BrainGenome, ConnGene, Genome, HiddenGene, Node, OutGene, KIND_EYE, MAX_CONN_GENES, MAX_HIDDEN,
+};
 use tidepool_sim::params::{id, Params, DEFS};
 use tidepool_sim::plant::MAX_PLANTS;
 use tidepool_sim::snapshot::{seal, LoadError, Writer, FORMAT_VERSION};
 use tidepool_sim::stats::{STAT_BIRTHS, STAT_DEATHS, STAT_MEAN_ENERGY01};
 use tidepool_sim::world::{SpawnAt, World, MAX_WORLD_SIZE};
+
+/// The inputs and the outputs that every body declares: `brain::ports`.
+const N_IN: usize = 11;
+const N_OUT: usize = 2;
 
 /// Founders, plants, a changed parameter, a possessed creature, and held manual input.
 fn world_at(ticks: u32) -> World {
@@ -15,7 +21,7 @@ fn world_at(ticks: u32) -> World {
     w.params.set(id::REPEL, 0.5);
     w.seed_founders(400, 1200);
     assert!(w.possess(w.creatures.uid[3]));
-    w.input(true, 0.8, 0.5);
+    w.input(true, 0.8, 0.5, false);
     w.run(ticks);
     w
 }
@@ -145,6 +151,7 @@ fn every_saved_field_is_in_the_hash_and_survives_a_load() {
         ("rng_spawn", |w| w.rng_spawn.0 ^= 1),
         ("rng_mutate", |w| w.rng_mutate.0 ^= 1),
         ("rng_plants", |w| w.rng_plants.0 ^= 1),
+        ("rng_mate", |w| w.rng_mate.0 ^= 1),
         ("params", |w| w.params.set(id::CHEMO_GAIN, 9.0)),
         // Two founders trade uids, so each uid is still alive once and above its parent.
         ("uid", |w| w.creatures.uid.swap(S, S + 1)),
@@ -156,11 +163,15 @@ fn every_saved_field_is_in_the_hash_and_survives_a_load() {
         ("omega", |w| w.creatures.omega[S] += 1.0),
         ("cmd_thrust", |w| w.creatures.cmd_thrust[S] += 0.1),
         ("cmd_turn", |w| w.creatures.cmd_turn[S] += 0.01),
+        ("cmd_accept", |w| w.creatures.cmd_accept[S] += 0.1),
+        ("mate_size", |w| w.creatures.mate_size[S] += 0.1),
+        ("mate_kin", |w| w.creatures.mate_kin[S] += 0.1),
         ("growth", |w| w.creatures.growth[S] -= 0.1),
         ("energy", |w| w.creatures.energy[S] += 1.0),
         ("age", |w| w.creatures.age[S] += 1),
         ("generation", |w| w.creatures.generation[S] += 1),
         ("parent", |w| w.creatures.parent[S] = 1),
+        ("mixed_with", |w| w.creatures.mixed_with[S] = 1),
         ("mark", |w| w.creatures.mark[S] ^= 1),
         ("bud_cooldown", |w| w.creatures.bud_cooldown[S] += 1),
         ("genome len", |w| w.genomes[S].len += 1.0),
@@ -176,36 +187,60 @@ fn every_saved_field_is_in_the_hash_and_survives_a_load() {
         ("part count", |w| {
             w.genomes[S].parts.pop();
         }),
-        ("genome bias", |w| w.genomes[S].brain.bias[0] += 0.5),
-        ("genome alpha", |w| w.genomes[S].brain.alpha[0] = 0.5),
-        // `load` holds the count of hidden neurons to the count of biases, so the count cannot
-        // change alone: the brain gets one more hidden neuron, with its bias and its alpha.
+        ("genome bias", |w| w.genomes[S].brain.hidden[0].bias += 0.5),
+        ("genome alpha", |w| w.genomes[S].brain.hidden[0].alpha = 0.5),
+        ("hidden id", |w| w.genomes[S].brain.hidden[0].id += 1000),
+        ("output bias", |w| w.genomes[S].brain.outs[0].bias += 0.5),
+        ("output alpha", |w| w.genomes[S].brain.outs[1].alpha = 0.5),
+        ("output name", |w| {
+            w.genomes[S].brain.outs[1].node.port = 200
+        }),
+        ("output count", |w| {
+            w.genomes[S].brain.outs.pop();
+        }),
+        // The brain gets one more hidden neuron. `brain::load` reads one activation for each
+        // neuron that the loaded genome expresses, so the block is expressed again.
         ("hidden neuron count", |w| {
-            let brain = &mut w.genomes[S].brain;
-            brain.n_hidden += 1;
-            brain.bias.push(0.0);
-            brain.alpha.push(1.0);
-            w.brains.express(S, &w.genomes[S].brain);
+            w.genomes[S].brain.hidden.push(HiddenGene {
+                id: 900,
+                bias: 0.0,
+                alpha: 1.0,
+            });
+            w.brains.express(S, &w.genomes[S], &w.params);
         }),
         ("brain activation", |w| {
             w.brains.cur[S * MAX_NEURONS + N_IN] += 0.5
         }),
         ("genome connections", |w| {
             let gene = ConnGene {
-                src: 0,
-                dst: N_IN as u16,
+                src: Node::body(IN_CONST),
+                dst: Node::hidden(w.genomes[S].brain.hidden[0].id),
                 weight: 1.0,
                 history: 3,
             };
             w.genomes[S].brain.conns.push(gene);
         }),
+        ("connection source", |w| {
+            w.genomes[S].brain.conns[0].src = Node::body(IN_ENERGY)
+        }),
+        ("connection target", |w| {
+            w.genomes[S].brain.conns[0].dst.owner = 900
+        }),
+        ("connection weight", |w| {
+            w.genomes[S].brain.conns[0].weight += 0.5
+        }),
+        ("connection history", |w| {
+            w.genomes[S].brain.conns[0].history += 1000
+        }),
+        ("donor", |w| w.donors[S] = Some((2, w.genomes[2].clone()))),
         ("births", |w| w.stats.births += 1),
         ("deaths", |w| w.stats.deaths += 1),
         ("eaten", |w| w.stats.eaten += 0.5),
         ("starved_juv", |w| w.stats.starved_juv += 1),
         ("plant_deaths", |w| w.stats.plant_deaths += 1),
         ("possessed", |w| assert!(w.possess(w.creatures.uid[S]))),
-        ("manual input", |w| w.input(true, 0.3, -0.2)),
+        ("manual input", |w| w.input(true, 0.3, -0.2, false)),
+        ("accept input", |w| w.input(true, 0.8, 0.5, true)),
         ("death cause", |w| w.kill(3, CAUSE_OLD_AGE)),
         ("buds", |w| w.control.buds += 1),
         ("plant slots", |w| w.plants.slots.free(S as u32)),
@@ -225,6 +260,19 @@ fn every_saved_field_is_in_the_hash_and_survives_a_load() {
         let loaded = World::load(&w.save()).unwrap_or_else(|e| panic!("{name}: {e:?}"));
         assert_eq!(loaded.state_hash(), hash, "{name} did not survive a load");
     }
+
+    // The genome of a donor is in the hash as well, and it survives a load.
+    let with_donor = |edit: fn(&mut Genome)| {
+        let mut w = world_at(50);
+        let mut genome = w.genomes[2].clone();
+        edit(&mut genome);
+        w.donors[S] = Some((2, genome));
+        w
+    };
+    let (plain, changed) = (with_donor(|_| {}), with_donor(|g| g.len += 1.0));
+    assert_ne!(changed.state_hash(), plain.state_hash());
+    let loaded = World::load(&changed.save()).expect("load");
+    assert_eq!(loaded.state_hash(), changed.state_hash());
 }
 
 #[test]
@@ -250,10 +298,10 @@ fn garbage_is_rejected_without_panic() {
 // Crafted input. Every snapshot below has a valid envelope and checksum, so only `load`'s own checks
 // can reject it.
 
-/// Bytes before the first length prefix: 5 header words and 3 generators of 2 words each.
-const HEADER_BYTES: usize = 4 * (5 + 3 * 2);
+/// Bytes before the first length prefix: 5 header words and 4 generators of 2 words each.
+const HEADER_BYTES: usize = 4 * (5 + 4 * 2);
 /// The `f32` creature fields. They come before the integer fields.
-const FLOATS_BEFORE: usize = 10;
+const FLOATS_BEFORE: usize = 13;
 
 /// A payload written by hand in the order of `World::save_payload`. A test changes one part.
 struct Crafted {
@@ -269,6 +317,8 @@ struct Crafted {
     wild_genome: bool,
     ages: Vec<u32>,
     parents: Vec<u32>,
+    /// The uid of the gene donor that each creature was born with.
+    mixed_with: Vec<u32>,
     /// The brain of every genome.
     brain: BrainGenome,
     births: u64,
@@ -276,6 +326,10 @@ struct Crafted {
     activations: Option<Vec<f32>>,
     /// The uid of the possessed creature, the manual flag, thrust, turn, and the death cause.
     control: (u32, u32, f32, f32, u32),
+    /// The accept flag of the control block.
+    accept: u32,
+    /// The uid of the donor that every live slot holds, with the default genome. 0 for none.
+    donor: u32,
     plant_slots: Vec<u32>,
     /// The x and the y of every plant.
     plant_place: Vec<f32>,
@@ -304,10 +358,13 @@ impl Crafted {
             wild_genome: false,
             ages: vec![0; n],
             parents: vec![0; n],
+            mixed_with: vec![0; n],
             brain: BrainGenome::default(),
             births: 0,
             activations: None,
             control: (0, 0, 0.0, 0.0, 0),
+            accept: 0,
+            donor: 0,
             plant_slots: vec![],
             plant_place: vec![],
             plant_reserve: vec![],
@@ -347,7 +404,7 @@ impl Crafted {
         p.f32(self.size.1);
         p.u32(self.next_uid);
         p.u32(1); // next_history
-        for _ in 0..3 {
+        for _ in 0..4 {
             p.u64(0); // a generator
         }
         p.f32s(&self.params);
@@ -359,6 +416,7 @@ impl Crafted {
         p.u32s(&self.ages);
         p.u32s(&vec![0; self.field.len()]); // generation
         p.u32s(&self.parents);
+        p.u32s(&self.mixed_with);
         p.u8s(&vec![0; self.field.len()]); // mark
         p.u32s(&vec![0; self.field.len()]); // bud_cooldown
         for i in 0..self.live.len() {
@@ -384,7 +442,7 @@ impl Crafted {
         p.u64(0f64.to_bits()); // eaten
         p.u64(0); // starved_juv
         p.u64(0); // plant_deaths
-        let neurons = N_IN + self.brain.n_hidden as usize + N_OUT;
+        let neurons = N_IN + self.brain.hidden.len() + N_OUT;
         let zeros = vec![0.0; self.live.len() * neurons];
         p.f32s(self.activations.as_ref().unwrap_or(&zeros));
         let (possessed, manual, thrust, turn, cause) = self.control;
@@ -392,8 +450,15 @@ impl Crafted {
         p.u32(manual);
         p.f32(thrust);
         p.f32(turn);
+        p.u32(self.accept);
         p.u32(cause);
         p.u32(0); // buds
+        for _ in &self.live {
+            p.u32(self.donor);
+            if self.donor != 0 {
+                Genome::default().save(&mut p);
+            }
+        }
         p.u32s(&self.plant_slots);
         p.f32s(&self.plant_place); // x
         p.f32s(&self.plant_place); // y
@@ -417,22 +482,41 @@ fn load_err(payload: &[u8]) -> Option<LoadError> {
     World::load(&seal(payload)).err()
 }
 
-fn conn(src: usize, dst: usize) -> ConnGene {
-    ConnGene {
-        src: src as u16,
-        dst: dst as u16,
-        weight: 0.5,
-        history: 1,
+/// The id of the first hidden gene of `brain`. The others count up from it.
+const HIDDEN_ID: u32 = 1000;
+
+/// The name of neuron `i` in the block of a brain of `brain` with `hidden` hidden neurons: the
+/// inputs, the hidden neurons, the outputs. An index past the block names a hidden neuron that no
+/// genome holds.
+fn node(i: usize, hidden: usize) -> Node {
+    let ports = brain::ports(&Genome::default());
+    assert_eq!((ports.inputs.len(), ports.outputs.len()), (N_IN, N_OUT));
+    let unknown = |k: usize| Node::hidden(HIDDEN_ID + k as u32);
+    match i.checked_sub(N_IN) {
+        None => ports.inputs[i],
+        Some(k) if k < hidden => Node::hidden(HIDDEN_ID + k as u32),
+        Some(k) => (ports.outputs.get(k - hidden).copied()).unwrap_or(unknown(k)),
     }
 }
 
-/// `hidden` hidden neurons, the matching bias and alpha, and the given connections.
-fn brain(hidden: usize, conns: Vec<ConnGene>) -> BrainGenome {
+/// `hidden` hidden neurons, an out gene for each output, and a connection for each pair of block
+/// indexes.
+fn brain(hidden: usize, conns: &[(usize, usize)]) -> BrainGenome {
+    let hidden_genes = (0..hidden as u32).map(|k| HiddenGene {
+        id: HIDDEN_ID + k,
+        bias: 0.0,
+        alpha: 1.0,
+    });
+    let conn = |&(src, dst): &(usize, usize)| ConnGene {
+        src: node(src, hidden),
+        dst: node(dst, hidden),
+        weight: 0.5,
+        history: 1,
+    };
     BrainGenome {
-        n_hidden: hidden as u16,
-        bias: vec![0.0; hidden + N_OUT],
-        alpha: vec![1.0; hidden + N_OUT],
-        conns,
+        hidden: hidden_genes.collect(),
+        conns: conns.iter().map(conn).collect(),
+        ..BrainGenome::default()
     }
 }
 
@@ -578,47 +662,53 @@ fn a_bad_brain_genome_is_invalid() {
         brain,
         ..Crafted::new(&[0], &[1.0])
     };
-    let most = MAX_NEURONS - N_IN - N_OUT;
+    let most = MAX_HIDDEN;
     let last = N_IN + 2 + N_OUT - 1;
     // Input to hidden, hidden to output, and an output that feeds a hidden neuron: all in range.
-    let good = brain(
-        2,
-        vec![conn(0, N_IN), conn(N_IN, last), conn(last, N_IN + 1)],
-    );
-    assert!(with_brain(good).load().is_ok());
-    assert!(with_brain(brain(most, vec![])).load().is_ok());
+    let good = brain(2, &[(0, N_IN), (N_IN, last), (last, N_IN + 1)]);
+    let w = with_brain(good).load().expect("load");
+    assert_eq!((w.brains.n_neur[0], w.brains.n_conn[0]), (15, 3));
+    assert!(with_brain(brain(most, &[])).load().is_ok());
 
-    let short_bias = BrainGenome {
-        bias: vec![0.0],
-        ..brain(0, vec![])
+    // A list of a brain genome holds no more than its cap. A genome has one bias and one alpha
+    // for each hidden gene and each out gene, so their counts cannot be wrong.
+    let many_outs = |count: usize| BrainGenome {
+        outs: vec![
+            OutGene {
+                node: node(N_IN, 0),
+                bias: 0.0,
+                alpha: 1.0
+            };
+            count
+        ],
+        ..brain(0, &[])
     };
-    let long_alpha = BrainGenome {
-        alpha: vec![1.0; 9],
-        ..brain(2, vec![])
-    };
+    let many_conns = |count: usize| brain(0, &vec![(0, N_IN); count]);
+    assert!(with_brain(many_outs(N_OUT_MAX)).load().is_ok());
+    assert!(with_brain(many_conns(MAX_CONN_GENES)).load().is_ok());
     for (bad, reason) in [
-        (brain(most + 1, vec![]), "brain genome hidden count"),
-        (short_bias, "brain genome bias or alpha count"),
-        (long_alpha, "brain genome bias or alpha count"),
+        (brain(most + 1, &[]), "brain genome hidden count"),
+        (many_outs(N_OUT_MAX + 1), "brain genome output count"),
         (
-            brain(2, vec![conn(last + 1, N_IN)]),
-            "brain genome connection out of range",
-        ),
-        (
-            brain(2, vec![conn(0, last + 1)]),
-            "brain genome connection out of range",
-        ),
-        // An input neuron takes no connection.
-        (
-            brain(2, vec![conn(N_IN, N_IN - 1)]),
-            "brain genome connection out of range",
-        ),
-        (
-            brain(0, vec![conn(0, 0xFFFF)]),
-            "brain genome connection out of range",
+            many_conns(MAX_CONN_GENES + 1),
+            "brain genome connection count",
         ),
     ] {
         assert_eq!(with_brain(bad).err(), Some(LoadError::Invalid(reason)));
+    }
+
+    // A name is not checked. A connection with an end that the genome does not declare loads, is
+    // not expressed, and the world runs.
+    for bad in [
+        brain(2, &[(last + 1, N_IN)]),
+        brain(2, &[(0, last + 1)]),
+        // An input neuron takes no connection.
+        brain(2, &[(N_IN, N_IN - 1)]),
+        brain(0, &[(0, 0xFFFF)]),
+    ] {
+        let mut w = with_brain(bad).load().expect("load");
+        assert_eq!(w.brains.n_conn[0], 0);
+        w.run(5);
     }
 }
 
@@ -634,6 +724,38 @@ fn a_brain_part_of_the_wrong_length_is_invalid() {
             p.err(),
             Some(LoadError::Invalid("brain activation count")),
             "{count} values"
+        );
+    }
+}
+
+#[test]
+fn a_bad_donor_is_invalid() {
+    let with_donor = |donor: u32| Crafted {
+        donor,
+        ..Crafted::uids(0, 9, &[3, 5])
+    };
+    let w = with_donor(8).load().expect("load");
+    // The donor is dead, and each of the two bodies holds its genome.
+    assert_eq!(w.donors.iter().flatten().count(), 2);
+    assert_eq!(w.donors[1].as_ref().map(|d| d.0), Some(8));
+    assert!(with_donor(0).load().expect("load").donors[1].is_none());
+    for donor in [9, u32::MAX] {
+        assert_eq!(
+            with_donor(donor).err(),
+            Some(LoadError::Invalid("donor uid not below next uid"))
+        );
+    }
+
+    let mixed_with = |mixed_with: &[u32]| Crafted {
+        mixed_with: mixed_with.to_vec(),
+        ..Crafted::uids(0, 9, &[3, 5])
+    };
+    assert!(mixed_with(&[2, 3]).load().is_ok());
+    for bad in [[3, 0], [0, 5], [0, 8], [u32::MAX, 0]] {
+        assert_eq!(
+            mixed_with(&bad).err(),
+            Some(LoadError::Invalid("creature donor not below its uid")),
+            "{bad:?}"
         );
     }
 }
@@ -661,6 +783,15 @@ fn a_bad_control_block_is_invalid() {
             "{control:?}"
         );
     }
+    let with_accept = |accept: u32| Crafted {
+        accept,
+        ..Crafted::uids(0, 9, &[3, 5])
+    };
+    assert!(with_accept(1).load().expect("load").control.accept);
+    assert_eq!(
+        with_accept(2).err(),
+        Some(LoadError::Invalid("control accept flag"))
+    );
 }
 
 #[test]
@@ -846,8 +977,9 @@ fn a_length_prefix_past_the_end_is_truncated() {
 #[test]
 fn every_cut_of_a_payload_is_an_error() {
     let p = Crafted {
-        brain: brain(1, vec![conn(0, N_IN), conn(N_IN, N_IN + 1)]),
+        brain: brain(1, &[(0, N_IN), (N_IN, N_IN + 1)]),
         control: (2, 1, 0.5, 0.5, 0),
+        donor: 1,
         plant_slots: vec![0, 4],
         plant_place: vec![10.0, 40.0],
         plant_reserve: vec![1.0, 2.0],
@@ -955,11 +1087,11 @@ fn wild_activations_and_scent_under_a_creature_load_and_run_without_panic() {
     ];
     let cycle = |n: usize| (0..n).map(|i| wild[i % wild.len()]).collect::<Vec<f32>>();
     let (hidden, thrust, turn) = (N_IN, N_IN + 1, N_IN + 2);
-    let mut conns: Vec<ConnGene> = (0..N_IN).map(|i| conn(i, hidden)).collect();
-    conns.extend([conn(hidden, thrust), conn(hidden, turn), conn(turn, hidden)]);
+    let mut conns: Vec<(usize, usize)> = (0..N_IN).map(|i| (i, hidden)).collect();
+    conns.extend([(hidden, thrust), (hidden, turn), (turn, hidden)]);
     let live: Vec<u32> = (0..7).collect();
     let p = Crafted {
-        brain: brain(1, conns),
+        brain: brain(1, &conns),
         activations: Some(cycle(live.len() * (N_IN + 1 + N_OUT))),
         scent: cycle(SCENT_CELLS),
         // An energy of 1 pays the upkeep of the default body for a few ticks, so each of the 7

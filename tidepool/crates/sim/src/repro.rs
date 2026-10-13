@@ -58,7 +58,10 @@ pub fn step(world: &mut World) {
                 break;
             }
             // The genome is drawn before the price is known, as in M1.
-            let child = world.genomes[s].mutated(&mut world.rng_mutate, p, &mut world.next_history);
+            let mut child =
+                world.genomes[s].mutated(&mut world.rng_mutate, p, &mut world.next_history);
+            // The brain genes of a newborn hold what its body expresses.
+            child.prune();
             let (length, width) = (child.len * egg, child.len * child.wid * egg);
             let area = length * width;
             let mass = area * heft(child.part_sum(eye_cost), part_mass);

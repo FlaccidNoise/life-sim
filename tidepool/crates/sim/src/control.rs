@@ -21,6 +21,8 @@ pub struct Control {
     pub manual: bool,
     pub thrust: f32,
     pub turn: f32,
+    /// The player courts. Stored, and read by no rule yet.
+    pub accept: bool,
     pub death_cause: u32,
     /// Buds of the possessed body since it was possessed.
     pub buds: u32,
@@ -84,22 +86,23 @@ impl World {
         self.control.possessed_slot = slot;
         self.control.death_cause = CAUSE_NONE;
         self.control.buds = 0;
-        self.input(false, 0.0, 0.0);
+        self.input(false, 0.0, 0.0, false);
         true
     }
 
     /// The creature keeps its mark.
     pub fn release(&mut self) {
         self.control.possessed = 0;
-        self.input(false, 0.0, 0.0);
+        self.input(false, 0.0, 0.0, false);
     }
 
     /// Clamps `thrust` to `[0, 1]` and `turn` to `[-1, 1]`. NaN counts as 0.
-    pub fn input(&mut self, manual: bool, thrust: f32, turn: f32) {
+    pub fn input(&mut self, manual: bool, thrust: f32, turn: f32, accept: bool) {
         let clean = |v: f32, lo: f32| if v.is_nan() { 0.0 } else { v.clamp(lo, 1.0) };
         self.control.manual = manual;
         self.control.thrust = clean(thrust, 0.0);
         self.control.turn = clean(turn, -1.0);
+        self.control.accept = accept;
     }
 
     /// Live creatures with the lineage mark, highest `energy01` first, ties by lower slot. At most
@@ -146,6 +149,7 @@ pub fn save(world: &World, w: &mut Writer) {
     w.u32(c.manual as u32);
     w.f32(c.thrust);
     w.f32(c.turn);
+    w.u32(c.accept as u32);
     w.u32(c.death_cause);
     w.u32(c.buds);
 }
@@ -159,15 +163,17 @@ pub fn load(world: &mut World, r: &mut Reader) -> Result<(), LoadError> {
             .slot_of(uid)
             .ok_or(LoadError::Invalid("possessed creature is not alive"))?,
     };
-    let manual = match r.u32()? {
-        0 => false,
-        1 => true,
-        _ => return Err(LoadError::Invalid("control manual flag")),
+    let flag = |v: u32, reason: &'static str| match v {
+        0 => Ok(false),
+        1 => Ok(true),
+        _ => Err(LoadError::Invalid(reason)),
     };
+    let manual = flag(r.u32()?, "control manual flag")?;
     let (thrust, turn) = (r.f32()?, r.f32()?);
     if !(0.0..=1.0).contains(&thrust) || !(-1.0..=1.0).contains(&turn) {
         return Err(LoadError::Invalid("control input out of range"));
     }
+    let accept = flag(r.u32()?, "control accept flag")?;
     let death_cause = r.u32()?;
     if death_cause > CAUSE_OLD_AGE {
         return Err(LoadError::Invalid("death cause"));
@@ -179,6 +185,7 @@ pub fn load(world: &mut World, r: &mut Reader) -> Result<(), LoadError> {
         manual,
         thrust,
         turn,
+        accept,
         death_cause,
         buds,
         heirs: Vec::new(),

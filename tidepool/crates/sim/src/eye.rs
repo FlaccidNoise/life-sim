@@ -3,7 +3,7 @@
 //! `Creatures::express` makes the cones from the genome, `see` scans them for the brain, and
 //! `frame::write` sends those of the possessed body to the page.
 
-use crate::brain::{IN_SEE_BODY_L, IN_SEE_BODY_R, IN_SEE_FOOD_L, IN_SEE_FOOD_R};
+use crate::brain::NO_INPUT;
 use crate::creature::MAX_EYES;
 use crate::grid::Grid;
 use crate::params::id;
@@ -18,10 +18,11 @@ pub const EYE_HALF_SPAN: f32 = 1.0;
 /// of `EYE_REACH` can pass the box of its exact shape by a tenth of a unit.
 const BOX_MARGIN: f32 = 0.25;
 
-/// Writes the four eye inputs of the body in `slot`. For the plants and for the bodies, each side
-/// gets the nearness of the nearest one in a cone of that side: 1 at the eye, 0 at the range of the
-/// cone and with nothing in it. A cone at a positive angle from the heading is on the right, and an
-/// eye on the midline feeds both sides.
+/// Writes the four eye inputs of the body in `slot`, from `Brains::in_eye`: food left, food right,
+/// body left, body right. For the plants and for the bodies, each side gets the nearness of the
+/// nearest one in a cone of that side: 1 at the eye, 0 at the range of the cone and with nothing in
+/// it. A cone at a positive angle from the heading is on the right, and an eye on the midline
+/// feeds both sides. A body whose brain has no eye input is not scanned.
 ///
 /// Reads the creature grid and the plant grid, so the caller has brought both up to date. Saves
 /// nothing: the inputs are brain activations.
@@ -34,6 +35,10 @@ pub fn see(world: &mut World, slot: usize) {
         params,
         ..
     } = world;
+    let in_eye = brains.in_eye[slot];
+    if in_eye == NO_INPUT {
+        return;
+    }
     let (eye_range, gain) = (params.get(id::EYE_RANGE), params.get(id::EYE_GAIN));
     let (px, py, hc, hs) = (c.x[slot], c.y[slot], c.hc[slot], c.hs[slot]);
     let n = (c.n_eyes[slot] as usize).min(MAX_EYES);
@@ -107,9 +112,9 @@ pub fn see(world: &mut World, slot: usize) {
             (food_r, body_r) = (food_r.max(plant), body_r.max(other));
         }
     }
-    let input = brains.inputs_mut(slot);
-    input[IN_SEE_FOOD_L] = (gain * food_l).clamp(0.0, 1.0);
-    input[IN_SEE_FOOD_R] = (gain * food_r).clamp(0.0, 1.0);
-    input[IN_SEE_BODY_L] = (gain * body_l).clamp(0.0, 1.0);
-    input[IN_SEE_BODY_R] = (gain * body_r).clamp(0.0, 1.0);
+    let input = &mut brains.inputs_mut(slot)[in_eye as usize..][..4];
+    input[0] = (gain * food_l).clamp(0.0, 1.0);
+    input[1] = (gain * food_r).clamp(0.0, 1.0);
+    input[2] = (gain * body_l).clamp(0.0, 1.0);
+    input[3] = (gain * body_r).clamp(0.0, 1.0);
 }

@@ -96,7 +96,8 @@ export function createHost(deps: HostDeps): Host {
     for (; owed >= period && ran < MAX_TICKS_PER_STEP; ran++) {
       owed -= period;
       const wasPossessed = sim.possessed() !== 0;
-      sim.input(input.manual, input.thrust, input.turn);
+      // No message carries the court input yet, so the player never accepts.
+      sim.input(input.manual, input.thrust, input.turn, false);
       const start = deps.now();
       sim.tick(1);
       tickMillis += deps.now() - start;
