@@ -1,8 +1,11 @@
 # M3 Task 14: three looks for the outline of a body
 
 Date: 2026-10-13. Draw only. No gene, no rule, no file under `crates/`. **The owner picks one look or
-none. Until then the default draw is today's, and `?look=1`, `2`, or `3` selects a look.** Each number
-below comes from the part genes in the frame record.
+none. Until then the default draw is today's, and `?look=1`, `2`, `3`, or `4` selects a look.** Each
+number below comes from the part genes in the frame record.
+
+**Look 4 was built after the owner saw looks 1 to 3. It is at the end of this file, and it is the
+one to look at first.**
 
 The text from "How each look is computed" to "Judgment" is the build agent's. The orchestrator looked
 at patch a in looks 0, 1, and 3 and agrees with what it says of them. The orchestrator did not run
@@ -121,8 +124,64 @@ is not built.
 - The shape pop at the 14-pixel threshold.
 - Draw time on a phone or a slower laptop.
 
+## Look 4: the scale of look 1 with the detail of look 3
+
+The owner on looks 1 to 3, 2026-10-13: "I'm not sure what look I prefer actually. I feel like there
+is an optimal look to this that we just can't quite get yet. I like the look of look one, a little
+bit smaller creatures overall and thinner lines. But I kinda like the complexity and detail we seem
+to get with a bit of the look three. But overall look one in terms of scale for sure."
+
+**How it is computed.** The taper of look 1 (`TAPER_FULL` 1/4, `NARROWEST` 0.35). Every part at
+today's size: `LOOK_2_SIZE` is not applied. The fan for a mouth and the fork for a chemoreceptor, with
+the shader constants of look 3. Each mouth swells the outline by `1 + MOUTH_SWELL × size`, with
+`MOUTH_SWELL` 0.5 as in look 3. Mouths at one place on the axis share the largest swell, and a body
+takes 2 places (`LOOK_4_SWELLS`). In the baked world 2 of 1,448 bodies have a third place. New in this
+look: a part inside a swell sits on the edge of the swell. In look 3 the eyes and feelers sat inside
+the head.
+
+| Patch | Look 1 | Look 3 | Look 4 |
+|---|---|---|---|
+| a | ![](img/m3-look1-patcha.png) | ![](img/m3-look3-patcha.png) | ![](img/m3-look4-patcha.png) |
+| b | ![](img/m3-look1-patchb.png) | ![](img/m3-look3-patchb.png) | ![](img/m3-look4-patchb.png) |
+| c | ![](img/m3-look1-patchc.png) | ![](img/m3-look3-patchc.png) | ![](img/m3-look4-patchc.png) |
+
+**Draw time.** Median of 32 rounds of 100 draws, looks 0 and 4 in turns, three runs at a load average
+of 10.7 to 14.2. Another agent's simulation and a virtual machine were running, and look 0 itself
+moved from 1.2 to 2.9 ms between runs.
+
+| View | Bodies | Look 4 over look 0, by run |
+|---|---|---|
+| Whole world, scale 0.72 | 1,448 | +8.5%, +2.6%, +4.1% |
+| Scale 2, centre (571, 353) | 389 | +7.4%, +10.4%, +8.1% |
+| Patch a, scale 7 | 73 | +2.0%, +4.2%, +1.9% |
+
+Two runs just before these, at a load of 11.7 to 12.3, read +7.8% and +17.3% on the whole world and
++11.8% and +13.5% at scale 2. **So the limit of a tenth is not proven for look 4: it reads near the
+limit on a loaded machine, and it needs one reading on a quiet one.** It is far under looks 2 and 3.
+Three costs were found and cut on the way: an array of swells in the shader (now one vector), the
+outline worked out on every draw (now kept by slot and worked out again when the uid, the length, or
+the width changes), and pixels far from the outline (now discarded, with the same picture).
+
+**The build agent's judgment.** Reads well: bodies and lines are at the scale of look 1, and the
+outlines are pears, bulbs, and slim capsules. Head width shows mouth size. No tangle of flagella and
+no cartoon eyes. It is clearly more to read than look 1. Reads badly: a fan or a fork is about 6 CSS
+pixels, so you can see that a body has one but can hardly count one fan against two at 25 bodies on
+screen. In patch c one lineage dominates and the bodies look alike. Most mouths sit at the nose, so
+most bodies are pears. Tried and dropped: a swell of 0.35 read too close to look 1, and a wider fan
+merged a pair into one cap. No fin shape was added: a fin here is at most 5 CSS pixels.
+
+The orchestrator looked at patch a and agrees: it is the scale of look 1 and the bodies no longer
+read as ovals.
+
+**Not checked for look 4:** Play mode (the energy ring, the lineage outline, the dimmed world), a
+fresh founder world, the shape pop at 14 pixels, a phone or a slower laptop. One risk in the code: the
+kept outline trusts that a uid names one body. A second world loaded under the same renderer could
+show a stale outline for a body with the same uid, length, and width.
+
 ## What waits for the owner
 
-1. Pick look 1, 2, 3, the fourth option, or none. After the pick the other looks and `?look` are
-   deleted (`../plans/2026-10-13-m3-minds.md`, Task 14).
-2. Looks 2 and 3 break the plan's limit on draw time. If one of them is picked, its cost is cut first.
+1. Pick look 1, 2, 3, 4, or none. After the pick the other looks and `?look` are deleted
+   (`../plans/2026-10-13-m3-minds.md`, Task 14). To see look 4 live: bake the world, `make dev`, and
+   open `/?world=/m2-world.tdpl&look=4`.
+2. Looks 2 and 3 break the plan's limit on draw time. Look 4 reads near it on a loaded machine. The
+   picked look gets one reading on a quiet machine and on a phone before the others are deleted.

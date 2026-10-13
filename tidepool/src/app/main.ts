@@ -291,7 +291,7 @@ function start(): void {
 
   let renderer: Renderer;
   try {
-    // `?look=1`, `2`, or `3` draws the bodies one of three other ways, for the owner to pick from.
+    // `?look=1`, `2`, `3`, or `4` draws the bodies one of four other ways, for the owner to pick from.
     renderer = createRenderer(canvas, lookOf(query.get('look')));
   } catch (e) {
     fail(e instanceof Error ? e.message : String(e));
