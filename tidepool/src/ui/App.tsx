@@ -1,7 +1,7 @@
 // The overlay root. The error state comes first, then the loading state, then the normal state.
 
 import type { Heir } from '../protocol';
-import { BRAIN_CSS, BrainPanel, BrainToggle } from './BrainPanel';
+import { BrainPanel, BrainToggle } from './BrainPanel';
 import { DeathOverlay } from './DeathOverlay';
 import {
   benchText,
@@ -102,7 +102,6 @@ export function App(props: {
       {benchText.value !== null && <p class="bench">{benchText.value}</p>}
       <Hint touch={props.touch} />
       {mode.value === 'play' && <Line debug={props.debug} />}
-      <style>{BRAIN_CSS}</style>
       <div class="corner">
         {!dead && <BrainToggle onToggle={props.onBrain} />}
         {mode.value === 'play' && (
