@@ -136,6 +136,8 @@ export function step(
     firstDeath: walk.wasDead && !f.dead && play, // an heir was picked
   };
   for (const id of BEATS) if (acts[id] && !isDone(id)) w.done = [...w.done, id];
+  // A body that has budded needs no line about the notch.
+  if (seen && f.buds >= 1 && !isDone('halfRing')) w.done = [...w.done, 'halfRing'];
   // Beat 12 has no line here: the death screen is its showing.
   if (f.dead && !walk.wasDead && !isDone('firstDeath')) show('firstDeath');
 
@@ -169,10 +171,13 @@ export function step(
     const next = BEATS.find(
       (id) =>
         armed[id] &&
-        !isDone(id) &&
-        (id === 'possess' || count(id) < RETIRE) &&
-        (w.until[id] ?? 0) <= w.clock &&
-        !(FOOT[id] && w.rest > 0),
+        // The line of beat 1 is the way in. It shows at once in Watch, also to a player who has
+        // been here before.
+        (id === 'possess' ||
+          (!isDone(id) &&
+            count(id) < RETIRE &&
+            (w.until[id] ?? 0) <= w.clock &&
+            !(FOOT[id] && w.rest > 0))),
     );
     if (next) {
       w.now = { beat: next, t: 0 };

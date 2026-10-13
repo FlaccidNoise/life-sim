@@ -50,7 +50,7 @@ function Hint(props: { touch: boolean }) {
         <small>
           {props.touch
             ? 'Hold a finger where you want to swim.'
-            : 'W A D or the arrow keys. Or hold the pointer where you want to swim.'}
+            : 'W A D, arrows, or a held pointer.'}
         </small>
       )}
     </p>

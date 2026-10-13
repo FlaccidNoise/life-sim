@@ -74,8 +74,9 @@ test('beat 1: the line stands in Watch until a body is possessed', () => {
   const played = run(watched.walk, PLAY, 1);
   expect(played.walk.done).toContain('possess');
   expect(lines(played.seen)).not.toContain(LINE.possess);
-  // Back in Watch, it does not show again.
-  expect(new Set(lines(run(played.walk, WATCH, 30).seen))).toEqual(new Set([null]));
+  // Back in Watch, it shows again: it is the way in.
+  expect(new Set(lines(run(played.walk, WATCH, 30).seen))).toEqual(new Set([LINE.possess]));
+  expect(run(played.walk, WATCH, 30).walk.done).toContain('possess');
 });
 
 test('beat 1: the line is not under the death overlay', () => {
@@ -298,8 +299,10 @@ test('a first life does every beat but the mate', () => {
 test('a done beat never shows again', () => {
   const first = run(begin(), life, 150);
   const again = run(begin(first.walk.done, first.walk.shown), life, 150);
-  expect(again.seen.every((s) => s.line === null && s.pulse === null)).toBe(true);
-  expect(again.walk.shown).toEqual(first.walk.shown);
+  // But for the way in, which a player who has been here before still needs in Watch.
+  const quiet = (s: Seen): boolean => (s.line === null || s.line === LINE.possess) && !s.pulse;
+  expect(again.seen.every(quiet)).toBe(true);
+  expect({ ...again.walk.shown, possess: 0 }).toEqual({ ...first.walk.shown, possess: 0 });
 });
 
 test('an ignored beat retires after two showings', () => {
@@ -355,9 +358,11 @@ test('no two lines show at once, and a breath lies between two lines', () => {
     if (s.line !== null && before !== s.line) expect(before).toBeNull();
   });
   // Two beats armed on one frame: the lower one shows, and the other waits 4 seconds after it.
-  const both = run(past('possess', 'move', 'eat'), { ...PLAY, energy01: 0.6, buds: 2 }, 20);
-  expect(both.seen[0]?.line).toBe(LINE.halfRing);
-  expect(both.seen.find((s) => s.line === LINE.score)?.t).toBeCloseTo(10, 0);
+  const both = run(past('possess', 'move', 'eat'), { ...PLAY, energy01: 0.6, lengthsAlone: 5 }, 30);
+  expect(both.seen[0]?.line).toBe(LINE.letGo);
+  const last = both.seen.filter((s) => s.line === LINE.letGo).at(-1)?.t ?? 0;
+  const next = both.seen.find((s) => s.line === LINE.halfRing)?.t ?? 0;
+  expect(next - last).toBeGreaterThanOrEqual(4);
 });
 
 test('a line does not start under a line of the page', () => {
@@ -499,4 +504,15 @@ test('the log keeps the first time that a beat showed and the first time it was 
   });
   // Nothing new: the same log.
   expect(note(log, done, done, 20)).toBe(log);
+});
+
+test('the way in shows to a player who has been here before', () => {
+  const back = run(past('possess', 'move', 'eat', 'letGo'), WATCH, 20);
+  expect(secondsOf(back.seen, LINE.possess)).toBeCloseTo(20, 0);
+});
+
+test('a body that has budded gets no line about the notch', () => {
+  const budded = run(past('possess', 'move', 'eat'), { ...STEER, buds: 1, energy01: 0.7 }, 30);
+  expect(lines(budded.seen)).not.toContain(LINE.halfRing);
+  expect(budded.walk.done).toContain('halfRing');
 });

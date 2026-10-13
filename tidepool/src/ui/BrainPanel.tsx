@@ -202,7 +202,7 @@ function draw(
     }
   });
 
-  // The outputs: a name and a gauge each. The dot is what the brain wants. The ring is what the
+  // The outputs: a name and a gauge each. The dot is what the brain asks for. The ring is what the
   // player does, on the outputs that the player's hands hold.
   for (let i = b.inputs + b.hidden; i < b.neurons.length; i++) {
     const n = b.neurons[i];
@@ -331,7 +331,7 @@ export function BrainPanel(props: { onClose: () => void }) {
                   <i class="ring" />
                   you
                   <i class="dot" />
-                  what the brain wants
+                  what the brain asks for
                 </span>
               </>
             ) : (

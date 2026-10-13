@@ -8,7 +8,7 @@ export const LINE = {
   eat: 'Green is food.',
   letGo: 'It swims without you. It has a brain.',
   disagree: 'Your hands and its brain disagree.',
-  halfRing: 'A full ring buds a child.',
+  halfRing: 'At the notch, a child buds.',
   score: 'The only score: descendants alive.',
 };
 
