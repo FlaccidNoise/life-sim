@@ -17,7 +17,7 @@ and the difference changes how they move and what they see. Part count does not 
 |---|---|---|
 | Creatures in one world differ in body plan | Met for a machine. "Visibly" is the owner's check 1 | `probe-plans` at tick 36,000: 54, 45, and 31 plans on seeds 1, 2, 3. The commonest plan holds 35%, 31%, 63% |
 | The difference changes how they move and what they see | Met as "the mechanism fires" | The five commonest plans of a seed read top speeds from 0.55 to 1.22 and eye angles from 1.66 to 6.32. Tests of each rule: `m2-audit-fixes.md` |
-| Part count does not collapse (R1) | Met to tick 144,000 on 10 seeds, one run per seed | `parts` 5.5 to 9.6. The chemoreceptor reads 0.16 to 0.27 and the eye 0.25 to 0.31. No body is without a sense |
+| Part count does not collapse (R1) | Met to tick 144,000 on 10 seeds, one run per seed | `parts` 5.5 to 9.6. The chemoreceptor reads 0.16 to 0.27 and the eye 0.25 to 0.31. No body is without both senses (`senseless` 0.00). Read on 2026-10-13 (`m2-audit-2.md`, finding M3): the share of bodies with no chemoreceptor is 0.02 to 0.38 at tick 144,000, and 0.38 on seeds 1 and 3. It rises and falls: seed 8 reads 0.09, 0.60, 0.29, 0.11 at the four ticks. The share with no eye reads 0.00 on every seed |
 
 The first audit of M2 (`m2-audit.md`, at commit f5b7381) said the exit was not met: by tick 144,000
 evolution had removed the chemoreceptor on 6 of 10 seeds and both senses on one. The cause was the
@@ -61,10 +61,12 @@ The full rows are in `m2-senses.md`, Part 5.
 |---|---|---|
 | Native, seed 1 after 12,000 ticks, 1,320 creatures | 3,188 to 3,411 | 2,400 |
 | WASM in Node (the gate), the same world | 2,933 to 3,127 | 2,400 |
-| WASM in Node after 108,000 ticks, 1,665 creatures | **2,357** | 2,400 |
+| WASM in Node after 108,000 ticks, 1,665 creatures | **2,357**. Read again on 2026-10-13: 2,426, 2,442, 2,471 | 2,400 |
 
 The old world was timed at a load average of 4.3, so its true number is higher by an unknown amount.
-A 24,000-tick skip at 2,357 takes 10.2 seconds.
+A 24,000-tick skip at 2,357 takes 10.2 seconds. The old world sits at the floor and not under it:
+three later readings of the same build are over the floor (`gates.md` "Throughput readings",
+`m2-audit-2.md` finding L7).
 
 ## Body plans
 

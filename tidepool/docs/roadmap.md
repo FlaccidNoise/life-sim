@@ -118,7 +118,7 @@ something that learned to dash is frightening and its cause is always shown.
 ### M5 — Deep time
 
 - Headless fast-forward in the worker, with progress streamed to the page.
-  Carried from M2: an old world read 2,357 ticks per second against the floor of 2,400, at tick
+  Carried from M2: an old world read 2,357 to 2,471 ticks per second against the floor of 2,400, at tick
   108,000 on a busy machine. Read it on a quiet machine first (`findings/m2-exit.md`).
 - The save format: versioned, checksummed, last-good backup, export and import.
 - The world resumes where the player left it.

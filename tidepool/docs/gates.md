@@ -170,6 +170,21 @@ project kept the machine at a load average near 5, so these readings are lower b
 | 2026-10-11 | M2 task 10, every body scans | A probe world, not the default: `founder_eye=0.2 starter_look=0 eye_gain=0`, so every body has eyes and none steers by sight | 1,592 | not read | 2,967 to 2,981 at `see_every` 2. 2,543 to 2,557 at 1 | 2,400 |
 | 2026-10-11 | M2 task 13 (the M2 rules on, the grazing rule, tuned defaults) | The default world after 12,000 ticks, seed 1: 1,321 creatures and 2,229 plants. Every body has eyes and steers by them | 1,327 | 2,993 to 3,298 | 3,002 to 3,067 | 2,400 |
 | 2026-10-12 | No part upkeep, `plant_growth` 0.03 (`findings/m2-senses.md`, trial 13) | The default world after 12,000 ticks, seed 1: 1,319 creatures and 2,229 plants | 1,320 | 3,188 to 3,411 | 2,933 to 3,127 | 2,400 |
+| 2026-10-13 | The second audit of M2 (`findings/m2-audit-2.md`). No rule changed | The same world | 1,320 | 3,091 (the auditor) and 3,493 | 2,992 (the auditor) and 3,200 | 2,400 |
+
+**The old world sits at the floor, on both sides of it.** `node scripts/bench-wasm.mjs --settle 108000
+--runs 3` settles at 1,648 creatures and times a mean of 1,665. Four readings of the same build:
+
+| Date | Who | Load average | Runs | `median_tps` | Verdict |
+|---|---|---|---|---|---|
+| 2026-10-12 | The orchestrator of M2 | 4.3 | not kept | 2,357 | `FAIL` |
+| 2026-10-13 | The auditor | 6.9 | not kept | 2,426 | `PASS` |
+| 2026-10-13 | The auditor | 4.6 | not kept. One run of the six was 2,373 | 2,442 | `PASS` |
+| 2026-10-13 | The orchestrator | 5.1 | 2,454, 2,471, 2,493 | 2,471 | `PASS` |
+
+So "under the floor" is not a stable reading of that world: it reads from 2% under to 3% over. The
+native bench of the same world read 2,511 at a mean of 1,664 (the auditor, load 4.2). No gate times
+that world, and the question stays with M5 (`decisions/INDEX.md`, 2026-10-12).
 
 The Task 13 row: native and WASM in turn, 3 rounds, at a load average of 3.7 from other projects.
 Native 3,298, 2,993, 3,284. WASM 3,002, 3,043, 3,067. The world of this row is not the world of
@@ -358,6 +373,29 @@ What has rejected a world at the defaults of 2026-10-12, and what has not:
   grows slowly.
 - On older defaults `max_gen` also rejected the input with no mutation, a baseline, and tuning trial
   2, and `creatures` above 3,000 rejected a tuning trial on all 3 seeds. Those are records.
+- **Two sides rejected a living world on 2026-10-13** (`findings/m2-audit-2.md`, finding M5, run by the
+  auditor and again by the orchestrator, the same digits). `plants` high, alone, in a world of 1,085:
+
+  ```
+  $ target/release/tidepool-headless gate-health --seeds 1 --param plant_cell_cap=16 --param fert_radius=600 --param plant_seed_chance=1 --param plant_growth=0.005
+  seed=1 creatures=1085 min_late=718 plants=8192 births_late=1707 max_gen=14 mean_chemo=0.42 parked=0.00 first_bud=698 juv_starved=0.51 to_bud=0.32 FAIL(plants=8192 > 7000)
+  gate-health 0/1 FAIL
+  exit=1
+  ```
+
+  `births_late`, in a world of 303 bodies that never bud, with `max_gen` and `parked`:
+
+  ```
+  $ target/release/tidepool-headless gate-health --seeds 1 --param bud_at=1 --param lifespan=24000 --param plant_growth=0.1
+  seed=1 creatures=303 min_late=303 plants=2229 births_late=0 max_gen=0 mean_chemo=0.50 parked=0.92 first_bud=none juv_starved=0.00 to_bud=0.00 FAIL(births_late=0 < 20, max_gen=0 < 8, parked=0.92 > 0.25)
+  gate-health 0/1 FAIL
+  exit=1
+  ```
+
+- **Still open: `min_late` and `plants` low have rejected only worlds that `creatures` also rejects.**
+  `min_late` failed at 0, 0, 3, 0 and `plants` low at 6, each with `creatures` under 150. No input is
+  known that fails one of them in a world of 150 creatures or more. Two tries at `births_late` alone
+  ended under 150 (116 and 141).
 - **`mean_chemo` has rejected an empty world**, where the mean of no creatures prints as 0, and no
   living world inside the protocol of the gate. "What the `mean_chemo` band can see" below has the
   readings.
