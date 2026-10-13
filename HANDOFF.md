@@ -9,8 +9,10 @@ The previous handoff (M2 is built, next is the audit and the M3 plan) is at
 ## Current Task
 
 M2 (Bodies) is built and pushed. Its second audit is done and its findings are fixed or with the
-owner. The plan for M3 (Minds) is written: `tidepool/docs/plans/2026-10-13-m3-minds.md`. **It is a
-draft. Build nothing for M3 until the owner approves it.**
+owner. The plan for M3 (Minds) is `tidepool/docs/plans/2026-10-13-m3-minds.md`. **The owner approved
+it on 2026-10-13, with the recommended option of every choice, and answered the audit questions
+(`tidepool/docs/decisions/INDEX.md`). The rest of this file is from before the approval: Pending
+steps 1 and 2 are done, the nine commits are pushed, and the auditor's worktree is removed.**
 
 ## Completed
 

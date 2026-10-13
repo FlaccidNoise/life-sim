@@ -23,8 +23,10 @@ High finding, and what it found and what was fixed is at the end of that file. T
 `docs/findings/m2-exit.md`. Of the owner's five checks, one is done, one is half done, and three are
 open.
 
-M3 (Minds) has a plan, `docs/plans/2026-10-13-m3-minds.md`. **It is a draft that waits for the owner.
-Build nothing from it until the owner approves it.**
+M3 (Minds) has a plan, `docs/plans/2026-10-13-m3-minds.md`. **The owner approved it on 2026-10-13 and
+it is being built.** The plan says which owner stops the build runs through and which stops are hard
+("How the build runs without the owner"). A choice logged as "provisional, owner to confirm" in
+`docs/decisions/INDEX.md` is not final.
 
 ## Commands
 
