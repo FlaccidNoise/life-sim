@@ -7,6 +7,7 @@ import {
   C_SLOT,
   CREATURE_STRIDE,
   TICK_HZ,
+  readBrain,
   viewFrame,
   type FrameView,
   type FromWorker,
@@ -19,7 +20,10 @@ import { createRenderer, type Renderer } from '../render/renderer';
 import { App } from '../ui/App';
 import {
   benchText,
+  brain,
   brainDriving,
+  brainError,
+  brainOpen,
   death,
   errorText,
   focusHeir,
@@ -30,6 +34,7 @@ import {
   ready,
   starving,
   stats,
+  steer,
   toast,
   buds,
 } from '../ui/state';
@@ -198,6 +203,9 @@ function start(): void {
       onLeave() {
         leave();
       },
+      onBrain() {
+        toggleBrain();
+      },
       onPick(uid) {
         const heir = death.peek()?.heirs.find((x) => x.uid === uid);
         if (heir) seenAt = { x: heir.x, y: heir.y };
@@ -353,6 +361,13 @@ function start(): void {
     send({ type: 'release' });
     watch();
   };
+  // The key B, the Brain button, and the close button of the panel. The worker sends the brain of
+  // the possessed body while the panel is open. It takes no message before `init`.
+  const toggleBrain = (): void => {
+    if (!ready.peek() || errorText.peek() !== null) return;
+    brainOpen.value = !brainOpen.peek();
+    send({ type: 'watchBrain', on: brainOpen.peek() });
+  };
   let hintTimer: ReturnType<typeof setTimeout> | undefined;
   let toastTimer: ReturnType<typeof setTimeout> | undefined;
   let lastBuds = 0;
@@ -398,6 +413,7 @@ function start(): void {
     // The overlay owns the keyboard: Tab and Enter work its buttons, and nothing steers behind it.
     if (death.peek()) return;
     if (e.code === 'Escape') leave();
+    if (e.key.toLowerCase() === 'b' && !e.repeat) toggleBrain();
     const key = keyOf(e.code);
     if (!key) return;
     pressed();
@@ -481,6 +497,15 @@ function start(): void {
         watch();
         closeDeath();
         death.value = { cause: msg.cause, heirs: msg.heirs };
+        break;
+      case 'brain':
+        // A readout that does not fit its header stays in the panel. The world runs on.
+        try {
+          brain.value = readBrain(msg.words);
+          brainError.value = null;
+        } catch (e) {
+          brainError.value = e instanceof Error ? e.message : String(e);
+        }
         break;
       case 'stats':
         stats.value = {
@@ -581,6 +606,7 @@ function start(): void {
       });
       if (out) {
         posted = out;
+        steer.value = { thrust: out.thrust, turn: out.turn };
         send({ type: 'input', ...out });
       }
       // The first frame drawn in which the player's input moved the body.

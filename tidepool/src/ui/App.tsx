@@ -1,10 +1,12 @@
 // The overlay root. The error state comes first, then the loading state, then the normal state.
 
 import type { Heir } from '../protocol';
+import { BRAIN_CSS, BrainPanel, BrainToggle } from './BrainPanel';
 import { DeathOverlay } from './DeathOverlay';
 import {
   benchText,
   brainDriving,
+  brainOpen,
   death,
   errorText,
   hint,
@@ -27,7 +29,8 @@ function Readout() {
 
 // One line near the foot of the screen. A passing hint comes first (the first one a possession
 // shows), then the line for the mode: in Play the starving line, then the instincts line. While the
-// brain drives, how to move is under the line, whichever of the two it is.
+// brain drives, how to move is under the line, whichever of the two it is. `--foot` is how far the
+// line is from the foot of the screen: the brain panel raises it where the panel is a sheet there.
 function Hint(props: { touch: boolean }) {
   if (death.value) return null;
   const instincts = hint.value === null && mode.value === 'play' && brainDriving.value;
@@ -41,7 +44,7 @@ function Hint(props: { touch: boolean }) {
           ? 'Your instincts are steering. Move to take over.'
           : null);
   return text === null ? null : (
-    <p class="hint" role="status">
+    <p class="hint" role="status" style={{ bottom: 'var(--foot, 12%)' }}>
       {text}
       {instincts && (
         <small>
@@ -63,7 +66,7 @@ function Line(props: { debug: boolean }) {
         Descendants alive: {Math.max(lineageAlive.value - 1, 0)}
       </p>
       {toast.value !== null && !death.value && (
-        <p class="hint" role="status" style={{ bottom: 'calc(12% + 5rem)' }}>
+        <p class="hint" role="status" style={{ bottom: 'calc(var(--foot, 12%) + 5rem)' }}>
           {toast.value}
         </p>
       )}
@@ -75,6 +78,7 @@ export function App(props: {
   debug: boolean;
   touch: boolean; // the main pointer is a finger
   onLeave: () => void;
+  onBrain: () => void; // the Brain button and the close button of the panel
   onPick: (uid: number) => void;
   onWatch: () => void;
   onFocus: (heir: Heir | null) => void;
@@ -98,11 +102,17 @@ export function App(props: {
       {benchText.value !== null && <p class="bench">{benchText.value}</p>}
       <Hint touch={props.touch} />
       {mode.value === 'play' && <Line debug={props.debug} />}
-      {mode.value === 'play' && (
-        <button type="button" class="leave" onClick={props.onLeave}>
-          Leave <kbd>Esc</kbd>
-        </button>
-      )}
+      <style>{BRAIN_CSS}</style>
+      <div class="corner">
+        {!dead && <BrainToggle onToggle={props.onBrain} />}
+        {mode.value === 'play' && (
+          <button type="button" class="leave" onClick={props.onLeave}>
+            Leave <kbd>Esc</kbd>
+          </button>
+        )}
+      </div>
+      {/* The death overlay stands where the panel is a sheet, and it owns the keyboard. */}
+      {brainOpen.value && !dead && <BrainPanel onClose={props.onBrain} />}
       {dead && (
         <DeathOverlay
           cause={dead.cause}
