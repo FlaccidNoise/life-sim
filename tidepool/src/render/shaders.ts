@@ -141,6 +141,9 @@ const vec2 FORK_AT = vec2(0.45, 0.0); // where the stalk of a feeler forks, in p
 const vec2 FORK_TIP = vec2(0.95, 0.45); // the tip of a prong
 const float FORK_THICK = 0.07; // the half thickness of the stalk and of a prong, in part sizes
 const float FORK_KNOB = 0.17; // the radius of the knob on a tip, in part sizes
+// Nothing of a body is drawn farther out of its outline than this many half widths: the glow of a
+// bud stops there.
+const float OUT_OF_REACH = 1.2;
 `;
 
 export const creatureVert = (look: number): string => `#version 300 es
@@ -153,11 +156,16 @@ layout(location = 3) in vec2 a_life; // the cilia size, and the bud pulse from 0
 layout(location = 4) in vec2 a_ends; // the widths of the nose and the tail, as shares of the width
 flat out vec2 v_ends; // the radius of the round nose and of the round tail
 #endif
-#if LOOK >= 3
+#if LOOK == 3
 // The swells of the outline: for each, its x on the axis and its radius. A radius of 0 is no swell.
 layout(location = 5) in vec4 a_swell_a;
 layout(location = 6) in vec4 a_swell_b;
 flat out vec2 v_swell[4];
+#endif
+#if LOOK == 4
+// Look 4 has two swells, as one vector: the array of look 3 cost a tenth of the draw time.
+layout(location = 5) in vec4 a_swells;
+flat out vec4 v_swells;
 #endif
 uniform vec4 u_view;
 out vec2 v_p; // the body frame in world units: +x is forward
@@ -183,11 +191,14 @@ void main() {
 #if LOOK >= 1
   v_ends = a_ends * 0.5 * wid;
 #endif
-#if LOOK >= 3
+#if LOOK == 3
   v_swell[0] = a_swell_a.xy;
   v_swell[1] = a_swell_a.zw;
   v_swell[2] = a_swell_b.xy;
   v_swell[3] = a_swell_b.zw;
+#endif
+#if LOOK == 4
+  v_swells = a_swells;
 #endif
 }
 `;
@@ -202,13 +213,26 @@ flat in vec3 v_marks;
 #if LOOK >= 1
 flat in vec2 v_ends;
 #endif
-#if LOOK >= 3
+#if LOOK == 3
 flat in vec2 v_swell[4];
+#endif
+#if LOOK == 4
+flat in vec4 v_swells;
 #endif
 uniform float u_beat; // the phase of the cilia beat, radians
 uniform float u_bud_at; // the share of a full store at which a body buds
 out vec4 o_color;
 ${SHAPES}${LOOKS}
+#if LOOK == 4
+// The distance \`d\` to an outline, with a swell joined to it smoothly: a circle on the axis, as its
+// x and its radius.
+float swollen(float d, vec2 swell, float join) {
+  if (swell.y <= 0.0) return d;
+  float to = length(v_p - vec2(swell.x, 0.0)) - swell.y;
+  float close = max(join - abs(d - to), 0.0);
+  return min(d, to) - 0.25 * close * close / join;
+}
+#endif
 void main() {
   float hl = v_body.x;
   float hw = v_body.y;
@@ -240,7 +264,7 @@ void main() {
   float round_membrane = min(abs(v_p.x), straight) + hw * atan(cap.x, abs(cap.y) + 1e-6);
   float bend = abs(v_p.x) > straight ? hw : 0.0; // the radius of the round end at this point
 #endif
-#if LOOK >= 3
+#if LOOK == 3
   // The outline swells round each mouth: a circle on the axis, joined to the outline smoothly.
   float join = SWELL_JOIN * hw;
   for (int k = 0; k < 4; k++) {
@@ -249,6 +273,11 @@ void main() {
     float close = max(join - abs(d - swell), 0.0);
     d = min(d, swell) - 0.25 * close * close / join;
   }
+#endif
+#if LOOK == 4
+  d = swollen(swollen(d, v_swells.xy, SWELL_JOIN * hw), v_swells.zw, SWELL_JOIN * hw);
+  // A point out of reach of the body draws nothing. Look 4 stops there.
+  if (d > OUT_OF_REACH * hw + 2.0 * u_px) discard;
 #endif
   vec3 pale = mix(v_rgb, vec3(1.0), 0.4);
 

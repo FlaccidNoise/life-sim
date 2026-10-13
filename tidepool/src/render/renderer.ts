@@ -27,10 +27,14 @@ import {
 } from '../protocol';
 import {
   MAX_SWELLS,
+  OUTLINE_FLOATS,
+  OUTLINE_SWELLS,
+  OUTLINE_TAPER,
   PART_INSTANCE_FLOATS,
   PART_LOD_PX,
   buildParts,
   endsOf,
+  outlineOf,
   partsOf,
   swellAt,
   taperOf,
@@ -78,7 +82,7 @@ export interface Renderer {
 const MAX_CREATURES = 4096; // the creature pool of the core
 const MAX_PLANTS = 8192; // the plant pool of the core
 const MAX_PARTS = MAX_CREATURES * PART_WORDS * 2; // a part gene makes a pair at most
-// a_pose, a_body, a_life, and for the looks a_ends, a_swell_a, a_swell_b
+// a_pose, a_body, a_life, and for the looks a_ends, a_swell_a or the a_swells of look 4, a_swell_b
 const CREATURE_ATTRIBUTES = [4, 4, 2, 2, 4, 4];
 const I_ENDS = 10; // the float of an instance at which a_ends starts
 const I_SWELLS = 12; // and its swells: an x and a radius each
@@ -183,6 +187,8 @@ export function createRenderer(canvas: HTMLCanvasElement, look: Look = 0): Rende
   const instances = new Float32Array(MAX_CREATURES * INSTANCE_FLOATS);
   const parts = layer(PART_VERT, partFrag(look), PART_ATTRIBUTES, MAX_PARTS);
   const partInstances = new Float32Array(MAX_PARTS * PART_INSTANCE_FLOATS);
+  // In look 4, the outline of the body of each slot.
+  const outlines = new Float64Array(look === 4 ? MAX_CREATURES * OUTLINE_FLOATS : 0);
   // The creature records of the frame being drawn, with each body placed between the last two
   // frames. The bodies and their parts are both drawn from it.
   const posedU32 = new Uint32Array(FRAME_HEADER_WORDS + MAX_CREATURES * CREATURE_STRIDE);
@@ -302,7 +308,15 @@ export function createRenderer(canvas: HTMLCanvasElement, look: Look = 0): Rende
         const carried = length * cam.scale >= PART_LOD_PX ? partsOf(u32, r) : NO_PARTS;
         let cilia = 0;
         for (const part of carried) if (part.kind === KIND_CILIA) cilia += part.size;
-        const taper = look >= 1 ? taperOf(carried) : 0;
+        // In look 4 a body that draws a part has its outline in `outlines`, for its parts too.
+        const shaped = look === 4 && carried.length > 0;
+        const outline = slot * OUTLINE_FLOATS;
+        if (shaped) outlineOf(carried, u32[r + C_UID] ?? 0, length, width, outlines, outline);
+        const taper = shaped
+          ? (outlines[outline + OUTLINE_TAPER] ?? 0)
+          : look >= 1
+            ? taperOf(carried)
+            : 0;
         // One pulse for each time the flag is set. A body that comes into view with the flag set
         // starts its pulse then.
         const budded = (flags & FLAG_BUDDED) !== 0;
@@ -326,15 +340,19 @@ export function createRenderer(canvas: HTMLCanvasElement, look: Look = 0): Rende
         // In look 3 the outline swells at each mouth. A radius of 0 is no swell.
         instances.fill(0, o + I_SWELLS, o + INSTANCE_FLOATS);
         let swells = 0;
-        for (const part of look >= 3 ? carried : NO_PARTS) {
+        for (const part of look === 3 ? carried : NO_PARTS) {
           if (part.kind !== KIND_FILTER || swells === MAX_SWELLS) continue;
           const swell = swellAt(part, length, width, taper);
           instances[o + I_SWELLS + 2 * swells] = swell.x;
           instances[o + I_SWELLS + 2 * swells + 1] = swell.r;
           swells++;
         }
+        // In look 4 the swells are those of the outline.
+        for (let k = OUTLINE_SWELLS; shaped && k < OUTLINE_FLOATS; k++) {
+          instances[o + I_SWELLS + k - OUTLINE_SWELLS] = outlines[outline + k] ?? 0;
+        }
       }
-      const partCount = buildParts(posed, cam.scale, timeSeconds, partInstances, look);
+      const partCount = buildParts(posed, cam.scale, timeSeconds, partInstances, look, outlines);
 
       // The cones of the header are those of `cur`. They turn with the body as it is drawn.
       const sight = sightOf(posed);
