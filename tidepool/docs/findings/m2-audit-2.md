@@ -293,8 +293,24 @@ break.
   falls. On seed 8 the bodies with no chemoreceptor were 60% of the world at tick 72,000 and 11% at
   tick 144,000. On seed 1 the share holds near 0.39 for 72,000 ticks, and on seed 3 it still rises at
   the last row.
-- What this does not show: where seeds 1 and 3 go after tick 144,000, and why the bodies with no
-  chemoreceptor lose ground again. No control ran.
+- What this does not show: why the bodies with no chemoreceptor lose ground again. No control ran.
+
+Seeds 1 and 3 read on to tick 288,000, one run each
+(`probe-census --seeds 1,3 --ticks 288000 --every 36000`, 220 s at a load average of 3 to 4):
+
+| Tick | Seed 1 `no_chemo` | `chemo` | `area` | `speed` | Seed 3 `no_chemo` | `chemo` | `area` | `speed` |
+|---|---|---|---|---|---|---|---|---|
+| 144,000 | 0.38 | 0.16 | 34.8 | 0.84 | 0.38 | 0.19 | 43.4 | 0.81 |
+| 180,000 | 0.34 | 0.16 | 36.8 | 0.85 | 0.44 | 0.18 | 41.1 | 0.77 |
+| 216,000 | 0.48 | 0.12 | 36.7 | 0.87 | 0.18 | 0.20 | 38.7 | 0.79 |
+| 252,000 | 0.34 | 0.17 | 35.5 | 0.79 | 0.08 | 0.19 | 37.1 | 0.82 |
+| 288,000 | 0.36 | 0.13 | 36.1 | 0.80 | 0.08 | 0.24 | 38.9 | 0.78 |
+
+- On seed 1 a third to a half of the bodies hold no chemoreceptor for 216,000 ticks, and the rest
+  keep it: two kinds of body live side by side. On seed 3 the share falls back to 0.08.
+- On these two seeds the chemoreceptor is not lost by tick 288,000, the area stops falling near 36
+  to 39, and the speed holds near 0.8. No gate reads past tick 144,000, and no blind arm ran here, so
+  this is a count and not a gap.
 
 ### The long reading and its proof (finding M4)
 
