@@ -3,7 +3,7 @@
 
 use tidepool_sim::control::{CAUSE_OLD_AGE, CAUSE_STARVED};
 use tidepool_sim::genome::{
-    Genome, KIND_CHEMO, KIND_CILIA, KIND_EYE, KIND_FILTER, KIND_FIN, KIND_FLAGELLUM,
+    Genome, HiddenGene, KIND_CHEMO, KIND_CILIA, KIND_EYE, KIND_FILTER, KIND_FIN, KIND_FLAGELLUM,
 };
 use tidepool_sim::math::pow075;
 use tidepool_sim::params::id;
@@ -414,46 +414,152 @@ fn a_step_of_growth_leaves_grow_floor_of_the_reserve() {
     assert!((c.energy[enough] - (least + 0.01 - cost)).abs() < 1e-4);
 }
 
-/// A resting adult with every other upkeep at 0. The brain of the body of `add` has 20 neurons and
-/// 60 connections, and each of the two rates is paid for its own count.
+/// An empty world where a resting body pays the three rates of rule U1 and nothing else.
+fn brain_world(fixed_upkeep: f32, neuron_upkeep: f32, conn_upkeep: f32) -> World {
+    let mut w = empty();
+    still(&mut w);
+    no_upkeep(&mut w);
+    w.params.set(id::FIXED_UPKEEP, fixed_upkeep);
+    w.params.set(id::NEURON_UPKEEP, neuron_upkeep);
+    w.params.set(id::CONN_UPKEEP, conn_upkeep);
+    w
+}
+
+const BRAIN_TICKS: f32 = 100.0;
+
+/// What a lone resting adult loses in `BRAIN_TICKS` at the three rates, in the order of
+/// `brain_world`. Then the counts of its brain: inputs, hidden neurons, connections.
+fn brain_loss(rates: [f32; 3], edit: impl FnOnce(&mut Genome)) -> (f32, [f32; 3]) {
+    let mut w = brain_world(rates[0], rates[1], rates[2]);
+    let c = add(&mut w, 500.0, 1.0, 0.9, edit);
+    let before = w.creatures.energy[c];
+    w.run(BRAIN_TICKS as u32);
+    let b = &w.brains;
+    let hidden = b.n_neur[c] - b.n_in[c] - b.n_out[c];
+    let counts = [b.n_in[c], hidden, b.n_conn[c]].map(f32::from);
+    (before - w.creatures.energy[c], counts)
+}
+
+fn near(got: f32, want: f32) -> bool {
+    (got / want - 1.0).abs() < 1e-3
+}
+
+fn no_eye(g: &mut Genome) {
+    g.parts.retain(|part| part.kind != KIND_EYE);
+}
+
+/// Rule U1. The brain of the body of `add` has 13 inputs, 4 hidden neurons, 3 outputs, and 60
+/// connections. At the defaults it is not free, and each of the two rates is paid for its own
+/// count.
 #[test]
-fn a_brain_costs_upkeep_for_each_neuron_and_each_connection() {
-    const TICKS: f32 = 100.0;
-    // What the body lost at these two rates, then its counts of neurons and of connections.
-    let loss = |neuron_upkeep: f32, conn_upkeep: f32| {
-        let mut w = empty();
-        still(&mut w);
-        no_upkeep(&mut w);
-        w.params.set(id::NEURON_UPKEEP, neuron_upkeep);
-        w.params.set(id::CONN_UPKEEP, conn_upkeep);
-        let c = add(&mut w, 500.0, 1.0, 0.9, |_| {});
-        let before = w.creatures.energy[c];
-        w.run(TICKS as u32);
-        let (neurons, conns) = (w.brains.n_neur[c] as f32, w.brains.n_conn[c] as f32);
-        (before - w.creatures.energy[c], neurons, conns)
-    };
-    let (free, neurons, conns) = loss(0.0, 0.0);
-    assert_eq!((free, neurons, conns), (0.0, 20.0, 60.0));
-    let near = |got: f32, want: f32| (got / want - 1.0).abs() < 1e-3;
-    let (for_neurons, ..) = loss(0.002, 0.0);
-    assert!(
-        near(for_neurons, TICKS * 0.002 * neurons),
-        "lost {for_neurons} for {neurons} neurons"
-    );
-    let (for_conns, ..) = loss(0.0, 0.002);
-    assert!(
-        near(for_conns, TICKS * 0.002 * conns),
-        "lost {for_conns} for {conns} connections"
-    );
-    // At the defaults the brain of a founder is not free.
+fn a_brain_costs_upkeep() {
+    let (free, counts) = brain_loss([0.0; 3], |_| {});
+    assert_eq!((free, counts), (0.0, [13.0, 4.0, 60.0]));
+    let [_, hidden, conns] = counts;
     let p = empty().params;
     let (neuron_upkeep, conn_upkeep) = (p.get(id::NEURON_UPKEEP), p.get(id::CONN_UPKEEP));
-    let (at_defaults, ..) = loss(neuron_upkeep, conn_upkeep);
-    let want = TICKS * (neuron_upkeep * neurons + conn_upkeep * conns);
+    let (at_defaults, _) = brain_loss([0.0, neuron_upkeep, conn_upkeep], |_| {});
+    let want = BRAIN_TICKS * (neuron_upkeep * hidden + conn_upkeep * conns);
     assert!(
         want > 1.0 && near(at_defaults, want),
         "{at_defaults} {want}"
     );
+    let (for_conns, _) = brain_loss([0.0, 0.0, 0.002], |_| {});
+    assert!(
+        near(for_conns, BRAIN_TICKS * 0.002 * conns),
+        "lost {for_conns} for {conns} connections"
+    );
+}
+
+/// Rule U1. Each body here has a different count of inputs. The two with 4 hidden neurons pay for
+/// 4, and the one with 5 pays for 5.
+#[test]
+fn a_hidden_neuron_costs_neuron_upkeep_and_an_input_costs_nothing() {
+    const RATE: f32 = 0.01;
+    let loss = |edit: fn(&mut Genome)| brain_loss([0.0, RATE, 0.0], edit);
+    let (eyed, [eyed_inputs, hidden, _]) = loss(|_| {});
+    let (blind, [blind_inputs, blind_hidden, _]) = loss(no_eye);
+    let (wide, [wide_inputs, wide_hidden, _]) = loss(|g| {
+        g.parts.retain(|part| part.kind != KIND_CHEMO);
+        g.brain.hidden.push(HiddenGene {
+            id: 1_000_000,
+            bias: 0.0,
+            alpha: 1.0,
+        });
+    });
+    assert_eq!((eyed_inputs, blind_inputs, wide_inputs), (13.0, 9.0, 10.0));
+    assert_eq!((hidden, blind_hidden, wide_hidden), (4.0, 4.0, 5.0));
+    let want = BRAIN_TICKS * RATE * hidden;
+    assert!(want > 1.0 && near(eyed, want), "lost {eyed}, not {want}");
+    assert_eq!(blind, eyed);
+    assert!(
+        near(wide - eyed, BRAIN_TICKS * RATE),
+        "one more hidden neuron cost {}",
+        wide - eyed
+    );
+}
+
+/// Rule U1. A newborn that does not grow and an adult lose the same.
+#[test]
+fn fixed_upkeep_is_paid_by_a_newborn_in_full() {
+    const RATE: f32 = 0.02;
+    let mut w = brain_world(RATE, 0.0, 0.0);
+    let birth_growth = w.params.get(id::BIRTH_GROWTH);
+    // Under the growth reserve, so the newborn pays for no growth.
+    let bodies = [
+        add(&mut w, 400.0, birth_growth, 0.2, |_| {}),
+        add(&mut w, 800.0, 1.0, 0.2, |_| {}),
+    ];
+    let before = bodies.map(|c| w.creatures.energy[c]);
+    w.run(BRAIN_TICKS as u32);
+    let [newborn, adult] = [0, 1].map(|i| before[i] - w.creatures.energy[bodies[i]]);
+    assert_eq!(w.creatures.growth[bodies[0]], birth_growth);
+    let want = BRAIN_TICKS * RATE;
+    assert!(want > 1.0 && near(adult, want), "an adult lost {adult}");
+    assert!(near(newborn, want), "a newborn lost {newborn}");
+}
+
+/// Rule U1, and the reason for it. A body with no eye declares 4 inputs fewer, and the 18
+/// connections that named them are not expressed. It saves `conn_upkeep` for each of the 18 and
+/// nothing for the inputs.
+#[test]
+fn a_body_that_drops_its_eye_saves_only_the_upkeep_of_the_wires_it_drops() {
+    const RATES: [f32; 3] = [0.02, 0.01, 0.002];
+    let (eyed, [eyed_inputs, eyed_hidden, eyed_conns]) = brain_loss(RATES, |_| {});
+    let (blind, [blind_inputs, blind_hidden, blind_conns]) = brain_loss(RATES, no_eye);
+    let dropped = eyed_conns - blind_conns;
+    assert_eq!(
+        (
+            eyed_inputs - blind_inputs,
+            eyed_hidden,
+            blind_hidden,
+            dropped
+        ),
+        (4.0, 4.0, 4.0, 18.0)
+    );
+    let want = BRAIN_TICKS * RATES[2] * dropped;
+    assert!(
+        want > 1.0 && near(eyed - blind, want),
+        "saved {}, not {want}",
+        eyed - blind
+    );
+}
+
+/// The Start values of the plan: what is left of the cost of the M2 brain is the fixed upkeep. The
+/// founder of M2 with an eye had 17 neurons and 57 connections, at 0.0012 and 0.0003 each. The
+/// body holds little energy here, so that a float can show a millionth of the cost of one tick.
+#[test]
+fn at_the_start_values_a_founder_pays_what_the_m2_founder_paid() {
+    const TICKS: u32 = 20;
+    let mut w = brain_world(0.0337, 0.0002, 0.00005);
+    let c = add(&mut w, 500.0, 1.0, 0.9, |_| {});
+    let b = &w.brains;
+    assert_eq!((b.n_neur[c] - b.n_in[c] - b.n_out[c], b.n_conn[c]), (4, 60));
+    w.creatures.energy[c] = 2.0;
+    w.run(TICKS);
+    let per_tick = f64::from(2.0 - w.creatures.energy[c]) / f64::from(TICKS);
+    let m2 = 0.0012 * 17.0 + 0.0003 * 57.0;
+    assert!((per_tick - m2).abs() < 1e-6, "{per_tick} against {m2}");
 }
 
 /// What one hungry adult of the given length takes in one tick from a plant of the given reserve
@@ -563,12 +669,14 @@ fn grazing_never_removes_a_plant() {
     assert!(bodies.iter().all(|&s| c.energy[s] < 0.5 * c.area(s)));
 }
 
-/// The `lifespan` parameter is 4800. Upkeep is times `1 + old_cost * (old / lifespan - 1)`.
+/// The `lifespan` parameter is 4800. Upkeep is times `1 + old_cost * (old / lifespan - 1)`, and
+/// the fixed upkeep is part of it.
 #[test]
 fn a_long_life_costs_more_per_tick() {
     let mut w = empty();
     still(&mut w);
     w.params.set(id::OLD_COST, 0.5);
+    w.params.set(id::FIXED_UPKEEP, 0.05);
     let bodies = [(300.0, 2400.0), (600.0, 4800.0), (900.0, 9600.0)]
         .map(|(x, old)| add(&mut w, x, 1.0, 0.9, |g| g.old = old));
     let before = bodies.map(|c| w.creatures.energy[c]);

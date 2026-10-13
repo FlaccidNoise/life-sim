@@ -93,9 +93,9 @@ table! {
     ENERGY_PER_MASS "energy_per_mass" 1.0 0.1 10.0;
     /// Upkeep per unit mass per tick.
     BASAL "basal" 0.0005 0.0 0.01;
-    /// Upkeep per neuron per tick.
+    /// Upkeep per hidden neuron per tick.
     NEURON_UPKEEP "neuron_upkeep" 0.0012 0.0 0.01;
-    /// Upkeep per connection per tick.
+    /// Upkeep per expressed connection per tick.
     CONN_UPKEEP "conn_upkeep" 0.0003 0.0 0.01;
     /// Cost of thrust.
     MOVE_COST "move_cost" 0.006 0.0 1.0;
