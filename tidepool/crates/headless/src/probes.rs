@@ -1,28 +1,31 @@
-//! The probes of the M2 rules. Each runs the default world and prints what it reads. None has a
-//! band.
+//! The probes of the M2 and M3 rules. Each runs the default world and prints what it reads. None
+//! has a band.
 
 use std::cmp::Reverse;
 use std::collections::HashMap;
 use std::io::Write;
 
+use tidepool_sim::brain::{self, IN_MATE_SIZE};
 use tidepool_sim::creature::MAX_EYES;
 use tidepool_sim::eye::{EYE_HALF_MIN, EYE_HALF_SPAN};
-use tidepool_sim::genome::{Genome, KIND_CHEMO, KIND_EYE};
+use tidepool_sim::genome::{Genome, Node, BODY, KIND_CHEMO, KIND_EYE};
 use tidepool_sim::grid::CELL;
 use tidepool_sim::world::World;
 
-use crate::evolve::{self, mean_sd, top_speed, turn_rate};
+use crate::evolve::{self, mean_sd, of_sense, top_speed, turn_rate, Mind};
 use crate::health::{args, default_world, live, median};
 use crate::{usage, value};
 
-/// Ticks between two rows of `probe-plants`.
-const PLANT_ROW_TICKS: u32 = 4000;
+/// Ticks between two rows of `probe-plants` and of `probe-mix`.
+const ROW_TICKS: u32 = 4000;
+/// `probe-brains` counts a connection whose weight is larger than this in size.
+const WIRE_SIZE: f32 = 0.1;
 /// `probe-crowd` takes its body at this tick, counts the bodies within this many units of it, and
 /// holds full thrust for this many ticks.
 const CROWD_TICK: u32 = 3000;
 const CROWD_RADIUS: f32 = 30.0;
 const CROWD_HOLD: u32 = 200;
-/// `probe-plans` prints this many plans.
+/// `probe-plans` prints this many plans, and `probe-brains` this many shapes.
 const PLANS_SHOWN: usize = 8;
 /// By kind.
 const KIND_NAMES: [&str; 7] = [
@@ -43,7 +46,7 @@ pub fn plants(argv: &[String]) {
         let mut world = default_world(seed, &a.params);
         let (mut alive, mut deaths) = (u64::from(world.plants.slots.count()), 0);
         while world.tick < a.ticks {
-            world.run(PLANT_ROW_TICKS.min(a.ticks - world.tick));
+            world.run(ROW_TICKS.min(a.ticks - world.tick));
             let p = &world.plants;
             let slots: Vec<usize> = (0..p.slots.high_water() as usize)
                 .filter(|&s| p.slots.is_alive(s as u32))
@@ -358,6 +361,133 @@ pub fn census(argv: &[String]) {
     }
 }
 
+/// The least value, the three quartiles, the largest value, and the mean. A quartile is the value
+/// at that share of the sorted list, as in `median`.
+fn spread(mut v: Vec<f32>) -> String {
+    v.sort_by(f32::total_cmp);
+    let at = |quarter: usize| {
+        let i = (v.len() * quarter / 4).min(v.len().saturating_sub(1));
+        v.get(i).copied().unwrap_or(f32::NAN)
+    };
+    format!(
+        "min={:.0} q1={:.0} median={:.0} q3={:.0} max={:.0} mean={:.2}",
+        at(0),
+        at(1),
+        at(2),
+        at(3),
+        at(4),
+        mean(v.iter().copied()),
+    )
+}
+
+/// `probe-brains`. The brains of the living at the end of the run: the spread of the three counts
+/// that the long gate reads, the most common shapes by the rule of its `shapes` band, the share
+/// of bodies with a connection above 0.1 in size from each group of inputs, and the share that
+/// accept a mate.
+pub fn brains(argv: &[String]) {
+    let a = args(argv, &[1], Some("--ticks"), 36000);
+    for &seed in &a.seeds {
+        let mut world = default_world(seed, &a.params);
+        world.run(a.ticks);
+        let minds = evolve::minds(&world);
+        println!("seed={seed} tick={} creatures={}", world.tick, minds.len());
+        // `hidden` is the measure of the gate: the hidden neurons on a path from an input to an
+        // output. `hidden_genes` is every hidden neuron, as a shape counts them.
+        let row = |name: &str, of: fn(&Mind) -> usize| {
+            let values = minds.iter().map(|m| of(m) as f32).collect();
+            println!("seed={seed} {name} {}", spread(values));
+        };
+        row("hidden", |m| m.wired);
+        row("hidden_genes", |m| m.hidden);
+        row("conns", |m| m.conns);
+        let shapes = evolve::shapes(evolve::shape, &minds);
+        for ((hidden, core), held) in shapes.iter().take(PLANS_SHOWN) {
+            println!(
+                "seed={seed} shape hidden_genes={hidden} core_conns={core} share={:.2}",
+                *held as f64 / minds.len() as f64,
+            );
+        }
+        let share = |of: &dyn Fn(usize) -> bool| mean(live(&world).map(|s| f32::from(of(s))));
+        let wired_from = |group: fn(Node) -> bool| {
+            share(&|s| {
+                let inputs = brain::ports(&world.genomes[s]).inputs;
+                let counts = |(src, _, weight): (usize, usize, f32)| {
+                    weight.abs() > WIRE_SIZE && inputs.get(src).is_some_and(|&i| group(i))
+                };
+                evolve::wires(&world, s).any(counts)
+            })
+        };
+        println!(
+            "seed={seed} wired body={:.2} mate={:.2} scent={:.2} eye={:.2} accept={:.2}",
+            wired_from(|i| !of_sense(i) && i.port < IN_MATE_SIZE),
+            wired_from(|i| !of_sense(i) && i.port >= IN_MATE_SIZE),
+            wired_from(|i| of_sense(i) && i.owner == BODY),
+            wired_from(|i| i.owner != BODY),
+            share(&|s| world.creatures.cmd_accept[s] > 0.0),
+        );
+        std::io::stdout().flush().expect("flush stdout");
+    }
+}
+
+/// By slot: the uid of the body and the uid of its donor. 0 and 0 for a dead slot, which can hold
+/// a stale donor, and a donor of 0 for a body that holds none.
+fn holders(world: &World) -> Vec<(u32, u32)> {
+    let c = &world.creatures;
+    let holder = |s: usize| {
+        if !c.slots.is_alive(s as u32) {
+            return (0, 0);
+        }
+        (c.uid[s], world.donors[s].as_ref().map_or(0, |d| d.0))
+    };
+    (0..c.slots.high_water() as usize).map(holder).collect()
+}
+
+/// What one tick mixed: the pairs made, and the children of a cross born. `before` is `holders`
+/// from before the tick, and a body with a uid at or above `uid_before` was born in it.
+///
+/// A pair is made when two bodies take each other as donor. A body that holds a donor now, and
+/// did not hold that donor before the tick, was in a pair of this tick. The pair is counted once,
+/// by the two uids, so it is still counted when one of the two died or budded in the same tick. A
+/// pair where both did is not seen.
+fn mixed(world: &World, before: &[(u32, u32)], uid_before: u32) -> (u64, u64) {
+    let now = holders(world);
+    let new = |&(s, held): &(usize, &(u32, u32))| held.1 != 0 && before.get(s) != Some(held);
+    let mut pairs: Vec<(u32, u32)> = (now.iter().enumerate().filter(new))
+        .map(|(_, &(uid, donor))| (uid.min(donor), uid.max(donor)))
+        .collect();
+    pairs.sort_unstable();
+    pairs.dedup();
+    let c = &world.creatures;
+    let crossed = live(world).filter(|&s| c.uid[s] >= uid_before && c.mixed_with[s] != 0);
+    (pairs.len() as u64, crossed.count() as u64)
+}
+
+/// `probe-mix`. One row every 4,000 ticks and one at the end of the run: the pairs made, the
+/// births, and the births of a cross since the row before, and the bodies that hold a donor now.
+pub fn mix(argv: &[String]) {
+    let a = args(argv, &[1], Some("--ticks"), 36000);
+    for &seed in &a.seeds {
+        let mut world = default_world(seed, &a.params);
+        while world.tick < a.ticks {
+            let (births, mut pairs, mut crossed) = (world.stats.births, 0, 0);
+            for _ in 0..ROW_TICKS.min(a.ticks - world.tick) {
+                let (before, uid_before) = (holders(&world), world.next_uid);
+                world.tick();
+                let (made, born) = mixed(&world, &before, uid_before);
+                (pairs, crossed) = (pairs + made, crossed + born);
+            }
+            println!(
+                "seed={seed} tick={} pairs={pairs} births={} crossed={crossed} donors={} creatures={}",
+                world.tick,
+                world.stats.births - births,
+                holders(&world).iter().filter(|held| held.1 != 0).count(),
+                world.creatures.slots.count(),
+            );
+            std::io::stdout().flush().expect("flush stdout");
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use tidepool_sim::genome::{KIND_FILTER, KIND_FIN, KIND_FLAGELLUM};
@@ -503,6 +633,47 @@ mod tests {
     }
 
     const CENSUS_TICKS: u32 = 400;
+
+    /// Mixing is not built, so this sets by hand what a tick of it will set. Three bodies with
+    /// the uids 1, 2, 3.
+    #[test]
+    fn a_pair_is_counted_once_and_a_child_of_a_cross_is_counted() {
+        let mut world = World::new(1, 256.0, 256.0);
+        let at = |parent: u32| SpawnAt {
+            x: 100.0,
+            y: 100.0,
+            heading: 0.0,
+            growth: 1.0,
+            energy01: 0.5,
+            parent,
+            generation: 0,
+            mark: 0,
+        };
+        for _ in 0..3 {
+            world.spawn(Genome::default(), at(0)).expect("slot");
+        }
+        let (before, uid_before) = (holders(&world), world.next_uid);
+        assert_eq!(mixed(&world, &before, uid_before), (0, 0));
+
+        // 1 and 2 take each other, and 3 buds a child of a cross.
+        world.donors[0] = Some((2, Genome::default()));
+        world.donors[1] = Some((1, Genome::default()));
+        let child = world.spawn(Genome::default(), at(3)).expect("slot") as usize;
+        world.creatures.mixed_with[child] = 1;
+        assert_eq!(mixed(&world, &before, uid_before), (1, 1));
+        assert_eq!(holders(&world)[..2], [(1, 2), (2, 1)]);
+
+        // On the next tick the pair still holds and nothing is new.
+        let (before, uid_before) = (holders(&world), world.next_uid);
+        assert_eq!(mixed(&world, &before, uid_before), (0, 0));
+        // 3 takes a body that is gone as donor: a pair. Then 3 dies, and its stale donor is not
+        // read.
+        world.donors[2] = Some((9, Genome::default()));
+        assert_eq!(mixed(&world, &before, uid_before), (1, 0));
+        world.kill(2, 0);
+        assert_eq!(mixed(&world, &before, uid_before), (0, 0));
+        assert_eq!(holders(&world)[2], (0, 0));
+    }
 
     /// `follow` hands the lineage mark on by its own count. This holds it to the real thing: for
     /// some picks, possess the pick in a copy of the world, run to its death, and ask
