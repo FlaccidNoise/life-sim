@@ -38,4 +38,4 @@ gates: headless wasm ## Throughput, health, and evolution gates
 	$(HEADLESS) gate-evolve
 
 gates-long: headless ## The evolution gate at tick 144,000. Run at each milestone exit, not in CI
-	$(HEADLESS) gate-evolve --seeds 1,5,8 --ticks 144000
+	$(HEADLESS) gate-evolve --seeds 1,4,5,6,8 --ticks 144000

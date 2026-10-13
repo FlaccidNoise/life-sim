@@ -509,7 +509,7 @@ Exit codes: 1, 0, 0.
   (`eye_blind` 0.07 to 0.13 at tick 36,000, and 0.00 to 0.05 at tick 144,000 on the three seeds
   read). The band is the audit's finding H3 and is the owner's.
 - **`speed` at tick 144,000 is 0.73 to 0.99**, against 0.63 to 0.92 at the old defaults. It still
-  falls from tick 36,000 on 9 of 10 seeds.
+  falls from tick 36,000 on 10 of 10 seeds (corrected on 2026-10-13, `m2-audit-2.md` finding L4).
 - **`len` still falls slowly with time** on most seeds. The lowest row is 8.3 (seed 2, tick 108,000),
   against a floor of 7.8. `area` is 33 to 45 at tick 144,000.
 

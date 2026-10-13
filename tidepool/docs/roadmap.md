@@ -21,7 +21,7 @@ one before it ships, because what is learned from playing a milestone changes th
 5. **Mechanism fires is not evolution uses it is not it helps.** Claim only the one that was measured. A
    fresh-context reviewer checks each milestone's claims against its probes.
 6. **Long reading at the exit.** Before a milestone closes, run `make gates-long`: the evolution gate at
-   tick 144,000 on seeds 1, 5, 8. It is not in CI. M2 lost its senses between tick 36,000 and tick
+   tick 144,000 on seeds 1, 4, 5, 6, 8. It is not in CI. M2 lost its senses between tick 36,000 and tick
    144,000, and no gate read that far (`gates.md`).
 
 ## Milestones

@@ -19,7 +19,8 @@ const LEN_SD: f64 = 0.5;
 /// A body needs 2 parts to live.
 const PARTS: f64 = 3.0;
 /// The least that the mean sum of a sense's parts must stand above the same mean in the blind run
-/// of that sense. Two worlds with the same useless sense read gaps of up to 0.07 by chance.
+/// of that sense. Two worlds with the same useless sense read gaps from -0.116 to 0.073 by chance
+/// (`gates.md`).
 const CHEMO_GAP: f64 = 0.10;
 const EYE_GAP: f64 = 0.10;
 /// A body plan counts when this share of the living holds it.
@@ -155,4 +156,66 @@ pub fn gate(argv: &[String]) {
         &args(argv, &[1, 2, 3], Some("--ticks"), 36000),
         measure,
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use tidepool_sim::genome::{Genome, KIND_CHEMO, KIND_FLAGELLUM};
+    use tidepool_sim::world::SpawnAt;
+
+    use super::*;
+
+    /// One lone full-grown body with no fin, under the player's hand for 150 ticks at full thrust:
+    /// first with no turn, then with the turn at 1. The two formulas must read what the motor
+    /// settles at.
+    #[test]
+    fn the_formulas_read_what_the_motor_settles_at() {
+        let bodies = [
+            (12.0, 0.5, 0.5, 0.6),
+            (8.0, 0.3, 1.0, 0.3),
+            (20.0, 0.8, 0.0, 1.0),
+        ];
+        for (len, wid, chemo, flagellum) in bodies {
+            let settle = |turn: f32| {
+                let mut world = World::new(1, 1536.0, 1024.0);
+                let mut genome = Genome::default();
+                (genome.len, genome.wid) = (len, wid);
+                genome.set_size(KIND_CHEMO, chemo);
+                genome.set_size(KIND_FLAGELLUM, flagellum);
+                let at = SpawnAt {
+                    x: 200.0,
+                    y: 512.0,
+                    heading: 0.0,
+                    growth: 1.0,
+                    energy01: 0.9,
+                    parent: 0,
+                    generation: 0,
+                    mark: 0,
+                };
+                let s = world.spawn(genome, at).expect("slot") as usize;
+                world.creatures.bud_cooldown[s] = 1_000_000;
+                assert!(world.possess(world.creatures.uid[s]));
+                world.input(true, 1.0, turn);
+                world.run(150);
+                let c = &world.creatures;
+                let speed = (c.vx[s] * c.vx[s] + c.vy[s] * c.vy[s]).sqrt();
+                (
+                    speed,
+                    c.omega[s],
+                    top_speed(&world, s),
+                    turn_rate(&world, s),
+                )
+            };
+            let (speed, _, top, _) = settle(0.0);
+            let (_, omega, _, rate) = settle(1.0);
+            assert!(
+                (speed / top - 1.0).abs() < 0.01,
+                "speed {speed} against {top}"
+            );
+            assert!(
+                (omega / rate - 1.0).abs() < 0.01,
+                "turn {omega} against {rate}"
+            );
+        }
+    }
 }
