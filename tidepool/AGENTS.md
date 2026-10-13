@@ -14,16 +14,17 @@ creature among creatures that each run an evolved neural network. It shares no c
 
 ## Status
 
-M0 (foundation) and M1 (first swim) are built, audited, and pushed. M2 (Bodies) is being built from
-`docs/plans/2026-10-11-m2-bodies.md`, which the owner approved on 2026-10-11. Tasks 1 to 13 are done,
-and Task 14 (the exit) is open. **`make check` and `make gates` both exit 0.** The fresh-context audit
-(`docs/findings/m2-audit.md`) found that evolution removed the senses by tick 144,000. The cause was
-the upkeep of a part. On 2026-10-12 the owner deleted that rule, and `plant_growth` went to 0.03
-(`docs/findings/m2-senses.md`): every one of 10 seeds now keeps both senses to tick 144,000. The
-failure proofs of `docs/gates.md` ran again at these defaults. The exit record is
-`docs/findings/m2-exit.md`. The owner decided the nine questions of the audit on 2026-10-12
-(`docs/decisions/INDEX.md`), and M2 is pushed. Left in Task 14: the owner's five checks, listed in the
-exit record. No fresh-context audit has run since the rule was deleted.
+M0 (foundation) and M1 (first swim) are built, audited, and pushed. M2 (Bodies) is built from
+`docs/plans/2026-10-11-m2-bodies.md` and pushed. **`make check`, `make gates`, and `make gates-long`
+all exit 0.** The first audit (`docs/findings/m2-audit.md`) found that evolution removed the senses by
+tick 144,000. The cause was the upkeep of a part, and the owner deleted that rule on 2026-10-12
+(`docs/findings/m2-senses.md`). The second audit, at the head, is `docs/findings/m2-audit-2.md`: no
+High finding, and what it found and what was fixed is at the end of that file. The exit record is
+`docs/findings/m2-exit.md`. Of the owner's five checks, one is done, one is half done, and three are
+open.
+
+M3 (Minds) has a plan, `docs/plans/2026-10-13-m3-minds.md`. **It is a draft that waits for the owner.
+Build nothing from it until the owner approves it.**
 
 ## Commands
 
