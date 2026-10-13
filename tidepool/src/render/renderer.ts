@@ -8,7 +8,6 @@ import {
   C_HEADING,
   C_HUE,
   C_LENGTH,
-  C_PARTS,
   C_SLOT,
   C_UID,
   C_WIDTH,
@@ -18,24 +17,35 @@ import {
   FLAG_BUDDED,
   FRAME_HEADER_WORDS,
   KIND_CILIA,
+  KIND_FILTER,
   MAX_EYES,
   PART_WORDS,
   PLANT_STRIDE,
   WORLD_H,
-  unpackPart,
   type FrameView,
+  type Part,
 } from '../protocol';
-import { PART_INSTANCE_FLOATS, PART_LOD_PX, buildParts } from './parts';
+import {
+  MAX_SWELLS,
+  PART_INSTANCE_FLOATS,
+  PART_LOD_PX,
+  buildParts,
+  endsOf,
+  partsOf,
+  swellAt,
+  taperOf,
+  type Look,
+} from './parts';
 import { sightOf } from './sight';
 import {
   BACKGROUND_FRAG,
   BACKGROUND_VERT,
-  CREATURE_FRAG,
-  CREATURE_VERT,
-  PART_FRAG,
   PART_VERT,
   PLANT_FRAG,
   PLANT_VERT,
+  creatureFrag,
+  creatureVert,
+  partFrag,
 } from './shaders';
 
 export class RendererError extends Error {}
@@ -68,8 +78,12 @@ export interface Renderer {
 const MAX_CREATURES = 4096; // the creature pool of the core
 const MAX_PLANTS = 8192; // the plant pool of the core
 const MAX_PARTS = MAX_CREATURES * PART_WORDS * 2; // a part gene makes a pair at most
-const CREATURE_ATTRIBUTES = [4, 4, 2]; // a_pose, a_body, a_life
-const INSTANCE_FLOATS = 10;
+// a_pose, a_body, a_life, and for the looks a_ends, a_swell_a, a_swell_b
+const CREATURE_ATTRIBUTES = [4, 4, 2, 2, 4, 4];
+const I_ENDS = 10; // the float of an instance at which a_ends starts
+const I_SWELLS = 12; // and its swells: an x and a radius each
+const INSTANCE_FLOATS = I_SWELLS + 2 * MAX_SWELLS;
+const NO_PARTS: readonly Part[] = [];
 const PART_ATTRIBUTES = [4, 4, 2]; // a_place, a_look, a_body
 const MAX_DPR = 2;
 const TAU = 2 * Math.PI;
@@ -131,8 +145,8 @@ function instancedQuad(
   return { vao, buffer };
 }
 
-/** Throws RendererError when WebGL2 is missing. */
-export function createRenderer(canvas: HTMLCanvasElement): Renderer {
+/** Throws RendererError when WebGL2 is missing. `look` is 0 for the draw of M2. */
+export function createRenderer(canvas: HTMLCanvasElement, look: Look = 0): Renderer {
   const gl = canvas.getContext('webgl2', { alpha: false, antialias: false });
   if (!gl) {
     throw new RendererError(
@@ -158,11 +172,16 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
   const backdrop = layer(BACKGROUND_VERT, BACKGROUND_FRAG, [], 0);
   const uHeight = gl.getUniformLocation(backdrop.program, 'u_height');
   const plants = layer(PLANT_VERT, PLANT_FRAG, [PLANT_STRIDE], MAX_PLANTS);
-  const creatures = layer(CREATURE_VERT, CREATURE_FRAG, CREATURE_ATTRIBUTES, MAX_CREATURES);
+  const creatures = layer(
+    creatureVert(look),
+    creatureFrag(look),
+    CREATURE_ATTRIBUTES,
+    MAX_CREATURES,
+  );
   const uBeat = gl.getUniformLocation(creatures.program, 'u_beat');
   const uBudAt = gl.getUniformLocation(creatures.program, 'u_bud_at');
   const instances = new Float32Array(MAX_CREATURES * INSTANCE_FLOATS);
-  const parts = layer(PART_VERT, PART_FRAG, PART_ATTRIBUTES, MAX_PARTS);
+  const parts = layer(PART_VERT, partFrag(look), PART_ATTRIBUTES, MAX_PARTS);
   const partInstances = new Float32Array(MAX_PARTS * PART_INSTANCE_FLOATS);
   // The creature records of the frame being drawn, with each body placed between the last two
   // frames. The bodies and their parts are both drawn from it.
@@ -254,6 +273,7 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
         let y = f32[r + C_Y] ?? 0;
         let heading = f32[r + C_HEADING] ?? 0;
         const length = f32[r + C_LENGTH] ?? 0;
+        const width = f32[r + C_WIDTH] ?? 0;
         const slot = u32[r + C_SLOT] ?? 0;
         const flags = u32[r + C_FLAGS] ?? 0;
         let known = false; // `prev` holds this creature
@@ -278,12 +298,11 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
         posedF32[r + C_HEADING] = heading;
         if (slot === cur.possessedSlot) lag = heading - (f32[r + C_HEADING] ?? 0);
 
-        // A body too small on screen for its parts has no cilia either.
+        // A body too small on screen for its parts has no cilia either, and the outline of today.
+        const carried = length * cam.scale >= PART_LOD_PX ? partsOf(u32, r) : NO_PARTS;
         let cilia = 0;
-        for (let k = 0; length * cam.scale >= PART_LOD_PX && k < PART_WORDS; k++) {
-          const part = unpackPart(u32[r + C_PARTS + k] ?? 0);
-          if (part?.kind === KIND_CILIA) cilia += part.size;
-        }
+        for (const part of carried) if (part.kind === KIND_CILIA) cilia += part.size;
+        const taper = look >= 1 ? taperOf(carried) : 0;
         // One pulse for each time the flag is set. A body that comes into view with the flag set
         // starts its pulse then.
         const budded = (flags & FLAG_BUDDED) !== 0;
@@ -296,13 +315,26 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
         instances[o + 2] = heading;
         instances[o + 3] = f32[r + C_HUE] ?? 0;
         instances[o + 4] = length;
-        instances[o + 5] = f32[r + C_WIDTH] ?? 0;
+        instances[o + 5] = width;
         instances[o + 6] = f32[r + C_ENERGY] ?? 0;
         instances[o + 7] = flags;
         instances[o + 8] = Math.min(cilia, 1);
         instances[o + 9] = budded ? Math.sin(Math.PI * Math.min(pulsed, 1)) : 0;
+        const [nose, tail] = endsOf(taper);
+        instances[o + I_ENDS] = nose;
+        instances[o + I_ENDS + 1] = tail;
+        // In look 3 the outline swells at each mouth. A radius of 0 is no swell.
+        instances.fill(0, o + I_SWELLS, o + INSTANCE_FLOATS);
+        let swells = 0;
+        for (const part of look >= 3 ? carried : NO_PARTS) {
+          if (part.kind !== KIND_FILTER || swells === MAX_SWELLS) continue;
+          const swell = swellAt(part, length, width, taper);
+          instances[o + I_SWELLS + 2 * swells] = swell.x;
+          instances[o + I_SWELLS + 2 * swells + 1] = swell.r;
+          swells++;
+        }
       }
-      const partCount = buildParts(posed, cam.scale, timeSeconds, partInstances);
+      const partCount = buildParts(posed, cam.scale, timeSeconds, partInstances, look);
 
       // The cones of the header are those of `cur`. They turn with the body as it is drawn.
       const sight = sightOf(posed);
