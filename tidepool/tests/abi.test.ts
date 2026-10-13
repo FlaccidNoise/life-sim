@@ -43,6 +43,11 @@ test('a brain readout reads back, and a readout that does not fit its header is 
   const brain = P.readBrain(sim.brain(9));
   expect(brain).toMatchObject({ uid: 9, inputs: 11, hidden: 4, outputs: 2, manual: false });
   expect([brain?.neurons.length, brain?.connections.length]).toEqual([17, 57]);
+  // The first wired connection of a founder runs from the constant input to thrust.
+  const cruise = brain?.connections.find((c) => c.history === 1);
+  expect([cruise?.src, cruise?.dst]).toEqual([0, 15]);
+  expect(brain?.neurons[15]).toMatchObject({ owner: 0, port: 128 });
+  expect(cruise?.weight).toBeGreaterThan(0);
   expect(sim.brain(999).length).toBe(0);
   expect(P.readBrain(new Uint32Array(0))).toBeNull();
   expect(() => P.readBrain(sim.brain(9).subarray(0, 40))).toThrow(/Fix: /);
