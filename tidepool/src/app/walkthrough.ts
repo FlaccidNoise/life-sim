@@ -37,6 +37,8 @@ export interface Facts {
   lineageAlive: number; // living bodies with the lineage mark, the player's own among them
   split: number; // how far the player's mark is from the brain's, 0 to 2
   busy: boolean; // a passing line of the page is up: a toast, or "Nothing there."
+  card: boolean; // the mate card is up
+  courted: boolean; // a body that the player courted accepted or refused a moment ago
 }
 
 export interface Walk {
@@ -146,6 +148,9 @@ export function step(
   if (seen && f.buds >= 1 && !isDone('halfRing')) w.done = [...w.done, 'halfRing'];
   // Beat 12 has no line here: the death screen is its showing.
   if (f.dead && f.first && !walk.wasFirst && !isDone('firstDeath')) show('firstDeath');
+  // Beat 10 arms when the mate card first shows: the card is its first showing. Its line follows
+  // the first courtship that the other accepts or refuses, and the beat is done with it.
+  if (play && f.card && count('court') === 0 && !isDone('court')) show('court');
 
   const armed: Partial<Record<BeatId, boolean>> = {
     possess: f.mode === 'watch' && !f.dead,
@@ -158,6 +163,7 @@ export function step(
     halfRing: past('eat') && seen && f.energy01 >= HALF_RING,
     // The counter leaves out the body of the player. It has just risen, on the screen.
     score: seen && f.buds >= SCORE_BUDS && f.lineageAlive - 1 >= SCORE_BUDS,
+    court: play && f.courted,
   };
   // A line leaves when the player acts on it, when it is no longer true, or after `LINE_S`. The
   // line of beat 1 is the way into the game: it stands until a body is possessed.

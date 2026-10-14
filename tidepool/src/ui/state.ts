@@ -76,6 +76,41 @@ export const guideBrain = signal<{
   connections: number;
 } | null>(null);
 
+/**
+ * The mate card: the body of the player, the body that the card is about, and the first thing that
+ * the two still lack for an exchange of genes. `courtship` of src/app/court.ts makes it.
+ */
+export interface Courtship {
+  you: Kin;
+  other: Kin;
+  state:
+    | 'ownYoung' // the body of the player is not full-grown
+    | 'young' // no full-grown body is in reach, and `other` is a juvenile
+    | 'carry' // the player holds a donor
+    | 'otherCarries'
+    | 'apart' // the two do not touch
+    | 'third' // another body is the nearest that one of the two touches
+    | 'hold' // the body of the player does not accept
+    | 'refused' // in touch, the player accepts and the other does not. `lingering` keeps it a while
+    | 'chance'; // both accept
+}
+// Null: no body is in reach, or mixing is off in this world, or the player is in no body.
+export const mate = signal<Courtship | null>(null);
+export const courtHeld = signal(false); // the Court button of the card is down
+/** The mate card is up. It steps back for the bud card: one card at a time. */
+export const mateShown = (): boolean =>
+  mate.value !== null && !budOpen.value && noteOpen.value !== 'bud';
+const NO_COURT: Courtship['state'][] = ['ownYoung', 'young', 'carry', 'otherCarries'];
+/** The card has its Court button: both bodies are full-grown and neither holds a donor. */
+export const courtable = (): boolean => {
+  const state = mate.value?.state;
+  return mateShown() && state !== undefined && !NO_COURT.includes(state);
+};
+// The button leaves with the card, and a button that is gone gets no `pointerup`.
+effect(() => {
+  if (!courtable()) courtHeld.value = false;
+});
+
 // A note leaves with the thing that it is on: none is open when the thing comes back.
 effect(() => {
   const dead = death.value !== null;
@@ -85,6 +120,7 @@ effect(() => {
     brain: panel,
     wiring: panel && changesShown.value,
     bud: play && !dead,
+    mate: play && !dead && mateShown(),
     score: play,
     death: dead,
   };

@@ -4,7 +4,7 @@
 
 import type { ChapterId } from './guide';
 
-export type NoteId = 'brain' | 'wiring' | 'bud' | 'score' | 'death';
+export type NoteId = 'brain' | 'wiring' | 'bud' | 'mate' | 'score' | 'death';
 
 /** `about` ends the label of the mark: what the note is on. `more` is the chapter of the guide. */
 export const NOTE: Record<NoteId, { about: string; text: string; more: ChapterId }> = {
@@ -20,8 +20,16 @@ export const NOTE: Record<NoteId, { about: string; text: string; more: ChapterId
   },
   bud: {
     about: 'the bud card',
-    text: 'The child is a copy of your genes with random changes. Most are small. No rule aims a change at what a body lacks.',
+    // True of a child of one parent and of a child born of a cross: the card of each has this mark.
+    text: 'The child is made of copied genes, with random changes. Most are small. No rule aims a change at what a body lacks.',
     more: 'child',
+  },
+  // Each clause is of `cross` in crates/sim/src/mix.rs. A gene that only one of the two holds comes
+  // from that one, or is left out. The hue is the home's.
+  mate: {
+    about: 'the mate card',
+    text: 'Each part, connection, and hidden neuron carries an id from when it first appeared. Mixing lines up the genes of both bodies by that id, and each gene of the child comes from one of them. The colour of a child comes from the parent that buds it.',
+    more: 'machine',
   },
   score: {
     about: 'the counter of your line',

@@ -286,7 +286,8 @@ export type ToWorker =
   | { type: 'possessAt'; x: number; y: number; radius: number }
   | { type: 'possess'; uid: number }
   | { type: 'release' }
-  | { type: 'input'; manual: boolean; thrust: number; turn: number }
+  // `accept`: the player courts. The core reads it while `manual` is set.
+  | { type: 'input'; manual: boolean; thrust: number; turn: number; accept: boolean }
   | { type: 'param'; index: number; value: number }
   // With `on`, a `brain` message follows each frame while a body is possessed.
   | { type: 'watchBrain'; on: boolean }
