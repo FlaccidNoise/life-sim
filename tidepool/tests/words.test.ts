@@ -20,8 +20,14 @@ const PURPOSE = [
   'decides to',
   'better',
 ];
-// The exact sentences that may hold a word of `PURPOSE`: each says that the thing does not happen.
-const ALLOWED = ['It does not learn.'];
+// The exact sentences that may hold a word of `PURPOSE`.
+const ALLOWED = [
+  // It says that the thing does not happen.
+  'It does not learn.',
+  // The purpose is that of the people who wrote the founder brain (`starter` in
+  // crates/sim/src/brain.rs), and they had one. No body and no brain changed for it.
+  'The first creatures have brains wired by hand so that they can feed.',
+];
 
 const wordsOf = (text: string): number =>
   text.split(/\s+/).filter((word) => /[\p{L}\p{N}]/u.test(word)).length;
@@ -55,6 +61,9 @@ const modules = import.meta.glob<Record<string, unknown>>('../src/ui/words/*.ts'
 test('every string of src/ui/words keeps rule 5, and every line keeps rule 2', () => {
   const lines = stringsOf(modules['../src/ui/words/lines.ts']);
   expect(lines.length).toBeGreaterThanOrEqual(8);
+  // The notes and the field guide are held too: every sentence of each is a string here.
+  expect(stringsOf(modules['../src/ui/words/notes.ts']).length).toBeGreaterThanOrEqual(15);
+  expect(stringsOf(modules['../src/ui/words/guide.ts']).length).toBeGreaterThanOrEqual(60);
   const breaks = Object.entries(modules).flatMap(([path, module]) =>
     stringsOf(module).flatMap((text) => broken(text, path.endsWith('/lines.ts'))),
   );
@@ -104,4 +113,10 @@ test('"learn" passes only in a sentence that is allowed by name', () => {
   expect(broken('Born with this wiring. It does not learn.', false)).toEqual([]);
   expect(broken('It does not learn. But it learns later.', false)).toHaveLength(1);
   expect(broken('It does learn.', false)).toHaveLength(1);
+});
+
+test('the purpose of a designer passes only in the sentence that is allowed by name', () => {
+  const founders = 'The first creatures have brains wired by hand so that they can feed.';
+  expect(broken(founders, false)).toEqual([]);
+  expect(broken('The first creatures grew brains so that they can feed.', false)).toHaveLength(1);
 });

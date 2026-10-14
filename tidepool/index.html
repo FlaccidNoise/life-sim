@@ -517,6 +517,354 @@
           }
         }
       }
+      /* A note: the "?" mark on the thing that it explains, and the note, open in place. */
+      button.mark {
+        position: relative;
+        box-sizing: border-box;
+        width: 20px;
+        min-width: 0;
+        height: 20px;
+        min-height: 0;
+        margin: 0 0 0 4px;
+        padding: 0;
+        border: 1px solid #3b6377;
+        border-radius: 50%;
+        background: rgb(4 18 28 / 0.75);
+        color: inherit;
+        font:
+          600 12px/1 system-ui,
+          sans-serif;
+        vertical-align: middle;
+        cursor: pointer;
+        pointer-events: auto;
+      }
+      /* A finger gets 44 pixels. */
+      button.mark::after {
+        content: '';
+        position: absolute;
+        inset: -12px;
+      }
+      button.mark:hover,
+      button.mark[aria-expanded='true'] {
+        border-color: #cfe6ee;
+        background: #12384d;
+      }
+      button.mark:focus-visible,
+      button.note-more:focus-visible,
+      .guide button:focus-visible {
+        outline: 2px solid #cfe6ee;
+        outline-offset: 2px;
+      }
+      .note {
+        display: block;
+        box-sizing: border-box;
+        max-width: 22rem;
+        margin: 6px 0 4px;
+        padding: 8px 12px;
+        border-left: 2px solid #7fd1a8;
+        border-radius: 0 8px 8px 0;
+        background: #0b2a3b;
+        font-size: 13px;
+        font-weight: 400;
+        line-height: 1.5;
+        text-align: left;
+        pointer-events: auto;
+      }
+      .death .note {
+        margin-inline: auto;
+      }
+      button.note-more {
+        min-width: 0;
+        min-height: 0;
+        margin-left: 6px;
+        padding: 0;
+        border: 0;
+        background: none;
+        color: #7fd1a8;
+        font: inherit;
+        font-weight: 600;
+        text-decoration: underline;
+        text-underline-offset: 3px;
+        cursor: pointer;
+      }
+      /* The descendants counter: top left, and under the debug readout when there is one. */
+      .score {
+        top: 12px;
+        bottom: auto;
+      }
+      .score.low {
+        top: 100px;
+      }
+      .score .note {
+        max-width: 17rem;
+      }
+      /* A narrow screen has no room for the counter beside three buttons: it is under them, and
+         the bud card is under it. */
+      @media (max-width: 40rem) {
+        .score {
+          top: 64px;
+        }
+        .score.low {
+          top: 152px;
+        }
+        .bud {
+          top: 108px;
+        }
+      }
+      /* The field guide: a modal dialog over the water, which runs on behind it. */
+      .guide {
+        box-sizing: border-box;
+        width: min(54rem, calc(100% - 32px));
+        max-width: none;
+        height: min(48rem, calc(100% - 32px));
+        max-height: none;
+        padding: 0;
+        border: 1px solid #3b6377;
+        border-radius: 14px;
+        background: #05151f;
+        color: #cfe6ee;
+        font:
+          16px/1.7 system-ui,
+          sans-serif;
+        overflow: hidden;
+        pointer-events: auto;
+      }
+      .guide[open] {
+        display: grid;
+        grid-template: auto 1fr / 15rem 1fr;
+      }
+      .guide::backdrop {
+        background: rgb(4 18 28 / 0.35);
+      }
+      .guide header {
+        grid-column: 1 / -1;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 12px 10px 22px;
+        border-bottom: 1px solid rgb(59 99 119 / 0.6);
+      }
+      .guide h2 {
+        margin: 0;
+        font-size: 17px;
+        font-weight: 600;
+      }
+      .guide header p {
+        flex: 1;
+        margin: 0;
+        font-size: 13px;
+        opacity: 0.7;
+      }
+      .guide nav {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding: 14px 10px;
+        border-right: 1px solid rgb(59 99 119 / 0.6);
+        overflow-y: auto;
+      }
+      .guide nav button {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        min-height: 42px;
+        padding: 8px 12px;
+        border: 0;
+        border-radius: 8px;
+        background: none;
+        color: inherit;
+        font: inherit;
+        font-size: 14px;
+        line-height: 1.35;
+        text-align: left;
+        cursor: pointer;
+        opacity: 0.75;
+      }
+      .guide nav b {
+        flex: none;
+        width: 1.1em;
+        color: #7fd1a8;
+        font-weight: 600;
+      }
+      .guide nav button:hover {
+        background: rgb(18 56 77 / 0.6);
+        opacity: 1;
+      }
+      .guide nav button[aria-current] {
+        background: #12384d;
+        opacity: 1;
+      }
+      .guide article {
+        padding: 24px 34px 28px;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+      }
+      .guide article > * {
+        max-width: 34rem;
+      }
+      .guide-n,
+      .guide-live h4,
+      .guide footer small {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .guide-n,
+      .guide-live h4 {
+        margin: 0;
+        color: #7fd1a8;
+      }
+      .guide h3 {
+        margin: 2px 0 14px;
+        font-size: 26px;
+        font-weight: 600;
+        line-height: 1.2;
+      }
+      .guide article p {
+        margin: 0 0 14px;
+      }
+      .guide-live {
+        margin-top: 22px;
+        padding: 12px 16px 14px;
+        border: 1px solid #3b6377;
+        border-radius: 12px;
+        background: rgb(18 56 77 / 0.35);
+        font-size: 14px;
+        line-height: 1.5;
+      }
+      .guide-live h4 {
+        margin-bottom: 8px;
+      }
+      .guide-live h5 {
+        margin: 14px 0 4px;
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .guide-live h5:first-of-type {
+        margin-top: 0;
+      }
+      .guide .guide-live p {
+        margin: 0;
+        opacity: 0.8;
+      }
+      .guide dl,
+      .guide dd {
+        margin: 0;
+      }
+      .guide-rows div {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 3px 0;
+        border-bottom: 1px solid rgb(59 99 119 / 0.35);
+      }
+      .guide-rows div:last-child {
+        border: 0;
+      }
+      .guide-rows dd {
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+      }
+      .guide-terms div {
+        padding: 10px 0;
+        border-bottom: 1px solid rgb(59 99 119 / 0.35);
+      }
+      .guide-terms dt {
+        font-weight: 600;
+      }
+      .guide-terms dd {
+        opacity: 0.85;
+      }
+      /* The last bud, in chapter 3: the card with no frame of its own. */
+      .guide .guide-bud {
+        position: static;
+        width: auto;
+        max-width: 20rem;
+        padding: 0;
+        border: 0;
+        background: none;
+        transform: none;
+        animation: none;
+      }
+      .guide footer {
+        display: flex;
+        gap: 10px;
+        margin-top: 24px;
+      }
+      .guide footer button {
+        display: grid;
+        flex: 1;
+        min-height: 52px;
+        padding: 8px 14px;
+        border: 1px solid #3b6377;
+        border-radius: 10px;
+        background: none;
+        color: inherit;
+        font: inherit;
+        font-size: 15px;
+        line-height: 1.3;
+        text-align: left;
+        cursor: pointer;
+      }
+      .guide footer small {
+        opacity: 0.7;
+      }
+      .guide footer .guide-next {
+        background: #12384d;
+        text-align: right;
+      }
+      .guide footer button:hover {
+        border-color: #cfe6ee;
+      }
+      /* A narrow screen: a sheet from the foot, with the chapters in one row that scrolls. */
+      @media (max-width: 44rem) {
+        .guide {
+          width: 100%;
+          height: min(88dvh, calc(100% - 40px));
+          margin: auto 0 0;
+          border-width: 1px 0 0;
+          border-radius: 16px 16px 0 0;
+        }
+        .guide[open] {
+          grid-template: auto auto 1fr / 1fr;
+        }
+        .guide header {
+          padding-left: 18px;
+        }
+        .guide nav {
+          flex-direction: row;
+          padding: 8px 12px;
+          border-right: 0;
+          border-bottom: 1px solid rgb(59 99 119 / 0.6);
+          overflow: auto hidden;
+          scroll-padding-inline: 12px;
+          scrollbar-width: none;
+        }
+        .guide nav button {
+          flex: none;
+          gap: 6px;
+          min-height: 44px;
+          white-space: nowrap;
+        }
+        .guide article {
+          padding: 18px 18px 28px;
+        }
+        .guide h3 {
+          font-size: 23px;
+        }
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        .guide[open] {
+          animation: guide-in 180ms ease-out;
+        }
+        @keyframes guide-in {
+          from {
+            opacity: 0;
+            transform: translateY(10px);
+          }
+        }
+      }
     </style>
   </head>
   <body>

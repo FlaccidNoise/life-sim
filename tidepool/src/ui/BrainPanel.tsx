@@ -6,6 +6,7 @@ import { useEffect, useRef } from 'preact/hooks';
 import { KIND_CHEMO, KIND_EYE, type BrainView } from '../protocol';
 import { KIND_MATE, layout, type Group, type Placed } from './brain/layout';
 import { inputLabel, pickPath } from './brain/words';
+import { Note, NoteMark } from './Note';
 import { brain, brainError, brainOpen, changesShown, pulse, steer, wiringChanged } from './state';
 import { NO_CHANGE } from './words/lines';
 
@@ -295,6 +296,7 @@ export function BrainPanel(props: { onClose: () => void }) {
     <section class="brain" aria-label="Brain">
       <header>
         <h2>Brain</h2>
+        <NoteMark id="brain" />
         {b && error === null && (
           <span class="brain-count">
             {b.neurons.length} neurons, {b.connections.length} connections
@@ -309,6 +311,7 @@ export function BrainPanel(props: { onClose: () => void }) {
           ×
         </button>
       </header>
+      <Note id="brain" />
       {error !== null ? (
         <div class="brain-state" role="alert">
           <p>This brain could not be read. Close the panel and open it again.</p>
@@ -344,9 +347,12 @@ export function BrainPanel(props: { onClose: () => void }) {
           )}
           {/* Beat 7 of the walkthrough. The count is of the live readouts: above 0 is a bug. */}
           {changesShown.value && (
-            <p class="brain-changes">
-              {NO_CHANGE} <b>{wiringChanged.value}</b>
-            </p>
+            <>
+              <p class="brain-changes">
+                {NO_CHANGE} <b>{wiringChanged.value}</b> <NoteMark id="wiring" />
+              </p>
+              <Note id="wiring" />
+            </>
           )}
           <p class="brain-key">
             <i class="wire" style={{ background: PLUS }} />

@@ -1,7 +1,9 @@
 // What the overlay shows. `src/app/main.ts` writes these from worker messages.
 
-import { signal } from '@preact/signals';
-import type { BrainView, DeathCause, Heir, Kin } from '../protocol';
+import { effect, signal } from '@preact/signals';
+import type { BrainView, DeathCause, Heir, Kin, ParamInfo } from '../protocol';
+import type { EntryId } from './words/guide';
+import type { NoteId } from './words/notes';
 
 export const errorText = signal<string | null>(null);
 export const ready = signal(false);
@@ -54,3 +56,48 @@ export interface Bud {
 // The last bud. It stays after its card has left, so the field guide can show it again.
 export const lastBud = signal<Bud | null>(null);
 export const budOpen = signal(false); // the bud card is up
+
+// The notes and the field guide, docs/plans/2026-10-13-walkthrough.md. Neither opens by itself, and
+// neither pauses the world.
+export const noteOpen = signal<NoteId | null>(null); // the note that is open in place. One at a time
+export const guideAt = signal<EntryId | null>(null); // the entry of the guide on show. Null: closed
+// The live readings of the guide. The parameter table is that of the `ready` message.
+export const worldParams = signal<ParamInfo[]>([]);
+// The counts of the brain of the possessed body, read when the guide opens. Null: no body.
+export const guideBrain = signal<{
+  inputs: number;
+  hidden: number;
+  outputs: number;
+  connections: number;
+} | null>(null);
+
+// A note leaves with the thing that it is on: none is open when the thing comes back.
+effect(() => {
+  const dead = death.value !== null;
+  const play = mode.value === 'play';
+  const panel = brainOpen.value && !dead;
+  const up: Record<NoteId, boolean> = {
+    brain: panel,
+    wiring: panel && changesShown.value,
+    bud: play && !dead,
+    score: play,
+    death: dead,
+  };
+  const open = noteOpen.value;
+  if (open !== null && !up[open]) noteOpen.value = null;
+});
+
+/** The "?" mark of a note: a tap opens the note, and a second tap closes it. */
+export const toggleNote = (id: NoteId): void => {
+  noteOpen.value = noteOpen.peek() === id ? null : id;
+};
+
+let guideLast: EntryId = 'body'; // where the guide was last, for the button and the key
+/** Opens the guide at an entry, or where it was last. */
+export const openGuide = (at: EntryId = guideLast): void => {
+  guideLast = at;
+  guideAt.value = at;
+};
+export const closeGuide = (): void => {
+  guideAt.value = null;
+};
