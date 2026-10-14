@@ -152,6 +152,15 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
 - 2026-10-13: **No feature is added beyond the roadmap.** Variety comes from M4 (predation) and M6
   (zones, plant genomes). A feature that the owner names is placed in a milestone with a measurement.
   → `../roadmap.md`
+- 2026-10-13: **Provisional, owner to confirm: the three brain bands of the long gate.** `hidden` fails
+  under 1.0, `conns` under 15.0, `shapes` under 2, each read with `gate-evolve --brain` at tick
+  144,000. Each rejected a bad world of the head on 3 of 3 seeds: a brain that is the largest cost of
+  a body reads 0.03 to 0.04 hidden neurons and 1.4 to 2.7 connections, and a world where no brain can
+  change shape reads 1 shape. The Start values read 3.04 to 3.85, 34.7 to 42.6, and 4 to 6. The gap to
+  a world with silent hidden neurons gets no band: it reads +3.18, -0.65, +1.10 against +1.45, -0.87,
+  +0.92 by chance, so "evolution uses a hidden neuron" is not shown. `shapes` can fall as variety
+  rises, and the retune prints a measure that cannot, to decide between them at its close.
+  → `../findings/m3-brains.md`, `../gates.md` "The brain bands"
 - 2026-10-13: **The game gets a walkthrough that teaches as it plays, asked for by the owner.** A full
   onboarding for a new player: a game first, and a true explanation of the biology, the evolution, the
   neural networks, and the computer science on screen. It is designed from research on onboarding
