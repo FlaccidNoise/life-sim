@@ -152,6 +152,14 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
 - 2026-10-13: **No feature is added beyond the roadmap.** Variety comes from M4 (predation) and M6
   (zones, plant genomes). A feature that the owner names is placed in a milestone with a measurement.
   → `../roadmap.md`
+- 2026-10-14: **Provisional, owner to confirm: `mix_rate` stays a parameter whatever value the retune
+  leaves it at.** The plan said to delete it if left at exactly 1. It is a chance per tick, as the
+  structural rates that the plan keeps are, and three things read it: the mate card shows only when it
+  is above 0, the field guide says "with mixing on", and a test pins it in `mate.rs`.
+  → `../plans/2026-10-13-m3-minds.md` Task 15
+- 2026-10-14: **Each hypothesis of a trial is committed before its run, not kept in a log folder.** A
+  machine restart lost the folder in `/private/tmp`, and with it the hypotheses of Tasks 9 and 10 as
+  written. The rows survive in `../findings/`. → `../findings/m3-tuning.md` Part 4
 - 2026-10-14: **Provisional, owner to confirm: stage 1 of the M3 retune closes with `mut_conn_remove`
   at 0.01, and the band on `shapes` is replaced by a band on `variety`.** At the Start values the long
   gate read 3 of 5 (the scent gap on seeds 4 and 8): with brain structure on, the bodies with no
