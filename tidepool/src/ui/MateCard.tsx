@@ -45,6 +45,7 @@ export function MateCard() {
         {MATE.heading} <NoteMark id="mate" />
       </p>
       <Note id="mate" />
+      <p class="bud-note">{MATE.what}</p>
       <div class="bud-pair">
         <Side kin={found.you} name={MATE.you} />
         <Side kin={found.other} name={MATE.other} />

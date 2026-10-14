@@ -85,6 +85,7 @@ export const BUD = {
  */
 export const MATE = {
   heading: 'Courting',
+  what: 'If both accept, your next brood is mixed.',
   you: 'You',
   other: 'The other',
   size: 'Length {l}, width {w}',
