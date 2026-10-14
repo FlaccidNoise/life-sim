@@ -8,13 +8,18 @@ import { beforeEach, expect, test } from 'vitest';
 import { Note, NoteMark } from '../src/ui/Note';
 import {
   brainOpen,
+  budOpen,
   changesShown,
   closeGuide,
+  closeNote,
   death,
   guideAt,
+  hint,
   mode,
   noteOpen,
   openGuide,
+  pageBusy,
+  toast,
 } from '../src/ui/state';
 import {
   CHANCES,
@@ -73,6 +78,9 @@ function show(id: NoteId | null): void {
 beforeEach(() => {
   show(null);
   noteOpen.value = null;
+  hint.value = null;
+  toast.value = null;
+  budOpen.value = false;
   closeGuide();
 });
 
@@ -125,6 +133,45 @@ test.each(NOTE_IDS)('"More" of the %s note opens the guide at its entry', (id) =
   expect(guideAt.value).toBe(NOTE[id].more);
   // The note is still there when the guide closes, and the focus goes back to "More".
   expect(noteOpen.value).toBe(id);
+});
+
+test('Escape closes an open note, and leaves the body only when none is open', () => {
+  show('bud');
+  noteOpen.value = 'bud';
+  expect(closeNote()).toBe(true);
+  expect(noteOpen.value).toBeNull();
+  expect(closeNote()).toBe(false);
+  // The key handler asks for the note first, also under the death overlay, and then leaves.
+  const keys = text('../src/app/main.ts');
+  const note = keys.indexOf("e.code === 'Escape' && closeNote()");
+  expect(note, 'main.ts does not close a note on Escape').toBeGreaterThan(-1);
+  expect(note).toBeLessThan(keys.indexOf('if (death.peek()) return;', note));
+  expect(note).toBeLessThan(keys.indexOf("if (e.code === 'Escape') leave();"));
+});
+
+test('a new line of the walkthrough waits for the guide, the bud card, and a line of the page', () => {
+  show('bud');
+  expect(pageBusy()).toBe(false);
+  // The guide covers the foot of the screen: a line that showed under it would be done unseen.
+  openGuide('body');
+  expect(pageBusy()).toBe(true);
+  closeGuide();
+  expect(pageBusy()).toBe(false);
+  budOpen.value = true;
+  expect(pageBusy()).toBe(true);
+  // The card stays up for as long as its note is open, after its 6 seconds.
+  budOpen.value = false;
+  noteOpen.value = 'bud';
+  expect(pageBusy()).toBe(true);
+  noteOpen.value = 'score';
+  expect(pageBusy()).toBe(false);
+  hint.value = 'Nothing there.';
+  expect(pageBusy()).toBe(true);
+  hint.value = null;
+  toast.value = 'You budded a child.';
+  expect(pageBusy()).toBe(true);
+  toast.value = null;
+  expect(text('../src/app/main.ts')).toContain('busy: pageBusy() ||');
 });
 
 test('each mark sits on the thing that its note explains', () => {

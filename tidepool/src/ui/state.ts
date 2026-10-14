@@ -92,6 +92,24 @@ export const toggleNote = (id: NoteId): void => {
   noteOpen.value = noteOpen.peek() === id ? null : id;
 };
 
+/** The Escape key closes the note that is open. False: none was open, and the key leaves the body. */
+export const closeNote = (): boolean => {
+  if (noteOpen.peek() === null) return false;
+  noteOpen.value = null;
+  return true;
+};
+
+/**
+ * A new line of the walkthrough waits for these: an answer to a click, a toast, the bud card, which
+ * stays up while its note is open, and the guide, which covers the foot of the screen.
+ */
+export const pageBusy = (): boolean =>
+  hint.peek() !== null ||
+  toast.peek() !== null ||
+  budOpen.peek() ||
+  noteOpen.peek() === 'bud' ||
+  guideAt.peek() !== null;
+
 let guideLast: EntryId = 'body'; // where the guide was last, for the button and the key
 /** Opens the guide at an entry, or where it was last. */
 export const openGuide = (at: EntryId = guideLast): void => {

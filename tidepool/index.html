@@ -162,6 +162,10 @@
         text-align: center;
         pointer-events: auto;
       }
+      /* An open note makes the overlay taller: the cause and the last button stay on the screen. */
+      .death:has(.note) {
+        max-height: 60%;
+      }
       .death p {
         margin: 0;
       }
@@ -505,6 +509,11 @@
         #ui:has(.brain) {
           --foot: 60%;
         }
+        /* The raised line is where the bud card is. The card is a line of the page too, and it
+           leaves in 6 seconds: the line is not drawn under it. */
+        #ui:has(.brain):has(.bud) .hint {
+          display: none;
+        }
       }
       @media (prefers-reduced-motion: no-preference) {
         .brain {
@@ -598,6 +607,11 @@
       .score .note {
         max-width: 17rem;
       }
+      /* The open note of the counter is over the bud card where the two meet. */
+      .score:has(.note) {
+        z-index: 1;
+        background: #04121c;
+      }
       /* A narrow screen has no room for the counter beside three buttons: it is under them, and
          the bud card is under it. */
       @media (max-width: 40rem) {
@@ -609,6 +623,19 @@
         }
         .bud {
           top: 108px;
+        }
+        /* `?debug`: the buttons leave the readout its corner, the copy button is under them, and
+           the bud card is under the counter. */
+        .readout ~ .corner {
+          flex-wrap: wrap;
+          justify-content: flex-end;
+          max-width: calc(100% - 150px);
+        }
+        .corner .walklog {
+          order: 1;
+        }
+        .score.low ~ .bud {
+          top: 196px;
         }
       }
       /* The field guide: a modal dialog over the water, which runs on behind it. */
