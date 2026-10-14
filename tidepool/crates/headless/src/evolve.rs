@@ -25,6 +25,11 @@ const PARTS: f64 = 3.0;
 /// (`gates.md`).
 const CHEMO_GAP: f64 = 0.10;
 const EYE_GAP: f64 = 0.10;
+/// The least spread of speed over the living: its standard deviation over its mean. Proof: with
+/// `mut_rate`, `mut_shape_rate`, and the three part rates at 0 it reads 0.05 to 0.07 on seeds 1, 4,
+/// 5, 6, 8. The default world reads 0.22 to 0.28 (M3 Task 10, 2026-10-14). Provisional until the
+/// owner confirms it.
+const SPEED_CV: f64 = 0.10;
 /// A body plan or a brain shape counts when this share of the living holds it.
 const PLAN_SHARE: f64 = 0.05;
 // The three bands of `--brain`, for a reading at tick 144,000. Each stands between the rows of a
@@ -266,6 +271,10 @@ fn measure(seed: u32, a: &Args, brain: bool) -> (String, Vec<String>) {
     band(len <= LEN.1, format!("len={len:.2} > {}", LEN.1));
     band(len_sd >= LEN_SD, format!("len_sd={len_sd:.2} < {LEN_SD}"));
     band(parts >= PARTS, format!("parts={parts:.2} < {PARTS}"));
+    band(
+        speed_cv >= SPEED_CV,
+        format!("speed_cv={speed_cv:.3} < {SPEED_CV}"),
+    );
     band(
         chemo_gap >= CHEMO_GAP,
         format!("chemo_gap={chemo_gap:.3} < {CHEMO_GAP}"),
