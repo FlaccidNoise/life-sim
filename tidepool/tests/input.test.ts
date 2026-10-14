@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 import {
   GRACE_MS,
+  OLD_FROM,
   STARVING_BELOW,
   clickOn,
   emptyAnswer,
@@ -11,6 +12,7 @@ import {
   steerToward,
 } from '../src/app/input';
 import * as P from '../src/protocol';
+import { REFUSE } from '../src/ui/words/lines';
 
 test('keys map to thrust and turn', () => {
   expect(steerFromKeys({ up: true, left: false, right: false })).toEqual({
@@ -103,7 +105,15 @@ test('a key held across a possess is posted again, because the worker dropped it
 // A frame with one creature record per entry. `possessed` is a slot.
 function frame(
   possessed: number,
-  creatures: { slot: number; uid: number; x: number; y: number; heading: number; e?: number }[],
+  creatures: {
+    slot: number;
+    uid: number;
+    x: number;
+    y: number;
+    heading: number;
+    e?: number;
+    age?: number;
+  }[],
 ) {
   const buffer = new ArrayBuffer(4 * (P.FRAME_HEADER_WORDS + creatures.length * P.CREATURE_STRIDE));
   const u32 = new Uint32Array(buffer);
@@ -117,6 +127,7 @@ function frame(
     f32[r + P.C_HEADING] = c.heading;
     f32[r + P.C_LENGTH] = 12;
     f32[r + P.C_ENERGY] = c.e ?? 0.6;
+    f32[r + P.C_AGE] = c.age ?? 0.3;
     u32[r + P.C_UID] = c.uid;
     u32[r + P.C_SLOT] = c.slot;
   });
@@ -177,4 +188,19 @@ test('a click on a body with under a quarter of a full store does not take it', 
     { slot: 2, uid: 8, x: 6, y: 0, heading: 0, e: 0.9 },
   ]);
   expect(clickOn(two, 1, 0, 10)).toEqual({ refuse: 'starving' });
+});
+
+test('a click on a body that has lived nine tenths of its life does not take it', () => {
+  expect(OLD_FROM).toBe(0.9);
+  const body = (age: number, e = 0.6) =>
+    frame(P.NO_SLOT, [{ slot: 1, uid: 7, x: 0, y: 0, heading: 0, e, age }]);
+  expect(clickOn(body(0.95), 1, 1, 10)).toEqual({ refuse: 'old' });
+  expect(clickOn(body(1.2), 1, 1, 10)).toEqual({ refuse: 'old' });
+  expect(clickOn(body(0.5), 1, 1, 10)).toEqual({ take: 7 });
+  expect(clickOn(body(0.89), 1, 1, 10)).toEqual({ take: 7 });
+  // A body that is starving and old gets the starving line.
+  expect(clickOn(body(0.95, 0.1), 1, 1, 10)).toEqual({ refuse: 'starving' });
+  // Every refusal has its line.
+  expect(REFUSE.old).toBe('That one is very old. Pick another.');
+  expect(REFUSE.starving).toBe('That one is starving. Pick another.');
 });
