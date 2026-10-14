@@ -27,6 +27,21 @@ const CHEMO_GAP: f64 = 0.10;
 const EYE_GAP: f64 = 0.10;
 /// A body plan or a brain shape counts when this share of the living holds it.
 const PLAN_SHARE: f64 = 0.05;
+// The three bands of `--brain`, for a reading at tick 144,000. Each stands between the rows of a
+// bad world and the rows of the world at the Start values of the M3 plan, on seeds 1, 4, 5 (M3
+// Task 9, 2026-10-13). Each is provisional until the owner confirms it.
+/// The least mean of hidden neurons that have a way in from an input and a way out to an output.
+/// Proof: with `neuron_upkeep=0.01 conn_upkeep=0.003` a brain is the largest cost of a body, and
+/// the mean reads 0.03 to 0.04. At the Start values it reads 3.04 to 3.85. The band does not show
+/// that a hidden neuron is used: with `hidden_gain=0` the mean reads 0.34, 3.69, and 2.75.
+const HIDDEN: f64 = 1.0;
+/// The least mean of expressed connections. Proof: the same bad world reads 1.4 to 2.7. At the
+/// Start values the mean reads 34.7 to 42.6.
+const CONNS: f64 = 15.0;
+/// The least number of brain shapes. Proof: with the four structural rates at 0 no brain can
+/// change shape, and the count reads 1. At the Start values it reads 4 to 6. The count can fall
+/// as brains come to differ more, because a shape that under 5% hold is not counted.
+const SHAPES: usize = 2;
 
 /// The mean and the standard deviation. Both are 0 for no values.
 pub fn mean_sd(values: impl Iterator<Item = f32>) -> (f64, f64) {
@@ -196,7 +211,8 @@ fn world_after(seed: u32, a: &Args, blind: Option<usize>) -> World {
 
 /// One seed of the gate: the printed measures and the bands that it left. Three runs, one at a
 /// time: the world as given, then with the scent sense blind, then with the eyes blind. With
-/// `brain`, a fourth: the world with `hidden_gain=0`, where a hidden neuron sends nothing.
+/// `brain`, the three brain bands apply, and there is a fourth run: the world with
+/// `hidden_gain=0`, where a hidden neuron sends nothing. That run has no band.
 fn measure(seed: u32, a: &Args, brain: bool) -> (String, Vec<String>) {
     let world = world_after(seed, a, None);
     let c = &world.creatures;
@@ -254,6 +270,11 @@ fn measure(seed: u32, a: &Args, brain: bool) -> (String, Vec<String>) {
         creatures_noeye >= CREATURES,
         "eye_blind run died".to_string(),
     );
+    if brain {
+        band(hidden >= HIDDEN, format!("hidden={hidden:.2} < {HIDDEN}"));
+        band(conns >= CONNS, format!("conns={conns:.1} < {CONNS}"));
+        band(shapes >= SHAPES, format!("shapes={shapes} < {SHAPES}"));
+    }
     let mut row = format!(
         "seed={seed} creatures={creatures} creatures_noscent={creatures_noscent} creatures_noeye={creatures_noeye} len={len:.1} len_sd={len_sd:.2} parts={parts:.1} chemo={chemo:.2} chemo_blind={chemo_blind:.2} eye={eye:.2} eye_blind={eye_blind:.2} plans={plans} speed_cv={speed_cv:.2} speed={speed:.2} area={area:.1} hidden={hidden:.2} conns={conns:.1} shapes={shapes} shapes_raw={shapes_raw}"
     );
