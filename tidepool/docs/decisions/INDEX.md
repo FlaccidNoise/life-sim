@@ -152,6 +152,17 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
 - 2026-10-13: **No feature is added beyond the roadmap.** Variety comes from M4 (predation) and M6
   (zones, plant genomes). A feature that the owner names is placed in a milestone with a measurement.
   → `../roadmap.md`
+- 2026-10-14: **Mixing is on in the default world: `mix_rate` 1, `fixed_upkeep` 0.0337 → 0.037, and
+  the WASM throughput target of M3 is 2,600, down from 2,700.** The owner chose this at a hard stop:
+  with mixing on, three trials left the bench at 2,650 to 2,800 against 2,700. Every other target is
+  met (long gate 5/5 with every brain band). Mixing costs about 9%: more bodies and the crosses, not
+  larger brains. Evolution drops it by tick 144,000 (accept share 0.01 to 0.24). The floor of 2,400
+  is unchanged. → `../findings/m3-tuning.md` Part 4
+- 2026-10-14: **Provisional, owner to confirm: no band on area or on `plans`, the egg range as it is,
+  and a band on `speed_cv` that fails under 0.10.** Area follows `len`, whose band bounds it already.
+  `plans` read 0 in a passing world. With room above 0.7 the egg did not rise. `speed_cv` reads 0.22 to
+  0.28 in good worlds and 0.05 to 0.07 with every body mutation off (0/5). → `../findings/m3-tuning.md`
+  Part 5
 - 2026-10-14: **Provisional, owner to confirm: `mix_rate` stays a parameter whatever value the retune
   leaves it at.** The plan said to delete it if left at exactly 1. It is a chance per tick, as the
   structural rates that the plan keeps are, and three things read it: the mate card shows only when it
