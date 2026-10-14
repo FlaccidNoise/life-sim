@@ -9,7 +9,18 @@ export const LINE = {
   letGo: 'It swims without you. It has a brain.',
   disagree: 'Your hands and its brain disagree.',
   halfRing: 'At the notch, a child buds.',
-  score: 'The only score: descendants alive.',
+  score: 'The only score: your line, alive.',
+};
+
+/** The counter, top left: the living bodies with the lineage mark, apart from the player's own. */
+export const COUNTER = 'Your line: {n} alive';
+
+/** The line that stands while the body the player is in has under a quarter of a full store. */
+export const STARVING = 'You are starving. Find a plant.';
+
+/** A click in Watch on a body that the page does not hand to the player, by what the body is. */
+export const REFUSE = {
+  starving: 'That one is starving. Pick another.',
 };
 
 /**
@@ -18,7 +29,7 @@ export const LINE = {
  */
 export const NO_CHANGE = 'Wiring changed since you first looked:';
 
-/** The death overlay, on the first death with a living descendant. */
+/** The death overlay, on the first death of a life of 20 seconds or more that leaves an heir. */
 export const FIRST_DEATH = 'You are gone. Your line is not.';
 
 /**
@@ -30,7 +41,8 @@ export const BUD = {
   parent: 'You',
   child: 'Child',
   none: 'No change you can see.',
-  noChild: 'You budded a child.', // no card: the frame did not hold the child
+  // No card: the frame did not hold the child, or the player has seen the card twice.
+  noChild: 'You budded a child.',
   brood: 'One of {n} born at this bud.',
   died: 'This child has died already.',
   noBrain: 'The brain could not be read.',

@@ -57,7 +57,7 @@ export const CHAPTERS: { id: ChapterId; title: string; text: string[] }[] = [
     id: 'line',
     title: 'A line',
     text: [
-      'The only score is descendants alive. When you take a body the game marks it, and every child inherits the mark of its parent. Your line, or lineage, is every living body with the mark. The counter shows how many there are, apart from the one you are in.',
+      'The only score is your line, alive. When you take a body the game marks it, and each living body that descends from it through living parents. A child inherits its parent’s mark. Your line, or lineage, is every living body with the mark. The counter shows how many, apart from your own.',
       'Every body dies. It starves when its energy runs out, or it dies of old age at the age its genes set. A longer life costs more upkeep.',
       'When your body dies the world waits, and the game offers up to {maxHeirs} living bodies of your line, the fullest of energy first. Pick one and you go on as it. With none alive, the line has ended.',
       'That pick is selection by a chooser, as when a breeder picks which animal to breed from. The same holds while you steer: a body fed by your hands buds, whether or not its own brain could have fed it.',
@@ -188,7 +188,7 @@ export const GUIDE_UI = {
   lastBud: 'The last bud of your body',
   noBud: 'No bud yet. The last bud of your body will show here.',
   chances: 'Chances at one birth, in this world',
-  descendants: 'Descendants alive',
+  lineOthers: 'Bodies of your line alive, apart from yours',
   lineAlive: 'Bodies of your line alive',
   tick: 'Steps of this world so far',
   bodies: 'Bodies alive',

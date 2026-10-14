@@ -3,7 +3,7 @@
 // it and closes it on Escape. The world runs on behind it. Every word is in ./words/guide.ts.
 
 import type { ComponentChild } from 'preact';
-import { useEffect, useRef } from 'preact/hooks';
+import { useLayoutEffect, useRef } from 'preact/hooks';
 import { BudBody } from './BudCard';
 import {
   closeGuide,
@@ -81,7 +81,7 @@ function reading(at: EntryId): ComponentChild {
         <Rows
           rows={
             mode.value === 'play'
-              ? [[GUIDE_UI.descendants, count(Math.max(lineageAlive.value - 1, 0))]]
+              ? [[GUIDE_UI.lineOthers, count(Math.max(lineageAlive.value - 1, 0))]]
               : [[GUIDE_UI.lineAlive, count(lineageAlive.value)]]
           }
         />
@@ -177,8 +177,9 @@ export function GuideToggle() {
 export function Guide() {
   const dialog = useRef<HTMLDialogElement>(null);
   const at = guideAt.value;
-  // The dialog follows the signal: the key G and "More" of a note open it from outside.
-  useEffect(() => {
+  // The dialog follows the signal: the key G and "More" of a note open it from outside. A layout
+  // effect: a dialog that closes gives the focus back, and the death overlay then takes it.
+  useLayoutEffect(() => {
     const d = dialog.current;
     if (!d) return;
     if (at !== null && !d.open) d.showModal();

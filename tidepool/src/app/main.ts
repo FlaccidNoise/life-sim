@@ -20,7 +20,7 @@ import {
 import { lookOf } from '../render/parts';
 import { createRenderer, type Renderer } from '../render/renderer';
 import { App } from '../ui/App';
-import { BUD } from '../ui/words/lines';
+import { BUD, REFUSE } from '../ui/words/lines';
 import {
   benchText,
   brain,
@@ -45,6 +45,7 @@ import {
   pageBusy,
   pulse,
   ready,
+  showDeath,
   starving,
   stats,
   steer,
@@ -70,6 +71,8 @@ import {
   type Camera,
 } from './camera';
 import {
+  STARVING_BELOW,
+  clickOn,
   emptyAnswer,
   inputToSend,
   keyOf,
@@ -81,9 +84,17 @@ import {
   type Keys,
   type Steer,
 } from './input';
-import { bodyIn, childOf, differences } from './kin';
+import { bodyIn, childOf, differences, showsCard } from './kin';
 import { loadWalk, note, saveWalk } from './walkstore';
-import { begin, split, step, wiringChanges, type Facts, type Walk } from './walkthrough';
+import {
+  begin,
+  leadsDeath,
+  split,
+  step,
+  wiringChanges,
+  type Facts,
+  type Walk,
+} from './walkthrough';
 
 const TICK_MS = 1000 / TICK_HZ;
 const BENCH_TICKS = 2000;
@@ -97,7 +108,6 @@ const PICK_RADIUS = 24; // CSS pixels around a click in which a creature is pick
 const HINT_MS = 1500;
 const TOAST_MS = 3000;
 const BUD_MS = 6000; // the bud card
-const STARVING_BELOW = 0.25; // of a full store
 const LATENCY_SAMPLES = 20;
 // Seconds. A tab that was hidden gives one long frame, and that is no time of play.
 const WALK_DT_MAX = 0.1;
@@ -259,6 +269,10 @@ function start(): void {
   const stored = loadWalk(query.get('walk') === 'reset');
   let walk: Walk = begin(stored.done, stored.shown);
   walkLog.value = stored.log;
+  let budCount = stored.buds; // buds of the bodies that the player was in, in every visit
+  const store = (): void =>
+    saveWalk({ done: walk.done, shown: walk.shown, log: walkLog.peek(), buds: budCount });
+  let possessedTick = 0; // the tick of the frame on show when the player took the body
   // Where the body was on the last frame, and the body lengths it has moved in this possession:
   // `hands` under the player's input, `alone` since the brain last took over.
   let path = { uid: 0, x: 0, y: 0, hands: 0, alone: 0 };
@@ -268,6 +282,7 @@ function start(): void {
     parent: Kin;
     child: Kin;
     brood: number;
+    card: boolean; // the card comes up. Without it the guide alone holds this bud: `showsCard`
     words: Map<number, Uint32Array>; // by uid
   }
   let budding: Budding | null = null;
@@ -377,7 +392,7 @@ function start(): void {
   // Where the camera goes in Play while no frame holds the body: the point of the pick, then the
   // place where the body was last seen.
   let seenAt = { x: 0, y: 0 };
-  let picking = false; // a `possessAt` has no answer yet
+  let picking = false; // the `possess` of a click has no answer yet
   let heirPick = false; // a `possess` that the death overlay sent has no answer yet
   let posted: Steer | null = null; // the last `input` posted in this possession
   let lastActive = -Infinity; // the time of the last frame with a key or a pointer down
@@ -423,6 +438,7 @@ function start(): void {
       brainRead: brains !== null,
       childDied: its.length === 0,
     };
+    if (!bud.card) return;
     budOpen.value = true;
     clearTimeout(budTimer);
     budTimer = setTimeout(() => (budOpen.value = false), BUD_MS);
@@ -469,11 +485,17 @@ function start(): void {
       else playScale = Math.min(Math.max(playScale * factor, SCALE_MIN), SCALE_MAX);
     },
     click(sx, sy) {
-      if (mode.peek() !== 'watch' || death.peek() || !world) return;
+      if (mode.peek() !== 'watch' || death.peek() || !world || !cur) return;
       const at = screenToWorld(cam, cssW, cssH, sx, sy);
-      picking = true;
-      seenAt = at;
-      send({ type: 'possessAt', x: at.x, y: at.y, radius: PICK_RADIUS / cam.scale });
+      // The page picks the body from the frame on show, so that it knows what it hands over.
+      const hit = clickOn(cur, at.x, at.y, PICK_RADIUS / cam.scale);
+      if (!hit) flash('Nothing there.', HINT_MS);
+      else if ('refuse' in hit) flash(REFUSE[hit.refuse], TOAST_MS);
+      else {
+        picking = true;
+        seenAt = at;
+        send({ type: 'possess', uid: hit.take });
+      }
     },
     hold(at) {
       if (at && !held) pressed();
@@ -556,11 +578,14 @@ function start(): void {
           // `prev` is the frame before this one. A brood is born on one tick.
           const parent = bodyIn(cur, cur.possessedSlot);
           const child = prev && childOf(prev, cur, cur.possessedSlot);
+          const card = showsCard(budCount++) && parent !== null && !!child;
+          store();
           if (parent && child) {
-            budding = { parent, child, brood: cur.buds - lastBuds, words: new Map() };
+            budding = { parent, child, brood: cur.buds - lastBuds, card, words: new Map() };
             send({ type: 'brainOf', uid: parent.uid });
             send({ type: 'brainOf', uid: child.uid });
-          } else {
+          }
+          if (!card) {
             toast.value = BUD.noChild;
             clearTimeout(toastTimer);
             toastTimer = setTimeout(() => (toast.value = null), TOAST_MS);
@@ -579,6 +604,7 @@ function start(): void {
         picking = false;
         if (msg.uid !== 0) {
           possessedUid = msg.uid;
+          possessedTick = cur?.tick ?? 0;
           forget();
           playScale = PLAY_SCALE;
           starving.value = false;
@@ -603,11 +629,15 @@ function start(): void {
         heirPick = false;
         watch();
         closeDeath();
-        death.value = {
+        showDeath({
           cause: msg.cause,
           heirs: msg.heirs,
-          first: !walk.done.includes('firstDeath'),
-        };
+          first: leadsDeath(
+            walk,
+            ((cur?.tick ?? possessedTick) - possessedTick) / TICK_HZ,
+            msg.heirs.length,
+          ),
+        });
         break;
       case 'brainOf': {
         // The guide asked for the counts of the body the player is in. A readout that is not read
@@ -724,6 +754,7 @@ function start(): void {
       manual,
       panelOpen: brainOpen.peek(),
       dead: death.peek() !== null,
+      first: death.peek()?.first === true,
       uid: mine?.uid ?? 0,
       energy01: (mine && energyOf(frame, frame.possessedSlot)) ?? 0,
       lengthsMoved: path.hands,
@@ -737,11 +768,12 @@ function start(): void {
       busy: pageBusy() || budding !== null,
     };
     const out = step(walk, facts, Math.min(dt, WALK_DT_MAX));
-    if (out.walk.done !== walk.done || out.walk.shown !== walk.shown) {
-      walkLog.value = note(walkLog.peek(), walk, out.walk, Math.round(now / 100) / 10);
-      saveWalk({ done: out.walk.done, shown: out.walk.shown, log: walkLog.peek() });
-    }
+    const before = walk;
     walk = out.walk;
+    if (walk.done !== before.done || walk.shown !== before.shown) {
+      walkLog.value = note(walkLog.peek(), before, walk, Math.round(now / 100) / 10);
+      store();
+    }
     walkLine.value = out.line;
     pulse.value = out.pulse;
     changesShown.value = walk.done.includes('noChange');

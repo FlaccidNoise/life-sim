@@ -2,6 +2,7 @@ import { afterEach, expect, test, vi } from 'vitest';
 import {
   BEATS,
   begin,
+  leadsDeath,
   split,
   step,
   wiringChanges,
@@ -19,6 +20,7 @@ const WATCH: Facts = {
   manual: false,
   panelOpen: false,
   dead: false,
+  first: false,
   uid: 0,
   energy01: 0.3,
   lengthsMoved: 0,
@@ -228,24 +230,33 @@ test('beat 8b: the first bud is recorded', () => {
   expect(step(past('possess'), { ...PLAY, buds: 1 }, DT).walk.done).toContain('bud');
 });
 
-test('beat 9: two buds show the score line and pulse the counter, once', () => {
-  const one = run(past('possess', 'move'), { ...PLAY, buds: 1 }, 8);
+test('beat 9: the second bud shows the score line and pulses the counter, once', () => {
+  // `lineageAlive` counts the body of the player: the counter shows one less.
+  const one = run(past('possess', 'move'), { ...PLAY, buds: 1, lineageAlive: 2 }, 8);
   expect(one.seen.every((s) => s.line === null && s.pulse === null)).toBe(true);
-  const two = run(one.walk, { ...PLAY, buds: 2 }, 8);
+  const two = run(one.walk, { ...PLAY, buds: 2, lineageAlive: 3 }, 8);
   expect(two.seen[0]).toMatchObject({ line: LINE.score, pulse: 'score' });
   expect(two.seen.filter((s) => (s.line === LINE.score) !== (s.pulse === 'score'))).toEqual([]);
   expect(two.walk.done).toContain('score');
-  expect(lines(run(two.walk, { ...PLAY, buds: 3 }, 30).seen)).not.toContain(LINE.score);
+  const three = { ...PLAY, buds: 3, lineageAlive: 4 };
+  expect(lines(run(two.walk, three, 30).seen)).not.toContain(LINE.score);
 });
 
-test('beat 9: the death of one descendant shows the score line too', () => {
+test('beat 9: the line waits for a counter that shows 2 or more', () => {
+  // The second bud, and the first child has died: the counter shows 1.
+  const thin = run(past('possess', 'move'), { ...PLAY, buds: 2, lineageAlive: 2 }, 8);
+  expect(thin.seen.every((s) => s.line === null && s.pulse === null)).toBe(true);
+  expect(thin.walk.done).not.toContain('score');
+  // A full line that the body came with is not a second bud of the player.
+  const came = run(past('possess', 'move'), { ...PLAY, buds: 1, lineageAlive: 9 }, 8);
+  expect(lines(came.seen)).not.toContain(LINE.score);
+});
+
+test('beat 9: the death of a descendant shows no line: its cause is off the screen', () => {
   const at = (t: number): Facts => ({ ...PLAY, buds: 1, lineageAlive: t < 2 ? 2 : 1 });
-  const { seen } = run(past('possess', 'move'), at, 4);
-  expect(seen.find((s) => s.line !== null)).toMatchObject({ line: LINE.score, pulse: 'score' });
-  expect(seen.find((s) => s.line !== null)?.t).toBeCloseTo(2, 0);
-  // A smaller line in another body is not a death.
-  const other = (t: number): Facts => (t < 2 ? { ...PLAY, lineageAlive: 5 } : { ...PLAY, uid: 9 });
-  expect(lines(run(past('possess', 'move'), other, 4).seen)).not.toContain(LINE.score);
+  const { walk, seen } = run(past('possess', 'move'), at, 30);
+  expect(seen.every((s) => s.line === null && s.pulse === null)).toBe(true);
+  expect(walk.done).not.toContain('score');
 });
 
 test('beat 10 never arms yet', () => {
@@ -265,12 +276,37 @@ test('beat 10 never arms yet', () => {
 });
 
 test('beat 12: the first death is recorded, and the pick of an heir is the beat', () => {
-  const died = run(past('possess'), { ...WATCH, dead: true }, 2);
+  const died = run(past('possess'), { ...WATCH, dead: true, first: true }, 2);
   expect(died.walk.shown.firstDeath).toBe(1);
   expect(died.walk.done).not.toContain('firstDeath');
   expect(died.seen.every((s) => s.line === null && s.pulse === null)).toBe(true);
   expect(run(died.walk, WATCH, 1).walk.done).not.toContain('firstDeath');
   expect(run(died.walk, { ...PLAY, uid: 8 }, 1).walk.done).toContain('firstDeath');
+});
+
+test('beat 12: the overlay leads with the line after a life of 20 seconds that leaves an heir', () => {
+  const walk = past('possess');
+  expect(leadsDeath(walk, 20, 1)).toBe(true);
+  expect(leadsDeath(walk, 300, 5)).toBe(true);
+  // A life that the player has not lived, and a line that has ended, get the plain layout.
+  expect(leadsDeath(walk, 19.9, 1)).toBe(false);
+  expect(leadsDeath(walk, 0.1, 3)).toBe(false);
+  expect(leadsDeath(walk, 300, 0)).toBe(false);
+  // Once: the player has gone on as an heir of a death that led with the line.
+  expect(leadsDeath(past('possess', 'firstDeath'), 300, 5)).toBe(false);
+});
+
+test('beat 12: a death with the plain layout does not use up the beat', () => {
+  // A life of a second: the overlay is plain, and the player goes on as an heir.
+  const short = run(past('possess'), { ...WATCH, dead: true }, 2);
+  expect(short.walk.shown.firstDeath).toBeUndefined();
+  const heir = run(short.walk, { ...PLAY, uid: 8 }, 1);
+  expect(heir.walk.done).not.toContain('firstDeath');
+  // The next death, of a life that was lived, is the first death.
+  expect(leadsDeath(heir.walk, 60, 2)).toBe(true);
+  const died = run(heir.walk, { ...WATCH, dead: true, first: true }, 2);
+  expect(died.walk.shown.firstDeath).toBe(1);
+  expect(run(died.walk, { ...PLAY, uid: 9 }, 1).walk.done).toContain('firstDeath');
 });
 
 // A whole first life, with every beat in it.
@@ -288,7 +324,8 @@ const life = (t: number): Facts => {
     lineageAlive: t >= 120 ? 3 : t >= 110 ? 2 : 1,
     busy: (t >= 110 && t < 113) || (t >= 120 && t < 123), // the toast of a bud
   };
-  return t < 140 ? facts : t < 145 ? { ...WATCH, dead: true } : { ...facts, uid: 8, buds: 0 };
+  if (t < 140) return facts;
+  return t < 145 ? { ...WATCH, dead: true, first: true } : { ...facts, uid: 8, buds: 0 };
 };
 
 test('a first life does every beat but the mate', () => {
@@ -453,43 +490,57 @@ const blocked = (): Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> => {
 };
 afterEach(() => vi.unstubAllGlobals());
 
-test('the store keeps what is done, what was shown, and the log', () => {
+const NONE = { done: [], shown: {}, log: {}, buds: 0 };
+
+test('the store keeps what is done, what was shown, the log, and the count of the buds', () => {
   vi.stubGlobal('localStorage', memory());
-  expect(loadWalk(false)).toEqual({ done: [], shown: {}, log: {} });
+  expect(loadWalk(false)).toEqual(NONE);
   const stored = {
     done: ['possess', 'eat'] as BeatId[],
     shown: { possess: 1, move: 2 },
     log: { possess: { shown: 0.5, done: 4.2 }, move: { shown: 9 } },
+    buds: 3,
   };
   saveWalk(stored);
   expect(loadWalk(false)).toEqual(stored);
-  // `?walk=reset` clears it.
-  expect(loadWalk(true)).toEqual({ done: [], shown: {}, log: {} });
-  expect(loadWalk(false)).toEqual({ done: [], shown: {}, log: {} });
+  // `?walk=reset` clears it, and the count of the buds with it.
+  expect(loadWalk(true)).toEqual(NONE);
+  expect(loadWalk(false)).toEqual(NONE);
 });
 
 test('with no storage the walk lives in memory', () => {
   vi.stubGlobal('localStorage', blocked());
-  expect(loadWalk(false)).toEqual({ done: [], shown: {}, log: {} });
-  expect(loadWalk(true)).toEqual({ done: [], shown: {}, log: {} });
-  expect(() => saveWalk({ done: ['possess'], shown: {}, log: {} })).not.toThrow();
+  expect(loadWalk(false)).toEqual(NONE);
+  expect(loadWalk(true)).toEqual(NONE);
+  expect(() => saveWalk({ ...NONE, done: ['possess'] })).not.toThrow();
   vi.stubGlobal('localStorage', undefined);
-  expect(loadWalk(false)).toEqual({ done: [], shown: {}, log: {} });
-  expect(() => saveWalk({ done: ['possess'], shown: {}, log: {} })).not.toThrow();
+  expect(loadWalk(false)).toEqual(NONE);
+  expect(() => saveWalk({ ...NONE, done: ['possess'] })).not.toThrow();
 });
 
 test('the store reads only what it knows from what it finds', () => {
   const storage = memory();
   vi.stubGlobal('localStorage', storage);
-  for (const text of ['not json', 'null', '7', '[]', '{"done":7,"shown":[],"log":"x"}']) {
+  const junk = ['not json', 'null', '7', '[]', '{"done":7,"shown":[],"log":"x","buds":"x"}'];
+  for (const text of [...junk, '{"buds":-2}']) {
     storage.setItem('tidepool.walk', text);
-    expect(loadWalk(false), text).toEqual({ done: [], shown: {}, log: {} });
+    expect(loadWalk(false), text).toEqual(NONE);
   }
   storage.setItem(
     'tidepool.walk',
     '{"done":["eat","fly",3],"shown":{"move":2,"fly":1,"eat":"x"},"log":{"eat":{"shown":"x","done":3},"fly":{"shown":1}}}',
   );
-  expect(loadWalk(false)).toEqual({ done: ['eat'], shown: { move: 2 }, log: { eat: { done: 3 } } });
+  expect(loadWalk(false)).toEqual({
+    ...NONE,
+    done: ['eat'],
+    shown: { move: 2 },
+    log: { eat: { done: 3 } },
+  });
+  // A whole count of buds is kept. A store of a visit before the count was kept holds none.
+  storage.setItem('tidepool.walk', '{"done":["bud"],"buds":2.9}');
+  expect(loadWalk(false)).toEqual({ ...NONE, done: ['bud'], buds: 2 });
+  storage.setItem('tidepool.walk', '{"done":["bud"]}');
+  expect(loadWalk(false)).toEqual({ ...NONE, done: ['bud'] });
 });
 
 test('the log keeps the first time that a beat showed and the first time it was done', () => {

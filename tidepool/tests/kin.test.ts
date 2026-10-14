@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { bodyIn, childOf, differences } from '../src/app/kin';
+import { bodyIn, childOf, differences, showsCard } from '../src/app/kin';
 import * as P from '../src/protocol';
 
 type Kin = P.Kin;
@@ -283,4 +283,8 @@ test('the larger changes come first, and the count of weights comes last', () =>
     'Cilia 5% larger',
     '1 of 1 connection weights nudged',
   ]);
+});
+
+test('the bud card shows for the first two buds of a player, and then steps back', () => {
+  expect([0, 1, 2, 3, 40].map(showsCard)).toEqual([true, true, false, false, false]);
 });

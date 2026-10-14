@@ -12,15 +12,19 @@ export interface Stored {
   done: BeatId[];
   shown: Partial<Record<BeatId, number>>;
   log: Log;
+  buds: number; // buds of the bodies that the player was in, in every visit: `showsCard`
 }
+
+const empty = (): Stored => ({ done: [], shown: {}, log: {}, buds: 0 });
 
 const fields = (value: unknown): Record<string, unknown> =>
   typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {};
 
 // What is stored is text that anything could have written: this keeps only what it knows.
 function read(text: string | null): Stored {
-  const stored: Stored = { done: [], shown: {}, log: {} };
+  const stored = empty();
   const raw = fields(JSON.parse(text ?? 'null'));
+  if (typeof raw.buds === 'number' && raw.buds > 0) stored.buds = Math.floor(raw.buds);
   const [done, shown, log] = [raw.done, fields(raw.shown), fields(raw.log)];
   for (const id of BEATS) {
     if (Array.isArray(done) && done.includes(id)) stored.done.push(id);
@@ -41,7 +45,7 @@ export function loadWalk(reset: boolean): Stored {
     if (reset) localStorage.removeItem(KEY);
     return read(localStorage.getItem(KEY));
   } catch {
-    return { done: [], shown: {}, log: {} };
+    return empty();
   }
 }
 
