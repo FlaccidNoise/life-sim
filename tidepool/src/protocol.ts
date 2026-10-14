@@ -1,10 +1,10 @@
 // Constants and layouts shared by the page and the worker. The frame layout mirrors
 // crates/sim/src/frame.rs. tests/abi.test.ts fails if the two disagree.
 
-export const ABI_VERSION = 4;
+export const ABI_VERSION = 5;
 export const TICK_HZ = 20;
 export const FRAME_HEADER_WORDS = 34;
-export const CREATURE_STRIDE = 23;
+export const CREATURE_STRIDE = 24;
 export const PLANT_STRIDE = 4;
 export const PART_WORDS = 12;
 export const MAX_EYES = 8;
@@ -20,7 +20,9 @@ const CONE_WORDS = 3;
 
 // Word offsets in a creature record. The first seven are floats, the next four are integers, and
 // PART_WORDS part words follow from C_PARTS. The word at C_BRAIN is `hidden | conns << 16`: the
-// hidden neurons and the connections that the brain of the body expresses.
+// hidden neurons and the connections that the brain of the body expresses. The last word, at
+// C_GROWTH, is a float: the share of its full size that the body has grown. The length and the width
+// are as the body is now, so the length over the growth is the length gene.
 export const C_X = 0,
   C_Y = 1,
   C_HEADING = 2,
@@ -33,6 +35,7 @@ export const C_UID = 7,
   C_FLAGS = 9,
   C_BRAIN = 10;
 export const C_PARTS = 11;
+export const C_GROWTH = 23;
 export const FLAG_LINEAGE = 1,
   FLAG_POSSESSED = 2,
   FLAG_JUVENILE = 4,
@@ -80,6 +83,7 @@ export interface Kin {
   length: number; // as it is now. A body that is not full-grown is shorter than its genes make it.
   width: number;
   hue: number;
+  growth: number; // the share of its full size that it has grown. 0 when the frame does not give it.
   flags: number;
   hidden: number; // hidden neurons
   conns: number; // connections

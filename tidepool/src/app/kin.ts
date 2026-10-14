@@ -4,6 +4,7 @@
 import {
   C_BRAIN,
   C_FLAGS,
+  C_GROWTH,
   C_HUE,
   C_LENGTH,
   C_PARTS,
@@ -13,7 +14,6 @@ import {
   C_X,
   C_Y,
   CREATURE_STRIDE,
-  FLAG_JUVENILE,
   FLAG_LINEAGE,
   KIND_EYE,
   PART_WORDS,
@@ -42,6 +42,7 @@ function kinAt(frame: FrameView, r: number): Kin {
     length: f32[r + C_LENGTH] ?? 0,
     width: f32[r + C_WIDTH] ?? 0,
     hue: f32[r + C_HUE] ?? 0,
+    growth: f32[r + C_GROWTH] ?? 0,
     flags: u32[r + C_FLAGS] ?? 0,
     hidden: brain & 0xffff,
     conns: brain >>> 16,
@@ -143,11 +144,11 @@ function nameOf(parts: Part[], i: number): string {
  * gained and the counts of the brain first, then each change of a size with the largest first, then
  * the parts that moved, then the count of the connection weights that differ.
  *
- * From the two records: the length in percent when both bodies are full-grown, the width as a share
- * of the length, each part lost, gained, resized, or moved, an eye with another cone, and the count
- * of hidden neurons. From the two readouts: the connections gained and lost, lined up by history id,
- * and of the connections that both hold, how many have another weight. With no readouts, the count
- * of connections is from the records. A difference under `LEAST` percent is not listed.
+ * From the two records: the length gene in percent, the width as a share of the length, each part
+ * lost, gained, resized, or moved, an eye with another cone, and the count of hidden neurons. From
+ * the two readouts: the connections gained and lost, lined up by history id, and of the connections
+ * that both hold, how many have another weight. With no readouts, the count of connections is from
+ * the records. A difference under `LEAST` percent is not listed.
  */
 export function differences(
   parent: Kin,
@@ -175,11 +176,13 @@ export function differences(
     if (n > 0) say(FIRST, side, fill(line, { n, s: n === 1 ? '' : 's' }));
   };
 
-  // The frame gives a length as it is now, and the genes of a body give its full length. So two
-  // lengths compare only when both bodies are full-grown. The width as a share of the length is
-  // the same at every age.
-  const grown = ((parent.flags | child.flags) & FLAG_JUVENILE) === 0;
-  if (grown) body(percent(parent.length, child.length), BUD.longer, BUD.shorter);
+  // The frame gives a length as it is now, and the length over the growth is the length gene: the
+  // full length of the body, at any age. A body with no growth has no length gene to compare. The
+  // width as a share of the length is the same at every age.
+  const gene = (kin: Kin): number => kin.length / kin.growth;
+  if (parent.growth > 0 && child.growth > 0) {
+    body(percent(gene(parent), gene(child)), BUD.longer, BUD.shorter);
+  }
   body(percent(parent.width / parent.length, child.width / child.length), BUD.wider, BUD.narrower);
 
   for (const [i, j] of lineUp(parent.parts, child.parts)) {

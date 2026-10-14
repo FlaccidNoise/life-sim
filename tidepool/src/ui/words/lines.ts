@@ -34,8 +34,8 @@ export const BUD = {
   brood: 'One of {n} born at this bud.',
   died: 'This child has died already.',
   noBrain: 'The brain could not be read.',
-  // The frame gives a body as long as it is now, and the card draws the shape and the parts.
-  newborn: 'Drawn at one length. A newborn is small.',
+  // The card draws the shape and the parts of the two bodies, not their lengths.
+  oneLength: 'Both drawn at one length.',
   more: 'And {n} more.',
   longer: 'Body {n}% longer',
   shorter: 'Body {n}% shorter',

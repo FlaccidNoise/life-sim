@@ -34,6 +34,7 @@ function frameOf(recs: Rec[], possessedSlot = 0): P.FrameView {
     f32[r + P.C_LENGTH] = 12;
     f32[r + P.C_WIDTH] = 6;
     f32[r + P.C_HUE] = 0.25;
+    f32[r + P.C_GROWTH] = 0.5;
     u32[r + P.C_UID] = rec.uid;
     u32[r + P.C_SLOT] = slot;
     u32[r + P.C_FLAGS] = rec.flags ?? 0;
@@ -54,6 +55,7 @@ test('bodyIn copies a record out of the frame, and gives null for a slot that it
     length: 12,
     width: 6,
     hue: 0.25,
+    growth: 0.5,
     hidden: 4,
     conns: 60,
   });
@@ -108,15 +110,16 @@ const kin = (over: Partial<Kin> = {}): Kin => ({
   length: 12,
   width: 6,
   hue: 0.25,
+  growth: 1,
   flags: P.FLAG_LINEAGE,
   hidden: 4,
   conns: 60,
   parts: FOUNDER,
   ...over,
 });
-// A newborn is drawn at a share of its full length: here 0.7, the egg of a founder.
+// A newborn has grown a share of its full length: here 0.7, the egg of a founder.
 const newborn = (over: Partial<Kin> = {}): Kin =>
-  kin({ uid: 2, length: 8.4, width: 4.2, flags: MARKED, ...over });
+  kin({ uid: 2, length: 8.4, width: 4.2, growth: 0.7, flags: MARKED, ...over });
 const texts = (...args: Parameters<typeof differences>): string[] =>
   differences(...args).map((d) => d.text);
 
@@ -134,13 +137,33 @@ test('a longer body and a wider one are listed in percent, on the side of the ch
   expect(texts(kin(), kin({ width: 5.4 }))).toEqual(['Body 10% narrower for its length']);
 });
 
-// The frame gives the length of a body as it is now, and a newborn is small. Its length gene is not
-// in the frame, so the length of a body that is not full-grown is not compared.
-test('the length of a newborn is not compared, and its shape is', () => {
-  expect(texts(kin(), newborn({ length: 6, width: 3 }))).toEqual([]);
+// The frame gives the length of a body as it is now, and its growth. The length over the growth is
+// the length gene, which is what a parent and its child are compared by.
+test('the length gene of a newborn is compared, and its shape is', () => {
+  // A length gene of 12.72: 6% over the 12 of the parent.
+  expect(differences(kin(), newborn({ length: 8.904, width: 4.452 }))).toEqual([
+    { text: 'Body 6% longer', side: 'child' },
+  ]);
+  expect(texts(kin(), newborn({ length: 7.56, width: 3.78 }))).toEqual(['Body 10% shorter']);
   expect(texts(kin(), newborn({ length: 8.4, width: 5.04 }))).toEqual([
     'Body 20% wider for its length',
   ]);
+});
+
+test('a child with the length gene of its parent has no length line, whatever its growth', () => {
+  for (const growth of [0.05, 0.4, 0.7, 0.999, 1]) {
+    // The lengths as the core gives them: 32-bit floats.
+    const child = { length: Math.fround(12 * growth), width: Math.fround(6 * growth), growth };
+    expect(texts(kin(), newborn(child))).toEqual([]);
+    expect(texts(newborn(child), kin())).toEqual([]);
+  }
+});
+
+test('a body with no growth has no length line', () => {
+  for (const growth of [0, NaN]) {
+    expect(texts(kin(), newborn({ length: 6, width: 3, growth }))).toEqual([]);
+    expect(texts(kin({ growth }), newborn({ length: 6, width: 3 }))).toEqual([]);
+  }
 });
 
 test('a gained part is on the side of the child and a lost part on the side of the parent', () => {

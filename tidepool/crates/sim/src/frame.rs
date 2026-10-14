@@ -9,7 +9,7 @@ use crate::plant;
 use crate::world::World;
 
 pub const HEADER_WORDS: u32 = 34;
-pub const CREATURE_STRIDE: u32 = 23;
+pub const CREATURE_STRIDE: u32 = 24;
 pub const PLANT_STRIDE: u32 = 4;
 /// Part words in a creature record: one for each part gene that a genome can hold.
 pub const PART_WORDS: u32 = MAX_PART_GENES as u32;
@@ -53,7 +53,9 @@ fn pack(part: &PartGene) -> u32 {
 /// count holds zeros.
 /// Creature record: x, y, heading, length, width, hue, energy01, then uid, slot, flags, and
 /// `hidden | conns << 16` for the hidden neurons and the connections that its brain expresses, then
-/// `PART_WORDS` part words in gene order. A place with no part holds 0.
+/// `PART_WORDS` part words in gene order. A place with no part holds 0. The last word is the growth,
+/// a float: the share of its full size that the body has grown. The length and the width are as
+/// the body is now, so the length over the growth is the length gene.
 /// Plant record: x, y, radius, reserve01.
 pub fn write(world: &mut World, x0: f32, y0: f32, x1: f32, y1: f32) -> u32 {
     let per_mass = world.params.get(id::ENERGY_PER_MASS);
@@ -163,6 +165,7 @@ pub fn write(world: &mut World, x0: f32, y0: f32, x1: f32, y1: f32) -> u32 {
             *word = pack(part);
         }
         frame.extend_from_slice(&parts);
+        frame.push(c.growth[s].to_bits());
         records += 1;
     });
     frame[1] = records;
@@ -319,14 +322,32 @@ mod tests {
         w.params.set(id::FOUNDER_EYE, 0.0);
         w.seed_founders(50, 0);
         write(&mut w, 0.0, 0.0, 1536.0, 1024.0);
-        let parts = &record(&w, 4)[11..];
-        assert_eq!(parts.len(), PART_WORDS as usize);
+        let parts = &record(&w, 4)[11..11 + PART_WORDS as usize];
         let kinds: Vec<u32> = parts.iter().map(|word| word & 0xFF).collect();
         assert_eq!(kinds, [1, 2, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0]);
         assert_eq!(parts[4..], [0; 8]);
         // The flagellum: anchor 1 packs as 255, and the size as its nearest 255th.
         let size = w.genomes[4].parts[0].size;
         assert_eq!(parts[0] >> 8, 255 | ((size * 255.0).round() as u32) << 8);
+    }
+
+    /// The page divides the length of a record by its growth, and gets the length gene.
+    #[test]
+    fn a_record_ends_with_the_growth_of_a_juvenile_and_of_an_adult() {
+        let mut w = World::new(5, 1536.0, 1024.0);
+        w.seed_founders(50, 0);
+        w.creatures.growth[9] = 0.4;
+        write(&mut w, 0.0, 0.0, 1536.0, 1024.0);
+        for (slot, growth) in [(9u32, 0.4f32), (4, 1.0)] {
+            let r = record(&w, slot);
+            assert_eq!(r[CREATURE - 1], growth.to_bits());
+            assert_eq!(r[9] & FLAG_JUVENILE != 0, growth < 1.0);
+            let gene = f32::from_bits(r[3]) / growth;
+            assert!(
+                (gene - w.creatures.len[slot as usize]).abs() < 1e-5,
+                "{gene}"
+            );
+        }
     }
 
     #[test]

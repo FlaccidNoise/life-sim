@@ -4,7 +4,6 @@
 
 import type { ComponentChild } from 'preact';
 import {
-  FLAG_JUVENILE,
   KIND_CHEMO,
   KIND_CILIA,
   KIND_EYE,
@@ -133,7 +132,7 @@ export function BudBody(props: { bud: Bud }) {
       {bud.brood > 1 && <p class="bud-note">{BUD.brood.replace('{n}', String(bud.brood))}</p>}
       {bud.childDied && <p class="bud-note">{BUD.died}</p>}
       {!bud.brainRead && <p class="bud-note">{BUD.noBrain}</p>}
-      {(bud.child.flags & FLAG_JUVENILE) !== 0 && <p class="bud-note">{BUD.newborn}</p>}
+      <p class="bud-note">{BUD.oneLength}</p>
     </>
   );
 }
