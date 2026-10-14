@@ -278,3 +278,94 @@ committed, and its logs were lost with the log folder. It starts again from its 
 `m3-tuning-hypotheses.txt` beside this file (a build agent cannot write a findings `.md` in this
 harness). A log folder in `/private/tmp` does not survive a restart, and "the hypothesis was written
 first" must be a fact that a reader can check: the order of the commits shows it.
+
+The hypotheses of this part and of Part 5 are in `m3-tuning-hypotheses.txt`, each committed before
+its run (`4ba86ab`, `b059d1f`, `93e27ed`, `1831dd7` on `main`). The readings below are the build
+agent's, and the orchestrator read the close again on `main`.
+
+### Mixing on, at the stage 1 values
+
+With `--param mix_rate=1` and nothing else changed:
+
+- `gate-health` 3/3. `gate-evolve` 3/3 at tick 36,000, with `len` 9.1 to 9.4 (11.5 to 11.8 with
+  mixing off). The long gate 5/5 with every brain band. Least scent gap 0.10, on seed 1.
+- Target 2 fails. The WASM bench, in turn, at a load of 2.8 to 3.2: 2,586 and 2,622 at 1,483
+  creatures with mixing, 3,023 and 3,017 at 1,357 without.
+- 2,604 × 1,483 = 3.86M creature-ticks per second against 3,020 × 1,357 = 4.10M. Mixing costs about
+  +9% bodies and +6% work per body.
+- The brains of the bench world are alike (seed 1 at tick 13,000: `conns` 57.9 against 56.6). So
+  connections are not the cost. More births and the crosses are the likely cost (`births_late`
+  2,334 against 1,935).
+
+### Three trials, all with mixing on
+
+| Trial | Change | Bench (trial / baseline in turn) | Long gate | Result |
+|---|---|---|---|---|
+| 1 | `conn_upkeep` 0.00005 → 0.0001 | 2,839, 2,826 at 1,404 / 2,642, 2,603 | 4/5: seed 5 scent gap 0.088 | A cost on wires lets the scent sense go |
+| 2 | `fixed_upkeep` 0.0337 → 0.037 | 2,801, 2,751 at 1,394 / 2,594, 2,569 | 5/5, least scent gap 0.12 | Written as the default (`f4d2ef3`) |
+| 3 | `fixed_upkeep` 0.037 → 0.040 | 2,691, 2,762 at 1,365 / 2,676, 2,646 | not run | Gain 1 to 4%, hypothesis of about 7% refuted. Stopped at the bench, the lever is spent |
+
+Later readings of the trial 2 default fell under 2,700: 2,681 (`make gates`, load 4.8 to 6.0), then
+2,648, 2,665, 2,676, 2,646. In turn with the stage 1 world (2,934 and 2,898) it runs about 9% slower.
+The commit message of `f4d2ef3` says the trial brings the bench back over 2,700. The readings after it
+do not support that. On `main` at load 8, `make gates` read 2,697.
+
+**Target 2 was not met after the trial cap: a hard stop.** The owner chose on 2026-10-14: mixing on,
+`fixed_upkeep` 0.037, and the target lowered to 2,600. The floor of 2,400 holds.
+
+### At the final defaults (`mix_rate` 1, `fixed_upkeep` 0.037)
+
+| Seed | 1 | 2 | 3 |
+|---|---|---|---|
+| Pairs, tick 36,000 | 4,070 | 3,606 | 2,883 |
+| Births of a cross, tick 36,000 | 5,883 of 9,422 (62%) | 5,190 of 9,393 (55%) | 4,079 of 7,030 (58%) |
+| Bodies holding a donor, tick 36,000 | 522 | 431 | 467 |
+| Accept share, tick 36,000 | 0.89 | 0.85 | 0.85 |
+| Accept share, tick 144,000 | 0.01 | 0.13 | 0.24 |
+
+Seed 1 to tick 144,000: 9 births of 7,877 are a cross (0.1%), with 9 pairs and 3 donors at the last
+reading.
+
+| Seed | creatures | len | parts | chemo / blind | scent gap | eye gap | hidden | conns | variety | Result |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | 1689 | 9.6 | 8.2 | .18 / .01 | .17 | .30 | 3.27 | 46.7 | 24.9 | PASS |
+| 4 | 1338 | 10.6 | 9.7 | .29 / .03 | .26 | .24 | 4.45 | 62.4 | 29.9 | PASS |
+| 5 | 1618 | 10.6 | 9.8 | .15 / .03 | .12 | .26 | 7.13 | 72.6 | 23.1 | PASS |
+| 6 | 1437 | 9.9 | 9.0 | .20 / .04 | .16 | .24 | 4.11 | 45.6 | 39.1 | PASS |
+| 8 | 1246 | 10.1 | 10.5 | .14 / .00 | .14 | .31 | 4.92 | 61.6 | 15.7 | PASS |
+
+- **The mechanism fires:** 55 to 62% of births are a cross at tick 36,000.
+- **Evolution does not keep it:** the accept share falls to 0.01 to 0.24 by tick 144,000, and on
+  seed 1 the share of crosses falls to 0.1%. Mating is a feature of a young world.
+- **The mechanism fires:** a cross brings donor hidden genes that stay unwired and still pay
+  upkeep: 4.2 to 6.6 hidden genes against 3.3 to 3.9 wired at tick 144,000.
+- **Evolution keeps it, not on every run:** lines with no chemoreceptor still take over on some
+  paths (seed 5 at 0.30). One run per seed.
+- **"It helps" is not shown** for hidden neurons (the hidden gap is −1.65 to +5.46) or for scent
+  (the world with no scent holds more creatures on 2 of 5 seeds). The world with blind eyes holds
+  fewer creatures on 5 of 5 seeds: consistent with "it helps" for eyes, each arm evolved alone.
+
+## Part 5: the three items carried from M2
+
+Five seeds at the final defaults.
+
+- **Area: no band.** It reads 35.5 to 41.7 at tick 36,000 and 34.3 to 39.7 at tick 144,000. Area is
+  about `len`² × 0.35 (`wid` reads 0.32 to 0.40 against its floor of 0.3), so the `len` band already
+  bounds it from below. No parameter narrows a body alone, so no bad input exists that an area band
+  rejects and the `len` band passes.
+- **Egg: the range as it is.** With the top of the range at 0.9 (founder 0.7), `egg` at tick 144,000
+  reads 0.65 to 0.67, against 0.65 to 0.66 with the top at 0.7. It does not use the room, and the
+  hypothesis that the top held it is refuted. `len` stays in its band. Confound: the wider range also
+  made the mutation step 40% larger.
+- **`speed_cv`: a band at 0.10.** Good worlds read 0.22 to 0.25 at tick 36,000 and 0.23 to 0.28 at
+  tick 144,000. The bad input (`mut_rate`, `mut_shape_rate`, and the three part rates at 0) reads 0.05
+  to 0.07 and fails 0/5. That world fails both sense gaps too, so this band is not its only rejector.
+- **`plans`: no band.** A passing default world read `plans=0` (seed 8 at tick 36,000). It is a count
+  of shares over 5%, as `shapes` was. An effective number of plans would be the form to try.
+
+## Close
+
+On `main` at `1831dd7`: `make check` exits 0 (263 Vitest tests). `make gates` exits 0 with every
+gate row equal digit for digit to the agent's close (native 2,829, WASM 2,697 at load 8). Break:
+with the full-grown condition taken out of `mate.rs`, `a_juvenile_and_a_body_with_a_donor_do_not_pair`
+fails, and passes again with it restored.
