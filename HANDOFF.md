@@ -19,8 +19,8 @@ The owner also asked, on 2026-10-13, for a walkthrough that teaches as it plays:
 
 ## State
 
-- Branch `main`. Nothing is pushed since `7895cd5`: about 50 local commits. **The owner has not said
-  to push.** Ask.
+- Branch `main`. Pushed to `5018fbb` on 2026-10-14, at the owner's word. Push again only when the
+  owner asks.
 - Built and merged, each checked by the orchestrator (the gates, the rows digit for digit, one rule
   broken to see a test fail): every task of the M3 plan but Task 10 parts 4 and 5 and Task 15. The
   walkthrough W1 to W4 and an integration pass. Two frame words (growth, age): stride 25, ABI 6.
@@ -49,7 +49,7 @@ The owner also asked, on 2026-10-13, for a walkthrough that teaches as it plays:
    §6, `tidepool/AGENTS.md`, and this file. Rename "Start" to "Default" in the plan's parameter table.
 3. Bring the owner, in one message: every provisional decision of M3 to confirm, the look to pick
    (`m3-shapes.md`: the owner leaned to look 1's scale with look 3's detail, and look 4 was built for
-   that), the M4 plan's eleven choices, the walkthrough playtest (`m3-walkthrough.md`), and the push.
+   that), the M4 plan's eleven choices, and the walkthrough playtest (`m3-walkthrough.md`).
 
 ## The owner's checks, open, never closed by an agent
 
