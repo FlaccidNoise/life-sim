@@ -401,6 +401,8 @@ pub fn brains(argv: &[String]) {
         row("hidden_genes", |m| m.hidden);
         row("conns", |m| m.conns);
         let shapes = evolve::shapes(evolve::shape, &minds);
+        let variety = evolve::variety(shapes.iter().map(|held| held.1));
+        println!("seed={seed} variety={variety:.1}");
         for ((hidden, core), held) in shapes.iter().take(PLANS_SHOWN) {
             println!(
                 "seed={seed} shape hidden_genes={hidden} core_conns={core} share={:.2}",

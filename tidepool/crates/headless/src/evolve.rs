@@ -184,6 +184,14 @@ pub fn shapes(of: fn(&Mind) -> (usize, usize), minds: &[Mind]) -> Vec<((usize, u
     shapes
 }
 
+/// The effective number of shapes: 1 over the sum of the squared shares. `held` is the number of
+/// brains that hold each shape. Every shape counts, whatever its share, so a shape that splits in
+/// two never lowers it. 0 for no brain.
+pub fn variety(held: impl Iterator<Item = usize>) -> f64 {
+    let (total, squares) = held.fold((0, 0), |(total, squares), n| (total + n, squares + n * n));
+    (total * total) as f64 / squares.max(1) as f64
+}
+
 /// The four brain measures of a row: `hidden`, `conns`, `shapes`, and `shapes_raw`.
 fn brain_measures(minds: &[Mind]) -> (f64, f64, usize, usize) {
     let held = |of: fn(&Mind) -> (usize, usize)| {
@@ -238,7 +246,9 @@ fn measure(seed: u32, a: &Args, brain: bool) -> (String, Vec<String>) {
     let creatures_noeye = blind.creatures.slots.count();
     let eye_blind = mean_sd(live(&blind).map(|s| blind.creatures.eye_sum[s])).0;
     let (chemo_gap, eye_gap) = (chemo - chemo_blind, eye - eye_blind);
-    let (hidden, conns, shapes, shapes_raw) = brain_measures(&minds(&world));
+    let living = minds(&world);
+    let variety = variety(shapes(shape, &living).iter().map(|held| held.1));
+    let (hidden, conns, shapes, shapes_raw) = brain_measures(&living);
 
     let mut failures = Vec::new();
     let mut band = |ok: bool, what: String| {
@@ -276,7 +286,7 @@ fn measure(seed: u32, a: &Args, brain: bool) -> (String, Vec<String>) {
         band(shapes >= SHAPES, format!("shapes={shapes} < {SHAPES}"));
     }
     let mut row = format!(
-        "seed={seed} creatures={creatures} creatures_noscent={creatures_noscent} creatures_noeye={creatures_noeye} len={len:.1} len_sd={len_sd:.2} parts={parts:.1} chemo={chemo:.2} chemo_blind={chemo_blind:.2} eye={eye:.2} eye_blind={eye_blind:.2} plans={plans} speed_cv={speed_cv:.2} speed={speed:.2} area={area:.1} hidden={hidden:.2} conns={conns:.1} shapes={shapes} shapes_raw={shapes_raw}"
+        "seed={seed} creatures={creatures} creatures_noscent={creatures_noscent} creatures_noeye={creatures_noeye} len={len:.1} len_sd={len_sd:.2} parts={parts:.1} chemo={chemo:.2} chemo_blind={chemo_blind:.2} eye={eye:.2} eye_blind={eye_blind:.2} plans={plans} speed_cv={speed_cv:.2} speed={speed:.2} area={area:.1} hidden={hidden:.2} conns={conns:.1} shapes={shapes} shapes_raw={shapes_raw} variety={variety:.1}"
     );
     if brain {
         let null = minds(&world_after(seed, a, Some(id::HIDDEN_GAIN)));
@@ -366,6 +376,27 @@ mod tests {
         assert_eq!(brain_measures(&minds), (4.0, 60.0, 1, 1));
         minds[1] = brain(29);
         assert_eq!(brain_measures(&minds), (4.0, 60.0, 2, 1));
+    }
+
+    #[test]
+    fn variety_is_the_effective_number_of_shapes() {
+        let of = |held: &[usize]| variety(held.iter().copied());
+        assert_eq!(of(&[]), 0.0);
+        assert_eq!(of(&[40]), 1.0);
+        assert_eq!(of(&[10, 10, 10, 10]), 4.0);
+        // A shape that under 5% hold counts too: `shapes` reads 1 here.
+        assert!(of(&[39, 1]) > 1.0);
+        // Each way to split one shape of each list in two.
+        for held in [vec![40], vec![30, 10], vec![25, 5, 5, 5], vec![2, 1, 1]] {
+            for (i, &n) in held.iter().enumerate() {
+                for part in 1..n {
+                    let mut split = held.clone();
+                    split[i] = part;
+                    split.push(n - part);
+                    assert!(of(&split) >= of(&held), "{split:?} against {held:?}");
+                }
+            }
+        }
     }
 
     /// One lone full-grown body with no fin, under the player's hand for 150 ticks at full thrust:
