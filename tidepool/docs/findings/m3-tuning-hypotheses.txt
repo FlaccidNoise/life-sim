@@ -33,3 +33,19 @@ clear it, since the brain is not where the cost of mixing is.
 Order of readings: gate-health, then the bench (target 2, the aim of the trial), paired in turn
 with the mix_rate=1 baseline, twice each, at a load under 5. Stop if the trial reads under 2,700.
 Then gate-evolve at 36,000 and the long gate.
+
+== Part 4, trial 2: fixed_upkeep up, with mixing on (2026-10-14) ==
+Trial 1 read: gate-health 3/3, bench 2,839 and 2,826 at 1,404 creatures against 2,642 and 2,603
+at 1,483 for the mix_rate=1 baseline in turn (load 2.6 to 2.9), gate-evolve 3/3 at 36,000, and the
+long gate 4/5: seed 5 fails the scent gap at 0.088. So target 2 is met by a cost of about 0.003 per
+tick on a founder, and a cost on wires loses the sense on one seed of five.
+Change: fixed_upkeep 0.0337 -> 0.037, with mix_rate=1. conn_upkeep back at 0.00005. Nothing else.
+The same 0.0033 per tick on a founder as trial 1, put on the body and not on the wires.
+Hypothesis: the cost of mixing is the count of bodies, and any cost of about this size cuts it.
+So the bench world holds about 1,400 bodies, as in trial 1, and the bench reads 2,750 or more.
+A fixed cost does not price a wire, so the scent sense keeps what it keeps with mixing on and no
+trial: the long gate 5/5 (that reading was 5/5, least scent gap 0.10 on seed 1). A fixed cost is a
+larger share of the upkeep of a small body, so len at tick 144,000 reads at or above the no-trial
+reading (8.9 to 11.0).
+Order: gate-health, the bench paired with the mix_rate=1 baseline twice each at a load under 5
+(stop if under 2,700), gate-evolve at 36,000, the long gate.
