@@ -94,7 +94,7 @@ function WalkLog() {
     );
   };
   return (
-    <button type="button" class="leave" disabled={empty} onClick={copy}>
+    <button type="button" class="leave walklog" disabled={empty} onClick={copy}>
       {empty ? 'No beats yet' : (said ?? 'Copy beat times')}
     </button>
   );

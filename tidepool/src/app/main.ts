@@ -30,6 +30,7 @@ import {
   budOpen,
   changesShown,
   closeGuide,
+  closeNote,
   death,
   errorText,
   focusHeir,
@@ -41,6 +42,7 @@ import {
   lineageAlive,
   mode,
   openGuide,
+  pageBusy,
   pulse,
   ready,
   starving,
@@ -489,6 +491,8 @@ function start(): void {
       return;
     }
     if (g && ready.peek() && errorText.peek() === null) openGuide();
+    // Escape closes an open note first, also on the death overlay. With none open it leaves the body.
+    if (e.code === 'Escape' && closeNote()) return;
     // The overlay owns the keyboard: Tab and Enter work its buttons, and nothing steers behind it.
     if (death.peek()) return;
     if (e.code === 'Escape') leave();
@@ -581,8 +585,12 @@ function start(): void {
           toast.value = null;
           guideBrain.value = null;
           dropBud();
+          // The last bud was of another body: chapter 3 of the guide shows the buds of this one.
+          lastBud.value = null;
           mode.value = 'play';
           closeDeath();
+          // A pick that the guide was opened over: chapter 2 shows the counts of the new body.
+          if (guideAt.peek() !== null) send({ type: 'brainOf', uid: msg.uid });
         } else if (empty === 'heir gone') {
           heirGone.value = true;
         } else if (empty === 'nothing there') {
@@ -726,7 +734,7 @@ function start(): void {
       split:
         manual && brainOpen.peek() && read?.uid === possessedUid ? split(read, steer.peek()) : 0,
       // The card of a bud is a line of the page too, from the frame of the bud on.
-      busy: hint.peek() !== null || toast.peek() !== null || budding !== null || budOpen.peek(),
+      busy: pageBusy() || budding !== null,
     };
     const out = step(walk, facts, Math.min(dt, WALK_DT_MAX));
     if (out.walk.done !== walk.done || out.walk.shown !== walk.shown) {
