@@ -381,7 +381,7 @@ fn spread(mut v: Vec<f32>) -> String {
 }
 
 /// `probe-brains`. The brains of the living at the end of the run: the spread of the three counts
-/// that the long gate reads, the most common shapes by the rule of its `shapes` band, the share
+/// that the long gate reads, the most common shapes by the rule of its `variety` band, the share
 /// of bodies with a connection above 0.1 in size from each group of inputs, and the share that
 /// accept a mate.
 pub fn brains(argv: &[String]) {

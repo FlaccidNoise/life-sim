@@ -38,10 +38,12 @@ const HIDDEN: f64 = 1.0;
 /// The least mean of expressed connections. Proof: the same bad world reads 1.4 to 2.7. At the
 /// Start values the mean reads 34.7 to 42.6.
 const CONNS: f64 = 15.0;
-/// The least number of brain shapes. Proof: with the four structural rates at 0 no brain can
-/// change shape, and the count reads 1. At the Start values it reads 4 to 6. The count can fall
-/// as brains come to differ more, because a shape that under 5% hold is not counted.
-const SHAPES: usize = 2;
+/// The least variety of brain shapes: the effective number of shapes. Proof: with the four
+/// structural rates at 0 no brain can change shape, and it reads 1.0 on seeds 1, 4, 5. At the
+/// Start values it reads 12.1 to 21.2 on seeds 1, 4, 5, 6, 8. It replaces a band on `shapes`
+/// (M3 Task 10): a shape that under 5% hold is not counted, so that count falls as brains come to
+/// differ more, and it read 1 on seed 3 at a variety of 27.3.
+const VARIETY: f64 = 2.0;
 
 /// The mean and the standard deviation. Both are 0 for no values.
 pub fn mean_sd(values: impl Iterator<Item = f32>) -> (f64, f64) {
@@ -166,7 +168,7 @@ pub fn minds(world: &World) -> Vec<Mind> {
     live(world).map(|s| mind(world, s)).collect()
 }
 
-/// A brain shape by the rule of the `shapes` band: its hidden neurons, and its connections with no
+/// A brain shape by the rule of `shapes` and of `variety`: its hidden neurons, and its connections with no
 /// end on an input of a sense. A body that gains or loses a sense keeps its shape.
 pub fn shape(m: &Mind) -> (usize, usize) {
     (m.hidden, m.core)
@@ -283,7 +285,10 @@ fn measure(seed: u32, a: &Args, brain: bool) -> (String, Vec<String>) {
     if brain {
         band(hidden >= HIDDEN, format!("hidden={hidden:.2} < {HIDDEN}"));
         band(conns >= CONNS, format!("conns={conns:.1} < {CONNS}"));
-        band(shapes >= SHAPES, format!("shapes={shapes} < {SHAPES}"));
+        band(
+            variety >= VARIETY,
+            format!("variety={variety:.1} < {VARIETY}"),
+        );
     }
     let mut row = format!(
         "seed={seed} creatures={creatures} creatures_noscent={creatures_noscent} creatures_noeye={creatures_noeye} len={len:.1} len_sd={len_sd:.2} parts={parts:.1} chemo={chemo:.2} chemo_blind={chemo_blind:.2} eye={eye:.2} eye_blind={eye_blind:.2} plans={plans} speed_cv={speed_cv:.2} speed={speed:.2} area={area:.1} hidden={hidden:.2} conns={conns:.1} shapes={shapes} shapes_raw={shapes_raw} variety={variety:.1}"
