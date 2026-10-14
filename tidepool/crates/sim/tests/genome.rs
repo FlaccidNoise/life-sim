@@ -13,12 +13,13 @@ use tidepool_sim::rng::Rng;
 use tidepool_sim::snapshot::{LoadError, Reader, Writer};
 use tidepool_sim::world::{SpawnAt, World};
 
-/// The table with no founder eye and with every M2 mutation at rate 0, as it was before Task 13
-/// of the M2 plan switched them on. A test then sets the one that it tests.
+/// The table with no founder eye, with every M2 and M3 mutation at rate 0, and with `part_wires`
+/// at 0, as it was before Task 13 of the M2 plan and Task 10 of the M3 plan switched them on. A
+/// test then sets the one that it tests.
 fn off() -> Params {
     let mut p = Params::new();
     p.set(id::FOUNDER_EYE, 0.0);
-    for k in M2_RATES {
+    for k in M2_RATES.into_iter().chain(M3_RATES).chain([id::PART_WIRES]) {
         p.set(k, 0.0);
     }
     p
@@ -346,8 +347,14 @@ fn saved(g: &Genome) -> Vec<u8> {
 fn with_every_m2_rate_at_0_a_mutation_makes_the_m1_draws_and_no_more() {
     let g = eyed_founder(&mut Rng::new(7));
     let (mut zero_rng, mut on_rng) = (Rng::new(11), Rng::new(11));
-    // The defaults have the M2 rates on. `zero` is the defaults with each of them set to 0.
+    // The defaults have the M2 rates on. `zero` is the defaults with each of them set to 0. Both
+    // have every M3 rate and `part_wires` at 0: the M3 draws come after these and have their own
+    // test.
     let (mut zero, mut on) = (Params::new(), Params::new());
+    for k in M3_RATES.into_iter().chain([id::PART_WIRES]) {
+        zero.set(k, 0.0);
+        on.set(k, 0.0);
+    }
     for k in M2_RATES {
         zero.set(k, 0.0);
         on.set(k, 1.0);
@@ -569,10 +576,8 @@ const M3_RATES: [usize; 4] = [
 /// parent by its hue and by the one rule that a test switches on.
 fn quiet() -> Params {
     let mut p = off();
-    let rest = [id::MUT_RATE, id::MUT_WEIGHT_RATE, id::PART_WIRES];
-    for k in M3_RATES.into_iter().chain(rest) {
-        p.set(k, 0.0);
-    }
+    p.set(id::MUT_RATE, 0.0);
+    p.set(id::MUT_WEIGHT_RATE, 0.0);
     p
 }
 

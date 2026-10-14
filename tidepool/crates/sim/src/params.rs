@@ -186,9 +186,9 @@ table! {
     /// Upkeep of a body per tick, whatever its size.
     FIXED_UPKEEP "fixed_upkeep" 0.0337 0.0 0.2;
     /// Chance per birth of a new connection.
-    MUT_CONN_ADD "mut_conn_add" 0.0 0.0 1.0;
+    MUT_CONN_ADD "mut_conn_add" 0.05 0.0 1.0;
     /// Chance per birth that a connection is lost.
-    MUT_CONN_REMOVE "mut_conn_remove" 0.0 0.0 1.0;
+    MUT_CONN_REMOVE "mut_conn_remove" 0.05 0.0 1.0;
     /// Chance per birth that a connection is split by a new hidden neuron.
     MUT_NEURON_ADD "mut_neuron_add" 0.0 0.0 1.0;
     /// Chance per birth that a hidden neuron is lost.
@@ -198,7 +198,7 @@ table! {
     /// recruits a connection that starts at zero.
     NEW_CONN_SIGMA "new_conn_sigma" 0.1 0.0 2.0;
     /// Connections that a part with new ports arrives with.
-    PART_WIRES "part_wires" 0.0 0.0 8.0;
+    PART_WIRES "part_wires" 2.0 0.0 8.0;
     /// Scale of what a hidden neuron sends. At 0 a hidden neuron still costs and still mutates, and
     /// nothing reads it: the control arm of the brain gap.
     HIDDEN_GAIN "hidden_gain" 1.0 0.0 1.0;
