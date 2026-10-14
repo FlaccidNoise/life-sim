@@ -30,11 +30,15 @@ macro_rules! table {
 }
 
 // Name, default, minimum, maximum. `intake_rate` is tuned against the health gate
-// (`docs/findings/m1-tuning.md`). `plant_growth`, `plant_cap`, `part_mass`, `neuron_upkeep`,
-// `conn_upkeep`, and `birth_growth` are tuned against both gates (`docs/findings/m2-tuning.md`).
-// The other defaults are arithmetic, not measurement. The rows from `part_mass` on are for the M2
-// rules (`docs/plans/2026-10-11-m2-bodies.md`). The rows from `fixed_upkeep` on are for the M3 rules
-// (`docs/plans/2026-10-13-m3-minds.md`). Each of them has the value at which its rule does nothing.
+// (`docs/findings/m1-tuning.md`). `plant_growth`, `plant_cap`, `part_mass`, and `birth_growth` are
+// tuned against both gates (`docs/findings/m2-tuning.md`). `fixed_upkeep`, `neuron_upkeep`, and
+// `conn_upkeep` are the Start values of the M3 plan, and no gate has tuned them yet. They are
+// arithmetic: the two marginal costs are the M1 values, and `fixed_upkeep` is what is left of the
+// 0.0375 that the M2 founder paid for its brain, for a founder with 4 hidden neurons and 60
+// connections. The other defaults are arithmetic, not measurement. The rows from `part_mass` on
+// are for the M2 rules (`docs/plans/2026-10-11-m2-bodies.md`). The rows from `fixed_upkeep` on are
+// for the M3 rules (`docs/plans/2026-10-13-m3-minds.md`). A rate of 0 among them is a rule that is
+// still off.
 table! {
     /// The founder's `old` gene: ticks until death by old age. The minimum is the bottom of
     /// `OLD_RANGE`.
@@ -94,9 +98,9 @@ table! {
     /// Upkeep per unit mass per tick.
     BASAL "basal" 0.0005 0.0 0.01;
     /// Upkeep per hidden neuron per tick.
-    NEURON_UPKEEP "neuron_upkeep" 0.0012 0.0 0.01;
+    NEURON_UPKEEP "neuron_upkeep" 0.0002 0.0 0.01;
     /// Upkeep per expressed connection per tick.
-    CONN_UPKEEP "conn_upkeep" 0.0003 0.0 0.01;
+    CONN_UPKEEP "conn_upkeep" 0.00005 0.0 0.01;
     /// Cost of thrust.
     MOVE_COST "move_cost" 0.006 0.0 1.0;
     /// Energy per tick per unit filter per unit of mouth. The mouth follows the area:
@@ -180,7 +184,7 @@ table! {
     /// Size of a part that a mutation adds.
     PART_NEW_SIZE "part_new_size" 0.1 0.01 1.0;
     /// Upkeep of a body per tick, whatever its size.
-    FIXED_UPKEEP "fixed_upkeep" 0.0 0.0 0.2;
+    FIXED_UPKEEP "fixed_upkeep" 0.0337 0.0 0.2;
     /// Chance per birth of a new connection.
     MUT_CONN_ADD "mut_conn_add" 0.0 0.0 1.0;
     /// Chance per birth that a connection is lost.

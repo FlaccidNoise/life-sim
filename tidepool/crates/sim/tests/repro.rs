@@ -54,6 +54,7 @@ fn adult_with_egg(w: &mut World, mark: u8, egg: f32) -> usize {
 fn quiet(w: &mut World) {
     for k in [
         id::BASAL,
+        id::FIXED_UPKEEP,
         id::NEURON_UPKEEP,
         id::CONN_UPKEEP,
         id::MOVE_COST,
