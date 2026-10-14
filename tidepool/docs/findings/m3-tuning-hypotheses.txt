@@ -15,3 +15,21 @@ If the egg stays at 0.70 or below on most seeds, the top of the range was not wh
 and the range as it is (or the egg as a parameter) is the proposal.
 Confound: the step of a life mutation is mut_sigma * (max - min), so the egg's step grows from
 0.040 to 0.056. A rise could be faster drift as well as selection.
+
+== Part 4, trial 1: conn_upkeep up one step, with mixing on (2026-10-14) ==
+Readings before it, with --param mix_rate=1: gate-health 3/3, gate-evolve 3/3 at tick 36,000, the
+long gate 5/5 with every brain band. Target 2 fails: bench-wasm 2,586 and 2,622 at 1,483
+creatures, against 3,023 and 3,017 at 1,357 with mix_rate 0, in turn, load 2.8 to 3.2.
+2,604 x 1,483 = 3.86M creature-ticks per second with mixing, 3,020 x 1,357 = 4.10M without: the
+cost is +9% bodies and +6% per body. The brains of the bench world are alike (seed 1 at tick
+13,000: conns 57.9 against 56.6, hidden genes 4.32 against 4.01), so the premise of rule 3 (that
+connections are the cost) does not hold here. More births and the crosses are the likely cost
+(births_late 2,334 against 1,935 on seed 1).
+Change: conn_upkeep 0.00005 -> 0.0001 (one step: doubled), with mix_rate=1. Rule 3 of Task 10
+names this lever first for target 2. Nothing else.
+Hypothesis: a founder pays 0.003 more per tick, about 4% more upkeep, so the bench world holds about
+4% fewer bodies and runs about 4% faster: 2,700 to 2,750. I expect it to sit at the line, not
+clear it, since the brain is not where the cost of mixing is.
+Order of readings: gate-health, then the bench (target 2, the aim of the trial), paired in turn
+with the mix_rate=1 baseline, twice each, at a load under 5. Stop if the trial reads under 2,700.
+Then gate-evolve at 36,000 and the long gate.
