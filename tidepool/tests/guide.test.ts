@@ -372,22 +372,19 @@ test('each chance of chapter 3 is a parameter of the built module', () => {
 
 // What the guide says of the code at the head. When one of these fails, the code has moved on:
 // write the sentence again in src/ui/words/guide.ts, and then change the check.
-test('what the guide says is not built yet is not built yet', () => {
+test('what the guide says of mixing is what the code does', () => {
   const code = (file: string): string => rust(file).replace(/\/\/.*$/gm, '');
-  // Chapter 6 and the glossary: the code of crossover is written, and no birth uses it.
+  // Chapters 3 and 6 and the glossary: a birth of a parent with a donor is a cross.
   expect(code('mix.rs')).toContain('pub fn cross(');
-  for (const file of ['repro.rs', 'mate.rs', 'world.rs']) {
-    expect(
-      code(file),
-      `${file} mixes genes now: chapter 6 says "no birth uses it yet"`,
-    ).not.toMatch(/\bcross\(|mix::/);
-  }
-  // Chapter 2: no rule reads the accept output.
-  for (const file of ['mate.rs', 'repro.rs', 'energy.rs', 'motor.rs', 'control.rs']) {
-    expect(code(file), `${file} reads accept now: chapter 2 says that no rule does`).not.toContain(
-      'cmd_accept',
-    );
-  }
+  expect(code('repro.rs'), 'chapter 3 says a child can carry genes of a donor').toMatch(
+    /\bcross\(/,
+  );
+  // Chapter 2: mating reads the accept output, and only of full-grown bodies.
+  expect(code('mate.rs'), 'chapter 2 says that both bodies accept').toContain('cmd_accept');
+  expect(code('mate.rs'), 'chapter 2 says full-grown bodies').toContain('growth');
+  // Chapter 6: a world has mixing on or off. With the chance at 0 `mate::step` makes no pair.
+  expect(code('mate.rs'), 'chapter 6 says a world can have mixing off').toContain('MIX_RATE');
+  expect(rust('params.rs'), 'the chance of a mix can be 0').toMatch(/"mix_rate" [\d.]+ 0\.0 1\.0;/);
   // Chapter 2: the outputs that it names are the outputs of every body.
   expect(rust('brain.rs')).toContain(
     'pub const BODY_OUTPUTS: [u8; 3] = [OUT_THRUST, OUT_TURN, OUT_ACCEPT];',

@@ -38,7 +38,7 @@ export const CHAPTERS: { id: ChapterId; title: string; text: string[] }[] = [
     title: 'A brain',
     text: [
       'Every body carries a brain that runs many times a second, also while you steer: your hands replace only thrust and turn.',
-      'Inputs, on the left, are numbers that the body senses, such as its energy, the smell of plants, what each eye sees. Outputs, on the right, are thrust, turn, and accept, the answer to a mate that no rule reads yet.',
+      'Inputs, on the left, are numbers that the body senses, such as its energy, the smell of plants, what each eye sees. Outputs, on the right, are thrust, turn, and accept, the answer to a mate.',
       'Hidden neurons sit between. A connection carries one neuron’s value to another, times its weight: a positive weight adds, a negative one takes away. A neuron sums what arrives, adds a fixed number, its bias, and squashes the result into a fixed range. A connection that loops back makes a brain recurrent.',
       'A brain keeps only the values of its neurons. A slow neuron, one with a long time constant, holds part of its old value. That is all its memory, and it ends with the body. The wiring is set at birth. It does not learn.',
     ],
@@ -47,10 +47,10 @@ export const CHAPTERS: { id: ChapterId; title: string; text: string[] }[] = [
     id: 'child',
     title: 'A child',
     text: [
-      'A full-grown body with a full enough store buds: it splits off a child, or a small brood, and pays for each out of its own energy. Budding takes no mate, and every body born here has one parent.',
+      'A full-grown body with a full enough store buds: it splits off a child, or a small brood, and pays for each out of its own energy. Budding takes no mate. With mixing on, a child can also carry a donor’s genes.',
       'A child is a copy of its parent’s genes with random mutations, drawn at the birth. Most are nudges: a body a little longer, a part a little larger or moved along the body, a weight of the brain a little up or down. Now and then a birth drops a part, copies one, or adds a new one of a random kind.',
       'The code can also add or remove a connection or a hidden neuron at a birth. Each kind of mutation has its own chance, shown below for this world, and a chance can be zero.',
-      'No rule aims a mutation at what a body lacks. Most are small. Some harm: a child that loses its mouth cannot eat.',
+      'No rule aims a mutation at what a body lacks. Some harm: a child that loses its mouth cannot eat.',
     ],
   },
   {
@@ -78,9 +78,9 @@ export const CHAPTERS: { id: ChapterId; title: string; text: string[] }[] = [
     title: 'The machine',
     text: [
       'This world is a program, run from a seed: a number that fixes every random draw. Same seed, same play, same world.',
-      'Nothing here is trained. There is no gradient, the signal that training uses to push a network toward a target. Brains change only between a parent and its child: neuroevolution.',
+      'Nothing is trained. There is no gradient, the signal that training uses to push a network toward a target. Brains change only between a parent and its child: neuroevolution.',
       'The first creatures have brains wired by hand so that they can feed. Everything after is copy, random change, and unequal survival.',
-      'Each part, connection, and hidden neuron carries a history id from when it first appeared. Crossover, which mixes the genes of a mate into a child, lines genes up by that id: a method from NEAT (Stanley and Miikkulainen, 2002). It is coming: no birth uses it yet.',
+      'Each part, connection, and hidden neuron carries a history id from when it appeared. Crossover, which mixes the genes of a mate into a child, lines genes up by that id: a method from NEAT (Stanley and Miikkulainen, 2002). With mixing on, grown bodies that touch and both accept exchange genes.',
       'For speed, a brain holds at most {maxNeurons} neurons and {maxConns} connections, and a body {maxParts} part genes. Your picks, an heir now and a mate later, are selection by a chooser, as a breeder does.',
     ],
   },
@@ -134,7 +134,7 @@ export const GLOSSARY: { term: string; means: string }[] = [
   {
     term: 'Crossover',
     means:
-      'Making a child from the genes of a parent and of a mate, lined up gene by gene, which is coming and which no birth here uses yet.',
+      'Making a child from the genes of a parent and of a mate, lined up gene by gene, in a world that has mixing on.',
   },
   {
     term: 'History id',
