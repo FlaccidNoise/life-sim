@@ -222,6 +222,7 @@ test('the card shows the two bodies, whether each is willing, and what the pair 
   const { lines, button } = card();
   expect(lines).toEqual([
     `${MATE.heading} `,
+    MATE.what,
     MATE.you,
     'Length 12.0, width 4.0',
     MATE.noParts,
