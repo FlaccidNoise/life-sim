@@ -13,12 +13,18 @@ use crate::world::World;
 
 /// The most velocity across the heading that a tick can take, whatever the fins.
 const SIDE_DRAG_MAX: f32 = 0.95;
+/// In `Motor::touch`: the body overlaps no other.
+pub const NO_TOUCH: u32 = u32::MAX;
 
 /// Scratch. Never saved.
 pub struct Motor {
     /// The push on each slot from the bodies that overlap it.
     pub push_x: Vec<f32>,
     pub push_y: Vec<f32>,
+    /// Of each live slot, filled on every tick: the slot of the nearest body that pushes it, by
+    /// the distance between the two centres, or `NO_TOUCH`. Of two at one distance, the lower
+    /// slot. `mate::step` reads it in the same tick.
+    pub touch: Vec<u32>,
     /// Of each live slot, filled once per tick, so that the neighbour loop reads one value per
     /// body.
     pub radius: Vec<f32>,
@@ -33,6 +39,7 @@ impl Default for Motor {
         Motor {
             push_x: vec![0.0; n],
             push_y: vec![0.0; n],
+            touch: vec![NO_TOUCH; n],
             radius: vec![0.0; n],
             mass: vec![0.0; n],
             heft: vec![0.0; n],
@@ -41,7 +48,8 @@ impl Default for Motor {
 }
 
 /// The push on every slot is worked out before any creature moves, so the result does not depend
-/// on slot order.
+/// on slot order. Two bodies push each other when their centres are closer than the sum of their
+/// radii and are not on one point. The nearest of the bodies that push a slot is kept in `touch`.
 pub fn step(world: &mut World) {
     let World {
         creatures: c,
@@ -55,6 +63,7 @@ pub fn step(world: &mut World) {
     let Motor {
         push_x,
         push_y,
+        touch,
         radius,
         mass,
         heft,
@@ -75,6 +84,7 @@ pub fn step(world: &mut World) {
         }
         let (px, py, ri, mi) = (c.x[s], c.y[s], radius[s], mass[s]);
         let (mut fx, mut fy) = (0.0f32, 0.0f32);
+        let (mut near, mut near_d2) = (NO_TOUCH, f32::INFINITY);
         // A body farther away than this cannot touch this one.
         let reach = ri + MAX_RADIUS;
         grid.for_each_in_box(px - reach, py - reach, px + reach, py + reach, |j| {
@@ -91,9 +101,13 @@ pub fn step(world: &mut World) {
                 let f = (rs - d) / d * repel * share;
                 fx += dx * f;
                 fy += dy * f;
+                // The grid does not give the slots in order, so the tie is broken here.
+                if d2 < near_d2 || (d2 == near_d2 && (j as u32) < near) {
+                    (near, near_d2) = (j as u32, d2);
+                }
             }
         });
-        (push_x[s], push_y[s]) = (fx, fy);
+        (push_x[s], push_y[s], touch[s]) = (fx, fy, near);
     }
     let (flag_force, cilia_force) = (params.get(id::FLAG_FORCE), params.get(id::CILIA_FORCE));
     let (flag_torque, cilia_torque) = (params.get(id::FLAG_TORQUE), params.get(id::CILIA_TORQUE));

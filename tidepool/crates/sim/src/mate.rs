@@ -1,14 +1,66 @@
 //! Mating. Two full-grown bodies that touch and both accept take each other's genome as a donor
-//! for their next brood.
-//!
-//! A stub: no pair is made yet. A donor is world state already, and it is saved here.
+//! for their next brood. `repro::step` makes that brood and clears the donor.
 
 use crate::genome::Genome;
+use crate::motor::NO_TOUCH;
+use crate::params::id;
 use crate::snapshot::{LoadError, Reader, Writer};
 use crate::world::World;
 
-/// Returns at once.
-pub fn step(_world: &mut World) {}
+/// With `mix_rate` at 0 it returns at once: no draw, and no mate value changes.
+///
+/// Each live slot `s` in ascending order. `j` is the nearest body that `s` touches, as the motor
+/// found it on this tick, before any body moved.
+///
+/// The two mate inputs of `s` are stored: `mate_size` is `area(j) / (area(s) + area(j))` with the
+/// areas as the bodies have grown, and `mate_kin` is `1 - 2 * d`, where `d` is the distance
+/// between the two hues around the circle, 0 to 0.5. Both are 0 with no body in touch.
+///
+/// `s` and `j` are a pair if `j > s`, both are full-grown, both hold no donor, both have
+/// `cmd_accept` above 0, and neither is in a pair of this tick already. A pair makes one draw from
+/// `rng_mate`. With chance `mix_rate` each of the two takes the uid of the other and a copy of its
+/// genome as its donor. A pair that the chance turns down is still the pair of the tick for both.
+pub fn step(world: &mut World) {
+    let rate = world.params.get(id::MIX_RATE);
+    if rate <= 0.0 {
+        return;
+    }
+    let World {
+        creatures: c,
+        genomes,
+        donors,
+        motor,
+        rng_mate,
+        ..
+    } = world;
+    let live = c.slots.high_water() as usize;
+    let mut paired = vec![false; live];
+    for s in 0..live {
+        if !c.slots.is_alive(s as u32) {
+            continue;
+        }
+        if motor.touch[s] == NO_TOUCH {
+            (c.mate_size[s], c.mate_kin[s]) = (0.0, 0.0);
+            continue;
+        }
+        let j = motor.touch[s] as usize;
+        let (own, other) = (c.area(s), c.area(j));
+        let apart = (c.hue[s] - c.hue[j]).abs();
+        c.mate_size[s] = other / (own + other);
+        c.mate_kin[s] = 1.0 - 2.0 * apart.min(1.0 - apart);
+
+        let free = |k: usize| {
+            c.growth[k] >= 1.0 && donors[k].is_none() && c.cmd_accept[k] > 0.0 && !paired[k]
+        };
+        if j > s && free(s) && free(j) {
+            (paired[s], paired[j]) = (true, true);
+            if rng_mate.unit() < rate {
+                donors[s] = Some((c.uid[j], genomes[j].clone()));
+                donors[j] = Some((c.uid[s], genomes[s].clone()));
+            }
+        }
+    }
+}
 
 /// The live slots in ascending order.
 fn live(world: &World) -> impl Iterator<Item = usize> + '_ {

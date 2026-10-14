@@ -1,6 +1,7 @@
 //! Budding. A fed adult splits off a brood of small children, each with a mutated genome and its
 //! parent's mark. The parent's `egg` gene is the growth of a child, so a small egg gives a large
-//! brood.
+//! brood. If the parent holds the genome of a donor, each child of the brood is a cross of the two
+//! before it mutates.
 //!
 //! The parent pays for each child's body and for each child's first energy, so a bud moves energy
 //! and makes none.
@@ -8,6 +9,7 @@
 use crate::creature::{heft, radius};
 use crate::genome::Genome;
 use crate::math::sin_cos;
+use crate::mix;
 use crate::params::id;
 use crate::snapshot::{LoadError, Reader, Writer};
 use crate::world::{SpawnAt, World};
@@ -25,6 +27,11 @@ const BROOD_FAN: f32 = 0.7;
 /// cannot pay for. The first child is born behind the parent. The others fan out around the rear
 /// at the same distance, to one side and then to the other. The births are applied after the
 /// loop, in the slot order of the parents, so a newborn does not bud on the tick of its birth.
+///
+/// A child of a parent that holds a donor is `mix::cross(parent, donor)`, then mutated, then
+/// pruned. A child of any other parent is the parent's genome, mutated and pruned. A crossed child
+/// stores the uid of the donor in `mixed_with`. A bud that made a child clears the donor, so a
+/// donor gives one brood.
 pub fn step(world: &mut World) {
     let p = &world.params;
     let (bud_at, cooldown) = (p.get(id::BUD_AT), p.get(id::BUD_COOLDOWN) as u32);
@@ -36,7 +43,8 @@ pub fn step(world: &mut World) {
     // A birth needs a free slot and a uid. `World::spawn` never gives out the last uid.
     let free = c.slots.capacity() - c.slots.count();
     let room = free.min(u32::MAX - world.next_uid) as usize;
-    let mut births: Vec<(Genome, SpawnAt)> = Vec::new();
+    // The genome and the place of each child, and the uid of its gene donor or 0.
+    let mut births: Vec<(Genome, SpawnAt, u32)> = Vec::new();
 
     for s in 0..c.slots.high_water() as usize {
         if !c.slots.is_alive(s as u32) {
@@ -53,13 +61,22 @@ pub fn step(world: &mut World) {
             continue;
         }
         let egg = c.egg[s];
+        let (home, before) = (&world.genomes[s], births.len());
+        let donor_uid = world.donors[s].as_ref().map_or(0, |donor| donor.0);
         for i in 0..brood_max {
             if births.len() >= room {
                 break;
             }
-            // The genome is drawn before the price is known, as in M1.
-            let mut child =
-                world.genomes[s].mutated(&mut world.rng_mutate, p, &mut world.next_history);
+            // The genome is drawn before the price is known, as in M1. A cross draws from
+            // `rng_mate`, so a parent with no donor makes the draws of a world that does not mix.
+            let mut child = match &world.donors[s] {
+                Some((_, donor)) => mix::cross(home, donor, &mut world.rng_mate, p).mutated(
+                    &mut world.rng_mutate,
+                    p,
+                    &mut world.next_history,
+                ),
+                None => home.mutated(&mut world.rng_mutate, p, &mut world.next_history),
+            };
             // The brain genes of a newborn hold what its body expresses.
             child.prune();
             let (length, width) = (child.len * egg, child.len * child.wid * egg);
@@ -102,18 +119,25 @@ pub fn step(world: &mut World) {
                 generation: c.generation[s].saturating_add(1),
                 mark: c.mark[s],
             };
-            births.push((child, at));
+            births.push((child, at, donor_uid));
+        }
+        // A donor gives one brood.
+        if births.len() > before {
+            world.donors[s] = None;
         }
     }
 
-    for (child, at) in births {
+    for (child, at, donor_uid) in births {
         let born = world.spawn(child, at);
         debug_assert!(born.is_some(), "the loop counted a slot and a uid for it");
+        if let Some(slot) = born {
+            world.creatures.mixed_with[slot as usize] = donor_uid;
+        }
     }
 }
 
-/// Writes nothing: the cooldown is a creature field, and `rng_mutate` and `next_history` are world
-/// fields.
+/// Writes nothing: the cooldown is a creature field, `rng_mutate`, `rng_mate`, and `next_history`
+/// are world fields, and `mate::save` writes the donors.
 pub fn save(_world: &World, _w: &mut Writer) {}
 
 /// Reads nothing.

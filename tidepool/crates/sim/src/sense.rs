@@ -15,8 +15,9 @@ const SCENT_FLOOR: f32 = 1e-6;
 /// Each live creature whose turn it is to think gets its inputs: the 6 of the body at their fixed
 /// indexes, the 3 of the scent from `Brains::in_scent` if it has a chemoreceptor (the level, the
 /// gradient along the heading, and the gradient across it), and those of `eye::see` if it has an
-/// eye. The two mate inputs read 0. The eyes scan on one think in `see_every`. On the other thinks
-/// the eye inputs keep their last values.
+/// eye. The two mate inputs are what `mate::step` last stored, and 0 with `mix_rate` at 0, when it
+/// stores nothing. The eyes scan on one think in `see_every`. On the other thinks the eye inputs
+/// keep their last values.
 ///
 /// The gradient is divided by the local scent level, so a creature far from food still gets a
 /// direction. The side gradient is positive when scent rises on the creature's `+heading` side.
@@ -28,6 +29,7 @@ pub fn step(world: &mut World) {
     let see_every = every * params.get(id::SEE_EVERY) as u32;
     let (v_max, gain) = (params.get(id::V_MAX), params.get(id::CHEMO_GAIN));
     let per_mass = params.get(id::ENERGY_PER_MASS);
+    let mixing = params.get(id::MIX_RATE) > 0.0;
     for s in 0..world.creatures.slots.high_water() as usize {
         let World {
             creatures: c,
@@ -47,7 +49,11 @@ pub fn step(world: &mut World) {
         input[IN_ENERGY as usize] = energy01;
         input[IN_AGE as usize] = c.age[s] as f32 / c.old[s];
         input[IN_SPEED as usize] = speed / v_max;
-        (input[IN_MATE_SIZE as usize], input[IN_MATE_KIN as usize]) = (0.0, 0.0);
+        (input[IN_MATE_SIZE as usize], input[IN_MATE_KIN as usize]) = if mixing {
+            (c.mate_size[s], c.mate_kin[s])
+        } else {
+            (0.0, 0.0)
+        };
         if in_scent != NO_INPUT {
             let (hc, hs, chemo) = (c.hc[s], c.hs[s], c.chemo[s]);
             let s0 = scent.sample(c.x[s], c.y[s]);
