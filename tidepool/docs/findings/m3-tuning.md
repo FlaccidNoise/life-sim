@@ -155,6 +155,116 @@ more creatures on 4 of 5 seeds here.
 | 4 | The M2 bands at tick 144,000, 5 of 5 | **Not met: 3 of 5, the scent gap** |
 | 5 | The brain bands at tick 144,000, 5 of 5 | Met for `hidden` and `conns`. `shapes` is replaced |
 
-## Part 3: the trials
+## Part 3: the band of variety, and two trials
 
-In progress. At most 8 trials, each with its hypothesis written before the run.
+### The band of `shapes` is replaced by a band of `variety` (`919492a`)
+
+`variety` is the effective number of brain shapes: 1 over the sum of the squared shares of the pairs
+(hidden genes, connections with no end on an input of a sense), every shape counted. It cannot fall
+when brains come to differ more, and `shapes` can. The band fails under 2.0 with `--brain`.
+`shapes` prints with no band. Proof, the frozen world of Task 9 (the four structural rates at 0):
+
+```
+seed=1 creatures=1766 creatures_noscent=1735 creatures_noeye=1340 len=11.0 len_sd=1.33 parts=6.0 chemo=0.21 chemo_blind=0.00 eye=0.25 eye_blind=0.03 plans=5 speed_cv=0.32 speed=0.84 area=40.2 hidden=4.00 conns=58.1 shapes=1 shapes_raw=2 variety=1.0 hidden_null=4.00 conns_null=56.3 FAIL(variety=1.0 < 2)
+seed=4 creatures=1332 creatures_noscent=1369 creatures_noeye=965 len=9.8 len_sd=1.26 parts=7.5 chemo=0.20 chemo_blind=0.02 eye=0.32 eye_blind=0.02 plans=6 speed_cv=0.27 speed=0.84 area=42.7 hidden=4.00 conns=57.3 shapes=1 shapes_raw=4 variety=1.0 hidden_null=4.00 conns_null=47.0 FAIL(variety=1.0 < 2)
+seed=5 creatures=1618 creatures_noscent=1598 creatures_noeye=1285 len=10.9 len_sd=1.29 parts=7.4 chemo=0.26 chemo_blind=0.00 eye=0.30 eye_blind=0.02 plans=6 speed_cv=0.26 speed=0.85 area=38.9 hidden=4.00 conns=61.6 shapes=1 shapes_raw=4 variety=1.0 hidden_null=4.00 conns_null=46.2 FAIL(variety=1.0 < 2)
+gate-evolve 0/3 FAIL
+```
+
+Exit 1 on 3 of 3, and no other band fails. The good rows read 12.1 to 21.2. Provisional.
+
+### The trials
+
+Each at tick 144,000 on the five seeds of the long gate, with the hypothesis written before the run
+(`trial-<n>-hypothesis.txt` in the session's log folder). Each cell lists seeds 1, 4, 5, 6, 8.
+
+| | The Start values | Trial 1: `mut_conn_remove=0.01` | Trial 2: `mut_neuron_remove=0.005` |
+|---|---|---|---|
+| Hypothesis | | The loss of single wires wears down the scent wiring of the carriers | The loss of hidden neurons drains the brain and wears down the scent wiring |
+| `chemo` | 0.14, 0.12, 0.19, 0.20, 0.07 | 0.21, 0.18, 0.24, 0.22, 0.15 | 0.18, 0.19, 0.17, 0.24, 0.18 |
+| `chemo_blind` | 0.00, 0.03, 0.02, 0.01, 0.00 | 0.03, 0.00, 0.00, 0.01, 0.00 | 0.01, 0.01, 0.01, 0.06, 0.01 |
+| Scent gap | 0.14, 0.094, 0.17, 0.19, 0.068 | 0.18, 0.18, 0.24, 0.21, 0.15 | 0.17, 0.18, 0.16, 0.18, 0.17 |
+| Eye gap | 0.28, 0.24, 0.25, 0.41, 0.24 | 0.27, 0.26, 0.23, 0.29, 0.29 | 0.28, 0.25, 0.28, 0.27, 0.24 |
+| `hidden` | 3.52, 3.04, 3.85, 3.45, 2.53 | 3.32, 3.08, 3.34, 2.50, 1.47 | 3.74, 5.20, 4.00, 4.91, 5.02 |
+| `conns` | 36.7, 34.7, 42.6, 39.7, 28.6 | 42.2, 41.9, 48.9, 32.4, 24.1 | 47.3, 54.9, 47.7, 50.2, 52.2 |
+| `variety` | 13.1, 20.8, 20.7, 21.2, 12.1 | 14.5, 16.0, 8.2, 16.5, 8.8 | 20.0, 10.6, 21.8, 19.9, 16.5 |
+| `len` | 10.2, 10.5, 10.5, 10.1, 9.7 | 11.1, 10.5, 11.4, 9.7, 10.7 | 8.2, 10.2, 9.0, 10.3, 10.2 |
+| Pass at tick 144,000 | 3 of 5 | **5 of 5** | 5 of 5 |
+| `gate-health`, `gate-evolve` at tick 36,000 | 3 of 3, 3 of 3 | 3 of 3, 3 of 3 | 3 of 3, **2 of 3** (seed 2, eye gap 0.095) |
+| `no_chemo`, seed 1, at 36k, 72k, 108k, 144k | 0.09, 0.49, 0.50, 0.57 | 0.17, 0.03, 0.12, 0.29 | 0.09, 0.24, 0.15, 0.06 |
+| `no_chemo`, seed 8 | 0.18, 0.27, 0.42, 0.77 | 0.21, 0.13, 0.09, 0.07 | 0.12, 0.10, 0.17, 0.24 |
+
+- **Trial 1 holds its hypothesis on the five seeds of the gate.** The build agent's own forecast, a
+  partial change at most, was wrong.
+- **Trial 2 holds the sense about as well,** with larger brains, and fails target 3 at tick 36,000.
+  `len` falls toward its band (8.2 on seed 1 against 7.8).
+- **The two trials do not tell wire loss from neuron loss.** Cutting either rate held the sense.
+- **Trial 1 is taken.** It meets targets 3, 4, and 5 and trial 2 does not meet 3.
+
+**What the five seeds do not show.** On the other five seeds (2, 3, 7, 9, 10) at tick 144,000, trial 1
+passes 4 of 5: seed 7 fails the scent gap at 0.031, because its blind world kept 0.11 of a useless
+sense. The Start values pass 5 of 5 there. Over all ten seeds: 9 of 10 against 8 of 10, which chance
+can give. The better evidence is the paired one: mean `chemo` 0.201 against 0.166, higher on 8 of 10
+seeds. Modest, and one run per seed. Seed 1's share with no chemoreceptor still climbs to 0.29 by tick
+144,000, so the loss may only be slower.
+
+### Throughput
+
+WASM, ticks per second, read in turn. The head at 1,357 creatures. The base is `342263e`, the tree
+before the switch-on, at 1,627 creatures (its brain was cheaper, so it held more). Base with U1 is
+`342263e` with the Start upkeep as flags, at 1,337 creatures.
+
+| Round | Load (1 minute) | Head | Base | Base with U1 |
+|---|---|---|---|---|
+| 1 | 9.9 to 11.6 | 1,251 | 1,794 | 2,476 |
+| 2 | 9.9 to 11.6 | 2,658 | 2,418 | 2,722 |
+| 3 | 4.7 to 7.3 | 2,702 | 2,274 | 2,777 |
+| 4 | 4.7 to 7.3 | 2,702 | 2,266 | 2,731 |
+| 5 | 4.7 to 7.3 | 2,707 | 2,357 | 2,810 |
+| 6 | 4.7 to 7.3 | 2,835 | 2,383 | 2,842 |
+
+Round 1 is a disturbed minute. Against the matched base the head is about 2% slower. `make gates`
+read 2,593 at the build agent's close (load 5.4 to 8.3) and 2,791 at the orchestrator's (load 7 to
+12). **Target 2 (2,700) is on the line, not shown either way.** The floor of 2,400 holds in every
+undisturbed reading. The plan's lever, `conn_upkeep` up, would not move the bench: its world is
+12,000 ticks old and its brains are still the size of a founder's.
+
+### The close of stage 1 (`4db32b8`)
+
+`mut_conn_remove` is 0.01. The orchestrator merged every M3 task to `main` (mating with `mix_rate` at
+0, the mate card, the age word of the frame, the walkthrough) and ran the three gates there:
+`make check` exit 0, `make gates` exit 0, `make gates-long` exit 0. The rows of both gates are the
+build agent's, digit for digit. So none of the later merges moved a row.
+
+```
+$ make gates-long
+seed=1 creatures=1644 creatures_noscent=1702 creatures_noeye=1373 len=11.1 len_sd=1.49 parts=6.8 chemo=0.21 chemo_blind=0.03 eye=0.29 eye_blind=0.02 plans=5 speed_cv=0.26 speed=0.94 area=40.1 hidden=3.32 conns=42.2 shapes=5 shapes_raw=4 variety=14.5 hidden_null=1.46 conns_null=16.4 PASS
+seed=4 creatures=1368 creatures_noscent=1401 creatures_noeye=1041 len=10.5 len_sd=2.48 parts=6.8 chemo=0.18 chemo_blind=0.00 eye=0.29 eye_blind=0.03 plans=5 speed_cv=0.25 speed=0.86 area=44.0 hidden=3.08 conns=41.9 shapes=5 shapes_raw=4 variety=16.0 hidden_null=3.20 conns_null=36.2 PASS
+seed=5 creatures=1676 creatures_noscent=1700 creatures_noeye=1336 len=11.4 len_sd=1.84 parts=6.4 chemo=0.24 chemo_blind=0.00 eye=0.25 eye_blind=0.02 plans=4 speed_cv=0.21 speed=1.22 area=45.9 hidden=3.34 conns=48.9 shapes=3 shapes_raw=5 variety=8.2 hidden_null=3.61 conns_null=37.9 PASS
+seed=6 creatures=1404 creatures_noscent=1388 creatures_noeye=1139 len=9.7 len_sd=1.78 parts=7.0 chemo=0.22 chemo_blind=0.01 eye=0.30 eye_blind=0.01 plans=5 speed_cv=0.25 speed=0.97 area=38.3 hidden=2.50 conns=32.4 shapes=7 shapes_raw=5 variety=16.5 hidden_null=2.75 conns_null=27.7 PASS
+seed=8 creatures=1532 creatures_noscent=1726 creatures_noeye=1005 len=10.7 len_sd=1.31 parts=6.5 chemo=0.15 chemo_blind=0.00 eye=0.30 eye_blind=0.01 plans=4 speed_cv=0.25 speed=0.83 area=41.7 hidden=1.47 conns=24.1 shapes=7 shapes_raw=5 variety=8.8 hidden_null=4.83 conns_null=30.4 PASS
+gate-evolve 5/5 PASS
+```
+
+| # | Target | Verdict |
+|---|---|---|
+| 1 | `gate-health` 3 of 3 | Met |
+| 2 | WASM 2,700 or more at 1,200 creatures or more | On the line: 4 of 7 undisturbed readings are at 2,700 or more |
+| 3 | The M2 bands at tick 36,000, 3 of 3 | Met |
+| 4 | The M2 bands at tick 144,000, 5 of 5 | Met, least scent gap 0.15. On ten seeds, 9 of 10 |
+| 5 | The brain bands at tick 144,000, 5 of 5 | Met: `hidden` 1.47 or more, `conns` 24.1 or more, `variety` 8.2 or more |
+
+### What is still wrong or fragile
+
+- Evolution keeps it: target 4 is shown on the five seeds of the gate. On ten seeds the count does
+  not separate from the Start values.
+- Evolution keeps it: seed 8 reads `hidden` 1.47 against a band of 1.0.
+- It helps, not shown: the gap in hidden neurons reads +1.86, -0.12, -0.27, -0.25, -3.36.
+- It helps, not shown for scent: the world with no scent holds more creatures on 4 of 5 seeds.
+- It helps, for eyes: the world with blind eyes holds fewer creatures on 5 of 5 seeds. Each arm
+  evolved alone, one run per seed.
+- The mechanism fires: `variety` reads 8.2 to 16.5, lower than at the Start values on seeds 4, 5,
+  and 8, and above its band.
+- A blind world that keeps a useless sense by chance fails a seed: seed 7 here, and seed 2's eye gap
+  in trial 2. The gap bands carry that noise.
+- Throughput has no margin over its target.
