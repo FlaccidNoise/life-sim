@@ -179,6 +179,13 @@ pub fn shape(m: &Mind) -> (usize, usize) {
     (m.hidden, m.core)
 }
 
+/// The same shape with only the hidden neurons that have a way in from an input and a way out to an
+/// output. A cross can leave a donor's hidden genes unwired, and `shape` counts them. Printed as
+/// `variety_wired`, with no band (M3 audit, finding M2).
+pub fn shape_wired(m: &Mind) -> (usize, usize) {
+    (m.wired, m.core)
+}
+
 /// The shapes with the number of brains that hold each, the most common first. Of two as common,
 /// the lower one comes first.
 pub fn shapes(of: fn(&Mind) -> (usize, usize), minds: &[Mind]) -> Vec<((usize, usize), usize)> {
@@ -254,6 +261,7 @@ fn measure(seed: u32, a: &Args, brain: bool) -> (String, Vec<String>) {
     let eye_blind = mean_sd(live(&blind).map(|s| blind.creatures.eye_sum[s])).0;
     let (chemo_gap, eye_gap) = (chemo - chemo_blind, eye - eye_blind);
     let living = minds(&world);
+    let variety_wired = variety(shapes(shape_wired, &living).iter().map(|held| held.1));
     let variety = variety(shapes(shape, &living).iter().map(|held| held.1));
     let (hidden, conns, shapes, shapes_raw) = brain_measures(&living);
 
@@ -300,7 +308,7 @@ fn measure(seed: u32, a: &Args, brain: bool) -> (String, Vec<String>) {
         );
     }
     let mut row = format!(
-        "seed={seed} creatures={creatures} creatures_noscent={creatures_noscent} creatures_noeye={creatures_noeye} len={len:.1} len_sd={len_sd:.2} parts={parts:.1} chemo={chemo:.2} chemo_blind={chemo_blind:.2} eye={eye:.2} eye_blind={eye_blind:.2} plans={plans} speed_cv={speed_cv:.2} speed={speed:.2} area={area:.1} hidden={hidden:.2} conns={conns:.1} shapes={shapes} shapes_raw={shapes_raw} variety={variety:.1}"
+        "seed={seed} creatures={creatures} creatures_noscent={creatures_noscent} creatures_noeye={creatures_noeye} len={len:.1} len_sd={len_sd:.2} parts={parts:.1} chemo={chemo:.2} chemo_blind={chemo_blind:.2} eye={eye:.2} eye_blind={eye_blind:.2} plans={plans} speed_cv={speed_cv:.2} speed={speed:.2} area={area:.1} hidden={hidden:.2} conns={conns:.1} shapes={shapes} shapes_raw={shapes_raw} variety={variety:.1} variety_wired={variety_wired:.1}"
     );
     if brain {
         let null = minds(&world_after(seed, a, Some(id::HIDDEN_GAIN)));

@@ -14,6 +14,10 @@ for digit. Not run again by the orchestrator: the costly world and the two chanc
 three. The gate of the good world still exits 1: seed 4 fails the scent gap of M2 at 0.094 against
 0.10.** The bands are provisional until the owner confirms them.
 
+**Since 2026-10-14 (`919492a`) a band on `variety` replaces the band on `shapes`** (`m3-tuning.md`
+Part 3). The rows below are the record of 2026-10-13 at the Start values. The proofs at the M3
+defaults are in `../gates.md` "The brain bands".
+
 | Measure | Fails under | The bad world reads | The good world reads | Kind of claim |
 |---|---|---|---|---|
 | `hidden` | 1.0 | 0.03 to 0.04 | 3.04 to 3.85 | Evolution keeps it, in the weak sense: not stripped at this cost by tick 144,000 |
@@ -66,7 +70,8 @@ gate-evolve 0/3 FAIL
 Exit 1. The brain is stripped: 1 to 3 connections are left of 60. Expected: 8 to 20 connections and
 300 to 900 creatures. Read: about 2, in a world that stayed full. **Limit: every seed here also
 fails a sense gap of M2, so `conns` partly reads the senses a second time.** No world is known that
-strips the brain and keeps both senses.
+strips the brain and keeps both senses. *(2026-10-14: at the M3 defaults the same input strips the
+brain on seeds 1 and 5 and passes both sense gaps there, `m3-audit.md` finding M1.)*
 
 ### Bad world 2: no brain can change shape
 
@@ -131,7 +136,7 @@ gate-evolve 3/3 PASS
    with a chance of 0.02, and that takes about 13 connections, while a new hidden neuron nets 1 and a
    new connection finds its pair joined already 4 times in 10. That is a loss of about a quarter of a
    connection per birth, which is 17 in 65 generations. The world with silent hidden neurons shows
-   the same drift with no selection to hold it: `hidden_null` reads 0.34, 3.69, 2.75.
+   the same drift with no selection for what they send, only the upkeep against them: `hidden_null` reads 0.34, 3.69, 2.75.
 2. **The good world fails an M2 band at tick 144,000.** Seed 4 reads a scent gap of 0.094. `chemo`
    reads 0.12 to 0.19 against 0.20 to 0.26 in the frozen world, so the sense is smaller where brains
    can lose wires. Target 4 of the retune (5 of 5 seeds at tick 144,000) is not met at the Start

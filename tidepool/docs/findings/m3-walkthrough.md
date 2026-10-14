@@ -35,7 +35,7 @@ The lines, as they are at the head:
 | | "That one is starving. Pick another." | A click in Watch on a body under a quarter of a full store. It is not taken |
 | | "You are starving. Find a plant." | The body is under a quarter of a full store |
 
-Beat 10 (the mate) waits for Task 13 of the M3 plan. Beat 5 is the pulse of beat 4 and the panel.
+Beat 10 (the mate, `court` in `src/app/walkthrough.ts`) was added with Task 13 of the M3 plan. Beat 5 is the pulse of beat 4 and the panel.
 
 ## How the words are held to the truth
 
@@ -46,9 +46,11 @@ Beat 10 (the mate) waits for Task 13 of the M3 plan. Beat 5 is the pulse of beat
   that of the people who wrote the starter brain).
 - `tests/guide.test.ts`: no number is typed in the guide. The caps (12 part genes, 96 neurons, 384
   connections, 5 heirs) are read from the Rust source by the test. The chances of chapter 3 are read
-  from the parameters of the running world. Three claims are pinned to the Rust source and fail on
-  purpose when mating is built: no birth uses crossover, no rule reads `accept`, and the outputs are
-  thrust, turn, accept.
+  from the parameters of the running world. What the guide says of mixing is pinned to the Rust
+  source (`tests/guide.test.ts`, "what the guide says of mixing is what the code does"): `cross(` in
+  `repro.rs`, `cmd_accept`, `growth`, and `MIX_RATE` in `mate.rs`, and the range of `mix_rate`. The
+  outputs are still pinned as thrust, turn, accept. Until mating was built the pins said that no birth
+  uses crossover and no rule reads `accept`.
 - The orchestrator read every sentence of the notes and the guide against the core and changed two:
   a fin "steers" a body, since it does nothing at rest, and a blind world lost "much" of its sense,
   not "most", since one seed kept 0.24.
@@ -76,8 +78,8 @@ No error or warning in the console at any point.
 ## What is still wrong or not checked
 
 1. **Old age is not guarded.** A new player can take a body that dies of old age in 90 seconds with
-   no sign of age on the screen. The frame does not carry age. To do with the next change of the
-   frame: put age in the record, and refuse the last tenth of a life.
+   no sign of age on the screen. *Done (`45eeae5`): the frame carries age, and a click on a body in the last tenth of its life is
+   refused.*
 2. **Nothing in Watch shows which bodies are starving,** so a player can be refused twice without
    knowing why "that one". A body's colour dims with its energy, and no new player knows that.
 3. **A life with the hands off still starves in under a minute,** even after three buds. That is the

@@ -23,8 +23,9 @@ High finding, and what it found and what was fixed is at the end of that file. T
 `docs/findings/m2-exit.md`. Of the owner's five checks, one is done, one is half done, and three are
 open.
 
-M3 (Minds) has a plan, `docs/plans/2026-10-13-m3-minds.md`. **The owner approved it on 2026-10-13 and
-it is built but for the second stage of its retune and its exit (see `/HANDOFF.md`).** The walkthrough
+M3 (Minds) has a plan, `docs/plans/2026-10-13-m3-minds.md`. **The owner approved it on 2026-10-13. It is
+built, audited (`docs/findings/m3-audit.md`), and its exit record is `docs/findings/m3-exit.md`.**
+The owner's checks are open. The walkthrough
 (`docs/plans/2026-10-13-walkthrough.md`) is built. The M4 plan is a draft for the owner
 (`docs/plans/2026-10-14-m4-teeth.md`): build nothing of it before approval. The plan says which owner stops the build runs through and which stops are hard
 ("How the build runs without the owner"). A choice logged as "provisional, owner to confirm" in
@@ -38,7 +39,7 @@ Run from `tidepool/`. If `cargo` is not found, run `. "$HOME/.cargo/env"`.
 |---|---|
 | `make check` | Crate count, format (Rust and TypeScript), Clippy, Rust tests, WASM build, type check, ESLint, Vitest |
 | `make gates` | Native bench, the throughput gate (`scripts/bench-wasm.mjs`), the health gate (`gate-health`), then the evolution gate (`gate-evolve`) |
-| `make gates-long` | The evolution gate at tick 144,000 on seeds 1, 4, 5, 6, 8. About 10 minutes on the reference machine. Run it at each milestone exit. It is not in CI |
+| `make gates-long` | The evolution gate at tick 144,000 on seeds 1, 4, 5, 6, 8, with the brain bands. About 17 minutes on the reference machine at a load of 4 to 7. Run it at each milestone exit. It is not in CI |
 | `make dev` | Build the WASM and start the dev server |
 
 ## Gotchas

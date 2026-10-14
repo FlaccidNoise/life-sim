@@ -65,3 +65,6 @@ turn with the default's 2,650. Larger bodies pay a smaller share of a fixed cost
 stays 5/5.
 Order: gate-health, the bench paired with the current default twice each at a load under 5 (stop
 if under 2,700), gate-evolve at 36,000, the long gate. This is the last of the 3 trials.
+
+== Note by the orchestrator (2026-10-14) ==
+The commit 8b2752d named in trial 3 is on the build branch. On main it is f4d2ef3.

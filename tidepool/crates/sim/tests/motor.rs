@@ -11,7 +11,13 @@ use tidepool_sim::world::{SpawnAt, World};
 /// and 14 land.
 fn still_water() -> World {
     let mut w = World::new(1, 1536.0, 1024.0);
-    for k in [id::BASAL, id::NEURON_UPKEEP, id::CONN_UPKEEP, id::MOVE_COST] {
+    for k in [
+        id::BASAL,
+        id::FIXED_UPKEEP,
+        id::NEURON_UPKEEP,
+        id::CONN_UPKEEP,
+        id::MOVE_COST,
+    ] {
         w.params.set(k, 0.0);
     }
     w

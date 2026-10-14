@@ -32,7 +32,7 @@ These numbers are the contract. Changing one is a decision, logged in `docs/deci
 | Time-skip target | 24,000 ticks (20 minutes of world time). M1 measured about 11 generations per skip: a generation is about 2,200 ticks. The design assumed about 30. M5 decides the skip length. | `design.md` §4, `findings/m1-tuning.md` |
 | Time-skip wall time | 10 seconds on the reference machine. Hard stop at 30 seconds on any machine. | The report says how many generations passed |
 | **Throughput floor** | **2,400 ticks per second** at the reference world, WASM in Node, reference machine (Apple M4 Pro). A run with a mean below 80% of the reference population of 1,500 creatures is void. | 24,000 ticks in 10 s |
-| Reference world | The default world (1536 by 1024, 400 founder creatures, 1,200 founder plants, seed 1) after 12,000 ticks | It holds 1,243 to 1,319 creatures on seeds 1 to 3. The floor is a seed 1 reading: of seeds 1 to 10, seeds 4 and 6 are void (`findings/m2-audit-2.md`, check 18). Reading at the head of M2 (every body has eyes), 2026-10-12, seed 1, mean of 1,320 creatures over the timed ticks: native 3,188 to 3,411 ticks per second and WASM in Node 2,933 to 3,127. That is a 24,000-tick skip in 7.7 to 8.2 s. An older world sits at the floor: after 108,000 settle ticks it holds 1,665 creatures and WASM reads 2,357 to 2,471 on four readings at a load average of 4.3 to 6.9. No gate times that world. Reading at the head of M3 (brain upkeep and mixing on), 2026-10-14, seed 1, 1,394 creatures: native 2,660 to 2,968 and WASM in Node 2,646 to 2,801 over nine readings at a load of 2.6 to 8. M3's target over the floor is 2,600 (`findings/m3-tuning.md` Part 4). Measured at M1, with no eyes: 3,757 in WASM and 4,381 native, at a mean of 1,539 creatures. All readings: `gates.md` "Throughput readings", `findings/m2-senses.md`. |
+| Reference world | The default world (1536 by 1024, 400 founder creatures, 1,200 founder plants, seed 1) after 12,000 ticks | It holds 1,243 to 1,319 creatures on seeds 1 to 3 at the head of M2, and 1,213 to 1,458 at the head of M3 (`gate-health`). The floor is a seed 1 reading: of seeds 1 to 10, seeds 4 and 6 are void (`findings/m2-audit-2.md`, check 18). Reading at the head of M2 (every body has eyes), 2026-10-12, seed 1, mean of 1,320 creatures over the timed ticks: native 3,188 to 3,411 ticks per second and WASM in Node 2,933 to 3,127. That is a 24,000-tick skip in 7.7 to 8.2 s. An older world sits at the floor: after 108,000 settle ticks it holds 1,665 creatures and WASM reads 2,357 to 2,471 on four readings at a load average of 4.3 to 6.9. No gate times that world. Reading at the head of M3 (brain upkeep and mixing on), 2026-10-14, seed 1, 1,394 creatures: native 2,660 to 2,968 and WASM in Node 2,646 to 2,801 over nine readings at a load of 2.6 to 8. M3's target over the floor is 2,600 (`findings/m3-tuning.md` Part 4). Measured at M1, with no eyes: 3,757 in WASM and 4,381 native, at a mean of 1,539 creatures. All readings: `gates.md` "Throughput readings", `findings/m2-senses.md`. |
 | Creature pool | 4,096 slots. Budding fails when the pool is full. | Bounds the worst case |
 | Plant pool | 8,192 slots | |
 | Parts per genome | 12 genes (up to 24 parts when mirrored) | `MAX_PART_GENES`. Enforced from M2. |
@@ -98,7 +98,8 @@ creatures are named by `uid`. A slot is reused. A `uid` is never reused.
 
 ### 5.2 Tick
 
-Fixed order. Each phase is one function in its own module.
+Fixed order. Each phase is one function. Most have their own module: contact and life are both in
+`energy.rs`, and budding is `repro::step`.
 
 | # | Phase | Notes |
 |---|---|---|
@@ -117,12 +118,15 @@ Fixed order. Each phase is one function in its own module.
 
 The same build, seed, parameters, and inputs give the same state hash, in native and in WASM.
 
-- One seeded generator, forked into one stream per subsystem. No stream is shared.
+- One seeded generator, forked into one stream per subsystem. One stream is shared: `rng_mate` draws
+  the chance of a pair (`mate.rs`) and the draws of a cross (`repro.rs`), in that fixed order.
 - Iterate in ascending slot order. No hash-map iteration.
 - No standard-library transcendental functions (`sin`, `cos`, `exp`, `powf`, `tanh`). They differ between
   targets. Use `sim::math`. Clippy rejects the banned calls. `sqrt` and basic arithmetic are exact and
   allowed.
-- No `mul_add`. No float-to-int casts on values that can be NaN.
+- No `mul_add`. A float-to-int cast is defined in Rust (NaN gives 0), so it does not break
+  determinism, but a cast on a value that can be NaN hides a bug: `energy.rs` casts `old` to `u32`, and
+  the frame packs NaN as 0.
 - The state hash covers every field that the snapshot covers. The snapshot covers every field that
   affects the future. One test proves both: save, load, run on, compare with an unbroken run.
 
@@ -191,7 +195,7 @@ native binary is dropped. M0 answers this.
   and connection genes. A connection names its two ends as `Node { owner, port }`: the body (owner 0),
   a part gene, or a hidden neuron gene, by history id. It holds no index (`genome.rs`).
 - `brain::ports` is the one place that says which neurons a body declares. The body: constant,
-  energy, age, speed, and two mate inputs, then the three scent inputs if it has a chemoreceptor,
+  energy, age, speed, and two mate inputs, then the three scent inputs if its chemoreceptors have a size sum above 0,
   then two inputs per cone of each eye gene. The outputs: thrust, turn, and accept. `Brains::express`
   turns names into indexes. A connection with an end that the body does not declare is not expressed
   and costs nothing. Connections are sorted by (destination, source, history). A founder has 13
@@ -200,14 +204,16 @@ native binary is dropped. M0 answers this.
   and `conn_upkeep` per expressed connection. An input or an output costs nothing.
 - `hidden_gain` scales what a hidden neuron sends. At 0 a hidden neuron is silent: the control arm of
   the long gate.
-- Layout reserves a per-connection `trace: f32` array for within-life learning. It is not allocated
-  while learning is off.
+- No layout is reserved for within-life learning yet. `Brains` has no `trace` array. A learning rule
+  would add one per connection, with its own snapshot version.
 
 ### 5.6 Parameters
 
 Every tunable constant is a named `f32` in one table, with a default, a minimum, and a maximum. The table
 is readable and writable through the ABI and the headless CLI (`--param name=value`). The Lab panel is
-generated from it. A constant that is not in the table cannot be tuned and must not need tuning.
+generated from it. A constant that is not in the table cannot be tuned and must not need tuning. Not yet true: the M3
+audit lists 14 groups of constants in rule code that are tunable by role (`findings/m3-audit.md`,
+step 6), among them `FOUNDER_EYE_EXTRA`, which was tuned once from 0.4.
 
 Parameters are part of the snapshot.
 
@@ -310,8 +316,9 @@ view are built before its normal state.
 | `run` | Run N ticks from a seed. Print the state hash and counts. | Never |
 | `bench` | Ticks per second of the native build, on the reference world of §2. For probes and a quick reading. | Below `--floor`, or a void run |
 | `gate-health` | 12,000 ticks on 3 seeds, one at a time. | Any seed leaves its bands |
+| `gate-evolve` | The evolution gate: each seed run as given and with each sense blind. `--brain` adds the brain bands. In `make gates` (36,000 ticks, seeds 1 to 3) and `make gates-long` (144,000 ticks, seeds 1, 4, 5, 6, 8). | Any seed leaves its bands |
 | `probe-*` | Named measurements. Output goes to `docs/findings/`. | Never |
-| `bake` | Run long, pass the health gate, write the shipped snapshot. | Gate fails |
+| `bake` | Not built. Planned: run long, pass the health gate, write the shipped snapshot. Today a world is baked with `run --out`. | Gate fails |
 
 Every gate is proven on a known-bad input before it counts. The proof and its output are recorded in
 `docs/gates.md`. A gate that has not rejected something is not a gate.

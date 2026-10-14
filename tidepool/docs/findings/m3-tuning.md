@@ -137,7 +137,8 @@ With brain structure frozen, bodies with no chemoreceptor lose ground again, as 
 (seed 8 of M2: 9%, 60%, 29%, 11%). With structural mutation on, they take over on seeds 1 and 8: 57%
 and 77% at tick 144,000. `eye` does not fall in either world, and no body is without an eye.
 
-What this shows: structural mutation of the brain is what lets the scent sense go, on 2 of 3 seeds.
+What this shows: losing the scent sense goes with structural mutation of the brain, on 2 of 3 seeds,
+one paired run per seed.
 "Evolution keeps it" fails for scent there. What it does not show: why. Two readings fit, and no run
 tells them apart yet. The wiring of the carriers is worn down by the loss of wires and neurons, or
 bodies with no chemoreceptor got better by new wiring. One given wire is lost by mutation alone on
@@ -160,8 +161,9 @@ more creatures on 4 of 5 seeds here.
 ### The band of `shapes` is replaced by a band of `variety` (`919492a`)
 
 `variety` is the effective number of brain shapes: 1 over the sum of the squared shares of the pairs
-(hidden genes, connections with no end on an input of a sense), every shape counted. It cannot fall
-when brains come to differ more, and `shapes` can. The band fails under 2.0 with `--brain`.
+(hidden genes, connections with no end on an input of a sense), every shape counted. Splitting a shape in
+two never lowers it (the test `variety_is_the_effective_number_of_shapes`), and `shapes` can fall
+that way. It can fall when shares shift: [20, 20] reads 2.0 and [30, 9, 1] reads 1.63. The band fails under 2.0 with `--brain`.
 `shapes` prints with no band. Proof, the frozen world of Task 9 (the four structural rates at 0):
 
 ```
@@ -261,8 +263,8 @@ gate-evolve 5/5 PASS
 - Evolution keeps it: seed 8 reads `hidden` 1.47 against a band of 1.0.
 - It helps, not shown: the gap in hidden neurons reads +1.86, -0.12, -0.27, -0.25, -3.36.
 - It helps, not shown for scent: the world with no scent holds more creatures on 4 of 5 seeds.
-- It helps, for eyes: the world with blind eyes holds fewer creatures on 5 of 5 seeds. Each arm
-  evolved alone, one run per seed.
+- Consistent with "it helps" for eyes: the world with blind eyes holds fewer creatures on 5 of 5
+  seeds. Each arm evolved alone, one run per seed.
 - The mechanism fires: `variety` reads 8.2 to 16.5, lower than at the Start values on seeds 4, 5,
   and 8, and above its band.
 - A blind world that keeps a useless sense by chance fails a seed: seed 7 here, and seed 2's eye gap
@@ -301,9 +303,9 @@ With `--param mix_rate=1` and nothing else changed:
 
 | Trial | Change | Bench (trial / baseline in turn) | Long gate | Result |
 |---|---|---|---|---|
-| 1 | `conn_upkeep` 0.00005 → 0.0001 | 2,839, 2,826 at 1,404 / 2,642, 2,603 | 4/5: seed 5 scent gap 0.088 | A cost on wires lets the scent sense go |
+| 1 | `conn_upkeep` 0.00005 → 0.0001 | 2,839, 2,826 at 1,404 / 2,642, 2,603 | 4/5: seed 5 scent gap 0.088 | The scent gap fell under its band on one seed, one run |
 | 2 | `fixed_upkeep` 0.0337 → 0.037 | 2,801, 2,751 at 1,394 / 2,594, 2,569 | 5/5, least scent gap 0.12 | Written as the default (`f4d2ef3`) |
-| 3 | `fixed_upkeep` 0.037 → 0.040 | 2,691, 2,762 at 1,365 / 2,676, 2,646 | not run | Gain 1 to 4%, hypothesis of about 7% refuted. Stopped at the bench, the lever is spent |
+| 3 | `fixed_upkeep` 0.037 → 0.040 | 2,691, 2,762 at 1,365 / 2,676, 2,646 | not run | Gain 1 to 4%, hypothesis of about 7% refuted on two bench readings. Stopped at the bench, as its rule said |
 
 Later readings of the trial 2 default fell under 2,700: 2,681 (`make gates`, load 4.8 to 6.0), then
 2,648, 2,665, 2,676, 2,646. In turn with the stage 1 world (2,934 and 2,898) it runs about 9% slower.
@@ -336,9 +338,13 @@ reading.
 
 - **The mechanism fires:** 55 to 62% of births are a cross at tick 36,000.
 - **Evolution does not keep it:** the accept share falls to 0.01 to 0.24 by tick 144,000, and on
-  seed 1 the share of crosses falls to 0.1%. Mating is a feature of a young world.
-- **The mechanism fires:** a cross brings donor hidden genes that stay unwired and still pay
-  upkeep: 4.2 to 6.6 hidden genes against 3.3 to 3.9 wired at tick 144,000.
+  seed 1 the share of crosses falls to 0.1%. On these runs, one per seed, mating is a feature of a
+  young world.
+- **Not shown:** the build agent reported 4.2 to 6.6 hidden genes against 3.3 to 3.9 wired at tick
+  144,000, and read it as donor genes that a cross leaves unwired. It did not name the seeds or the
+  probe, and the `hidden` (wired) column above reads 3.27 to 7.13. No run with mixing off compares
+  them. `variety_wired` (Close) reads the shapes with wired neurons only. On seed 1, `probe-brains`
+  reads 4.21 hidden genes against 3.27 wired, which agrees with the agent's numbers for that seed.
 - **Evolution keeps it, not on every run:** lines with no chemoreceptor still take over on some
   paths (seed 5 at 0.30). One run per seed.
 - **"It helps" is not shown** for hidden neurons (the hidden gap is −1.65 to +5.46) or for scent
@@ -351,15 +357,15 @@ Five seeds at the final defaults.
 
 - **Area: no band.** It reads 35.5 to 41.7 at tick 36,000 and 34.3 to 39.7 at tick 144,000. Area is
   about `len`² × 0.35 (`wid` reads 0.32 to 0.40 against its floor of 0.3), so the `len` band already
-  bounds it from below. No parameter narrows a body alone, so no bad input exists that an area band
+  bounds it from below. No parameter narrows a body alone, so no bad input is known that an area band
   rejects and the `len` band passes.
 - **Egg: the range as it is.** With the top of the range at 0.9 (founder 0.7), `egg` at tick 144,000
   reads 0.65 to 0.67, against 0.65 to 0.66 with the top at 0.7. It does not use the room, and the
-  hypothesis that the top held it is refuted. `len` stays in its band. Confound: the wider range also
+  hypothesis that the top held it is not supported. `len` stays in its band. Confound: the wider range also
   made the mutation step 40% larger.
 - **`speed_cv`: a band at 0.10.** Good worlds read 0.22 to 0.25 at tick 36,000 and 0.23 to 0.28 at
   tick 144,000. The bad input (`mut_rate`, `mut_shape_rate`, and the three part rates at 0) reads 0.05
-  to 0.07 and fails 0/5. That world fails both sense gaps too, so this band is not its only rejector.
+  to 0.07 and fails 0/5 in the build agent's run (0/3 on seeds 1, 2, 3 on `main`, `gates.md`). That world fails both sense gaps too, so this band is not its only rejector.
 - **`plans`: no band.** A passing default world read `plans=0` (seed 8 at tick 36,000). It is a count
   of shares over 5%, as `shapes` was. An effective number of plans would be the form to try.
 
@@ -369,3 +375,31 @@ On `main` at `1831dd7`: `make check` exits 0 (263 Vitest tests). `make gates` ex
 gate row equal digit for digit to the agent's close (native 2,829, WASM 2,697 at load 8). Break:
 with the full-grown condition taken out of `mate.rs`, `a_juvenile_and_a_body_with_a_donor_do_not_pair`
 fails, and passes again with it restored.
+
+The rows of `make gates` at the final defaults, with the `speed_cv` band, at `fa1631a` (load 7.2 to
+4.2). The fresh-context audit read the same rows at `77a096e`:
+
+```
+bench creatures=1394 median_tps=2968 floor=2400 PASS
+bench-wasm creatures=1394 median_tps=2762 floor=2400 PASS
+seed=1 creatures=1458 min_late=1294 plants=2229 births_late=2498 max_gen=14 mean_chemo=0.48 parked=0.00 first_bud=783 juv_starved=0.55 to_bud=0.31 PASS
+seed=2 creatures=1305 min_late=1196 plants=2076 births_late=2340 max_gen=17 mean_chemo=0.46 parked=0.00 first_bud=763 juv_starved=0.54 to_bud=0.32 PASS
+seed=3 creatures=1213 min_late=1152 plants=1964 births_late=2034 max_gen=14 mean_chemo=0.46 parked=0.00 first_bud=793 juv_starved=0.54 to_bud=0.31 PASS
+gate-health 3/3 PASS
+seed=1 creatures=1633 creatures_noscent=1513 creatures_noeye=1689 len=10.0 len_sd=1.59 parts=7.5 chemo=0.35 chemo_blind=0.16 eye=0.25 eye_blind=0.07 plans=4 speed_cv=0.25 speed=0.94 area=35.5 hidden=4.29 conns=60.0 shapes=4 shapes_raw=1 variety=30.6 PASS
+seed=2 creatures=1521 creatures_noscent=1550 creatures_noeye=1540 len=9.4 len_sd=1.68 parts=8.3 chemo=0.41 chemo_blind=0.18 eye=0.26 eye_blind=0.09 plans=3 speed_cv=0.25 speed=0.90 area=33.4 hidden=4.40 conns=61.8 shapes=1 shapes_raw=0 variety=42.1 PASS
+seed=3 creatures=1341 creatures_noscent=1398 creatures_noeye=1548 len=10.3 len_sd=1.61 parts=7.2 chemo=0.38 chemo_blind=0.15 eye=0.25 eye_blind=0.11 plans=3 speed_cv=0.24 speed=1.06 area=42.2 hidden=4.13 conns=58.1 shapes=3 shapes_raw=2 variety=41.1 PASS
+gate-evolve 3/3 PASS
+```
+
+**`variety_wired`, after the audit** (`m3-audit.md` finding M2). The long gate at `1b20e7e` with the
+wired reading added, load 6.0 to 4.5, every other cell equal to the rows above:
+
+| Seed | 1 | 4 | 5 | 6 | 8 |
+|---|---|---|---|---|---|
+| `variety` (every hidden gene) | 24.9 | 29.9 | 23.1 | 39.1 | 15.7 |
+| `variety_wired` (wired hidden neurons only) | 24.9 | 21.8 | 19.1 | 38.5 | 12.2 |
+
+Unwired genes raise `variety` by up to 27% (seed 4). With wired neurons only it still reads 12.2 to
+38.5, against a band of 2.0 and 1.0 in the frozen world. Which of the two the band reads is the
+owner's: it is a change to a band. `variety_wired` is printed with no band.

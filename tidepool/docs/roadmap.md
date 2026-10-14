@@ -88,7 +88,14 @@ Looks and function become one thing.
 Exit: after a long headless run, creatures in one world visibly differ in body plan, and the difference
 changes how they move and what they see. Part count does not collapse to the minimum (risk R1).
 
-### M3 — Minds
+### M3 — Minds (built 2026-10-14, owner check open)
+
+Status: every task of `plans/2026-10-13-m3-minds.md` is built. `make check`, `make gates`, and
+`make gates-long` exit 0, and a fresh-context audit found no High finding in the code
+(`findings/m3-audit.md`). The exit record is `findings/m3-exit.md`. Brains differ in shape and are not
+minimal at tick 144,000 on 5 of 5 seeds. That a hidden neuron helps is not shown. Mixing is on by
+default, and evolution drops it by tick 144,000. Several choices are provisional and wait for the
+owner, with the owner's checks.
 
 - Variable-topology recurrent brains. Inputs and outputs come from parts.
 - Brain upkeep. Mutations that add and remove neurons and connections.

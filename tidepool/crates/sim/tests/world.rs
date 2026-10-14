@@ -265,7 +265,13 @@ fn seed_founders_stops_at_a_full_pool() {
 fn founders_swim_and_every_tick_adds_one_to_each_age() {
     let mut w = World::new(2, 1536.0, 1024.0);
     // Nothing starves, so the test holds after Task 13 adds upkeep.
-    for k in [id::BASAL, id::NEURON_UPKEEP, id::CONN_UPKEEP, id::MOVE_COST] {
+    for k in [
+        id::BASAL,
+        id::FIXED_UPKEEP,
+        id::NEURON_UPKEEP,
+        id::CONN_UPKEEP,
+        id::MOVE_COST,
+    ] {
         w.params.set(k, 0.0);
     }
     w.seed_founders(400, 0);
