@@ -49,7 +49,7 @@ Off values, so the Start values are written out.
 $ target/release/tidepool-headless gate-evolve --brain --ticks 144000 --seeds 1,4,5 --param fixed_upkeep=0.0337 --param neuron_upkeep=0.0002 --param conn_upkeep=0.00005 --param mut_conn_add=0.05 --param mut_conn_remove=0.05 --param mut_neuron_add=0.02 --param mut_neuron_remove=0.02 --param part_wires=2
 ```
 
-The hypothesis was written before run 1 (`hypothesis.txt` in the session's log folder). The good
+The hypothesis was written before run 1 (`hypothesis.txt` in the session's log folder). The session's log folder was in `/private/tmp` and was lost in a machine restart on 2026-10-14. The rows pasted in this file are the record. The hypothesis as written before the run cannot be shown. The good
 world was not run or looked at before the rows of the two bad worlds were in their files.
 
 ### Bad world 1: a brain is the largest cost of a body

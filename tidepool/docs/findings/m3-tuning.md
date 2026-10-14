@@ -176,7 +176,7 @@ Exit 1 on 3 of 3, and no other band fails. The good rows read 12.1 to 21.2. Prov
 ### The trials
 
 Each at tick 144,000 on the five seeds of the long gate, with the hypothesis written before the run
-(`trial-<n>-hypothesis.txt` in the session's log folder). Each cell lists seeds 1, 4, 5, 6, 8.
+(`trial-<n>-hypothesis.txt` in the session's log folder). The session's log folder was in `/private/tmp` and was lost in a machine restart on 2026-10-14. The rows pasted in this file are the record. The hypothesis as written before the run cannot be shown. Each cell lists seeds 1, 4, 5, 6, 8.
 
 | | The Start values | Trial 1: `mut_conn_remove=0.01` | Trial 2: `mut_neuron_remove=0.005` |
 |---|---|---|---|
@@ -268,3 +268,12 @@ gate-evolve 5/5 PASS
 - A blind world that keeps a useless sense by chance fails a seed: seed 7 here, and seed 2's eye gap
   in trial 2. The gap bands carry that noise.
 - Throughput has no margin over its target.
+
+## Part 4: mixing on
+
+The machine restarted on 2026-10-14 during the first attempt at this part. Nothing of it had been
+committed, and its logs were lost with the log folder. It starts again from its first step.
+
+**From here each hypothesis is committed to this file before its run.** A log folder in `/private/tmp`
+does not survive a restart, and "the hypothesis was written first" must be a fact that a reader can
+check.
