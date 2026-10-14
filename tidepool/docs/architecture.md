@@ -264,9 +264,12 @@ Rules:
     count and `MAX_EYES` places of 3 floats: direction in world radians, cosine of the half angle,
     range in world units.
   - Creature record: x, y, heading, length, width, hue, energy as a share of capacity, then `uid`,
-    slot, flags (lineage 1, possessed 2, juvenile 4, budded 8), then `PART_WORDS` (12) part words in
-    gene order. A part word is `kind | anchor << 8 | size << 16 | extra << 24`, each of the three
-    values scaled from 0 to 1 onto a byte. A place with no part is 0.
+    slot, flags (lineage 1, possessed 2, juvenile 4, budded 8, born of a cross 16, willing to mate 32,
+    holds a donor 64), the brain word `hidden | conns << 16`, then `PART_WORDS` (12) part words in
+    gene order, then the growth (the share of its full size) and the age as a share of its life. A
+    part word is `kind | anchor << 8 | size << 16 | extra << 24`, each of the three values scaled
+    from 0 to 1 onto a byte. A place with no part is 0. The grown length over the growth is the
+    length gene.
   - Plant record: x, y, radius, reserve as a share of the cap.
   - A full frame is at most 4 x (34 + 4,096 x 25 + 8,192 x 4) bytes. The page buffers have that
     size.
