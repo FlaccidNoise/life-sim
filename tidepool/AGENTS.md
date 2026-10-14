@@ -24,7 +24,9 @@ High finding, and what it found and what was fixed is at the end of that file. T
 open.
 
 M3 (Minds) has a plan, `docs/plans/2026-10-13-m3-minds.md`. **The owner approved it on 2026-10-13 and
-it is being built.** The plan says which owner stops the build runs through and which stops are hard
+it is built but for the second stage of its retune and its exit (see `/HANDOFF.md`).** The walkthrough
+(`docs/plans/2026-10-13-walkthrough.md`) is built. The M4 plan is a draft for the owner
+(`docs/plans/2026-10-14-m4-teeth.md`): build nothing of it before approval. The plan says which owner stops the build runs through and which stops are hard
 ("How the build runs without the owner"). A choice logged as "provisional, owner to confirm" in
 `docs/decisions/INDEX.md` is not final.
 
