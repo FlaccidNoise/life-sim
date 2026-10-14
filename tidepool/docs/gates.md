@@ -881,6 +881,29 @@ tick 36,000 too. The seeds that passed at tick 36,000 and failed at tick 144,000
 (`chemo_gap=0.016` and `0.067`, the same check 14). They show that the long reading sees what the
 short one does not.
 
+### The brain bands (M3, provisional)
+
+`gate-evolve --brain` reads three more bands at tick 144,000. They are in `make gates-long` only from
+the close of the M3 retune, and not in `make gates` or CI. **Provisional: the owner has not confirmed
+them.** The rows, the hypothesis, and the limits are in `findings/m3-brains.md`.
+
+| Band | Fails under | Bad input of the head | It read | The good world read |
+|---|---|---|---|---|
+| `hidden` | 1.0 | `neuron_upkeep=0.01 conn_upkeep=0.003` with the Start values | 0.03, 0.03, 0.04. `0/3`, exit 1 | 3.52, 3.04, 3.85 |
+| `conns` | 15.0 | The same | 2.7, 1.4, 2.2. `0/3`, exit 1 | 36.7, 34.7, 42.6 |
+| `shapes` | 2 | The four structural rates at 0 | 1, 1, 1. `0/3`, exit 1, and no other band fails | 4, 6, 4 |
+
+Seeds 1, 4, 5, one run each. The Start values are written out as `--param` flags in every command,
+because the defaults were still at their Off values.
+
+What the bands do not show:
+- **Use.** `hidden - hidden_null` reads +3.18, -0.65, +1.10 in the good world and +1.45, -0.87, +0.92
+  by chance. It has no band.
+- The costly world also fails a sense gap on every seed, so `conns` there partly reads the senses.
+- `hidden` and `conns` pass a world where a hidden neuron sends nothing.
+- `shapes` can fall as variety rises, because a shape that under 5% hold is not counted.
+- `shapes_raw` reads 2 to 4 in the frozen world. It is printed and never a band.
+
 ## Probes
 
 Built by M2 Task 12. Each runs the default world and prints what it reads. None has a band, and none
