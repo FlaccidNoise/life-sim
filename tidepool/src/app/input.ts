@@ -2,6 +2,7 @@
 // held keys, the pointer, and the frames, and posts what they return.
 
 import {
+  C_ENERGY,
   C_HEADING,
   C_LENGTH,
   C_SLOT,
@@ -24,6 +25,7 @@ export interface Keys {
   right: boolean;
 }
 export const GRACE_MS = 500;
+export const STARVING_BELOW = 0.25; // of a full energy store
 
 const TAU = 2 * Math.PI;
 const TURN_FULL = 0.5; // radians off the heading at which the turn is full
@@ -94,6 +96,31 @@ export function inputToSend(sent: Steer | null, next: Steer): Steer | null {
   if (!next.manual) return sent?.manual ? { manual: false, thrust: 0, turn: 0 } : null;
   const same = sent?.manual && sent.thrust === next.thrust && sent.turn === next.turn;
   return same ? null : next;
+}
+
+/**
+ * What a click in Watch at a world point does. It finds the body as `World::pick` of
+ * crates/sim/src/control.rs does: the nearest whose centre is within `radius`, and of two at one
+ * distance the lower slot. `take` is the uid to possess. A body with under `STARVING_BELOW` of a
+ * full store is not handed to the player: it has seconds left. Null: no body is there.
+ */
+export function clickOn(
+  frame: FrameView,
+  x: number,
+  y: number,
+  radius: number,
+): { take: number } | { refuse: 'starving' } | null {
+  let [best, far, slot] = [-1, radius * radius, Infinity];
+  for (let i = 0; i < frame.creatureCount; i++) {
+    const r = frame.creatureBase + i * CREATURE_STRIDE;
+    const d2 = ((frame.f32[r + C_X] ?? 0) - x) ** 2 + ((frame.f32[r + C_Y] ?? 0) - y) ** 2;
+    const s = frame.u32[r + C_SLOT] ?? 0;
+    if (d2 < far || (d2 === far && s < slot)) [best, far, slot] = [r, d2, s];
+  }
+  if (best < 0) return null;
+  return (frame.f32[best + C_ENERGY] ?? 0) < STARVING_BELOW
+    ? { refuse: 'starving' }
+    : { take: frame.u32[best + C_UID] ?? 0 };
 }
 
 /**

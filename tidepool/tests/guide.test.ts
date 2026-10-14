@@ -19,6 +19,7 @@ import {
   noteOpen,
   openGuide,
   pageBusy,
+  showDeath,
   toast,
 } from '../src/ui/state';
 import {
@@ -30,6 +31,7 @@ import {
   fill,
   type EntryId,
 } from '../src/ui/words/guide';
+import { BUD, COUNTER, FIRST_DEATH, LINE, REFUSE, STARVING } from '../src/ui/words/lines';
 import { NOTE, NOTE_UI, type NoteId } from '../src/ui/words/notes';
 import { createSim } from '../src/worker/wasm';
 
@@ -172,6 +174,56 @@ test('a new line of the walkthrough waits for the guide, the bud card, and a lin
   expect(pageBusy()).toBe(true);
   toast.value = null;
   expect(text('../src/app/main.ts')).toContain('busy: pageBusy() ||');
+});
+
+test('a death is seen at once: the guide and an open note close under the overlay', () => {
+  show('score');
+  noteOpen.value = 'score';
+  openGuide('child');
+  showDeath({ cause: 'old age', heirs: [], first: false });
+  expect(guideAt.value).toBeNull();
+  expect(noteOpen.value).toBeNull();
+  expect(death.value).toEqual({ cause: 'old age', heirs: [], first: false });
+  // The worker's `died` message goes through it, and the overlay takes the focus when it mounts.
+  expect(text('../src/app/main.ts')).toContain('showDeath({');
+  expect(text('../src/ui/DeathOverlay.tsx')).toMatch(
+    /useEffect\(\(\) => \{[^}]*\.focus\(\);\s*\}, \[\]\)/,
+  );
+});
+
+test('the counter and the score line say what the core counts: the line, not descendants', () => {
+  // `lineageAlive` is every living body with the lineage mark. After the pick of an heir that holds
+  // the parent and the siblings of the new body, which are no descendants of it.
+  expect(rust('frame.rs')).toMatch(/c\.mark\[s\] & MARK_LINEAGE != 0/);
+  for (const said of [
+    COUNTER,
+    LINE.score,
+    NOTE.score.about,
+    NOTE.score.text,
+    GUIDE_UI.lineOthers,
+  ]) {
+    expect(said, said).toMatch(/\bline\b/);
+    expect(said, said).not.toMatch(/descend/i);
+  }
+  expect(COUNTER).toContain('{n}');
+  expect(CHAPTERS.find((c) => c.id === 'line')?.text[0]).toMatch(
+    /^The only score is your line, alive\./,
+  );
+  // The page draws the counter and the line of chapter 4 from these strings.
+  expect(text('../src/ui/App.tsx')).toContain("COUNTER.replace('{n}'");
+  expect(text('../src/ui/App.tsx')).not.toMatch(/Descendants/);
+  // The first death of a first body offers only its descendants, and its words stay.
+  expect(FIRST_DEATH).toBe('You are gone. Your line is not.');
+});
+
+test('the lines of the page are true of the screen and of the body', () => {
+  // In Play the water outside the eye cone is drawn grey: the line names the thing, not a colour.
+  expect(STARVING).toBe('You are starving. Find a plant.');
+  expect(text('../src/ui/App.tsx')).toContain('starving.value ? STARVING : null');
+  // A refused click says what the body is. The toast of a bud with no card is the old string.
+  expect(REFUSE.starving).toBe('That one is starving. Pick another.');
+  expect(text('../src/app/main.ts')).toContain('flash(REFUSE[hit.refuse]');
+  expect(BUD.noChild).toBe('You budded a child.');
 });
 
 test('each mark sits on the thing that its note explains', () => {

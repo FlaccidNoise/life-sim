@@ -1,6 +1,8 @@
 import { expect, test } from 'vitest';
 import {
   GRACE_MS,
+  STARVING_BELOW,
+  clickOn,
   emptyAnswer,
   inputToSend,
   manualNow,
@@ -101,7 +103,7 @@ test('a key held across a possess is posted again, because the worker dropped it
 // A frame with one creature record per entry. `possessed` is a slot.
 function frame(
   possessed: number,
-  creatures: { slot: number; uid: number; x: number; y: number; heading: number }[],
+  creatures: { slot: number; uid: number; x: number; y: number; heading: number; e?: number }[],
 ) {
   const buffer = new ArrayBuffer(4 * (P.FRAME_HEADER_WORDS + creatures.length * P.CREATURE_STRIDE));
   const u32 = new Uint32Array(buffer);
@@ -114,6 +116,7 @@ function frame(
     f32[r + P.C_Y] = c.y;
     f32[r + P.C_HEADING] = c.heading;
     f32[r + P.C_LENGTH] = 12;
+    f32[r + P.C_ENERGY] = c.e ?? 0.6;
     u32[r + P.C_UID] = c.uid;
     u32[r + P.C_SLOT] = c.slot;
   });
@@ -145,4 +148,33 @@ test('an empty answer is a lost heir only when the overlay sent a pick', () => {
   expect(emptyAnswer(false, true)).toBe('nothing there');
   // The answer to a `release`, which can arrive while the death overlay is open.
   expect(emptyAnswer(false, false)).toBe(null);
+});
+
+test('a click in Watch takes the nearest body within the radius, as the core picks', () => {
+  const at = (slot: number, uid: number, x: number, y: number) => ({ slot, uid, x, y, heading: 0 });
+  const cur = frame(P.NO_SLOT, [at(5, 50, 100, 100), at(2, 20, 110, 100), at(9, 90, 300, 300)]);
+  expect(clickOn(cur, 103, 100, 10)).toEqual({ take: 50 });
+  expect(clickOn(cur, 108, 100, 10)).toEqual({ take: 20 });
+  // Of two at one distance, the lower slot. A body at the radius is within it.
+  expect(clickOn(cur, 105, 100, 10)).toEqual({ take: 20 });
+  expect(clickOn(cur, 310, 300, 10)).toEqual({ take: 90 });
+  expect(clickOn(cur, 311, 300, 10)).toBeNull();
+  expect(clickOn(cur, 200, 200, 10)).toBeNull();
+  expect(clickOn(frame(P.NO_SLOT, []), 0, 0, 10)).toBeNull();
+});
+
+test('a click on a body with under a quarter of a full store does not take it', () => {
+  expect(STARVING_BELOW).toBe(0.25);
+  const body = (e: number) => frame(P.NO_SLOT, [{ slot: 1, uid: 7, x: 0, y: 0, heading: 0, e }]);
+  expect(clickOn(body(0.24), 1, 1, 10)).toEqual({ refuse: 'starving' });
+  expect(clickOn(body(0), 1, 1, 10)).toEqual({ refuse: 'starving' });
+  // A body in between is taken as before.
+  expect(clickOn(body(0.25), 1, 1, 10)).toEqual({ take: 7 });
+  expect(clickOn(body(0.9), 1, 1, 10)).toEqual({ take: 7 });
+  // The body under the click is the one that is judged: no fed body behind it is taken for it.
+  const two = frame(P.NO_SLOT, [
+    { slot: 1, uid: 7, x: 0, y: 0, heading: 0, e: 0.1 },
+    { slot: 2, uid: 8, x: 6, y: 0, heading: 0, e: 0.9 },
+  ]);
+  expect(clickOn(two, 1, 0, 10)).toEqual({ refuse: 'starving' });
 });

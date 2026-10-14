@@ -16,8 +16,13 @@ export const lineageAlive = signal(0); // frame header word 7: living creatures 
 export const buds = signal(0); // frame header word 8: buds of the possessed body since it was possessed
 export const toast = signal<string | null>(null); // one line, 3 seconds
 export const starving = signal(false); // the possessed body has under a quarter of a full store
-// `first`: the player has not gone on as an heir yet, so the overlay leads with the descendants.
-export const death = signal<{ cause: DeathCause; heirs: Heir[]; first: boolean } | null>(null);
+// `first`: the overlay leads with the line that goes on: `leadsDeath` of src/app/walkthrough.ts.
+export interface Death {
+  cause: DeathCause;
+  heirs: Heir[];
+  first: boolean;
+}
+export const death = signal<Death | null>(null);
 export const focusHeir = signal<Heir | null>(null); // main.ts moves the camera to it
 export const heirGone = signal(false); // a pick came back empty: the heir was not alive
 export const brainOpen = signal(false); // the brain panel
@@ -90,6 +95,16 @@ effect(() => {
 /** The "?" mark of a note: a tap opens the note, and a second tap closes it. */
 export const toggleNote = (id: NoteId): void => {
   noteOpen.value = noteOpen.peek() === id ? null : id;
+};
+
+/**
+ * The body of the player died. The death is seen at once: the guide and an open note close, and the
+ * overlay comes up and takes the focus.
+ */
+export const showDeath = (died: Death): void => {
+  closeGuide();
+  noteOpen.value = null;
+  death.value = died;
 };
 
 /** The Escape key closes the note that is open. False: none was open, and the key leaves the body. */

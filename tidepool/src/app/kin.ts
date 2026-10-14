@@ -83,6 +83,15 @@ export function childOf(prev: FrameView, next: FrameView, parentSlot: number): K
   return child;
 }
 
+const FULL_CARDS = 2; // buds of a player that show the card
+
+/**
+ * Whether a bud shows the bud card. The first buds of a player do, by `earlier`, the count of the
+ * buds before this one. A later bud shows one line at the foot, so the card does not cover a fed
+ * life. The guide holds the card of every bud.
+ */
+export const showsCard = (earlier: number): boolean => earlier < FULL_CARDS;
+
 const LEAST = 1; // percent. A smaller difference is not listed.
 const LEAST_MOVE = LEAST / 100; // of the way from the nose to the tail, and of the range of a cone
 const GAP = 1.5; // the cost of a part with no partner. A pair of one kind costs 3 at most.

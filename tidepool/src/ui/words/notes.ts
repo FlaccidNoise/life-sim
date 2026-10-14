@@ -24,7 +24,7 @@ export const NOTE: Record<NoteId, { about: string; text: string; more: ChapterId
     more: 'child',
   },
   score: {
-    about: 'the descendants counter',
+    about: 'the counter of your line',
     text: 'This counts the living bodies of your line, apart from the one you are in. It is the only score. Nothing here scores size, speed, or age.',
     more: 'line',
   },

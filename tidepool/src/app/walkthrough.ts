@@ -27,13 +27,14 @@ export interface Facts {
   manual: boolean; // the player steers
   panelOpen: boolean;
   dead: boolean; // the death overlay is up
+  first: boolean; // and it leads with the line of beat 12: `leadsDeath`
   /** The possessed body, when the frame holds it. 0: no body, or the frame does not hold it. */
   uid: number;
   energy01: number; // of the body `uid`
   lengthsMoved: number; // body lengths moved under the player's input in this possession
   lengthsAlone: number; // body lengths moved since the brain last took over. 0 while the player steers
   buds: number; // of the body `uid` in this possession
-  lineageAlive: number;
+  lineageAlive: number; // living bodies with the lineage mark, the player's own among them
   split: number; // how far the player's mark is from the brain's, 0 to 2
   busy: boolean; // a passing line of the page is up: a toast, or "Nothing there."
 }
@@ -45,14 +46,12 @@ export interface Walk {
   rest: number; // seconds until the next line may show
   clock: number; // seconds of the walk in this visit
   until: Partial<Record<BeatId, number>>; // the `clock` before which a beat does not show again
-  uid: number; // the body that `energy` and `lineage` are of
+  uid: number; // the body that `energy` is of
   energy: number;
-  lineage: number;
   idle: number; // seconds in a body with no input
   panel: number; // seconds of the open panel, in a body
   apart: number; // seconds for which the two marks have been `APART` apart
-  lost: boolean; // a descendant has died
-  wasDead: boolean;
+  wasFirst: boolean; // the death overlay was up on the last frame, and led with the line of beat 12
 }
 
 export const begin = (done: BeatId[] = [], shown: Walk['shown'] = {}): Walk => ({
@@ -64,12 +63,10 @@ export const begin = (done: BeatId[] = [], shown: Walk['shown'] = {}): Walk => (
   until: {},
   uid: 0,
   energy: 0,
-  lineage: 0,
   idle: 0,
   panel: 0,
   apart: 0,
-  lost: false,
-  wasDead: false,
+  wasFirst: false,
 });
 
 const LINE_S = 6; // a line leaves after this
@@ -85,6 +82,16 @@ const APART = 0.5; // beat 6: between the two marks
 const APART_S = 1;
 const NO_CHANGE_S = 20; // beat 7: of the open panel
 const HALF_RING = 0.5; // beat 8a: of a full store
+const SCORE_BUDS = 2; // beat 9: buds of the body, and the least that the counter shows
+const FIRST_DEATH_S = 20; // beat 12: a shorter life is not one that the player has lived
+
+/**
+ * Beat 12: whether the death overlay leads with "You are gone. Your line is not." It does at the
+ * first death of a life of `FIRST_DEATH_S` seconds or more that leaves an heir to go on as. A
+ * shorter life, and one with no heir, gets the plain layout and leaves the beat for a later death.
+ */
+export const leadsDeath = (walk: Walk, lifeSeconds: number, heirs: number): boolean =>
+  !walk.done.includes('firstDeath') && lifeSeconds >= FIRST_DEATH_S && heirs > 0;
 
 // The lines at the foot of the screen. A beat that is not here shows a pulse, or a line in the panel.
 const FOOT: Partial<Record<BeatId, string>> = LINE;
@@ -104,15 +111,14 @@ export function step(
   const same = seen && f.uid === w.uid;
   // Eating is the only rule of the core that adds energy: `eat` in crates/sim/src/energy.rs.
   const ate = same && f.energy01 > w.energy;
-  if (same && f.lineageAlive < w.lineage) w.lost = true;
-  if (seen) [w.uid, w.energy, w.lineage] = [f.uid, f.energy01, f.lineageAlive];
+  if (seen) [w.uid, w.energy] = [f.uid, f.energy01];
   if (!play) w.uid = 0;
   w.idle = play && !f.manual ? w.idle + dt : 0;
   if (play && f.panelOpen) w.panel += dt;
   w.apart = play && f.panelOpen && f.manual && f.split >= APART ? w.apart + dt : 0;
   w.rest = Math.max(w.rest - dt, 0);
   w.clock += dt;
-  w.wasDead = f.dead;
+  w.wasFirst = f.dead && f.first;
   if (w.now) w.now = { beat: w.now.beat, t: w.now.t + dt };
   const on = w.now?.beat;
   const t = w.now?.t ?? 0;
@@ -133,13 +139,13 @@ export function step(
     openBrain: w.panel >= PANEL_S,
     disagree: on === 'disagree' && w.apart >= APART_S,
     bud: seen && f.buds >= 1,
-    firstDeath: walk.wasDead && !f.dead && play, // an heir was picked
+    firstDeath: walk.wasFirst && !f.dead && play, // an heir was picked
   };
   for (const id of BEATS) if (acts[id] && !isDone(id)) w.done = [...w.done, id];
   // A body that has budded needs no line about the notch.
   if (seen && f.buds >= 1 && !isDone('halfRing')) w.done = [...w.done, 'halfRing'];
   // Beat 12 has no line here: the death screen is its showing.
-  if (f.dead && !walk.wasDead && !isDone('firstDeath')) show('firstDeath');
+  if (f.dead && f.first && !walk.wasFirst && !isDone('firstDeath')) show('firstDeath');
 
   const armed: Partial<Record<BeatId, boolean>> = {
     possess: f.mode === 'watch' && !f.dead,
@@ -150,7 +156,8 @@ export function step(
     disagree: w.apart > 0,
     noChange: play && f.panelOpen && w.panel >= NO_CHANGE_S,
     halfRing: past('eat') && seen && f.energy01 >= HALF_RING,
-    score: seen && (f.buds >= 2 || w.lost),
+    // The counter leaves out the body of the player. It has just risen, on the screen.
+    score: seen && f.buds >= SCORE_BUDS && f.lineageAlive - 1 >= SCORE_BUDS,
   };
   // A line leaves when the player acts on it, when it is no longer true, or after `LINE_S`. The
   // line of beat 1 is the way into the game: it stands until a body is possessed.

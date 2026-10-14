@@ -23,7 +23,7 @@ import {
   walkLine,
   walkLog,
 } from './state';
-import { LINE } from './words/lines';
+import { COUNTER, LINE, STARVING } from './words/lines';
 
 function Readout() {
   const s = stats.value;
@@ -46,7 +46,7 @@ function Hint(props: { touch: boolean }) {
     hint.value ??
     toast.value ??
     walkLine.value ??
-    (mode.value === 'play' && starving.value ? 'You are starving. Find green.' : null);
+    (mode.value === 'play' && starving.value ? STARVING : null);
   return text === null ? null : (
     <p class="hint" role="status" style={{ bottom: 'var(--foot, 12%)' }}>
       {text}
@@ -61,15 +61,15 @@ function Hint(props: { touch: boolean }) {
   );
 }
 
-// The descendant count, top left, under the debug readout when there is one. The line counts the
-// player's own body in `lineageAlive`, so it shows one less. Beat 9 points at it. On a narrow screen
-// it is under the buttons: index.html.
+// The count of the line, top left, under the debug readout when there is one: every living body
+// with the lineage mark but the player's own, which `lineageAlive` counts. Beat 9 points at it. On a
+// narrow screen it is under the buttons: index.html.
 function Line(props: { debug: boolean }) {
   return (
     <div
       class={`bench score${props.debug ? ' low' : ''}${pulse.value === 'score' ? ' pulse' : ''}`}
     >
-      Descendants alive: {Math.max(lineageAlive.value - 1, 0)} <NoteMark id="score" />
+      {COUNTER.replace('{n}', String(Math.max(lineageAlive.value - 1, 0)))} <NoteMark id="score" />
       <Note id="score" />
     </div>
   );

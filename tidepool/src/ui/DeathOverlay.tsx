@@ -1,6 +1,7 @@
 // The death overlay: the cause, then the heirs to continue as, or the end of the line. The first
 // death with a living descendant leads with the descendants, and the cause comes after them.
 
+import { useEffect, useRef } from 'preact/hooks';
 import type { DeathCause, Heir } from '../protocol';
 import { Note, NoteMark } from './Note';
 import { heirGone } from './state';
@@ -32,15 +33,26 @@ export function DeathOverlay(props: {
 }) {
   const { cause, heirs } = props;
   const lineFirst = props.first && heirs.length > 0;
+  // The overlay takes the focus when it comes up: the first heir, or its heading when the line has
+  // ended. A key that steered does not press a button.
+  const section = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const overlay = section.current;
+    (overlay?.querySelector<HTMLElement>('.heir') ?? overlay?.querySelector('p'))?.focus();
+  }, []);
   const causeLine = (
-    <p class={lineFirst ? 'death-after' : 'death-cause'} role={lineFirst ? undefined : 'status'}>
+    <p
+      class={lineFirst ? 'death-after' : 'death-cause'}
+      role={lineFirst ? undefined : 'status'}
+      tabIndex={lineFirst ? undefined : -1}
+    >
       {CAUSE_TEXT[cause]}
     </p>
   );
   return (
-    <section class="death" aria-label="You died">
+    <section class="death" aria-label="You died" ref={section}>
       {lineFirst ? (
-        <p class="death-cause" role="status">
+        <p class="death-cause" role="status" tabIndex={-1}>
           {FIRST_DEATH}
         </p>
       ) : (
