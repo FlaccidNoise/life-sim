@@ -16,7 +16,7 @@ use crate::frame;
 use crate::params::{ParamDef, DEFS};
 use crate::world::{self, World};
 
-pub const ABI_VERSION: u32 = 4;
+pub const ABI_VERSION: u32 = 5;
 
 thread_local! {
     /// Why the last `tp_new` or `tp_load` returned null.

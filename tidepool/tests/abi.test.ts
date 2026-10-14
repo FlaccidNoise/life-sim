@@ -20,8 +20,10 @@ test('frame layout constants match the module', () => {
   expect(n('tp_frame_part_words')).toBe(P.PART_WORDS);
   expect(n('tp_frame_max_eyes')).toBe(P.MAX_EYES);
   expect(n('tp_heir_stride')).toBe(P.HEIR_STRIDE);
-  expect(P.C_PARTS + P.PART_WORDS).toBe(P.CREATURE_STRIDE);
   expect(P.C_BRAIN + 1).toBe(P.C_PARTS);
+  // The growth is the last word of a record, after the part words.
+  expect(P.C_GROWTH).toBe(P.C_PARTS + n('tp_frame_part_words'));
+  expect(P.C_GROWTH).toBe(n('tp_frame_creature_stride') - 1);
 });
 
 test('the brain layout constants of the module are those of crates/sim/src/brain.rs', () => {
@@ -63,7 +65,7 @@ test('a founder record unpacks to its four parts, and to an eye with `founder_ey
     const buf = new ArrayBuffer(4 * (P.FRAME_HEADER_WORDS + P.CREATURE_STRIDE));
     s.writeFrame(0, 0, 1536, 1024, buf);
     const f = P.viewFrame(buf);
-    const words = f.u32.subarray(f.creatureBase + P.C_PARTS, f.creatureBase + P.CREATURE_STRIDE);
+    const words = f.u32.subarray(f.creatureBase + P.C_PARTS, f.creatureBase + P.C_GROWTH);
     return Array.from(words, P.unpackPart);
   };
   sim.setParam(eye.index, 0);
@@ -144,6 +146,8 @@ test('a frame of the whole world holds every creature', () => {
     expect(f.f32[o + P.C_X]).toBeLessThanOrEqual(1536);
     expect(f.f32[o + P.C_LENGTH]).toBeGreaterThan(0);
     expect(f.f32[o + P.C_WIDTH]).toBeLessThan(f.f32[o + P.C_LENGTH] ?? 0);
+    // A founder is full-grown.
+    expect(f.f32[o + P.C_GROWTH]).toBe(1);
     // A founder starts at 0.5 and has paid 10 ticks of upkeep with nothing to eat.
     expect(f.f32[o + P.C_ENERGY]).toBeGreaterThan(0.45);
     expect(f.f32[o + P.C_ENERGY]).toBeLessThan(0.5);
