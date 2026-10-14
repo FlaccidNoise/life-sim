@@ -38,7 +38,8 @@ macro_rules! table {
 // connections. The other defaults are arithmetic, not measurement. The rows from `part_mass` on
 // are for the M2 rules (`docs/plans/2026-10-11-m2-bodies.md`). The rows from `fixed_upkeep` on are
 // for the M3 rules (`docs/plans/2026-10-13-m3-minds.md`). A rate of 0 among them is a rule that is
-// still off.
+// still off. `mut_conn_remove` is the one of them that Task 10 of that plan moved from its Start
+// value, 0.05, against the evolution gate at tick 144,000.
 table! {
     /// The founder's `old` gene: ticks until death by old age. The minimum is the bottom of
     /// `OLD_RANGE`.
@@ -188,7 +189,7 @@ table! {
     /// Chance per birth of a new connection.
     MUT_CONN_ADD "mut_conn_add" 0.05 0.0 1.0;
     /// Chance per birth that a connection is lost.
-    MUT_CONN_REMOVE "mut_conn_remove" 0.05 0.0 1.0;
+    MUT_CONN_REMOVE "mut_conn_remove" 0.01 0.0 1.0;
     /// Chance per birth that a connection is split by a new hidden neuron.
     MUT_NEURON_ADD "mut_neuron_add" 0.02 0.0 1.0;
     /// Chance per birth that a hidden neuron is lost.
