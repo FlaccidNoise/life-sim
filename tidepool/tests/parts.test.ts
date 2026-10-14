@@ -8,6 +8,13 @@ import {
   C_X,
   C_Y,
   CREATURE_STRIDE,
+  FLAG_BUDDED,
+  FLAG_DONOR,
+  FLAG_JUVENILE,
+  FLAG_LINEAGE,
+  FLAG_MIXED,
+  FLAG_POSSESSED,
+  FLAG_WILLING,
   FRAME_HEADER_WORDS,
   KIND_CHEMO,
   KIND_CILIA,
@@ -28,6 +35,7 @@ import {
   anchorPoint,
   buildParts,
   endsOf,
+  hasMixedMark,
   lookOf,
   outlineOf,
   partsOf,
@@ -408,4 +416,18 @@ test('the look of the address is 1, 2, 3, or 4, and anything else is today', () 
   expect(lookOf('3')).toBe(3);
   expect(lookOf('4')).toBe(4);
   for (const text of [null, '', '0', '5', '-1', '1.5', 'x']) expect(lookOf(text)).toBe(0);
+});
+
+test('only a body that is both mixed and young draws the mark of a cross', () => {
+  expect(hasMixedMark(FLAG_MIXED | FLAG_JUVENILE)).toBe(true);
+  expect(hasMixedMark(FLAG_MIXED | FLAG_JUVENILE | FLAG_LINEAGE | FLAG_POSSESSED)).toBe(true);
+  // Full-grown: the mark is gone.
+  expect(hasMixedMark(FLAG_MIXED)).toBe(false);
+  expect(hasMixedMark(FLAG_JUVENILE)).toBe(false);
+  // No other flag, alone or together, gives it.
+  const others = FLAG_LINEAGE | FLAG_POSSESSED | FLAG_BUDDED | FLAG_WILLING | FLAG_DONOR;
+  expect(hasMixedMark(0)).toBe(false);
+  expect(hasMixedMark(others)).toBe(false);
+  expect(hasMixedMark(others | FLAG_MIXED)).toBe(false);
+  expect(hasMixedMark(others | FLAG_JUVENILE)).toBe(false);
 });

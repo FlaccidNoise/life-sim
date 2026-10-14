@@ -144,6 +144,12 @@ const float FORK_KNOB = 0.17; // the radius of the knob on a tip, in part sizes
 // Nothing of a body is drawn farther out of its outline than this many half widths: the glow of a
 // bud stops there.
 const float OUT_OF_REACH = 1.2;
+// The rim of a young body born of a cross: a band inside the membrane, in the hue of the body on
+// one side of its axis and in the hue of the other parent on the other side. The frame does not
+// give that hue, so the band shows a hue half a turn round the hue wheel from the body's own.
+const float MIXED_BAND_AT = 0.42; // the middle of the band, in half widths inside the edge
+const float MIXED_BAND_HALF = 0.13; // its half thickness, in half widths
+const float MIXED_BAND_ALPHA = 0.75;
 `;
 
 export const creatureVert = (look: number): string => `#version 300 es
@@ -151,7 +157,7 @@ export const creatureVert = (look: number): string => `#version 300 es
 layout(location = 0) in vec2 a_corner;
 layout(location = 1) in vec4 a_pose; // x, y, heading, hue
 layout(location = 2) in vec4 a_body; // length, width, energy01, flags
-layout(location = 3) in vec2 a_life; // the cilia size, and the bud pulse from 0 to 1
+layout(location = 3) in vec3 a_life; // the cilia size, the bud pulse from 0 to 1, 1 for the mark of a cross
 #if LOOK >= 1
 layout(location = 4) in vec2 a_ends; // the widths of the nose and the tail, as shares of the width
 flat out vec2 v_ends; // the radius of the round nose and of the round tail
@@ -171,7 +177,8 @@ uniform vec4 u_view;
 out vec2 v_p; // the body frame in world units: +x is forward
 flat out vec3 v_rgb;
 flat out vec4 v_body; // half length, half width, energy01, cilia size
-flat out vec3 v_marks; // 1 for the player's lineage, 1 for the possessed creature, the bud pulse
+flat out vec4 v_marks; // 1 for the player's lineage, 1 for the possessed creature, the bud pulse, 1 for a young cross
+flat out vec3 v_rgb2; // the colour of the other side of the rim of a young cross
 flat out float v_seen;
 ${TINT}${SIGHT}
 void main() {
@@ -186,7 +193,8 @@ void main() {
   v_rgb = tint(a_pose.w, a_body.z);
   v_body = vec4(0.5 * len, 0.5 * wid, a_body.z, a_life.x);
   int flags = int(a_body.w);
-  v_marks = vec3(flags & 1, (flags >> 1) & 1, a_life.y);
+  v_marks = vec4(flags & 1, (flags >> 1) & 1, a_life.y, a_life.z);
+  v_rgb2 = a_life.z > 0.0 ? tint(fract(a_pose.w + 0.5), a_body.z) : vec3(0.0);
   v_seen = seen(a_pose.xy);
 #if LOOK >= 1
   v_ends = a_ends * 0.5 * wid;
@@ -209,7 +217,8 @@ precision highp float;
 in vec2 v_p;
 flat in vec3 v_rgb;
 flat in vec4 v_body;
-flat in vec3 v_marks;
+flat in vec4 v_marks;
+flat in vec3 v_rgb2;
 #if LOOK >= 1
 flat in vec2 v_ends;
 #endif
@@ -296,6 +305,11 @@ void main() {
   c = over(c, v_rgb, 0.35 * fill(d));
   // The nucleus, toward the front.
   c = over(c, v_rgb * 0.3, 0.65 * fill(length(v_p - vec2(0.3 * hl, 0.0)) - 0.45 * hw));
+  // A young body born of a cross: a rim of two hues, one on each side of the axis.
+  if (v_marks.w > 0.0) {
+    float band = line(d + MIXED_BAND_AT * hw, MIXED_BAND_HALF * hw);
+    c = over(c, v_p.y < 0.0 ? v_rgb2 : v_rgb, MIXED_BAND_ALPHA * band);
+  }
   // The membrane, just inside the edge.
   float membrane = 0.12 * hw;
   c = over(c, pale, 0.9 * line(d + membrane, membrane));
