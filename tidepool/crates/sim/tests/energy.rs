@@ -69,7 +69,13 @@ fn still(w: &mut World) {
 }
 
 fn no_upkeep(w: &mut World) {
-    for k in [id::BASAL, id::NEURON_UPKEEP, id::CONN_UPKEEP, id::MOVE_COST] {
+    for k in [
+        id::BASAL,
+        id::FIXED_UPKEEP,
+        id::NEURON_UPKEEP,
+        id::CONN_UPKEEP,
+        id::MOVE_COST,
+    ] {
         w.params.set(k, 0.0);
     }
 }
@@ -276,13 +282,15 @@ fn pow075_is_within_1e_4_of_powf() {
     assert_eq!((pow075(0.0), pow075(-4.0)), (0.0, 0.0));
 }
 
-/// What one resting adult loses in 100 ticks with no brain upkeep. `still` stops every force, so
-/// the body pays no move cost. `setup` sets the parameters under test and `edit` the body.
+/// What one resting adult loses in 100 ticks with no brain upkeep and no fixed upkeep. `still`
+/// stops every force, so the body pays no move cost. `setup` sets the parameters under test and
+/// `edit` the body.
 fn resting_loss(setup: impl FnOnce(&mut World), edit: impl FnOnce(&mut Genome)) -> f32 {
     let mut w = empty();
     still(&mut w);
-    w.params.set(id::NEURON_UPKEEP, 0.0);
-    w.params.set(id::CONN_UPKEEP, 0.0);
+    for k in [id::FIXED_UPKEEP, id::NEURON_UPKEEP, id::CONN_UPKEEP] {
+        w.params.set(k, 0.0);
+    }
     setup(&mut w);
     let c = add(&mut w, 500.0, 1.0, 0.9, edit);
     let before = w.creatures.energy[c];
@@ -449,21 +457,18 @@ fn no_eye(g: &mut Genome) {
 }
 
 /// Rule U1. The brain of the body of `add` has 13 inputs, 4 hidden neurons, 3 outputs, and 60
-/// connections. At the defaults it is not free, and each of the two rates is paid for its own
-/// count.
+/// connections. At the two rates of M2 it is not free, and each of the two rates is paid for its
+/// own count. The test sets the rates: at the defaults the loss in `BRAIN_TICKS` is too small to
+/// test.
 #[test]
 fn a_brain_costs_upkeep() {
     let (free, counts) = brain_loss([0.0; 3], |_| {});
     assert_eq!((free, counts), (0.0, [13.0, 4.0, 60.0]));
     let [_, hidden, conns] = counts;
-    let p = empty().params;
-    let (neuron_upkeep, conn_upkeep) = (p.get(id::NEURON_UPKEEP), p.get(id::CONN_UPKEEP));
-    let (at_defaults, _) = brain_loss([0.0, neuron_upkeep, conn_upkeep], |_| {});
+    let (neuron_upkeep, conn_upkeep) = (0.0012, 0.0003);
+    let (at_both, _) = brain_loss([0.0, neuron_upkeep, conn_upkeep], |_| {});
     let want = BRAIN_TICKS * (neuron_upkeep * hidden + conn_upkeep * conns);
-    assert!(
-        want > 1.0 && near(at_defaults, want),
-        "{at_defaults} {want}"
-    );
+    assert!(want > 1.0 && near(at_both, want), "{at_both} {want}");
     let (for_conns, _) = brain_loss([0.0, 0.0, 0.002], |_| {});
     assert!(
         near(for_conns, BRAIN_TICKS * 0.002 * conns),
@@ -693,7 +698,12 @@ fn a_long_life_costs_more_per_tick() {
 fn thrust_costs_the_same_per_unit_of_mass() {
     let loss_per_area = |len: f32| {
         let mut w = empty();
-        for k in [id::BASAL, id::NEURON_UPKEEP, id::CONN_UPKEEP] {
+        for k in [
+            id::BASAL,
+            id::FIXED_UPKEEP,
+            id::NEURON_UPKEEP,
+            id::CONN_UPKEEP,
+        ] {
             w.params.set(k, 0.0);
         }
         let c = add(&mut w, 500.0, 1.0, 0.9, |g| g.len = len);
