@@ -511,7 +511,15 @@ fn the_readout_gives_a_port_of_a_part_the_kind_and_the_gene_index_of_its_part() 
 #[test]
 fn a_child_that_loses_its_eye_gene_loses_those_connections() {
     let mut p = Params::new();
-    for k in [id::MUT_PART_ADD, id::MUT_PART_DUP] {
+    // No part arrives, and no mutation of the brain adds or takes a connection.
+    for k in [
+        id::MUT_PART_ADD,
+        id::MUT_PART_DUP,
+        id::MUT_CONN_ADD,
+        id::MUT_CONN_REMOVE,
+        id::MUT_NEURON_ADD,
+        id::MUT_NEURON_REMOVE,
+    ] {
         p.set(k, 0.0);
     }
     p.set(id::MUT_PART_REMOVE, 1.0);
