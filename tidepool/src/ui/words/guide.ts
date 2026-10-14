@@ -28,7 +28,7 @@ export const CHAPTERS: { id: ChapterId; title: string; text: string[] }[] = [
     id: 'body',
     title: 'A body',
     text: [
-      'A body is one rounded shape with parts on it. Its genes set its length, its width, and its parts: a mouth, a flagellum or cilia that push it, a fin that turns it, a chemoreceptor that smells plants, an eye. A gene makes one part or a mirrored pair, and a body holds at most {maxParts} such genes.',
+      'A body is one rounded shape with parts on it. Its genes set its length, its width, and its parts: a mouth, a flagellum or cilia that push it, a fin that steers it, a chemoreceptor that smells plants, an eye. A gene makes one part or a mirrored pair, and a body holds at most {maxParts} such genes.',
       'Energy is the only currency, and the ring around your body shows its store. A mouth takes energy from each plant the body touches, with no order from the brain. Energy pays for upkeep at every moment, for growth, and for children. A body with none left starves.',
       'Every part adds mass. Mass costs energy to build, and a heavier body pays more upkeep for as long as it lives. That is the whole cost of a part: it has no fee of its own. Thrust costs energy too, and so does each hidden neuron and each connection of the brain.',
     ],
@@ -69,7 +69,7 @@ export const CHAPTERS: { id: ChapterId; title: string; text: string[] }[] = [
     text: [
       'Variation comes first: children differ from their parents by random mutation. Then survival is unequal: some bodies starve young and some bud many times. Over many generations the common genes change. That is selection.',
       'No body evolves in its life. It grows, but its genes and its wiring are fixed at birth. What changes over time is which bodies are alive.',
-      'There is no goal. No rule of the world picks a winner or aims a mutation. Most mutations are small and do little, and some do harm. Fitness here means descendants left, and nothing else. A trait can be lost: one birth can drop a part, and in test worlds with a sense switched off the lines lost most of that sense.',
+      'There is no goal. No rule of the world picks a winner or aims a mutation. Most mutations are small and do little, and some do harm. Fitness here means descendants left, and nothing else. A trait can be lost: one birth can drop a part, and in test worlds with a sense switched off the lines lost much of that sense.',
       'And this world has not shown that sensing pays: with the rules as they are, a test world whose senses were switched off sometimes held as many creatures as one that could sense, or more.',
     ],
   },
