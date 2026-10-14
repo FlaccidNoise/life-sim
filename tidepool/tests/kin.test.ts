@@ -242,7 +242,7 @@ test('two brain readouts give the weights that differ and the connections gained
     [2, -1.01],
     [3, 2],
   ]);
-  expect(texts(kin(), newborn(), [was, nudged])).toEqual(['1 of 3 connection weights nudged']);
+  expect(texts(kin(), newborn(), [was, nudged])).toEqual(['1 of 3 connection weights differ']);
   // History 3 is gone and 9 is new. The frame counts 3 and 3, and the readouts tell the two apart.
   const rewired = brainOf([
     [1, 0.5],
@@ -258,7 +258,7 @@ test('two brain readouts give the weights that differ and the connections gained
     [2, -1.1],
     [3, 2.2],
   ]);
-  expect(texts(kin(), newborn(), [was, every])).toEqual(['3 of 3 connection weights nudged']);
+  expect(texts(kin(), newborn(), [was, every])).toEqual(['3 of 3 connection weights differ']);
 });
 
 test('a difference under 1% is left out', () => {
@@ -281,7 +281,7 @@ test('the larger changes come first, and the count of weights comes last', () =>
     '1 more hidden neuron',
     'Body 20% wider for its length',
     'Cilia 5% larger',
-    '1 of 1 connection weights nudged',
+    '1 of 1 connection weights differ',
   ]);
 });
 

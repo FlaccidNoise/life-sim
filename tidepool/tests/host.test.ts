@@ -350,19 +350,52 @@ test('manual input turns the brain-driving flag off', () => {
   r.host.handle({ type: 'init', seed: 1 });
   r.advance(100);
   r.host.handle(firstCreature(r));
-  r.host.handle({ type: 'input', manual: true, thrust: 1, turn: 0 });
+  r.host.handle({ type: 'input', manual: true, thrust: 1, turn: 0, accept: false });
   r.advance(100);
   expect(frameOf(r).brainDriving).toBe(false);
-  r.host.handle({ type: 'input', manual: false, thrust: 0, turn: 0 });
+  r.host.handle({ type: 'input', manual: false, thrust: 0, turn: 0, accept: false });
   r.advance(100);
   expect(frameOf(r).brainDriving).toBe(true);
+});
+
+// Rule X3 of the M3 plan: `control::apply` in crates/sim/src/control.rs.
+test('a possessed body carries the willing flag only while the page courts', () => {
+  const r = rig({ recycle: true });
+  // The brain of a founder accepts or refuses by this weight: here it refuses.
+  r.host.handle({ type: 'init', seed: 1, params: [{ name: 'starter_accept', value: -3 }] });
+  r.host.handle({ type: 'possess', uid: 7 });
+  const willing = (): boolean => {
+    r.advance(100);
+    const f = frameOf(r);
+    for (let i = 0; i < f.creatureCount; i++) {
+      const o = f.creatureBase + i * P.CREATURE_STRIDE;
+      if (f.u32[o + P.C_SLOT] === f.possessedSlot) {
+        return ((f.u32[o + P.C_FLAGS] ?? 0) & P.FLAG_WILLING) !== 0;
+      }
+    }
+    throw new Error('the frame does not hold the possessed body');
+  };
+  const input = (manual: boolean, accept: boolean): void =>
+    r.host.handle({ type: 'input', manual, thrust: 0, turn: 0, accept });
+  expect(willing()).toBe(false);
+  input(true, true);
+  expect(willing()).toBe(true);
+  input(true, false);
+  expect(willing()).toBe(false);
+  // A court that the page holds while the brain drives is not read: the brain decides.
+  input(false, true);
+  expect(willing()).toBe(false);
+  // A new body starts with no court.
+  input(true, true);
+  r.host.handle({ type: 'possess', uid: 8 });
+  expect(willing()).toBe(false);
 });
 
 test('a new body does not inherit the input held for the last one', () => {
   const r = rig({ recycle: true });
   r.host.handle({ type: 'init', seed: 1 });
   r.host.handle({ type: 'possess', uid: 7 });
-  r.host.handle({ type: 'input', manual: true, thrust: 1, turn: 1 });
+  r.host.handle({ type: 'input', manual: true, thrust: 1, turn: 1, accept: false });
   r.advance(100);
   expect(frameOf(r).brainDriving).toBe(false);
   r.host.handle({ type: 'release' });
@@ -446,7 +479,7 @@ test('a death pauses the world, posts the cause and the heirs, and possessing an
   r.host.handle({ type: 'init', seed: 1 });
   r.host.handle({ type: 'possess', uid: 7 }); // marked by possession: it outlives the player
   r.host.handle({ type: 'possess', uid: 8 }); // the body the player dies in
-  r.host.handle({ type: 'input', manual: true, thrust: 1, turn: 0 });
+  r.host.handle({ type: 'input', manual: true, thrust: 1, turn: 0, accept: false });
   r.advance(500);
   expect(r.of('died')).toEqual([]);
   m.die(2);

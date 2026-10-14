@@ -4,6 +4,7 @@
 
 import type { ComponentChild } from 'preact';
 import {
+  FLAG_MIXED,
   KIND_CHEMO,
   KIND_CILIA,
   KIND_EYE,
@@ -55,8 +56,9 @@ function shapeOf(part: Part): ComponentChild {
 
 // A body from its own record: its hue, its width as a share of its length, and its parts at their
 // anchors. The nose is on the right. Every body is drawn at one length. `marked` are the places in
-// its part list of the parts that a line of the card is about.
-function Sketch(props: { kin: Kin; marked: number[] }) {
+// its part list of the parts that a line of the card is about. The mate card draws its two bodies
+// with it too.
+export function Sketch(props: { kin: Kin; marked: number[] }) {
   const { kin, marked } = props;
   const ry = kin.length > 0 ? (HALF * kin.width) / kin.length : 0;
   return (
@@ -98,6 +100,9 @@ function Sketch(props: { kin: Kin; marked: number[] }) {
   );
 }
 
+// The child was born of a cross: its parent held the genes of a partner at the bud.
+const mixed = (bud: Bud): boolean => (bud.child.flags & FLAG_MIXED) !== 0;
+
 /** What the card holds, for the card and for chapter 3 of the field guide. */
 export function BudBody(props: { bud: Bud }) {
   const { bud } = props;
@@ -132,6 +137,7 @@ export function BudBody(props: { bud: Bud }) {
       {bud.brood > 1 && <p class="bud-note">{BUD.brood.replace('{n}', String(bud.brood))}</p>}
       {bud.childDied && <p class="bud-note">{BUD.died}</p>}
       {!bud.brainRead && <p class="bud-note">{BUD.noBrain}</p>}
+      {mixed(bud) && <p class="bud-note">{BUD.against}</p>}
       <p class="bud-note">{BUD.oneLength}</p>
     </>
   );
@@ -144,7 +150,7 @@ export function BudCard() {
   return (
     <div class="bud" role="status">
       <p class="bud-head">
-        {BUD.heading} <NoteMark id="bud" />
+        {mixed(bud) ? BUD.mixedHeading : BUD.heading} <NoteMark id="bud" />
       </p>
       <Note id="bud" />
       <BudBody bud={bud} />

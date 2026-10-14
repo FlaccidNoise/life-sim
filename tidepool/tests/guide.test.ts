@@ -5,6 +5,7 @@
 import { readFileSync } from 'node:fs';
 import type { ComponentChild, VNode } from 'preact';
 import { beforeEach, expect, test } from 'vitest';
+import type { Kin } from '../src/protocol';
 import { Note, NoteMark } from '../src/ui/Note';
 import {
   brainOpen,
@@ -15,6 +16,7 @@ import {
   death,
   guideAt,
   hint,
+  mate,
   mode,
   noteOpen,
   openGuide,
@@ -31,7 +33,7 @@ import {
   fill,
   type EntryId,
 } from '../src/ui/words/guide';
-import { BUD, COUNTER, FIRST_DEATH, LINE, REFUSE, STARVING } from '../src/ui/words/lines';
+import { BUD, COUNTER, FIRST_DEATH, LINE, MATE, REFUSE, STARVING } from '../src/ui/words/lines';
 import { NOTE, NOTE_UI, type NoteId } from '../src/ui/words/notes';
 import { createSim } from '../src/worker/wasm';
 
@@ -69,12 +71,27 @@ const click = (vnode: VNode<Record<string, unknown>> | undefined): void => {
   (vnode?.props.onClick as () => void)();
 };
 
+const KIN: Kin = {
+  uid: 7,
+  x: 0,
+  y: 0,
+  length: 12,
+  width: 5,
+  hue: 0.2,
+  growth: 1,
+  flags: 0,
+  hidden: 4,
+  conns: 60,
+  parts: [],
+};
+
 // The page as it is when the thing that a note is on is up.
 function show(id: NoteId | null): void {
   mode.value = id === 'death' || id === null ? 'watch' : 'play';
   death.value = id === 'death' ? { cause: 'starved', heirs: [], first: true } : null;
   brainOpen.value = id === 'brain' || id === 'wiring';
   changesShown.value = id === 'wiring';
+  mate.value = id === 'mate' ? { you: KIN, other: KIN, state: 'apart' } : null;
 }
 
 beforeEach(() => {
@@ -87,7 +104,7 @@ beforeEach(() => {
 });
 
 test('there is one note for each thing that the plan gives a mark', () => {
-  expect(NOTE_IDS).toEqual(['brain', 'wiring', 'bud', 'score', 'death']);
+  expect(NOTE_IDS).toEqual(['brain', 'wiring', 'bud', 'mate', 'score', 'death']);
 });
 
 test.each(NOTE_IDS)(
@@ -231,6 +248,7 @@ test('each mark sits on the thing that its note explains', () => {
     brain: 'BrainPanel.tsx',
     wiring: 'BrainPanel.tsx',
     bud: 'BudCard.tsx',
+    mate: 'MateCard.tsx',
     score: 'App.tsx',
     death: 'DeathOverlay.tsx',
   };
@@ -389,6 +407,73 @@ test('what the guide says of mixing is what the code does', () => {
   expect(rust('brain.rs')).toContain(
     'pub const BODY_OUTPUTS: [u8; 3] = [OUT_THRUST, OUT_TURN, OUT_ACCEPT];',
   );
+});
+
+// The mate card, its note, and the bud card of a mixed child. When one of these fails, the code has
+// moved on: write the words again in src/ui/words, and then change the check.
+test('what the mate card and its note say is what the code does', () => {
+  const code = (file: string): string => rust(file).replace(/\/\/.*$/gm, '');
+  // The note: parts and connections line up by history id, and hidden genes by id.
+  for (const key of ['|part| part.history', '|conn| conn.history', '|gene| gene.id']) {
+    expect(code('mix.rs'), key).toContain(key);
+  }
+  // Each gene of the child comes from one of the two: the child starts as the home genome, and a
+  // gene takes the numbers of the donor or a copy of a gene of the donor goes on the end.
+  expect(code('mix.rs')).toContain('let mut g = home.clone();');
+  expect(code('mix.rs')).toContain('child.push(theirs.clone());');
+  // The colour is that of the parent that buds: a cross never writes the hue.
+  expect(code('mix.rs')).not.toMatch(/hue/);
+  expect(NOTE.mate.more).toBe('machine');
+
+  // The states of the card: what `mate::step` asks of each body of a pair, and the chance.
+  expect(code('mate.rs')).toContain(
+    'c.growth[k] >= 1.0 && donors[k].is_none() && c.cmd_accept[k] > 0.0 && !paired[k]',
+  );
+  expect(code('mate.rs')).toContain('if j > s && free(s) && free(j) {');
+  expect(code('mate.rs')).toContain('if rng_mate.unit() < rate {');
+  expect(Object.keys(MATE.state)).toEqual([
+    'ownYoung',
+    'young',
+    'carry',
+    'otherCarries',
+    'apart',
+    'third',
+    'hold',
+    'refused',
+    'chance',
+  ]);
+  // A refusal names the brain and gives no reason: the game knows none.
+  expect(MATE.state.refused).toBe('It refused. Its brain decided.');
+  expect(LINE.court).toBe('Its brain decides, not a rule.');
+  // The card shows only in a world where mixing is on, and the key C does nothing in any other.
+  expect(text('../src/app/main.ts')).toContain('const found = mixing ? courtship(');
+  expect(text('../src/app/main.ts')).toContain("(key === 'court' && !mixing)");
+
+  // "Your next brood is mixed": each child of the next bud is a cross, and that bud clears the
+  // donor. "Until you bud": nothing else clears it.
+  expect(MATE.exchanged).toBe('Genes exchanged. Your next brood is mixed.');
+  expect(code('repro.rs')).toMatch(/Some\(\(_, donor\)\) => mix::cross\(home, donor,/);
+  expect(rust('repro.rs').match(/donors\[s\] = None/g)).toHaveLength(1);
+  expect(rust('mate.rs').match(/donors\[\w\] = Some/g)).toHaveLength(2);
+
+  // Chapter 2: under the hands of the player, all three outputs are the player's.
+  expect(code('control.rs')).toContain(
+    'world.creatures.cmd_accept[slot] = if c.accept { 1.0 } else { -1.0 };',
+  );
+});
+
+test('the bud card of a child born of a cross says so, and what its lines are against', () => {
+  expect(BUD.mixedHeading).toMatch(/mix/);
+  expect(BUD.mixedHeading).not.toMatch(/copy/);
+  expect(BUD.against).toMatch(/budding parent/);
+  const card = text('../src/ui/BudCard.tsx');
+  expect(card).toContain('(bud.child.flags & FLAG_MIXED) !== 0');
+  expect(card).toContain('mixed(bud) ? BUD.mixedHeading : BUD.heading');
+  expect(card).toContain('{mixed(bud) && <p class="bud-note">{BUD.against}</p>}');
+  // The flag is of a body whose parent held a donor at the bud.
+  expect(rust('frame.rs')).toMatch(/if c\.mixed_with\[s\] != 0 \{\s*flags \|= FLAG_MIXED;/);
+  // The note of the card is true of both kinds of child.
+  expect(NOTE.bud.text).not.toMatch(/your genes/);
 });
 
 test('the word "evolve" is on no button', () => {

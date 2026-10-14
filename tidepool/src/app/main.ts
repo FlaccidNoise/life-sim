@@ -6,6 +6,7 @@ import {
   C_ENERGY,
   C_SLOT,
   CREATURE_STRIDE,
+  FLAG_DONOR,
   TICK_HZ,
   readBrain,
   viewFrame,
@@ -20,7 +21,7 @@ import {
 import { lookOf } from '../render/parts';
 import { createRenderer, type Renderer } from '../render/renderer';
 import { App } from '../ui/App';
-import { BUD, REFUSE } from '../ui/words/lines';
+import { BUD, MATE, REFUSE } from '../ui/words/lines';
 import {
   benchText,
   brain,
@@ -31,6 +32,7 @@ import {
   changesShown,
   closeGuide,
   closeNote,
+  courtHeld,
   death,
   errorText,
   focusHeir,
@@ -40,6 +42,8 @@ import {
   hint,
   lastBud,
   lineageAlive,
+  mate,
+  mateShown,
   mode,
   openGuide,
   pageBusy,
@@ -70,6 +74,7 @@ import {
   zoomAt,
   type Camera,
 } from './camera';
+import { courtship, lingering, type Refusal } from './court';
 import {
   STARVING_BELOW,
   clickOn,
@@ -108,6 +113,8 @@ const PICK_RADIUS = 24; // CSS pixels around a click in which a creature is pick
 const HINT_MS = 1500;
 const TOAST_MS = 3000;
 const BUD_MS = 6000; // the bud card
+// The line of beat 10 is about a courtship that has just ended: after this long it waits for the next.
+const COURTED_MS = 6000;
 const LATENCY_SAMPLES = 20;
 // Seconds. A tab that was hidden gives one long frame, and that is no time of play.
 const WALK_DT_MAX = 0.1;
@@ -260,6 +267,7 @@ function start(): void {
   let cssW = 1;
   let cssH = 1;
   let params: ParamInfo[] = [];
+  let mixing = false; // `mix_rate` is above 0: two bodies of this world can exchange genes
   let possessedUid = 0;
   let body: Body | null = null; // the possessed creature as drawn, when the frame holds it
   let prev: FrameView | null = null;
@@ -386,7 +394,7 @@ function start(): void {
 
   // Watch: the player moves the camera. Play: the camera follows the body, and the keys and a held
   // pointer steer it.
-  const keys: Keys = { up: false, left: false, right: false };
+  const keys: Keys = { up: false, left: false, right: false, court: false };
   let held: { x: number; y: number } | null = null; // the pointer that is down, in CSS pixels
   let playScale = PLAY_SCALE; // the scale the camera goes to in Play. The wheel moves it.
   // Where the camera goes in Play while no frame holds the body: the point of the pick, then the
@@ -397,12 +405,17 @@ function start(): void {
   let posted: Steer | null = null; // the last `input` posted in this possession
   let lastActive = -Infinity; // the time of the last frame with a key or a pointer down
   let pressedAt: number | null = null; // a press that took over from the brain, not yet drawn
+  // Beat 10: when a body that the player courted last accepted or refused, in this possession.
+  let courtedAt = -Infinity;
+  let donor = { uid: 0, holds: false }; // the body of the last frame, and whether it held a donor
+  let refusal: Refusal = { uid: 0, at: -Infinity };
 
   // The worker dropped its held input: it does so on every possess, on release, and on death.
   const forget = (): void => {
     posted = null;
     lastActive = -Infinity;
     pressedAt = null;
+    courtedAt = -Infinity;
   };
   const watch = (): void => {
     mode.value = 'watch';
@@ -411,6 +424,7 @@ function start(): void {
     toast.value = null;
     starving.value = false;
     guideBrain.value = null;
+    mate.value = null;
     dropBud();
     forget();
   };
@@ -465,6 +479,11 @@ function start(): void {
     clearTimeout(hintTimer);
     hintTimer = setTimeout(() => (hint.value = null), ms);
   };
+  const say = (text: string): void => {
+    toast.value = text;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => (toast.value = null), TOAST_MS);
+  };
   // A key or a pointer went down. A press that ends before the next frame still takes over. A press
   // while the brain drives starts a latency sample, and the frame loop ends it.
   const pressed = (): void => {
@@ -473,7 +492,8 @@ function start(): void {
     if (brainDriving.peek()) pressedAt ??= lastActive;
   };
   const dropKeys = (): void => {
-    keys.up = keys.left = keys.right = false;
+    keys.up = keys.left = keys.right = keys.court = false;
+    courtHeld.value = false;
   };
 
   bindPointer(canvas, {
@@ -520,7 +540,7 @@ function start(): void {
     if (e.code === 'Escape') leave();
     if (e.key.toLowerCase() === 'b' && !e.repeat) toggleBrain();
     const key = keyOf(e.code);
-    if (!key) return;
+    if (!key || (key === 'court' && !mixing)) return;
     pressed();
     keys[key] = true;
   });
@@ -549,6 +569,7 @@ function start(): void {
         world = { w: msg.worldW, h: msg.worldH };
         params = msg.params;
         worldParams.value = msg.params;
+        mixing = params.some((p) => p.name === 'mix_rate' && p.value > 0);
         // The energy ring shows where a bud happens.
         for (const p of params) if (p.name === 'bud_at') renderer.setBudAt(p.value);
         cam = fitWorld(world.w, world.h, cssW, cssH);
@@ -585,16 +606,26 @@ function start(): void {
             send({ type: 'brainOf', uid: parent.uid });
             send({ type: 'brainOf', uid: child.uid });
           }
-          if (!card) {
-            toast.value = BUD.noChild;
-            clearTimeout(toastTimer);
-            toastTimer = setTimeout(() => (toast.value = null), TOAST_MS);
-          }
+          if (!card) say(BUD.noChild);
         }
         lastBuds = cur.buds;
         if (mode.peek() === 'play') {
           const energy = energyOf(cur, cur.possessedSlot);
           if (energy !== null) starving.value = energy < STARVING_BELOW;
+          const courting = posted?.accept === true;
+          // The donor flag rose on the body of the player: two bodies exchanged genes.
+          const you = bodyIn(cur, cur.possessedSlot);
+          const holds = you !== null && (you.flags & FLAG_DONOR) !== 0;
+          if (you && holds && donor.uid === you.uid && !donor.holds) {
+            say(MATE.exchanged);
+            if (courting) courtedAt = performance.now();
+          }
+          if (you) donor = { uid: you.uid, holds };
+          // In a world where mixing is off a court can do nothing, and the card does not show.
+          const found = mixing ? courtship(cur, cur.possessedSlot) : null;
+          if (courting && found?.state === 'refused') courtedAt = performance.now();
+          const kept = lingering(found, refusal, performance.now());
+          [mate.value, refusal] = [kept.shown, kept.last];
         }
         break;
       }
@@ -766,6 +797,8 @@ function start(): void {
         manual && brainOpen.peek() && read?.uid === possessedUid ? split(read, steer.peek()) : 0,
       // The card of a bud is a line of the page too, from the frame of the bud on.
       busy: pageBusy() || budding !== null,
+      card: mateShown(),
+      courted: now - courtedAt < COURTED_MS,
     };
     const out = step(walk, facts, Math.min(dt, WALK_DT_MAX));
     const before = walk;
@@ -809,8 +842,9 @@ function start(): void {
       }
       cam = inWorld(follow(cam, seenAt.x, seenAt.y, cam.scale, dt));
       // Keys win over a held pointer.
-      let { thrust, turn, active } = steerFromKeys(keys);
-      if (!active && held && body) {
+      const hands = steerFromKeys({ ...keys, court: keys.court || courtHeld.peek() });
+      let { thrust, turn, active } = hands;
+      if (!hands.steers && held && body) {
         const at = screenToWorld(cam, cssW, cssH, held.x, held.y);
         ({ thrust, turn } = steerToward(body.x, body.y, body.heading, body.length, at.x, at.y));
         active = true;
@@ -820,6 +854,7 @@ function start(): void {
         manual: active || manualNow(lastActive, now),
         thrust,
         turn,
+        accept: hands.accept,
       });
       if (out) {
         posted = out;

@@ -19,11 +19,13 @@ export interface Steer {
   manual: boolean;
   thrust: number;
   turn: number;
+  accept: boolean; // the player courts
 }
 export interface Keys {
   up: boolean;
   left: boolean;
   right: boolean;
+  court: boolean;
 }
 export const GRACE_MS = 500;
 export const STARVING_BELOW = 0.25; // of a full energy store
@@ -42,19 +44,33 @@ const KEY_OF: Record<string, keyof Keys> = {
   ArrowLeft: 'left',
   KeyD: 'right',
   ArrowRight: 'right',
+  KeyC: 'court',
 };
 
-/** The steering key of a `KeyboardEvent.code`: the place of the key, not its letter. */
+/** The key of a `KeyboardEvent.code` that the body takes: the place of the key, not its letter. */
 export function keyOf(code: string): keyof Keys | undefined {
   return KEY_OF[code];
 }
 
-/** W or ArrowUp thrusts. A or ArrowLeft turns -1. D or ArrowRight turns +1. Both turn keys cancel. */
-export function steerFromKeys(k: Keys): { thrust: number; turn: number; active: boolean } {
+/**
+ * W or ArrowUp thrusts. A or ArrowLeft turns -1. D or ArrowRight turns +1. Both turn keys cancel. C
+ * courts: the body accepts a mate. `steers`: a key that moves the body is down, and it wins over a
+ * held pointer. `active`: any of the four is down, and the input is manual.
+ */
+export function steerFromKeys(k: Keys): {
+  thrust: number;
+  turn: number;
+  accept: boolean;
+  steers: boolean;
+  active: boolean;
+} {
+  const steers = k.up || k.left || k.right;
   return {
     thrust: k.up ? 1 : 0,
     turn: (k.right ? 1 : 0) - (k.left ? 1 : 0),
-    active: k.up || k.left || k.right,
+    accept: k.court,
+    steers,
+    active: steers || k.court,
   };
 }
 
@@ -95,8 +111,14 @@ export function manualNow(lastActiveMs: number, nowMs: number): boolean {
  * A steer that is not manual goes out once, after a manual one.
  */
 export function inputToSend(sent: Steer | null, next: Steer): Steer | null {
-  if (!next.manual) return sent?.manual ? { manual: false, thrust: 0, turn: 0 } : null;
-  const same = sent?.manual && sent.thrust === next.thrust && sent.turn === next.turn;
+  if (!next.manual) {
+    return sent?.manual ? { manual: false, thrust: 0, turn: 0, accept: false } : null;
+  }
+  const same =
+    sent?.manual &&
+    sent.thrust === next.thrust &&
+    sent.turn === next.turn &&
+    sent.accept === next.accept;
   return same ? null : next;
 }
 

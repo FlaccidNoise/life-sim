@@ -352,6 +352,42 @@
           }
         }
       }
+      /* The mate card: where the bud card is, and never with it. Its Court button is held. */
+      .mate figure p {
+        opacity: 0.8;
+      }
+      .mate figure .willing {
+        color: #7fd1a8;
+        opacity: 1;
+      }
+      .mate .mate-state {
+        margin-top: 6px;
+        font-weight: 600;
+        text-align: center;
+      }
+      .mate .court {
+        position: static;
+        display: block;
+        margin: 6px auto 0;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
+        touch-action: none;
+      }
+      .mate .court[aria-pressed='true'] {
+        border-color: #cfe6ee;
+        background: #12384d;
+      }
+      /* On a narrow screen the card is above the body: wide, and with small sketches, so that its
+         foot stays clear of the body. */
+      @media (max-width: 50rem) {
+        .bud.mate {
+          width: min(24rem, calc(100% - 24px));
+        }
+        .mate svg {
+          max-width: 4rem;
+        }
+      }
       .corner {
         position: fixed;
         top: 12px;
@@ -515,7 +551,12 @@
         }
         /* The raised line is where the bud card is. The card is a line of the page too, and it
            leaves in 6 seconds: the line is not drawn under it. */
-        #ui:has(.brain):has(.bud) .hint {
+        #ui:has(.brain):has(.bud:not(.mate)) .hint {
+          display: none;
+        }
+        /* The mate card stands for as long as a body is near: under the raised line it would cover
+           it, so it steps back while the panel is a sheet. */
+        #ui:has(.brain) .mate {
           display: none;
         }
       }

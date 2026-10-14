@@ -10,6 +10,7 @@ export const LINE = {
   disagree: 'Your hands and its brain disagree.',
   halfRing: 'At the notch, a child buds.',
   score: 'The only score: your line, alive.',
+  court: 'Its brain decides, not a rule.',
 };
 
 /** The counter, top left: the living bodies with the lineage mark, apart from the player's own. */
@@ -39,6 +40,10 @@ export const FIRST_DEATH = 'You are gone. Your line is not.';
  */
 export const BUD = {
   heading: 'Your child. A copy, with changes.',
+  // The child of a parent that held the genes of a partner: `cross` of crates/sim/src/mix.rs, and
+  // then the mutations of every birth. The card lists what differs from the parent that budded.
+  mixedHeading: 'Your child. A mix of two, with changes.',
+  against: 'Differences are against you, the budding parent.',
   parent: 'You',
   child: 'Child',
   none: 'No change you can see.',
@@ -69,8 +74,44 @@ export const BUD = {
   fewerConns: '{n} fewer connection{s}',
   connsGained: '{n} connection{s} gained',
   connsLost: '{n} connection{s} lost',
-  weights: '{n} of {m} connection weights nudged',
+  // Of a child born of a cross, a weight that differs can be the partner's: not every one is a nudge.
+  weights: '{n} of {m} connection weights differ',
   part: 'part', // a kind that this build does not know
+};
+
+/**
+ * The mate card. A place in braces takes a number. The card shows only in a world with `mix_rate`
+ * above 0.
+ */
+export const MATE = {
+  heading: 'Courting',
+  you: 'You',
+  other: 'The other',
+  size: 'Length {l}, width {w}',
+  hidden: 'Hidden neurons: {n}',
+  conns: 'Connections: {n}',
+  noParts: 'No parts',
+  // `FLAG_WILLING` of the frame: the accept command of the body is above 0.
+  willing: 'Willing now',
+  unwilling: 'Not willing now',
+  court: 'Hold to court',
+  // What the two still lack for an exchange, by the `state` of `courtship` in src/app/court.ts.
+  state: {
+    ownYoung: 'You are not full-grown yet.',
+    young: 'Too young',
+    carry: 'You carry a partner’s genes until you bud.',
+    otherCarries: 'It carries a partner’s genes already.',
+    apart: 'You do not touch yet.',
+    third: 'Another body is nearer to one of you.',
+    hold: 'You touch. You are not courting.',
+    // In touch, with the player courting, the accept output of its brain was at 0 or under. The
+    // game knows no reason for it. The line stays for a while after the two come apart.
+    refused: 'It refused. Its brain decided.',
+    // Every condition holds. The core draws once per step for the pair, with chance `mix_rate`.
+    chance: 'Both accept. Each step has a chance.',
+  },
+  // `FLAG_DONOR` rose on the body of the player.
+  exchanged: 'Genes exchanged. Your next brood is mixed.',
 };
 
 /** The kinds of part, by the `KIND_` constants of src/protocol.ts. */

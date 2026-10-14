@@ -37,7 +37,7 @@ export const CHAPTERS: { id: ChapterId; title: string; text: string[] }[] = [
     id: 'brain',
     title: 'A brain',
     text: [
-      'Every body carries a brain that runs many times a second, also while you steer: your hands replace only thrust and turn.',
+      'Every body carries a brain that runs many times a second, also while you steer: your hands replace only its outputs.',
       'Inputs, on the left, are numbers that the body senses, such as its energy, the smell of plants, what each eye sees. Outputs, on the right, are thrust, turn, and accept, the answer to a mate.',
       'Hidden neurons sit between. A connection carries one neuron’s value to another, times its weight: a positive weight adds, a negative one takes away. A neuron sums what arrives, adds a fixed number, its bias, and squashes the result into a fixed range. A connection that loops back makes a brain recurrent.',
       'A brain keeps only the values of its neurons. A slow neuron, one with a long time constant, holds part of its old value. That is all its memory, and it ends with the body. The wiring is set at birth. It does not learn.',
@@ -81,7 +81,7 @@ export const CHAPTERS: { id: ChapterId; title: string; text: string[] }[] = [
       'Nothing is trained. There is no gradient, the signal that training uses to push a network toward a target. Brains change only between a parent and its child: neuroevolution.',
       'The first creatures have brains wired by hand so that they can feed. Everything after is copy, random change, and unequal survival.',
       'Each part, connection, and hidden neuron carries a history id from when it appeared. Crossover, which mixes the genes of a mate into a child, lines genes up by that id: a method from NEAT (Stanley and Miikkulainen, 2002). With mixing on, grown bodies that touch and both accept exchange genes.',
-      'For speed, a brain holds at most {maxNeurons} neurons and {maxConns} connections, and a body {maxParts} part genes. Your picks, an heir now and a mate later, are selection by a chooser, as a breeder does.',
+      'For speed, a brain holds at most {maxNeurons} neurons and {maxConns} connections, and a body {maxParts} part genes. Your picks, of an heir or of a mate, are selection by a chooser, as a breeder does.',
     ],
   },
 ];

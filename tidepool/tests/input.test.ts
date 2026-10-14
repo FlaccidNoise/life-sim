@@ -6,6 +6,7 @@ import {
   clickOn,
   emptyAnswer,
   inputToSend,
+  keyOf,
   manualNow,
   possessedBody,
   steerFromKeys,
@@ -14,28 +15,56 @@ import {
 import * as P from '../src/protocol';
 import { REFUSE } from '../src/ui/words/lines';
 
+const NO_KEYS = { up: false, left: false, right: false, court: false };
+
 test('keys map to thrust and turn', () => {
-  expect(steerFromKeys({ up: true, left: false, right: false })).toEqual({
-    thrust: 1,
-    turn: 0,
-    active: true,
-  });
-  expect(steerFromKeys({ up: false, left: true, right: false })).toEqual({
-    thrust: 0,
-    turn: -1,
-    active: true,
-  });
-  expect(steerFromKeys({ up: true, left: false, right: true })).toEqual({
+  const moving = { accept: false, steers: true, active: true };
+  expect(steerFromKeys({ ...NO_KEYS, up: true })).toEqual({ thrust: 1, turn: 0, ...moving });
+  expect(steerFromKeys({ ...NO_KEYS, left: true })).toEqual({ thrust: 0, turn: -1, ...moving });
+  expect(steerFromKeys({ ...NO_KEYS, up: true, right: true })).toEqual({
     thrust: 1,
     turn: 1,
-    active: true,
+    ...moving,
   });
-  expect(steerFromKeys({ up: false, left: true, right: true })).toEqual({
+  expect(steerFromKeys({ ...NO_KEYS, left: true, right: true })).toEqual({
     thrust: 0,
     turn: 0,
+    ...moving,
+  });
+  expect(steerFromKeys(NO_KEYS).active).toBe(false);
+});
+
+test('holding C sets accept and counts as manual input, and releasing clears it', () => {
+  expect(keyOf('KeyC')).toBe('court');
+  // The key alone moves nothing, and leaves a held pointer to steer.
+  expect(steerFromKeys({ ...NO_KEYS, court: true })).toEqual({
+    thrust: 0,
+    turn: 0,
+    accept: true,
+    steers: false,
     active: true,
   });
-  expect(steerFromKeys({ up: false, left: false, right: false }).active).toBe(false);
+  expect(steerFromKeys({ ...NO_KEYS, up: true, court: true })).toMatchObject({
+    thrust: 1,
+    accept: true,
+    steers: true,
+    active: true,
+  });
+  expect(steerFromKeys(NO_KEYS)).toMatchObject({ accept: false, active: false });
+
+  // The court goes to the worker when it starts and when it ends, with the steer as it is.
+  const swim = { manual: true, thrust: 1, turn: 0, accept: false };
+  const court = { ...swim, accept: true };
+  expect(inputToSend(swim, court)).toEqual(court);
+  expect(inputToSend(court, court)).toBeNull();
+  expect(inputToSend(court, swim)).toEqual(swim);
+  // The hand-back to the brain carries no court: the brain decides.
+  expect(inputToSend(court, { manual: false, thrust: 0, turn: 0, accept: true })).toEqual({
+    manual: false,
+    thrust: 0,
+    turn: 0,
+    accept: false,
+  });
 });
 
 test('a point dead ahead means full thrust and no turn', () => {
@@ -81,22 +110,18 @@ test('a point on the body turns less, and a point at the centre does not turn', 
 });
 
 test('a manual steer is posted when it changes, and the hand-back is posted once', () => {
-  const held = { manual: true, thrust: 1, turn: 0 };
-  const idle = { manual: false, thrust: 0, turn: 0 };
+  const held = { manual: true, thrust: 1, turn: 0, accept: false };
+  const idle = { manual: false, thrust: 0, turn: 0, accept: false };
   expect(inputToSend(null, idle)).toBeNull();
   expect(inputToSend(null, held)).toEqual(held);
   expect(inputToSend(held, held)).toBeNull();
-  expect(inputToSend(held, { manual: true, thrust: 1, turn: 1 })).toEqual({
-    manual: true,
-    thrust: 1,
-    turn: 1,
-  });
+  expect(inputToSend(held, { ...held, turn: 1 })).toEqual({ ...held, turn: 1 });
   expect(inputToSend(held, idle)).toEqual(idle);
   expect(inputToSend(idle, idle)).toBeNull();
 });
 
 test('a key held across a possess is posted again, because the worker dropped it', () => {
-  const held = { manual: true, thrust: 1, turn: 0 };
+  const held = { manual: true, thrust: 1, turn: 0, accept: false };
   expect(inputToSend(held, held)).toBeNull();
   // The page forgets what it sent on `possessed` and on `died`.
   expect(inputToSend(null, held)).toEqual(held);

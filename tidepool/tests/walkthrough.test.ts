@@ -29,6 +29,8 @@ const WATCH: Facts = {
   lineageAlive: 1,
   split: 0,
   busy: false,
+  card: false,
+  courted: false,
 };
 // In a body, hands off. `STEER` is the same body under the player's hands.
 const PLAY: Facts = { ...WATCH, mode: 'play', uid: 7 };
@@ -259,7 +261,7 @@ test('beat 9: the death of a descendant shows no line: its cause is off the scre
   expect(walk.done).not.toContain('score');
 });
 
-test('beat 10 never arms yet', () => {
+test('beat 10: with no mate card it does not arm', () => {
   const busyLife = (t: number): Facts => ({
     ...PLAY,
     manual: t % 10 < 5,
@@ -273,6 +275,40 @@ test('beat 10 never arms yet', () => {
   const { walk } = run(begin(), busyLife, 200);
   expect(walk.done).not.toContain('court');
   expect(walk.shown.court).toBeUndefined();
+  // The card is of a body that the player is in.
+  expect(run(begin(), { ...WATCH, card: true }, 5).walk.shown.court).toBeUndefined();
+});
+
+test('beat 10: it arms when the mate card first shows, with no line, and the card does not use it up', () => {
+  const near = run(past('possess', 'move'), { ...PLAY, card: true }, 30);
+  expect(near.walk.shown.court).toBe(1);
+  expect(near.walk.done).not.toContain('court');
+  expect(near.seen.every((s) => s.line === null && s.pulse === null)).toBe(true);
+  // The card comes and goes with the bodies near: it is one showing.
+  const gone = run(near.walk, PLAY, 5);
+  expect(run(gone.walk, { ...PLAY, card: true }, 30).walk.shown.court).toBe(1);
+});
+
+test('beat 10: one courtship, accepted or refused, shows its line once and is the beat', () => {
+  const near = run(past('possess', 'move'), { ...PLAY, card: true }, 5);
+  const courted = run(near.walk, { ...PLAY, card: true, courted: true }, 30);
+  expect(courted.walk.done).toContain('court');
+  expect(showings(courted.seen, LINE.court)).toBe(1);
+  expect(courted.seen[0]?.line).toBe(LINE.court);
+  expect(secondsOf(courted.seen, LINE.court)).toBeCloseTo(6, 0);
+  // A second courtship, in this body or the next, shows nothing.
+  const again = run(begin(courted.walk.done, courted.walk.shown), { ...PLAY, courted: true }, 30);
+  expect(again.seen.every((s) => s.line === null)).toBe(true);
+});
+
+test('beat 10: its line waits for the line of the exchange to leave, and the beat with it', () => {
+  const near = run(past('possess', 'move'), { ...PLAY, card: true }, 1);
+  const toast = run(near.walk, { ...PLAY, card: true, courted: true, busy: true }, 3);
+  expect(toast.seen.every((s) => s.line === null)).toBe(true);
+  expect(toast.walk.done).not.toContain('court');
+  const after = run(toast.walk, { ...PLAY, card: true, courted: true }, 1);
+  expect(after.seen[0]?.line).toBe(LINE.court);
+  expect(after.walk.done).toContain('court');
 });
 
 test('beat 12: the first death is recorded, and the pick of an heir is the beat', () => {
@@ -323,14 +359,16 @@ const life = (t: number): Facts => {
     buds: t >= 120 ? 2 : t >= 110 ? 1 : 0,
     lineageAlive: t >= 120 ? 3 : t >= 110 ? 2 : 1,
     busy: (t >= 110 && t < 113) || (t >= 120 && t < 123), // the toast of a bud
+    card: t >= 128 && t < 138,
+    courted: t >= 132,
   };
   if (t < 140) return facts;
   return t < 145 ? { ...WATCH, dead: true, first: true } : { ...facts, uid: 8, buds: 0 };
 };
 
-test('a first life does every beat but the mate', () => {
+test('a first life does every beat', () => {
   const { walk } = run(begin(), life, 150);
-  expect([...walk.done].sort()).toEqual(BEATS.filter((id) => id !== 'court').sort());
+  expect([...walk.done].sort()).toEqual([...BEATS].sort());
 });
 
 test('a done beat never shows again', () => {

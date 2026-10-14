@@ -6,6 +6,7 @@ import { BrainPanel, BrainToggle } from './BrainPanel';
 import { BudCard } from './BudCard';
 import { DeathOverlay } from './DeathOverlay';
 import { Guide, GuideToggle } from './Guide';
+import { MateCard } from './MateCard';
 import { Note, NoteMark } from './Note';
 import {
   benchText,
@@ -129,6 +130,7 @@ export function App(props: {
       <Hint touch={props.touch} />
       {mode.value === 'play' && <Line debug={props.debug} />}
       {mode.value === 'play' && !dead && <BudCard />}
+      {mode.value === 'play' && !dead && <MateCard />}
       <div class="corner">
         {props.debug && <WalkLog />}
         {!dead && <BrainToggle onToggle={props.onBrain} />}

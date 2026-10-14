@@ -34,7 +34,7 @@ const STAT_CREATURES = 0;
 const STAT_PLANTS = 1;
 // The `CAUSE_` constants in crates/sim/src/control.rs. 0 is no death.
 const CAUSES: Record<number, DeathCause> = { 1: 'starved', 2: 'old age' };
-const NO_INPUT = { manual: false, thrust: 0, turn: 0 };
+const NO_INPUT = { manual: false, thrust: 0, turn: 0, accept: false };
 
 export function createHost(deps: HostDeps): Host {
   let sim: Sim | undefined;
@@ -111,8 +111,7 @@ export function createHost(deps: HostDeps): Host {
     for (; owed >= period && ran < MAX_TICKS_PER_STEP; ran++) {
       owed -= period;
       const wasPossessed = sim.possessed() !== 0;
-      // No message carries the court input yet, so the player never accepts.
-      sim.input(input.manual, input.thrust, input.turn, false);
+      sim.input(input.manual, input.thrust, input.turn, input.accept);
       const start = deps.now();
       sim.tick(1);
       tickMillis += deps.now() - start;
@@ -256,7 +255,12 @@ export function createHost(deps: HostDeps): Host {
             deps.post({ type: 'possessed', uid: 0 });
             break;
           case 'input':
-            input = { manual: msg.manual, thrust: msg.thrust, turn: msg.turn };
+            input = {
+              manual: msg.manual,
+              thrust: msg.thrust,
+              turn: msg.turn,
+              accept: msg.accept,
+            };
             break;
           case 'param':
             sim.setParam(msg.index, msg.value);
