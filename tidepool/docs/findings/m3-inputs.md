@@ -168,8 +168,9 @@ are the reading that the plan asks for, pass.
 | World with blind eyes holds more creatures | 0 of 3 | 8 of 10 | 4 of 10 |
 
 **What this shows.** The cause named under Task 6 is supported: with an input free, the senses and
-the part count come back to the M2 values on 10 seeds, and a blind world no longer gains by shedding
-its sense. This is "the mechanism fires" and "evolution keeps it". It is one run per seed.
+the part count return to about the M2 range on most of 10 seeds (M2 was read on seeds 1 to 3, and
+`chemo` reads 0.21 on seed 8 against 0.33 to 0.39 in M2), and the blind world holds more creatures on
+3 and 4 of 10 seeds, down from 9 and 8. This is "the mechanism fires" and "evolution keeps it". It is one run per seed.
 
 **What it does not show.** "It helps." A blind world still holds more creatures on 3 and 4 of 10
 seeds, and each arm evolved alone. The eye gap has more room than in M2 (0.14 at the least, against
