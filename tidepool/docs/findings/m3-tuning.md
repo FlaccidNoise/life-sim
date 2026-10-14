@@ -274,6 +274,7 @@ gate-evolve 5/5 PASS
 The machine restarted on 2026-10-14 during the first attempt at this part. Nothing of it had been
 committed, and its logs were lost with the log folder. It starts again from its first step.
 
-**From here each hypothesis is committed to this file before its run.** A log folder in `/private/tmp`
-does not survive a restart, and "the hypothesis was written first" must be a fact that a reader can
-check.
+**From here each hypothesis is committed to the repo before its run,** in
+`m3-tuning-hypotheses.txt` beside this file (a build agent cannot write a findings `.md` in this
+harness). A log folder in `/private/tmp` does not survive a restart, and "the hypothesis was written
+first" must be a fact that a reader can check: the order of the commits shows it.
