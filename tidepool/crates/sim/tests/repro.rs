@@ -3,8 +3,10 @@ use tidepool_sim::genome::{
     ConnGene, Genome, Node, KIND_CHEMO, KIND_CILIA, KIND_FILTER, KIND_FLAGELLUM, LEN_RANGE,
     SIZE_RANGE, WID_RANGE,
 };
+use tidepool_sim::mix::cross;
 use tidepool_sim::params::{id, Params};
 use tidepool_sim::rng::Rng;
+use tidepool_sim::snapshot::Writer;
 use tidepool_sim::stats::{STAT_BIRTHS, STAT_MAX_GENERATION};
 use tidepool_sim::world::{SpawnAt, World};
 
@@ -377,6 +379,100 @@ fn a_body_that_just_budded_carries_the_flag() {
     assert_eq!(flags(&mut w, 1) & FLAG_BUDDED, 0, "the newborn did not bud");
     w.run(41);
     assert_eq!(flags(&mut w, p) & FLAG_BUDDED, 0);
+}
+
+fn saved(g: &Genome) -> Vec<u8> {
+    let mut w = Writer::new();
+    g.save(&mut w);
+    w.bytes
+}
+
+/// A world that mixes, with a fed adult in slot 0 that buds two children on the next tick.
+fn mixing_world() -> (World, usize) {
+    let mut w = World::new(1, 1536.0, 1024.0);
+    quiet(&mut w);
+    w.params.set(id::MIX_RATE, 1.0);
+    w.params.set(id::BROOD_MAX, 2.0);
+    // The egg of these tests: a newborn at 0.4 of its length.
+    w.params.set(id::BIRTH_GROWTH, 0.4);
+    let p = fed_adult(&mut w, 0);
+    (w, p)
+}
+
+#[test]
+fn the_brood_of_a_donor_holder_is_crossed_marked_and_clears_the_donor() {
+    let (mut w, p) = mixing_world();
+    // The partner: far away, with the genes of another founder, and too hungry to bud.
+    let at = SpawnAt {
+        x: 1200.0,
+        y: 500.0,
+        heading: 0.0,
+        growth: 1.0,
+        energy01: 0.5,
+        parent: 0,
+        generation: 0,
+        mark: 0,
+    };
+    let genome = Genome::founder(&mut Rng::new(2), &w.params);
+    let partner = w.spawn(genome, at).expect("slot") as usize;
+    let (uid, donor) = (w.creatures.uid[partner], w.genomes[partner].clone());
+    w.donors[p] = Some((uid, donor.clone()));
+
+    let (home, params) = (w.genomes[p].clone(), w.params.clone());
+    let (mut mate, mut mutate) = (w.rng_mate.clone(), w.rng_mutate.clone());
+    let mut next_history = w.next_history;
+    w.tick();
+    let brood = children(&w, p);
+    assert_eq!(brood.len(), 2);
+    // Each child: a cross from `rng_mate`, then the mutation and the heading from `rng_mutate`.
+    for &s in &brood {
+        let crossed = cross(&home, &donor, &mut mate, &params);
+        assert_ne!(saved(&crossed), saved(&home), "the cross took nothing");
+        let mut child = crossed.mutated(&mut mutate, &params, &mut next_history);
+        child.prune();
+        mutate.gauss();
+        assert_eq!(saved(&w.genomes[s]), saved(&child), "child in slot {s}");
+        assert_eq!(w.creatures.mixed_with[s], uid);
+    }
+    assert_eq!(
+        (w.rng_mate.0, w.rng_mutate.0, w.next_history),
+        (mate.0, mutate.0, next_history)
+    );
+    assert!(w.donors[p].is_none(), "the donor outlived the bud");
+
+    // The next brood is the parent's alone.
+    w.creatures.energy[p] = 0.95 * 72.0;
+    w.run(201);
+    let later: Vec<usize> = children(&w, p)
+        .into_iter()
+        .filter(|s| !brood.contains(s))
+        .collect();
+    assert_eq!(later.len(), 2);
+    assert!(later.iter().all(|&s| w.creatures.mixed_with[s] == 0));
+}
+
+/// With mixing on, a parent that holds no donor makes the draws of the M2 bud and no other.
+#[test]
+fn a_bud_with_no_donor_is_the_m2_bud() {
+    let (mut w, p) = mixing_world();
+    let (home, params) = (w.genomes[p].clone(), w.params.clone());
+    let (mate, mut mutate) = (w.rng_mate.0, w.rng_mutate.clone());
+    let mut next_history = w.next_history;
+    w.tick();
+    let brood = children(&w, p);
+    assert_eq!(brood.len(), 2);
+    for &s in &brood {
+        let mut child = home.mutated(&mut mutate, &params, &mut next_history);
+        child.prune();
+        mutate.gauss();
+        assert_eq!(saved(&w.genomes[s]), saved(&child), "child in slot {s}");
+        assert_eq!(w.creatures.mixed_with[s], 0);
+    }
+    assert_eq!((w.rng_mutate.0, w.next_history), (mutate.0, next_history));
+    assert_eq!(
+        w.rng_mate.0, mate,
+        "a bud with no donor drew from `rng_mate`"
+    );
 }
 
 #[test]

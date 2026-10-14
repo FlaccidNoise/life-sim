@@ -1,6 +1,9 @@
+use tidepool_sim::brain::OUT_ACCEPT;
 use tidepool_sim::control::{CAUSE_NONE, CAUSE_STARVED, HEIR_STRIDE, MAX_HEIRS};
 use tidepool_sim::creature::MARK_LINEAGE;
 use tidepool_sim::genome::Genome;
+use tidepool_sim::params::id;
+use tidepool_sim::rng::Rng;
 use tidepool_sim::world::{SpawnAt, World};
 
 fn world() -> World {
@@ -107,6 +110,84 @@ fn the_accept_input_is_stored_and_a_new_body_or_a_release_clears_it() {
     w.input(true, 0.0, 0.0, true);
     w.release();
     assert!(!w.control.accept);
+}
+
+/// Two founders in touch, in slots 0 and 1, in a world that mixes. Nothing pushes them apart and
+/// neither swims, so they stay in touch. Each is too hungry to bud, so a donor stays.
+fn two_in_touch() -> World {
+    let mut w = World::new(1, 512.0, 512.0);
+    w.params.set(id::MIX_RATE, 1.0);
+    for k in [id::REPEL, id::FLAG_FORCE, id::CILIA_FORCE] {
+        w.params.set(k, 0.0);
+    }
+    for (seed, x) in [(1, 250.0), (2, 255.0)] {
+        let at = SpawnAt {
+            x,
+            y: 250.0,
+            heading: 0.0,
+            growth: 1.0,
+            energy01: 0.5,
+            parent: 0,
+            generation: 0,
+            mark: 0,
+        };
+        let genome = Genome::founder(&mut Rng::new(seed), &w.params);
+        w.spawn(genome, at).expect("slot");
+    }
+    w
+}
+
+/// The uids of the donors that slots 0 and 1 hold, or 0.
+fn donors(w: &World) -> [u32; 2] {
+    [0, 1].map(|s| w.donors[s].as_ref().map_or(0, |held| held.0))
+}
+
+#[test]
+fn a_manual_player_accepts_only_while_courting() {
+    let mut w = two_in_touch();
+    let uid = [w.creatures.uid[0], w.creatures.uid[1]];
+    assert!(w.possess(uid[0]));
+    // The brain of a founder accepts. The hand of the player does not, until the player courts.
+    w.input(true, 0.0, 0.0, false);
+    w.run(4);
+    assert_eq!(w.creatures.cmd_accept[0], -1.0);
+    assert!(w.brains.output(0, OUT_ACCEPT) > 0.0);
+    assert!(
+        w.creatures.cmd_accept[1] > 0.0,
+        "the other body is not willing"
+    );
+    assert_eq!(donors(&w), [0, 0]);
+    w.input(true, 0.0, 0.0, true);
+    w.tick();
+    assert_eq!(w.creatures.cmd_accept[0], 1.0);
+    assert_eq!(donors(&w), [uid[1], uid[0]]);
+    w.input(true, 0.0, 0.0, false);
+    w.tick();
+    assert_eq!(w.creatures.cmd_accept[0], -1.0);
+}
+
+#[test]
+fn a_released_body_lets_its_brain_accept() {
+    // The player lets go of the controls and stays in the body, or leaves the body.
+    for leave in [false, true] {
+        let mut w = two_in_touch();
+        let uid = [w.creatures.uid[0], w.creatures.uid[1]];
+        assert!(w.possess(uid[0]));
+        w.input(true, 0.0, 0.0, false);
+        w.run(4);
+        assert_eq!((w.creatures.cmd_accept[0], donors(&w)), (-1.0, [0, 0]));
+        if leave {
+            w.release();
+        } else {
+            w.input(false, 0.0, 0.0, false);
+        }
+        // Two ticks: a body thinks on every second tick.
+        w.run(2);
+        let accept = w.creatures.cmd_accept[0];
+        assert!(accept > 0.0 && accept < 1.0, "leave {leave}: {accept}");
+        assert_eq!(accept, w.brains.output(0, OUT_ACCEPT));
+        assert_eq!(donors(&w), [uid[1], uid[0]], "leave {leave}");
+    }
 }
 
 #[test]

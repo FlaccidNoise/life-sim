@@ -21,7 +21,7 @@ pub struct Control {
     pub manual: bool,
     pub thrust: f32,
     pub turn: f32,
-    /// The player courts. Stored, and read by no rule yet.
+    /// The player courts. Read while the input is manual.
     pub accept: bool,
     pub death_cause: u32,
     /// Buds of the possessed body since it was possessed.
@@ -133,12 +133,13 @@ impl World {
 }
 
 /// If a creature is possessed and the input is manual, the player's values replace that slot's
-/// commands.
+/// commands. Its `cmd_accept` is 1 while the player courts and -1 while not.
 pub fn apply(world: &mut World) {
     let (c, slot) = (&world.control, world.control.possessed_slot as usize);
     if c.possessed != 0 && c.manual {
         world.creatures.cmd_thrust[slot] = c.thrust;
         world.creatures.cmd_turn[slot] = c.turn;
+        world.creatures.cmd_accept[slot] = if c.accept { 1.0 } else { -1.0 };
     }
 }
 
