@@ -13,6 +13,8 @@ import {
   C_X,
   C_Y,
   CREATURE_STRIDE,
+  FLAG_JUVENILE,
+  FLAG_MIXED,
   KIND_CHEMO,
   KIND_EYE,
   KIND_FILTER,
@@ -54,6 +56,13 @@ const REACH: Partial<Record<number, readonly [number, number]>> = {
   [KIND_FIN]: [0.1, 0.4],
   [KIND_EYE]: [0.05, 0.12],
 };
+/** The flags that give the mark of a young body born of a cross: both must be set. */
+export const MIXED_MARK_FLAGS = FLAG_MIXED | FLAG_JUVENILE;
+
+/** Whether a body of these flags draws the mark: it was born of a cross and is not full-grown. */
+export const hasMixedMark = (flags: number): boolean =>
+  (flags & MIXED_MARK_FLAGS) === MIXED_MARK_FLAGS;
+
 const MIDLINE = [1] as const;
 const PAIR = [1, -1] as const;
 

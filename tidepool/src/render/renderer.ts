@@ -34,6 +34,7 @@ import {
   PART_LOD_PX,
   buildParts,
   endsOf,
+  hasMixedMark,
   outlineOf,
   partsOf,
   swellAt,
@@ -83,9 +84,9 @@ const MAX_CREATURES = 4096; // the creature pool of the core
 const MAX_PLANTS = 8192; // the plant pool of the core
 const MAX_PARTS = MAX_CREATURES * PART_WORDS * 2; // a part gene makes a pair at most
 // a_pose, a_body, a_life, and for the looks a_ends, a_swell_a or the a_swells of look 4, a_swell_b
-const CREATURE_ATTRIBUTES = [4, 4, 2, 2, 4, 4];
-const I_ENDS = 10; // the float of an instance at which a_ends starts
-const I_SWELLS = 12; // and its swells: an x and a radius each
+const CREATURE_ATTRIBUTES = [4, 4, 3, 2, 4, 4];
+const I_ENDS = 11; // the float of an instance at which a_ends starts
+const I_SWELLS = 13; // and its swells: an x and a radius each
 const INSTANCE_FLOATS = I_SWELLS + 2 * MAX_SWELLS;
 const NO_PARTS: readonly Part[] = [];
 const PART_ATTRIBUTES = [4, 4, 2]; // a_place, a_look, a_body
@@ -334,6 +335,7 @@ export function createRenderer(canvas: HTMLCanvasElement, look: Look = 0): Rende
         instances[o + 7] = flags;
         instances[o + 8] = Math.min(cilia, 1);
         instances[o + 9] = budded ? Math.sin(Math.PI * Math.min(pulsed, 1)) : 0;
+        instances[o + 10] = hasMixedMark(flags) ? 1 : 0;
         const [nose, tail] = endsOf(taper);
         instances[o + I_ENDS] = nose;
         instances[o + I_ENDS + 1] = tail;
