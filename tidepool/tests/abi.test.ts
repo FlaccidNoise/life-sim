@@ -130,6 +130,10 @@ test('the frame header holds the lineage count, the buds, and the cones of the p
 
 test('a frame of the whole world holds every creature', () => {
   const sim = fresh();
+  // No pair mates, so no founder holds a donor.
+  const mix = sim.params().find((p) => p.name === 'mix_rate');
+  if (!mix) throw new Error('no parameter mix_rate');
+  sim.setParam(mix.index, 0);
   sim.seedFounders(300, 0);
   sim.tick(10);
   const buf = new ArrayBuffer(4 * (P.FRAME_HEADER_WORDS + 300 * P.CREATURE_STRIDE));
@@ -276,6 +280,10 @@ test('a parameter change changes the future', () => {
 
 test('pick, possess, input, and release go through the ABI', () => {
   const sim = fresh();
+  // No pair mates, so no body holds a donor.
+  const mix = sim.params().find((p) => p.name === 'mix_rate');
+  if (!mix) throw new Error('no parameter mix_rate');
+  sim.setParam(mix.index, 0);
   sim.seedFounders(300, 0);
   const buf = new ArrayBuffer(4 * (P.FRAME_HEADER_WORDS + 300 * P.CREATURE_STRIDE));
   sim.writeFrame(0, 0, 1536, 1024, buf);

@@ -31,15 +31,14 @@ macro_rules! table {
 
 // Name, default, minimum, maximum. `intake_rate` is tuned against the health gate
 // (`docs/findings/m1-tuning.md`). `plant_growth`, `plant_cap`, `part_mass`, and `birth_growth` are
-// tuned against both gates (`docs/findings/m2-tuning.md`). `fixed_upkeep`, `neuron_upkeep`, and
-// `conn_upkeep` are the Start values of the M3 plan, and no gate has tuned them yet. They are
-// arithmetic: the two marginal costs are the M1 values, and `fixed_upkeep` is what is left of the
-// 0.0375 that the M2 founder paid for its brain, for a founder with 4 hidden neurons and 60
-// connections. The other defaults are arithmetic, not measurement. The rows from `part_mass` on
-// are for the M2 rules (`docs/plans/2026-10-11-m2-bodies.md`). The rows from `fixed_upkeep` on are
-// for the M3 rules (`docs/plans/2026-10-13-m3-minds.md`). A rate of 0 among them is a rule that is
-// still off. `mut_conn_remove` is the one of them that Task 10 of that plan moved from its Start
-// value, 0.05, against the evolution gate at tick 144,000.
+// tuned against both gates (`docs/findings/m2-tuning.md`). `neuron_upkeep` and `conn_upkeep` are
+// the Start values of the M3 plan, which are arithmetic: the M1 values. The rows from `part_mass`
+// on are for the M2 rules (`docs/plans/2026-10-11-m2-bodies.md`). The rows from `fixed_upkeep` on
+// are for the M3 rules (`docs/plans/2026-10-13-m3-minds.md`). Task 10 of that plan moved three of
+// them from their Start values, against the gates (`docs/findings/m3-tuning.md`):
+// `mut_conn_remove` from 0.05, `mix_rate` from 0 (mixing on), and `fixed_upkeep` from 0.0337, which
+// let a founder pay the 0.0375 of the M2 founder's brain. The other defaults are arithmetic, not
+// measurement.
 table! {
     /// The founder's `old` gene: ticks until death by old age. The minimum is the bottom of
     /// `OLD_RANGE`.
@@ -185,7 +184,7 @@ table! {
     /// Size of a part that a mutation adds.
     PART_NEW_SIZE "part_new_size" 0.1 0.01 1.0;
     /// Upkeep of a body per tick, whatever its size.
-    FIXED_UPKEEP "fixed_upkeep" 0.0337 0.0 0.2;
+    FIXED_UPKEEP "fixed_upkeep" 0.037 0.0 0.2;
     /// Chance per birth of a new connection.
     MUT_CONN_ADD "mut_conn_add" 0.05 0.0 1.0;
     /// Chance per birth that a connection is lost.
@@ -206,7 +205,7 @@ table! {
     /// Founder brain: constant to `accept`.
     STARTER_ACCEPT "starter_accept" 1.0 -3.0 3.0;
     /// Chance per tick that a pair in touch that both accept exchange genes.
-    MIX_RATE "mix_rate" 0.0 0.0 1.0;
+    MIX_RATE "mix_rate" 1.0 0.0 1.0;
     /// Chance that a gene both hold comes from the donor.
     MIX_SWAP "mix_swap" 0.5 0.0 1.0;
     /// Chance that a gene only the donor holds is taken.

@@ -559,9 +559,11 @@ fn a_child_that_loses_its_eye_gene_loses_those_connections() {
 
 #[test]
 fn a_world_with_a_donor_is_the_same_in_a_reload() {
-    // The body in slot 5 holds the genome of the body in slot 9, and a child of a cross lives.
+    // The body in slot 5 holds the genome of the body in slot 9, and a child of a cross lives. No
+    // pair mates, so that donor is the only one.
     let start = |donor: bool| {
         let mut w = World::new(4, 1536.0, 1024.0);
+        w.params.set(id::MIX_RATE, 0.0);
         w.seed_founders(300, 1200);
         w.run(300);
         if donor {
