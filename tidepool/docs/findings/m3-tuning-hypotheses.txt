@@ -49,3 +49,19 @@ larger share of the upkeep of a small body, so len at tick 144,000 reads at or a
 reading (8.9 to 11.0).
 Order: gate-health, the bench paired with the mix_rate=1 baseline twice each at a load under 5
 (stop if under 2,700), gate-evolve at 36,000, the long gate.
+
+== Part 4, trial 3: fixed_upkeep up one more step, with mixing on (2026-10-14) ==
+Trial 2 (fixed_upkeep 0.037) met targets 1, 3, 4, 5: gate-health 3/3, gate-evolve 3/3, the long
+gate 5/5 (least scent gap 0.12). Its first bench read 2,801 and 2,751 at 1,394 creatures, against
+2,594 and 2,569 for the mix_rate=1 baseline (load 4.6 to 5.1), and it was written as the default
+(8b2752d). Three later readings of that default are under 2,700: 2,681 in make gates (load 4.8 to
+6.0), and 2,648 and 2,665 in turn with the stage 1 world, which read 2,934 and 2,898 (load 4.7 to
+4.9). So target 2 is on the line, not met.
+Change: fixed_upkeep 0.037 -> 0.040, with mix_rate=1 (the default now). Nothing else.
+Hypothesis: the step from 0.0337 to 0.037 cut the bench world from 1,483 to 1,394 bodies (-6%) and
+gained about 7%. The same step again cuts it to about 1,310 and gains about 7% more: about 2,850 in
+turn with the default's 2,650. Larger bodies pay a smaller share of a fixed cost, so len at tick
+144,000 reads at or above trial 2 (9.6 to 10.6). The sense pays no fixed cost, so the long gate
+stays 5/5.
+Order: gate-health, the bench paired with the current default twice each at a load under 5 (stop
+if under 2,700), gate-evolve at 36,000, the long gate. This is the last of the 3 trials.
