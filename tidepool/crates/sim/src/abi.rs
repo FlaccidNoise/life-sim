@@ -16,7 +16,7 @@ use crate::frame;
 use crate::params::{ParamDef, DEFS};
 use crate::world::{self, World};
 
-pub const ABI_VERSION: u32 = 5;
+pub const ABI_VERSION: u32 = 6;
 
 thread_local! {
     /// Why the last `tp_new` or `tp_load` returned null.
@@ -229,7 +229,7 @@ pub extern "C" fn tp_frame_plant_stride() -> u32 {
     frame::PLANT_STRIDE
 }
 
-/// The part words at the end of a creature record.
+/// The part words of a creature record.
 #[no_mangle]
 pub extern "C" fn tp_frame_part_words() -> u32 {
     frame::PART_WORDS

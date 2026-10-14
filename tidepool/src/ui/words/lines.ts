@@ -21,6 +21,7 @@ export const STARVING = 'You are starving. Find a plant.';
 /** A click in Watch on a body that the page does not hand to the player, by what the body is. */
 export const REFUSE = {
   starving: 'That one is starving. Pick another.',
+  old: 'That one is very old. Pick another.',
 };
 
 /**
