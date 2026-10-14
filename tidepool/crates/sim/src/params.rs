@@ -190,9 +190,9 @@ table! {
     /// Chance per birth that a connection is lost.
     MUT_CONN_REMOVE "mut_conn_remove" 0.05 0.0 1.0;
     /// Chance per birth that a connection is split by a new hidden neuron.
-    MUT_NEURON_ADD "mut_neuron_add" 0.0 0.0 1.0;
+    MUT_NEURON_ADD "mut_neuron_add" 0.02 0.0 1.0;
     /// Chance per birth that a hidden neuron is lost.
-    MUT_NEURON_REMOVE "mut_neuron_remove" 0.0 0.0 1.0;
+    MUT_NEURON_REMOVE "mut_neuron_remove" 0.02 0.0 1.0;
     /// Size of the weight of a new connection, and of the random weights of a founder brain. Small,
     /// so the wired weights of a founder lead. Not zero: the draft showed that evolution never
     /// recruits a connection that starts at zero.

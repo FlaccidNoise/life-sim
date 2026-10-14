@@ -381,7 +381,8 @@ fn a_body_that_just_budded_carries_the_flag() {
 
 #[test]
 fn mutation_stays_in_range_and_rate_zero_copies() {
-    // The M1 mutation alone: no part is lost, added, copied, or moved, and `egg` and `old` stay.
+    // The M1 mutation alone: no part is lost, added, copied, or moved, `egg` and `old` stay, and
+    // no neuron or connection comes or goes.
     let mut p = Params::new();
     for k in [
         id::MUT_SHAPE_RATE,
@@ -389,6 +390,10 @@ fn mutation_stays_in_range_and_rate_zero_copies() {
         id::MUT_PART_ADD,
         id::MUT_PART_REMOVE,
         id::MUT_PART_DUP,
+        id::MUT_CONN_ADD,
+        id::MUT_CONN_REMOVE,
+        id::MUT_NEURON_ADD,
+        id::MUT_NEURON_REMOVE,
     ] {
         p.set(k, 0.0);
     }
