@@ -134,7 +134,8 @@ Energy is health, growth, and breeding budget. A bite removes energy. There is n
 - **Wired to the body.** Each part type declares its inputs and outputs. Adding an Eye adds its inputs.
   Removing a Flagellum removes its dash output. A new part arrives with a few weak random connections,
   because the draft showed that anything wired at zero is never recruited by evolution. In M2 eyes
-  feed four fixed brain inputs. Inputs declared by parts arrive in M3.
+  feed four fixed brain inputs. From M3 a part declares its inputs: each eye gene adds two per cone,
+  and a chemoreceptor adds the three scent inputs. An input or an output costs nothing.
 - **Motor outputs.** `thrust` and `turn` always exist. The body's parts decide what force and torque
   those commands can produce. Each ability part adds one trigger output. Also `bite` and
   `accept mate`. A Filter mouth eats on contact with no output: the draft measured brain-gated eating
@@ -142,7 +143,8 @@ Energy is health, growth, and breeding budget. A bite removes energy. There is n
 - **Own-body inputs.** Energy, hunger, age, damage just taken and from which side, speed, a constant.
 - **Memory and rhythm.** Neurons keep state between ticks. Each neuron has an evolvable time constant.
   Slow neurons hold memory. Loops produce rhythm.
-- **Cost.** Each neuron and each connection costs upkeep.
+- **Cost.** Each hidden neuron and each connection costs upkeep (M3, rule U1). Inputs and outputs are
+  free: a cost on them took the senses away (`findings/m3-inputs.md`).
 - **The player and their brain.** While the player steers, their inputs replace the motor and ability
   outputs. The brain still runs every tick. The viewer can show what the creature's instincts wanted.
   With the controls released, the brain drives.
