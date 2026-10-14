@@ -1,121 +1,89 @@
-# Handoff — Tidepool: the M3 plan is written and waits for the owner
+# Handoff — Tidepool: M3 is built, the retune's stage 2 runs, then the exit
 
-**Date:** 2026-10-13
-**Project:** life-sim, subproject `tidepool/`
+**Date:** 2026-10-14
+**Project:** life-sim, subproject `tidepool/`. The draft in `src/` at the repo root is frozen.
 
-The previous handoff (M2 is built, next is the audit and the M3 plan) is at
-`git show cc0cc99:HANDOFF.md`. The draft in `src/` is frozen.
+The previous handoff (M3 plan written, waiting for the owner) is at `git show 7895cd5:HANDOFF.md`.
 
-## Current Task
+## Current task
 
-M2 (Bodies) is built and pushed. Its second audit is done and its findings are fixed or with the
-owner. The plan for M3 (Minds) is `tidepool/docs/plans/2026-10-13-m3-minds.md`. **The owner approved
-it on 2026-10-13, with the recommended option of every choice, and answered the audit questions
-(`tidepool/docs/decisions/INDEX.md`). The rest of this file is from before the approval: Pending
-steps 1 and 2 are done, the nine commits are pushed, and the auditor's worktree is removed.**
+M3 (Minds) from `tidepool/docs/plans/2026-10-13-m3-minds.md`, approved by the owner on 2026-10-13
+with the recommended option of every choice. The owner asked for the build to run through the plan's
+soft stops: at each one the orchestrator takes the recommended option and logs it in
+`tidepool/docs/decisions/INDEX.md` as **"provisional, owner to confirm"**. Hard stops stay: a change
+to an existing band, a rule, the floor, or the reference population, deleting a feature, a target
+not met after its trial cap, and any push.
 
-## Completed
+The owner also asked, on 2026-10-13, for a walkthrough that teaches as it plays: built
+(`tidepool/docs/plans/2026-10-13-walkthrough.md`, `tidepool/docs/findings/m3-walkthrough.md`).
 
-- The owner answered the five checks of the M2 exit (`tidepool/docs/findings/m2-exit.md`, "The owner's
-  answers"). Check 2 is done and closes the open half of the M1 exit. Check 3 is half done. Checks 1,
-  4, and 5 are open.
-- `make gates-long` reads seeds 1, 4, 5, 6, 8 (owner, 2026-10-12). 5 of 5 pass, in 10 minutes.
-- A fresh-context audit of M2 at `cc0cc99`: `tidepool/docs/findings/m2-audit-2.md`. 0 High, 5 Medium,
-  7 Low. The orchestrator ran its new readings again. The end of that file says what was checked and
-  what was fixed.
-- From the audit: two tests that were missing (`eye_cost` in the mass, and the two motion formulas
-  against the motor), two columns in `probe-census` (`no_chemo`, `no_eye`), two health proofs on a
-  living world, and seven doc lines.
-- The long reading has a proof at the head: the chance input fails on 5 of 5 seeds (`gates.md`, "The
-  long reading").
-- The M3 plan, with six open choices and eleven soft spots.
-- `make check` and `make gates` exit 0 at the head. No rule, band, floor, or default changed.
+## State
 
-## Pending
+- Branch `main`. Nothing is pushed since `7895cd5`: about 50 local commits. **The owner has not said
+  to push.** Ask.
+- Built and merged, each checked by the orchestrator (the gates, the rows digit for digit, one rule
+  broken to see a test fail): every task of the M3 plan but Task 10 parts 4 and 5 and Task 15. The
+  walkthrough W1 to W4 and an integration pass. Two frame words (growth, age): stride 25, ABI 6.
+- At `d372cc5` the orchestrator ran `make check`, `make gates`, and `make gates-long` on `main` with
+  every task merged: all exit 0, rows equal to the retune's close.
+- Stage 1 of the retune closed with `mut_conn_remove` 0.01 (provisional). The band on `shapes` was
+  replaced by a band on `variety` (provisional). Records: `tidepool/docs/findings/m3-tuning.md`,
+  `m3-brains.md`, `m3-inputs.md`.
+- **Running when this was written:** stage 2 of the retune (Task 10 parts 4 and 5: mixing on, then the
+  three items carried from M2), by a build agent in `.claude/worktrees/agent-aa66cd0e1d2fc703e`. If the
+  session ended, check that worktree's `git log` against `main` and its hypothesis file
+  `tidepool/docs/findings/m3-tuning-hypotheses.txt` before redoing anything.
+- The M4 plan is a draft for the owner: `tidepool/docs/plans/2026-10-14-m4-teeth.md`. Eleven choices.
+  Its rules were read by the orchestrator, its tasks scanned. Build nothing of it before approval.
 
-In this order. Steps 1 to 3 need the owner.
+## Pending, in order
 
-1. **The owner approves or changes the M3 plan.** Six choices, each with options and a
-   recommendation: C1 the rule of brain upkeep, C2 what "inputs come from parts" means, C3 where
-   mixing goes, C4 what the gate reads, C5 shapes beyond ovals, C6 the three items carried from M2.
-   The plan also lists eight differences from the roadmap and the design to approve.
-2. **Three questions from the audit** (`m2-audit-2.md`, "Questions for the owner"). (1) Does R1 read
-   the mean of a sense or the share of bodies that hold it? On seeds 1 and 3, 38% of bodies hold no
-   chemoreceptor at tick 144,000. Read on to tick 288,000, seed 1 holds at a third to a half and
-   seed 3 falls back to 8%. (2) Is a search worth it for a world that passes the short gate and
-   fails the long one? The one candidate fails on 1 of 5 seeds. (3) The fin is in 26% to 36% of bodies
-   at tick 144,000 on two seeds, which the decision to leave its strength to M4 did not know.
-3. **The owner's checks that are open:** bodies visibly differ (check 1, the plan's choice C5), the
-   dimmed view of a body with no eye (the other half of check 3), `/?bench` on a phone and a slower
-   laptop (check 4), and the four felt judgments of `m1-feel.md` (check 5).
-4. **Build M3 from the plan, after approval.** Batch A first. The method is in the plan and in
-   "Context & Warnings" below.
+1. Stage 2 of the retune lands. Check it on `main` (`make check`, `make gates`, `make gates-long`, the
+   rows against the agent's, one break), fold `m3-tuning-hypotheses.txt` into `m3-tuning.md`, and log
+   its proposals (mixing on or off, the area band, the egg range, `plans` and `speed_cv`) as
+   provisional.
+2. Task 15, the M3 exit: rebake `public/m2-world.tdpl` and `m2-world-long.tdpl` at the final defaults
+   (the old files predate the brain layout and fail to load with "brain activation count"). Then a
+   fresh-context `auditor` (its report comes back as reply text: a subagent cannot write a findings
+   `.md`), fix what it finds, write `m3-exit.md`, update `architecture.md`, `roadmap.md`, `design.md`
+   §6, `tidepool/AGENTS.md`, and this file. Rename "Start" to "Default" in the plan's parameter table.
+3. Bring the owner, in one message: every provisional decision of M3 to confirm, the look to pick
+   (`m3-shapes.md`: the owner leaned to look 1's scale with look 3's detail, and look 4 was built for
+   that), the M4 plan's eleven choices, the walkthrough playtest (`m3-walkthrough.md`), and the push.
 
-## Open Questions
+## The owner's checks, open, never closed by an agent
 
-- Brains may stay small until M4: the M3 world has plants that never die and no hunter (soft spot 1 of
-  the plan). The brain bands can then fail with the brain cost at 0, and the plan stops and goes to
-  the owner.
-- The default world passed the scent gap on seed 8 at tick 72,000 by 0.02 (0.12 against 0.10). The
-  long gate reads tick 144,000, where it reads 0.16. The mean of one seed moves by 0.1 between two
-  readings. The band is the owner's.
-- `min_late` and `plants` low have rejected only worlds that `creatures` also rejects (`gates.md`).
-- The old world sits at the throughput floor: 2,357 to 2,471 against 2,400 on four readings. Carried
-  to M5. A larger brain costs throughput, and the plan budgets for it.
-- `motor.rs:90` still holds the arithmetic of a deleted switch (audit finding L1). Fix it with the
-  next change to the motor, and pin the gate rows again.
-- Push rule conflict, still open. The root `AGENTS.md` says push at session end. The owner's global
-  rules say push only when asked. Follow the owner's rules. Nine commits are local at this handoff, from `cc0cc99`. The remote is at `9a9a411`.
+From M2: bodies visibly differ (now with four looks), the dimmed view of a body with no eye, `/?bench`
+on a phone and a slower laptop, the felt judgments of `m1-feel.md`. From M3 (Task 15): play with the
+brain panel, let go and see the brain take over, the strongest-path sentence, courting, and the
+walkthrough playtest with a person who has not seen the game.
 
-## Key Decisions
+## Warnings
 
-All in `tidepool/docs/decisions/INDEX.md`. Do not reopen one without new evidence.
+- **`/private/tmp` does not survive a restart.** A restart on 2026-10-14 lost every run log and
+  hypothesis file of Tasks 7 to 10. The rows in `docs/findings/` are the record. From now on each
+  hypothesis is committed to the repo before its run.
+- One simulation at a time. Write each `--param` flag out in zsh. Echo every exit code. Record
+  `uptime` beside every timing: this machine's load ran from 3 to 24, and WASM throughput sits on its
+  target of 2,700 with no margin.
+- Build agents: one task each, own worktree, the brief starts with `git merge --ff-only main` and a
+  head hash, bans `cargo fmt --all` and `make fmt`, and says "run no simulation" when another agent
+  runs one. A subagent cannot write a findings `.md`: have it reply with the text, or write a `.txt`.
+- The field guide's text is held to the code by `tests/guide.test.ts` (numbers read from the Rust
+  source, claims about mixing pinned to `mate.rs` and `repro.rs`) and `tests/words.test.ts` (no
+  purpose in a cause, at most eight words for a line). A chapter has a cap of 160 words.
+- Format only the files you changed: `rustfmt --edition 2021 <file>`.
+- `bd` does not start in this repo. Open problems live in the findings files.
 
-- 2026-10-12: a part has no upkeep of its own. `plant_growth` is 0.03.
-- 2026-10-12: the nine questions of the first M2 audit. No band, rule, or default changed.
-- 2026-10-12: the owner's answers to the five checks of the M2 exit.
-- 2026-10-12: `make gates-long` reads seeds 1, 4, 5, 6, 8.
+## Key files
 
-## Relevant Files
-
-| File | Notes |
-|------|-------|
-| `tidepool/AGENTS.md` | **Start here.** Commands, gotchas, status |
-| `tidepool/docs/plans/2026-10-13-m3-minds.md` | The M3 plan. A draft until the owner approves it |
-| `tidepool/docs/findings/m2-audit-2.md` | The second audit, the orchestrator's check, and what was fixed |
-| `tidepool/docs/findings/m2-exit.md` | The M2 verdict, the rows, and the owner's answers |
-| `tidepool/docs/roadmap.md` | The milestones, their exits, and what each carries from M2 |
-| `tidepool/docs/design.md` | What the game is. §6 is brains, §5.6 is mixing |
-| `tidepool/docs/gates.md` | Every gate, its bands, and the bad input that each band rejected |
-| `tidepool/docs/decisions/INDEX.md` | Decisions |
-
-## Context & Warnings
-
-- Run `make` and `pnpm` from `tidepool/`. If `cargo` is not found: `. "$HOME/.cargo/env"`.
-- `bd` (beads) does not start in this repo. Open problems live in the findings files.
-- To see the game: `make dev` in `tidepool/`. The two evolved worlds are baked files that are not in
-  git. Bake them in `tidepool/` with
-  `target/release/tidepool-headless run --seed 1 --ticks 36000 --creatures 400 --plants 1200 --out public/m2-world.tdpl`
-  and the same command with `--ticks 144000 --out public/m2-world-long.tdpl`. Then open
-  `/?world=/m2-world.tdpl` or `/?world=/m2-world-long.tdpl`. The scroll wheel zooms.
-- The snapshot `FORMAT_VERSION` is 7. Task 1 of the M3 plan makes it 8.
-- One simulation run at a time. In zsh a variable that holds `--param a=b` is passed as one word and
-  the command fails with "unknown flag". Write the flags out.
-- A chain of commands ends with the exit code of its last command. Echo the exit code of each step.
-- A script that edits a doc must check that its anchor matches exactly once, and the staged diff must
-  be read before the commit.
-- Build agents run one per task, each in its own worktree. Each brief starts with
-  `git merge --ff-only main` and a check of the head hash, and bans `cargo fmt --all` and `make fmt`.
-  The orchestrator checks each claim before it takes a commit: `make check`, the gate rows digit for
-  digit, and one broken rule to see a test fail.
-- **A subagent cannot write a findings `.md` file in this harness.** The auditor's write was blocked.
-  Ask an auditor to return its report as text, and save it from the reply.
-- The auditor's worktree is still on disk: `.claude/worktrees/agent-a46573dd7990c0b98`, clean, at
-  `cc0cc99`. Remove it with `git worktree remove` when the owner agrees.
-- Timings on this machine are noisy. Record the load average next to each one.
-
-## Suggested Next Steps
-
-1. Read `tidepool/AGENTS.md`, then the plan, then `m2-audit-2.md` from "The orchestrator's check".
-2. Get the owner's answers to the six choices and the three questions.
-3. Change the plan to match, log each choice in `decisions/INDEX.md`, and start batch A.
+| File | What |
+|---|---|
+| `tidepool/AGENTS.md` | Commands, gotchas, status |
+| `tidepool/docs/plans/2026-10-13-m3-minds.md` | The M3 plan, approved |
+| `tidepool/docs/plans/2026-10-13-walkthrough.md` | The walkthrough plan |
+| `tidepool/docs/plans/2026-10-14-m4-teeth.md` | The M4 plan, a draft |
+| `tidepool/docs/decisions/INDEX.md` | Decisions. "Provisional" ones wait for the owner |
+| `tidepool/docs/findings/m3-*.md` | What M3 measured and built |
+| `tidepool/docs/research/onboarding.md` | The research behind the walkthrough |
+| `tidepool/docs/gates.md` | Every gate, its bands, and the bad input each rejected |
