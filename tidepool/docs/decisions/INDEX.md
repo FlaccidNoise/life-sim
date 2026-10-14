@@ -152,6 +152,15 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
 - 2026-10-13: **No feature is added beyond the roadmap.** Variety comes from M4 (predation) and M6
   (zones, plant genomes). A feature that the owner names is placed in a milestone with a measurement.
   → `../roadmap.md`
+- 2026-10-14: **Provisional, owner to confirm: stage 1 of the M3 retune closes with `mut_conn_remove`
+  at 0.01, and the band on `shapes` is replaced by a band on `variety`.** At the Start values the long
+  gate read 3 of 5 (the scent gap on seeds 4 and 8): with brain structure on, the bodies with no
+  chemoreceptor took over on 2 of 3 seeds, and with it frozen they did not. At 0.01 the gate reads 5 of
+  5 and the senses hold (mean `chemo` 0.201 against 0.166, higher on 8 of 10 seeds). On ten seeds the
+  pass count is 9 of 10 against 8 of 10, which chance can give. `shapes` rejected the most varied world
+  read (seed 3: `shapes=1`, `variety=27.3`). `variety`, the effective number of brain shapes, fails
+  under 2.0 and read 1.0 on 3 of 3 seeds of the frozen world. Throughput is on its target of 2,700, not
+  over it. → `../findings/m3-tuning.md` Part 3
 - 2026-10-13: **Provisional, owner to confirm: the three brain bands of the long gate.** `hidden` fails
   under 1.0, `conns` under 15.0, `shapes` under 2, each read with `gate-evolve --brain` at tick
   144,000. Each rejected a bad world of the head on 3 of 3 seeds: a brain that is the largest cost of
