@@ -491,7 +491,7 @@ finding M1). Five proofs have a new input, and "The proofs" says which.
 | `chemo` less `chemo_blind` | Mean chemoreceptor sum, less the same in the run with `chemo_gain=0` | 0.10 or more. **The plan said 0.02** |
 | `eye` less `eye_blind` | Mean eye sum, less the same in the run with `eye_gain=0` | 0.10 or more. **The plan said 0.02** |
 | `plans` | Body plans held by 5% or more of the living. A plan is the sorted list of part kinds | Reported, no band |
-| `speed_cv` | Standard deviation over mean of the top speed of adults, by rule S3 of the plan | Reported, no band |
+| `speed_cv` | Standard deviation over mean of the top speed of adults, by rule S3 of the plan | 0.10 or more, from 2026-10-14. **Provisional** ("The `speed_cv` band" below) |
 | `speed` | Mean top speed of the living, by the same rule. The `speed` of `probe-census` | Reported, no band |
 | `area` | Mean of length squared times the width gene, over the living. The `area` of `probe-census` | Reported, no band |
 
@@ -891,7 +891,7 @@ them.** The rows, the hypothesis, and the limits are in `findings/m3-brains.md`.
 |---|---|---|---|---|
 | `hidden` | 1.0 | `neuron_upkeep=0.01 conn_upkeep=0.003` with the Start values | 0.03, 0.03, 0.04. `0/3`, exit 1 | 3.52, 3.04, 3.85 |
 | `conns` | 15.0 | The same | 2.7, 1.4, 2.2. `0/3`, exit 1 | 36.7, 34.7, 42.6 |
-| `shapes` | 2 | The four structural rates at 0 | 1, 1, 1. `0/3`, exit 1, and no other band fails | 4, 6, 4 |
+| `variety` | 2.0 | The four structural rates at 0 | 1.0, 1.0, 1.0. `0/3`, exit 1 | 12.1 to 21.2 on seeds 1, 4, 5, 6, 8 |
 
 Seeds 1, 4, 5, one run each. The Start values are written out as `--param` flags in every command,
 because the defaults were still at their Off values.
@@ -901,8 +901,32 @@ What the bands do not show:
   by chance. It has no band.
 - The costly world also fails a sense gap on every seed, so `conns` there partly reads the senses.
 - `hidden` and `conns` pass a world where a hidden neuron sends nothing.
-- `shapes` can fall as variety rises, because a shape that under 5% hold is not counted.
-- `shapes_raw` reads 2 to 4 in the frozen world. It is printed and never a band.
+- `variety` replaced a band on `shapes` (fails under 2) at the close of stage 1 of the retune.
+  `shapes` can fall as variety rises, because a shape that under 5% hold is not counted: it rejected
+  seed 3 at `shapes=1`, `variety=27.3` (`findings/m3-tuning.md` Part 3). `shapes` and `shapes_raw`
+  are printed and have no band.
+
+### The `speed_cv` band (M3, provisional)
+
+From 2026-10-14 `gate-evolve` fails a seed whose `speed_cv` reads under 0.10, in `make gates` and
+in the long gate. **Provisional: the owner has not confirmed it.** The default world read 0.22 to
+0.25 at tick 36,000 and 0.23 to 0.28 at tick 144,000 on seeds 1, 4, 5, 6, 8 (`findings/m3-tuning.md`
+Part 5). The bad input sets `mut_rate`, `mut_shape_rate`, `mut_part_add`, `mut_part_remove`, and
+`mut_part_dup` to 0. That world also fails both sense gaps, so this band is not its only rejector.
+
+The proof on `main` on 2026-10-14, at tick 36,000 (load 5.3):
+
+```
+$ target/release/tidepool-headless gate-evolve --param mut_rate=0 --param mut_shape_rate=0 --param mut_part_add=0 --param mut_part_remove=0 --param mut_part_dup=0
+seed=1 creatures=1408 creatures_noscent=1459 creatures_noeye=1487 len=11.8 len_sd=0.66 parts=5.0 chemo=0.47 chemo_blind=0.50 eye=0.20 eye_blind=0.20 plans=1 speed_cv=0.05 speed=1.35 area=66.2 hidden=4.57 conns=62.6 shapes=5 shapes_raw=4 variety=28.6 FAIL(speed_cv=0.049 < 0.1, chemo_gap=-0.029 < 0.1, eye_gap=0.000 < 0.1)
+seed=2 creatures=1257 creatures_noscent=1368 creatures_noeye=1326 len=11.9 len_sd=0.54 parts=5.0 chemo=0.47 chemo_blind=0.48 eye=0.20 eye_blind=0.20 plans=1 speed_cv=0.06 speed=1.35 area=68.2 hidden=4.09 conns=60.4 shapes=4 shapes_raw=0 variety=32.3 FAIL(speed_cv=0.058 < 0.1, chemo_gap=-0.006 < 0.1, eye_gap=0.000 < 0.1)
+seed=3 creatures=1325 creatures_noscent=1246 creatures_noeye=1335 len=11.6 len_sd=0.72 parts=5.0 chemo=0.47 chemo_blind=0.47 eye=0.20 eye_blind=0.20 plans=1 speed_cv=0.06 speed=1.36 area=62.8 hidden=4.25 conns=62.0 shapes=3 shapes_raw=2 variety=28.6 FAIL(speed_cv=0.061 < 0.1, chemo_gap=-0.005 < 0.1, eye_gap=0.000 < 0.1)
+gate-evolve 0/3 FAIL
+exit=1
+```
+
+With the band in, `make gates` exits 0 and its rows equal those before it, and the long gate's
+rows read 0.23 to 0.28.
 
 ## Probes
 
