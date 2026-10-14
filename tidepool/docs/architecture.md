@@ -105,12 +105,13 @@ Fixed order. Each phase is one function in its own module.
 | 1 | grid | Counting-sort spatial hash of creatures, cell 32. The plant hash is rebuilt only when plants change. |
 | 2 | sense | Creatures whose think turn it is. Fills brain inputs. |
 | 3 | brain | The same creatures. One recurrent step. |
-| 4 | control | The possessed creature's motor outputs are replaced by player input when manual. |
-| 5 | act | Outputs to force and torque. Integrate. World bounds. |
-| 6 | contact | Eating. Later: bites, mating. |
-| 7 | life | Upkeep, growth, age, death, budding. Births and deaths are queued and applied in slot order. |
-| 8 | plants | One eighth of the plant slots per tick: growth and seeding. |
-| 9 | fields | Scent deposit and diffusion, every 2nd tick. |
+| 4 | control | The possessed creature's outputs are replaced by player input when manual: thrust, turn, and accept. |
+| 5 | act | Outputs to force and torque. Integrate. World bounds. The push of each overlap, and the nearest overlap of each body, kept as scratch. |
+| 6 | mate | Two full-grown bodies that touch and both accept exchange genomes, with chance `mix_rate` (`mate.rs`). |
+| 7 | contact | Eating. Later: bites. |
+| 8 | life | Upkeep, growth, age, death, budding. Births and deaths are queued and applied in slot order. |
+| 9 | plants | One eighth of the plant slots per tick: growth and seeding. |
+| 10 | fields | Scent deposit and diffusion, every 2nd tick. |
 
 ### 5.3 Determinism
 
@@ -149,13 +150,18 @@ native binary is dropped. M0 answers this.
   not saved. A value that is not finite counts as 0, and every part value is held in 0 to 1.
 - `Genome::mutated` has the M1 draws first: len, wid, part sizes, hue, weights, biases, and time
   constants. Five M2 groups follow, in this order: shape (anchors, and the `extra` of eyes), life
-  (`egg` and `old`), remove, duplicate, and add. Each group has a rate in the parameter table, and a
-  rate of 0 makes no draw. Remove loses one part chosen evenly. Duplicate copies one part to the end
-  with a nudged anchor. Add puts a new part of a random kind on the end, with size `part_new_size`.
-  Duplicate and add need room. The brain keeps its shape.
+  (`egg` and `old`), remove, duplicate, and add. Then four M3 groups: remove a connection, remove a
+  hidden neuron with its connections, add a connection, and add a hidden neuron by splitting a
+  connection. Each group has a rate in the parameter table, and a rate of 0 makes no draw. Remove loses
+  one part chosen evenly. Duplicate copies one part to the end with a nudged anchor, and copies each
+  connection that names it. Add puts a new part of a random kind on the end, with size
+  `part_new_size`, and `part_wires` connections from the inputs it brings. Duplicate and add need
+  room. `Genome::prune` runs on every child: a connection with an end that the body does not declare
+  goes, and so does the second connection between one pair of ends.
 - Every part gene and every connection gene has a history id. A founder takes ids 1 to
-  `FOUNDER_HISTORIES`. `World::next_history` gives a new id to each duplicate and add. It is in the
-  snapshot. M3 lines genes up by id for crossover.
+  `FOUNDER_HISTORIES`. `World::next_history` gives a new id to each duplicate and add, to each new
+  connection, and to each new hidden neuron. It is in the snapshot. `mix::cross` lines up the genes of
+  two genomes by these ids (`mix.rs`).
 - A part has no upkeep of its own. It costs through mass. Mass is the area times
   `heft = (1 + part_mass * S) / (1 + part_mass * REF_PARTS)`, where `S` is the sum of the part sizes
   and an eye counts `eye_cost` times. Energy capacity follows the area alone. Growth costs
@@ -166,11 +172,10 @@ native binary is dropped. M0 answers this.
   (`motor.rs`).
 - An Eye makes one cone on the midline and two elsewhere, at most `MAX_EYES` (8) cones on a body.
   Genes past that still cost their size. The half angle is `EYE_HALF_MIN + EYE_HALF_SPAN * extra`.
-  The range is `eye_range * size * length`, held to `EYE_REACH` (64). Eyes feed four fixed brain
-  inputs, `IN_SEE_FOOD_L`, `IN_SEE_FOOD_R`, `IN_SEE_BODY_L`, and `IN_SEE_BODY_R`: the nearness of
-  the nearest plant or body in a cone of that side, 1 at the eye and 0 at the range, times
-  `eye_gain`. A midline eye feeds both sides. A body scans on one think in `see_every`. Until M3 a
-  part does not declare inputs of its own (`eye.rs`).
+  The range is `eye_range * size * length`, held to `EYE_REACH` (64). Each cone feeds two inputs of
+  its own eye gene: the nearness of the nearest plant and of the nearest body in the cone, 1 at the
+  eye and 0 at the range, times `eye_gain`. Nothing is summed over cones. A body scans on one think in
+  `see_every` (`eye.rs`).
 
 ### 5.5 Brains
 
@@ -182,9 +187,19 @@ native binary is dropped. M0 answers this.
   double-buffered.
 - Update: `a[j] += alpha[j] * (act(bias[j] + sum(w * a_prev[src])) - a[j])`. `alpha` of 1 is a
   memoryless neuron. `act(x)` is the rational tanh from the spike, clamped to plus or minus 3.
-- The evaluator is final from M1. Genomes give every creature the same shape and evolve weights,
-  biases, and time constants only. There are 11 inputs and 2 outputs (`thrust`, `turn`). M3 adds
-  structural mutation and crossover. History ids are in the genome since M2.
+- The evaluator is final from M1. From M3 a brain genome is a list of hidden neuron genes, out genes,
+  and connection genes. A connection names its two ends as `Node { owner, port }`: the body (owner 0),
+  a part gene, or a hidden neuron gene, by history id. It holds no index (`genome.rs`).
+- `brain::ports` is the one place that says which neurons a body declares. The body: constant,
+  energy, age, speed, and two mate inputs, then the three scent inputs if it has a chemoreceptor,
+  then two inputs per cone of each eye gene. The outputs: thrust, turn, and accept. `Brains::express`
+  turns names into indexes. A connection with an end that the body does not declare is not expressed
+  and costs nothing. Connections are sorted by (destination, source, history). A founder has 13
+  inputs, 4 hidden neurons, 3 outputs, and 60 connections.
+- Upkeep (rule U1 of the M3 plan): a body pays `fixed_upkeep`, plus `neuron_upkeep` per hidden neuron
+  and `conn_upkeep` per expressed connection. An input or an output costs nothing.
+- `hidden_gain` scales what a hidden neuron sends. At 0 a hidden neuron is silent: the control arm of
+  the long gate.
 - Layout reserves a per-connection `trace: f32` array for within-life learning. It is not allocated
   while learning is off.
 
@@ -200,14 +215,16 @@ Parameters are part of the snapshot.
 
 A little-endian byte buffer: magic `TDPL`, format version, payload length, payload, CRC32 of the payload.
 `World::save` and `World::load`. A load of bad data returns an error and never a half-built world. The format version
-rises on any layout change. It is 7 at the head of M2. A genome with more than `MAX_PART_GENES`
+rises on any layout change. It is 8 at the head of M3. A genome with more than `MAX_PART_GENES`
 parts or a kind outside 1 to 6 is a load error. M5 adds migration, last-good backup, and export.
 
 ## 6. ABI
 
 The core exports plain functions prefixed `tp_`. The worker reads buffers through typed-array views of
 WASM memory and must re-create its views after any call that can grow memory. Layout constants (frame
-strides, header size) are exported as functions. A test fails if `protocol.ts` disagrees with them.
+strides, header size, the brain readout) are exported as functions. A test fails if `protocol.ts`
+disagrees with them. `tp_brain_write(uid)` writes the readout of one living brain: a header, six
+words per neuron, three per connection. The ABI version is 6 at the head of M3.
 
 `tp_abi_version()` rises on any change to an export's meaning. The worker refuses a module whose version
 it does not know, and the page shows the error.
@@ -218,9 +235,11 @@ The full list for M0 and M1 is in the plan.
 
 Messages are plain objects with a `type` field, declared in `src/protocol.ts`.
 
-- Page to worker: `init` (see below), `view`, `input`, `possessAt`, `possess`, `release`, `speed`,
-  `param`, `recycle`, `bench`. Later: `skip`, `save`, `load`, god tools.
-- Worker to page: `ready`, `frame`, `stats`, `possessed`, `died`, `benchResult`, `error`. Later:
+- Page to worker: `init` (see below), `view`, `input` (thrust, turn, and accept while the player
+  courts), `possessAt`, `possess`, `release`, `speed`, `param`, `recycle`, `bench`, `watchBrain`,
+  `brainOf`. Later: `skip`, `save`, `load`, god tools.
+- Worker to page: `ready`, `frame`, `stats`, `possessed`, `died`, `brain` (with each frame while the
+  page watches the possessed body's brain), `brainOf`, `benchResult`, `error`. Later:
   `skipProgress`, `skipReport`.
 
 `init` carries `seed`, an optional `snapshot`, and an optional `params` list of `{ name, value }`.
