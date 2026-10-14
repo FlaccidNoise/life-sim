@@ -1,5 +1,6 @@
 // The bud card: a parent and its child side by side, and each difference as one line with a mark on
-// the side it belongs to. It takes no pointer and holds no control: the world runs on under it.
+// the side it belongs to. It takes no pointer but on the "?" mark of its note: the world runs on
+// under it.
 
 import type { ComponentChild } from 'preact';
 import {
@@ -14,7 +15,8 @@ import {
   type Part,
 } from '../protocol';
 import { swatch } from './DeathOverlay';
-import { budOpen, lastBud } from './state';
+import { Note, NoteMark } from './Note';
+import { budOpen, lastBud, noteOpen, type Bud } from './state';
 import { BUD } from './words/lines';
 
 const MAX_LINES = 5; // with more differences, the last line counts the rest
@@ -97,16 +99,15 @@ function Sketch(props: { kin: Kin; marked: number[] }) {
   );
 }
 
-export function BudCard() {
-  const bud = lastBud.value;
-  if (!budOpen.value || !bud) return null;
+/** What the card holds, for the card and for chapter 3 of the field guide. */
+export function BudBody(props: { bud: Bud }) {
+  const { bud } = props;
   const marked = (side: 'parent' | 'child'): number[] =>
     bud.lines.flatMap((d) => (d.side === side && d.part !== undefined ? [d.part] : []));
   const lines = bud.lines.length > MAX_LINES ? bud.lines.slice(0, MAX_LINES - 1) : bud.lines;
   const rest = bud.lines.length - lines.length;
   return (
-    <div class="bud" role="status">
-      <p class="bud-head">{BUD.heading}</p>
+    <>
       <div class="bud-pair">
         <figure>
           <Sketch kin={bud.parent} marked={marked('parent')} />
@@ -133,6 +134,21 @@ export function BudCard() {
       {bud.childDied && <p class="bud-note">{BUD.died}</p>}
       {!bud.brainRead && <p class="bud-note">{BUD.noBrain}</p>}
       {(bud.child.flags & FLAG_JUVENILE) !== 0 && <p class="bud-note">{BUD.newborn}</p>}
+    </>
+  );
+}
+
+// The card stays up for as long as its note is open.
+export function BudCard() {
+  const bud = lastBud.value;
+  if (!bud || !(budOpen.value || noteOpen.value === 'bud')) return null;
+  return (
+    <div class="bud" role="status">
+      <p class="bud-head">
+        {BUD.heading} <NoteMark id="bud" />
+      </p>
+      <Note id="bud" />
+      <BudBody bud={bud} />
     </div>
   );
 }

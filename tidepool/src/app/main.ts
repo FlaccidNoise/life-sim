@@ -29,14 +29,18 @@ import {
   brainOpen,
   budOpen,
   changesShown,
+  closeGuide,
   death,
   errorText,
   focusHeir,
+  guideAt,
+  guideBrain,
   heirGone,
   hint,
   lastBud,
   lineageAlive,
   mode,
+  openGuide,
   pulse,
   ready,
   starving,
@@ -47,6 +51,7 @@ import {
   walkLine,
   walkLog,
   wiringChanged,
+  worldParams,
 } from '../ui/state';
 import {
   PLAY_SCALE,
@@ -388,6 +393,7 @@ function start(): void {
     hint.value = null;
     toast.value = null;
     starving.value = false;
+    guideBrain.value = null;
     dropBud();
     forget();
   };
@@ -475,6 +481,14 @@ function start(): void {
   window.addEventListener('keydown', (e) => {
     // A shortcut is not steering, and macOS sends no `keyup` for a key pressed with Command.
     if (inText(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
+    // The key G opens the field guide and closes it. While it is open it owns the keyboard, and
+    // the dialog closes itself on Escape: no key steers behind it, and Escape does not leave the body.
+    const g = e.key.toLowerCase() === 'g' && !e.repeat;
+    if (guideAt.peek() !== null) {
+      if (g) closeGuide();
+      return;
+    }
+    if (g && ready.peek() && errorText.peek() === null) openGuide();
     // The overlay owns the keyboard: Tab and Enter work its buttons, and nothing steers behind it.
     if (death.peek()) return;
     if (e.code === 'Escape') leave();
@@ -489,6 +503,15 @@ function start(): void {
     if (key) keys[key] = false;
   });
   window.addEventListener('blur', dropKeys);
+  // The guide opened, or turned a page. The page behind a modal dialog gets no `keyup` and no
+  // `pointerup`, so a key or a pointer that was down is let go. The counts of chapter 2 are those
+  // of the body the player is in.
+  guideAt.subscribe((at) => {
+    if (at === null) return;
+    dropKeys();
+    held = null;
+    if (possessedUid !== 0) send({ type: 'brainOf', uid: possessedUid });
+  });
 
   let arrival = 0;
 
@@ -499,6 +522,7 @@ function start(): void {
       case 'ready':
         world = { w: msg.worldW, h: msg.worldH };
         params = msg.params;
+        worldParams.value = msg.params;
         // The energy ring shows where a bud happens.
         for (const p of params) if (p.name === 'bud_at') renderer.setBudAt(p.value);
         cam = fitWorld(world.w, world.h, cssW, cssH);
@@ -555,6 +579,7 @@ function start(): void {
           playScale = PLAY_SCALE;
           starving.value = false;
           toast.value = null;
+          guideBrain.value = null;
           dropBud();
           mode.value = 'play';
           closeDeath();
@@ -577,6 +602,21 @@ function start(): void {
         };
         break;
       case 'brainOf': {
+        // The guide asked for the counts of the body the player is in. A readout that is not read
+        // leaves the chapter with its empty state.
+        if (msg.uid === possessedUid && guideAt.peek() !== null) {
+          try {
+            const read = readBrain(msg.words);
+            guideBrain.value = read && {
+              inputs: read.inputs,
+              hidden: read.hidden,
+              outputs: read.outputs,
+              connections: read.connections.length,
+            };
+          } catch {
+            guideBrain.value = null;
+          }
+        }
         // An answer for a bud that a later bud, or a new body, has replaced is dropped.
         if (!budding || (msg.uid !== budding.parent.uid && msg.uid !== budding.child.uid)) break;
         budding.words.set(msg.uid, msg.words);

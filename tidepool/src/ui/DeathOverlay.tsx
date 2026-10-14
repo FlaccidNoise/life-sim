@@ -2,6 +2,7 @@
 // death with a living descendant leads with the descendants, and the cause comes after them.
 
 import type { DeathCause, Heir } from '../protocol';
+import { Note, NoteMark } from './Note';
 import { heirGone } from './state';
 import { FIRST_DEATH } from './words/lines';
 
@@ -46,8 +47,10 @@ export function DeathOverlay(props: {
         causeLine
       )}
       <p class="death-next">
-        {heirs.length === 0 ? 'Your line has ended.' : 'Continue as a descendant.'}
+        {heirs.length === 0 ? 'Your line has ended.' : 'Continue as a descendant.'}{' '}
+        <NoteMark id="death" />
       </p>
+      <Note id="death" />
       {heirGone.value && (
         <p class="death-gone" role="alert">
           That one is gone.

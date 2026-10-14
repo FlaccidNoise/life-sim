@@ -5,6 +5,8 @@ import type { Heir } from '../protocol';
 import { BrainPanel, BrainToggle } from './BrainPanel';
 import { BudCard } from './BudCard';
 import { DeathOverlay } from './DeathOverlay';
+import { Guide, GuideToggle } from './Guide';
+import { Note, NoteMark } from './Note';
 import {
   benchText,
   brainOpen,
@@ -60,15 +62,16 @@ function Hint(props: { touch: boolean }) {
 }
 
 // The descendant count, top left, under the debug readout when there is one. The line counts the
-// player's own body in `lineageAlive`, so it shows one less. Beat 9 points at it.
+// player's own body in `lineageAlive`, so it shows one less. Beat 9 points at it. On a narrow screen
+// it is under the buttons: index.html.
 function Line(props: { debug: boolean }) {
   return (
-    <p
-      class={pulse.value === 'score' ? 'bench pulse' : 'bench'}
-      style={{ top: props.debug ? '100px' : '12px', bottom: 'auto' }}
+    <div
+      class={`bench score${props.debug ? ' low' : ''}${pulse.value === 'score' ? ' pulse' : ''}`}
     >
-      Descendants alive: {Math.max(lineageAlive.value - 1, 0)}
-    </p>
+      Descendants alive: {Math.max(lineageAlive.value - 1, 0)} <NoteMark id="score" />
+      <Note id="score" />
+    </div>
   );
 }
 
@@ -129,6 +132,7 @@ export function App(props: {
       <div class="corner">
         {props.debug && <WalkLog />}
         {!dead && <BrainToggle onToggle={props.onBrain} />}
+        <GuideToggle />
         {mode.value === 'play' && (
           <button type="button" class="leave" onClick={props.onLeave}>
             Leave <kbd>Esc</kbd>
@@ -147,6 +151,7 @@ export function App(props: {
           onFocus={props.onFocus}
         />
       )}
+      <Guide />
     </>
   );
 }
