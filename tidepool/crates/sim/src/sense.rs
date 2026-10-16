@@ -1,7 +1,8 @@
 //! Brain inputs: the creature's own state, the scent at its centre, and what its eyes see.
 
 use crate::brain::{
-    thinks, IN_AGE, IN_CONST, IN_ENERGY, IN_MATE_KIN, IN_MATE_SIZE, IN_SPEED, NO_INPUT,
+    thinks, IN_AGE, IN_CONST, IN_ENERGY, IN_HURT, IN_HURT_SIDE, IN_MATE_KIN, IN_MATE_SIZE,
+    IN_SPEED, NO_INPUT,
 };
 use crate::eye;
 use crate::params::id;
@@ -12,12 +13,14 @@ use crate::world::World;
 /// scent gives a gradient of 0 and not a division by zero.
 const SCENT_FLOOR: f32 = 1e-6;
 
-/// Each live creature whose turn it is to think gets its inputs: the 6 of the body at their fixed
+/// Each live creature whose turn it is to think gets its inputs: the 8 of the body at their fixed
 /// indexes, the 3 of the scent from `Brains::in_scent` if it has a chemoreceptor (the level, the
 /// gradient along the heading, and the gradient across it), and those of `eye::see` if it has an
 /// eye. The two mate inputs are what `mate::step` last stored, and 0 with `mix_rate` at 0, when it
-/// stores nothing. The eyes scan on one think in `see_every`. On the other thinks the eye inputs
-/// keep their last values.
+/// stores nothing. The hurt is the energy lost to hits since the last think, as a share of capacity,
+/// times `hurt_gain` and held in 0 to 1, and the side is that of the last hit, or 0 with no loss.
+/// The hurt is then zeroed. `hurt_side` stays, for the frame. The eyes scan on one think in
+/// `see_every`. On the other thinks the eye inputs keep their last values.
 ///
 /// The gradient is divided by the local scent level, so a creature far from food still gets a
 /// direction. The side gradient is positive when scent rises on the creature's `+heading` side.
@@ -28,7 +31,7 @@ pub fn step(world: &mut World) {
     let every = params.get(id::THINK_EVERY) as u32;
     let see_every = every * params.get(id::SEE_EVERY) as u32;
     let (v_max, gain) = (params.get(id::V_MAX), params.get(id::CHEMO_GAIN));
-    let per_mass = params.get(id::ENERGY_PER_MASS);
+    let (per_mass, hurt_gain) = (params.get(id::ENERGY_PER_MASS), params.get(id::HURT_GAIN));
     let mixing = params.get(id::MIX_RATE) > 0.0;
     for s in 0..world.creatures.slots.high_water() as usize {
         let World {
@@ -42,6 +45,10 @@ pub fn step(world: &mut World) {
             continue;
         }
         let energy01 = c.energy01(s, per_mass);
+        let hurt = c.hurt[s];
+        let hurt01 = (hurt / (per_mass * c.area(s)) * hurt_gain).clamp(0.0, 1.0);
+        let side = if hurt > 0.0 { c.hurt_side[s] } else { 0.0 };
+        c.hurt[s] = 0.0;
         let speed = (c.vx[s] * c.vx[s] + c.vy[s] * c.vy[s]).sqrt();
         let in_scent = brains.in_scent[s];
         let input = brains.inputs_mut(s);
@@ -54,6 +61,7 @@ pub fn step(world: &mut World) {
         } else {
             (0.0, 0.0)
         };
+        (input[IN_HURT as usize], input[IN_HURT_SIDE as usize]) = (hurt01, side);
         if in_scent != NO_INPUT {
             let (hc, hs, chemo) = (c.hc[s], c.hs[s], c.chemo[s]);
             let s0 = scent.sample(c.x[s], c.y[s]);

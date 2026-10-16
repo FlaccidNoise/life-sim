@@ -10,8 +10,8 @@ use std::ops::Range;
 
 use crate::creature::MAX_EYES;
 use crate::genome::{
-    BrainGenome, ConnGene, Genome, HiddenGene, Node, BODY, FOUNDER_EYE_HISTORY, KIND_CHEMO,
-    KIND_EYE,
+    BrainGenome, ConnGene, Genome, HiddenGene, Node, OutGene, BODY, FOUNDER_EYE_HISTORY,
+    FOUNDER_JAW_HISTORY, KIND_CHEMO, KIND_EYE, KIND_FLAGELLUM, KIND_JAW, KIND_TOXIN,
 };
 use crate::math::act;
 use crate::params::{id, Params};
@@ -34,7 +34,12 @@ pub const IN_SPEED: u8 = 3;
 /// The two mate inputs.
 pub const IN_MATE_SIZE: u8 = 4;
 pub const IN_MATE_KIN: u8 = 5;
-pub const N_BODY_IN: usize = 6;
+/// Energy lost to bites, spikes, and toxin since the last think, as a share of capacity, times
+/// `hurt_gain`, held in 0 to 1.
+pub const IN_HURT: u8 = 6;
+/// The side of the last hit: -1 to 1, 0 with no hit since the last think.
+pub const IN_HURT_SIDE: u8 = 7;
+pub const N_BODY_IN: usize = 8;
 /// The three scent inputs, of a body whose chemoreceptors sum to more than 0. Owner `BODY`.
 /// `IN_GRAD_SIDE` is positive when the scent rises on the side of positive angles from the heading.
 pub const IN_SCENT: u8 = 16;
@@ -47,9 +52,16 @@ pub const EYE_FOOD_A: u8 = 0;
 pub const EYE_BODY_A: u8 = 1;
 pub const EYE_FOOD_B: u8 = 2;
 pub const EYE_BODY_B: u8 = 3;
+/// The jaw size of the nearest body in the cone, 0 with none.
+pub const EYE_JAW_A: u8 = 4;
+pub const EYE_JAW_B: u8 = 5;
 pub const OUT_THRUST: u8 = 128;
 pub const OUT_TURN: u8 = 129;
 pub const OUT_ACCEPT: u8 = 130;
+/// The triggers. Each is declared by a body with a part of its kind, as `TRIGGERS` says.
+pub const OUT_DASH: u8 = 131;
+pub const OUT_LUNGE: u8 = 132;
+pub const OUT_TOXIN: u8 = 133;
 /// The inputs that every body declares, in block order.
 const BODY_INPUTS: [u8; N_BODY_IN] = [
     IN_CONST,
@@ -58,21 +70,39 @@ const BODY_INPUTS: [u8; N_BODY_IN] = [
     IN_SPEED,
     IN_MATE_SIZE,
     IN_MATE_KIN,
+    IN_HURT,
+    IN_HURT_SIDE,
 ];
 const SCENT_INPUTS: [u8; 3] = [IN_SCENT, IN_GRAD_FWD, IN_GRAD_SIDE];
 /// The outputs that every body declares, in block order. Their ports count up from `OUT_THRUST`.
 pub const BODY_OUTPUTS: [u8; 3] = [OUT_THRUST, OUT_TURN, OUT_ACCEPT];
+/// Each trigger output and the kind whose sizes, summed above 0, declare it, in block order.
+pub const TRIGGERS: [(u8, u8); 3] = [
+    (OUT_DASH, KIND_FLAGELLUM),
+    (OUT_LUNGE, KIND_JAW),
+    (OUT_TOXIN, KIND_TOXIN),
+];
+/// The output ports, `OUT_THRUST` and up.
+const OUT_PORTS: usize = BODY_OUTPUTS.len() + TRIGGERS.len();
+/// What `Brains::output` reads of an output that the body does not declare. A trigger at -1 never
+/// fires.
+pub const UNDECLARED: f32 = -1.0;
 /// `Brains::in_scent` or `Brains::in_eye` of a slot whose body does not declare those inputs.
 pub const NO_INPUT: u16 = u16::MAX;
 
 /// Hidden neurons of the starter brain.
 pub const STARTER_HIDDEN: u32 = 4;
-/// The history ids that the connections of a founder brain can hold are `1..=STARTER_CONNS`. Every
-/// starter brain takes 1 to 39: the 3 wired connections, each input of the M2 body and of the
-/// scent to each hidden neuron, and each hidden neuron to thrust and to turn. It also takes 58 to
-/// 60, the 3 connections into `accept`. The brain of a founder with an eye takes 40 to 57 as well:
-/// each eye input to each hidden neuron, and the 2 wired eye connections.
+/// The history ids that the M3 connections of a founder brain can hold are `1..=STARTER_CONNS`.
+/// Every starter brain takes 1 to 39: the 3 wired connections, each input of the M2 body and of
+/// the scent to each hidden neuron, and each hidden neuron to thrust and to turn. It also takes 58
+/// to 60, the 3 connections into `accept`. The brain of a founder with an eye takes 40 to 57 as
+/// well: each eye input to each hidden neuron, and the 2 wired eye connections.
 pub const STARTER_CONNS: u32 = 60;
+/// The wires of the triggers (rule P2 of the M4 plan) take the ids after `FOUNDER_JAW_HISTORY`:
+/// the hurt to dash, then with an eye the 4 that flee from teeth, then of a hunter with an eye the
+/// 4 that chase a body.
+pub const TRIGGER_CONNS: u32 = 9;
+const FIRST_TRIGGER_CONN: u32 = FOUNDER_JAW_HISTORY + 1;
 const STARTER_BIAS_SIGMA: f32 = 0.05;
 
 /// Words of the readout that `readout` makes: the header, one neuron, and one connection.
@@ -94,10 +124,11 @@ pub struct Ports {
 
 /// Who declares what. The only place that knows.
 ///
-/// Inputs: the 6 of the body. Then the 3 of the scent, if the chemoreceptors sum to more than 0.
+/// Inputs: the 8 of the body. Then the 3 of the scent, if the chemoreceptors sum to more than 0.
 /// Then the eye genes in gene order: for each cone that `Creatures::express` makes, its plant
-/// input and then its body input, `A` before `B`. A cone past `MAX_EYES` declares nothing.
-/// Outputs: thrust, turn, and accept. No part declares an output.
+/// input, its body input, and its jaw input, `A` before `B`. A cone past `MAX_EYES` declares
+/// nothing. Outputs: thrust, turn, and accept, then the triggers of `TRIGGERS` that the parts
+/// declare. A part of a trigger's kind declares no port of its own: the body owns the trigger.
 ///
 /// The names are all different when every part has its own history id above `BODY`, as in a
 /// living world. For a hand-made genome where two eye genes share an id, or where one has the id
@@ -119,17 +150,18 @@ pub fn ports(g: &Genome) -> Ports {
             owner: part.history,
             port,
         };
-        for cone in [[EYE_FOOD_A, EYE_BODY_A], [EYE_FOOD_B, EYE_BODY_B]]
-            .iter()
-            .take(made)
-        {
+        let cones = [
+            [EYE_FOOD_A, EYE_BODY_A, EYE_JAW_A],
+            [EYE_FOOD_B, EYE_BODY_B, EYE_JAW_B],
+        ];
+        for cone in cones.iter().take(made) {
             inputs.extend(cone.map(node));
         }
     }
-    Ports {
-        inputs,
-        outputs: BODY_OUTPUTS.map(Node::body).into(),
-    }
+    let mut outputs: Vec<Node> = BODY_OUTPUTS.map(Node::body).into();
+    let declared = TRIGGERS.iter().filter(|&&(_, kind)| g.size_of(kind) > 0.0);
+    outputs.extend(declared.map(|&(port, _)| Node::body(port)));
+    Ports { inputs, outputs }
 }
 
 /// The neurons of one brain block, by name and in block order: the inputs, the hidden genes in
@@ -199,6 +231,9 @@ pub struct Brains {
     /// By slot: the index of the first scent input and of the first eye input, or `NO_INPUT`.
     pub in_scent: Vec<u16>,
     pub in_eye: Vec<u16>,
+    /// By slot, by output port from `OUT_THRUST`: the index of the output in the block, or
+    /// `NO_INPUT` for one that the body does not declare.
+    pub out_at: Vec<[u16; OUT_PORTS]>,
     /// `capacity * MAX_NEURONS`. `cur` is saved for live slots.
     pub cur: Vec<f32>,
     pub nxt: Vec<f32>,
@@ -224,6 +259,7 @@ impl Brains {
             n_out: vec![0; slots],
             in_scent: vec![NO_INPUT; slots],
             in_eye: vec![NO_INPUT; slots],
+            out_at: vec![[NO_INPUT; OUT_PORTS]; slots],
             cur: vec![0.0; slots * MAX_NEURONS],
             nxt: vec![0.0; slots * MAX_NEURONS],
             bias: vec![0.0; slots * MAX_NEURONS],
@@ -252,10 +288,12 @@ impl Brains {
         for (at, gene) in hidden.clone().zip(&g.brain.hidden) {
             (self.bias[first + at], self.alpha[first + at]) = (gene.bias, gene.alpha);
         }
+        self.out_at[slot] = [NO_INPUT; OUT_PORTS];
         for (at, node) in block.names.iter().enumerate().skip(hidden.end) {
             let gene = g.brain.outs.iter().find(|gene| gene.node == *node);
             (self.bias[first + at], self.alpha[first + at]) =
                 gene.map_or((0.0, 1.0), |gene| (gene.bias, gene.alpha));
+            self.out_at[slot][(node.port - OUT_THRUST) as usize] = at as u16;
         }
         // The scent inputs follow those of the body, and the eye inputs are the rest.
         let inputs = &block.names[..block.n_in];
@@ -289,10 +327,13 @@ impl Brains {
         &mut self.cur[slot * MAX_NEURONS..][..self.n_in[slot] as usize]
     }
 
-    /// The activation of an output of the body, by its port, in an expressed slot.
+    /// The activation of an output of the body, by its port, in an expressed slot. `UNDECLARED`
+    /// for an output that the body does not declare.
     pub fn output(&self, slot: usize, port: u8) -> f32 {
-        let first = self.n_neur[slot] as usize - self.n_out[slot] as usize;
-        self.cur[slot * MAX_NEURONS + first + (port - OUT_THRUST) as usize]
+        match self.out_at[slot][(port - OUT_THRUST) as usize] {
+            NO_INPUT => UNDECLARED,
+            at => self.cur[slot * MAX_NEURONS + at as usize],
+        }
     }
 
     /// One step of an expressed slot: `cur += alpha * (act(bias + sum(w * cur[src])) - cur)` for
@@ -330,7 +371,8 @@ pub(crate) fn thinks(tick: u32, slot: usize, every: u32) -> bool {
 }
 
 /// The founder brain. Every founder has the same shape and the same history ids: the connections
-/// take 1 to 39 and 58 to 60, and the 4 hidden genes take the 4 ids after the founder's eye. Three
+/// take 1 to 39, 58 to 60, and the first trigger id, and the 4 hidden genes take the 4 ids after
+/// the founder's eye. Three
 /// wired weights make it swim and turn up the scent gradient: `starter_cruise` from `IN_CONST` to
 /// thrust, `starter_steer` from `IN_GRAD_SIDE` to turn, and `starter_surge` from `IN_GRAD_FWD` to
 /// thrust. Each other weight of 1 to 39 is `gauss * new_conn_sigma`. Draws those in history order,
@@ -345,6 +387,11 @@ pub(crate) fn thinks(tick: u32, slot: usize, every: u32) -> bool {
 /// The inputs are in the order of M2, the left before the right: the plant of `B`, the plant of
 /// `A`, the body of `B`, the body of `A`. Their random weights are drawn last, so an eye moves no
 /// draw of the brain with none.
+///
+/// Rule P2 of the M4 plan, with no draw: the out gene of `dash` has bias `starter_trigger_bias`,
+/// so it rests closed. `IN_HURT` runs to dash at `starter_flee`. With an eye, `EYE_JAW_A` runs to
+/// turn at minus `starter_flee` and `EYE_JAW_B` at plus (away from teeth), and both to dash at
+/// `starter_flee`. These take the ids from `FOUNDER_JAW_HISTORY + 1`, in that order.
 pub fn starter(rng: &mut Rng, p: &Params) -> BrainGenome {
     let sigma = p.get(id::NEW_CONN_SIGMA);
     let hidden: Vec<Node> = (1..=STARTER_HIDDEN)
@@ -395,23 +442,31 @@ pub fn starter(rng: &mut Rng, p: &Params) -> BrainGenome {
         (Node::body(IN_MATE_SIZE), accept, rng.gauss() * sigma),
         (Node::body(IN_MATE_KIN), accept, rng.gauss() * sigma),
     ];
-    if p.get(id::FOUNDER_EYE) > 0.0 {
-        let eye = |port: u8| Node {
-            owner: FOUNDER_EYE_HISTORY,
-            port,
-        };
+    let (dash, flee) = (Node::body(OUT_DASH), p.get(id::STARTER_FLEE));
+    let mut triggers = vec![(Node::body(IN_HURT), dash, flee)];
+    let eyed = p.get(id::FOUNDER_EYE) > 0.0;
+    if eyed {
         for input in [EYE_FOOD_B, EYE_FOOD_A, EYE_BODY_B, EYE_BODY_A] {
             for &h in &hidden {
-                wires.push((eye(input), h, rng.gauss() * sigma));
+                wires.push((founder_eye(input), h, rng.gauss() * sigma));
             }
         }
         let look = p.get(id::STARTER_LOOK);
-        wires.push((eye(EYE_FOOD_A), turn, look));
-        wires.push((eye(EYE_FOOD_B), turn, -look));
+        wires.push((founder_eye(EYE_FOOD_A), turn, look));
+        wires.push((founder_eye(EYE_FOOD_B), turn, -look));
+        let (jaw_a, jaw_b) = (founder_eye(EYE_JAW_A), founder_eye(EYE_JAW_B));
+        triggers.extend([
+            (jaw_a, turn, -flee),
+            (jaw_b, turn, flee),
+            (jaw_a, dash, flee),
+            (jaw_b, dash, flee),
+        ]);
     }
+    brain.outs.push(trigger_gene(OUT_DASH, p));
     let first_accept = STARTER_CONNS + 1 - accepts.len() as u32;
     let wires = (1..).zip(wires).chain((first_accept..).zip(accepts));
     brain.conns = wires
+        .chain((FIRST_TRIGGER_CONN..).zip(triggers))
         .map(|(history, (src, dst, weight))| ConnGene {
             src,
             dst,
@@ -422,8 +477,56 @@ pub fn starter(rng: &mut Rng, p: &Params) -> BrainGenome {
     brain
 }
 
+/// A port of the founder's eye.
+fn founder_eye(port: u8) -> Node {
+    Node {
+        owner: FOUNDER_EYE_HISTORY,
+        port,
+    }
+}
+
+/// The out gene of a trigger of a founder, which rests closed.
+fn trigger_gene(port: u8, p: &Params) -> OutGene {
+    OutGene {
+        node: Node::body(port),
+        bias: p.get(id::STARTER_TRIGGER_BIAS),
+        alpha: 1.0,
+    }
+}
+
+/// Rule P2 of the M4 plan for a hunter founder, with no draw: the out gene of `lunge` rests
+/// closed, and with an eye `EYE_BODY_A` runs to turn at `starter_chase` and `EYE_BODY_B` at minus
+/// (toward a body), and both to lunge at `starter_lunge`. These take the 4 ids after the wires of
+/// `starter`.
+pub fn hunter(brain: &mut BrainGenome, p: &Params) {
+    brain.outs.push(trigger_gene(OUT_LUNGE, p));
+    if p.get(id::FOUNDER_EYE) <= 0.0 {
+        return;
+    }
+    let (turn, lunge) = (Node::body(OUT_TURN), Node::body(OUT_LUNGE));
+    let (chase, bite) = (p.get(id::STARTER_CHASE), p.get(id::STARTER_LUNGE));
+    let (body_a, body_b) = (founder_eye(EYE_BODY_A), founder_eye(EYE_BODY_B));
+    let wires = [
+        (body_a, turn, chase),
+        (body_b, turn, -chase),
+        (body_a, lunge, bite),
+        (body_b, lunge, bite),
+    ];
+    let first = FIRST_TRIGGER_CONN + TRIGGER_CONNS - wires.len() as u32;
+    let wires = (first..).zip(wires);
+    brain
+        .conns
+        .extend(wires.map(|(history, (src, dst, weight))| ConnGene {
+            src,
+            dst,
+            weight,
+            history,
+        }));
+}
+
 /// Each live creature whose turn it is takes one brain step, and its outputs become its commands.
-/// The commands of the others stay as they were.
+/// A trigger that the body does not declare gets `UNDECLARED`. The commands of the others stay as
+/// they were.
 ///
 /// The weights of a block hold `hidden_gain`. If the parameter is not what the blocks hold, every
 /// live block is wired again first, so a world behaves as its genomes and its parameters say and a
@@ -456,6 +559,9 @@ pub fn step(world: &mut World) {
         c.cmd_thrust[s] = brains.output(s, OUT_THRUST).max(0.0);
         c.cmd_turn[s] = brains.output(s, OUT_TURN);
         c.cmd_accept[s] = brains.output(s, OUT_ACCEPT);
+        c.cmd_dash[s] = brains.output(s, OUT_DASH);
+        c.cmd_lunge[s] = brains.output(s, OUT_LUNGE);
+        c.cmd_toxin[s] = brains.output(s, OUT_TOXIN);
     }
 }
 

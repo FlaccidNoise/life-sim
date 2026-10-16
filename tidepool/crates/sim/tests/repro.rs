@@ -126,8 +126,8 @@ fn a_newborn_holds_no_connection_that_its_body_does_not_express() {
         conns.iter().map(|c| c.history).collect()
     };
     assert_eq!(histories(p).last(), Some(&900));
-    assert_eq!(histories(1), (1..=60).collect::<Vec<u32>>());
-    assert_eq!(w.brains.n_conn[1], 60);
+    assert_eq!(histories(1), (1..=60).chain(71..=75).collect::<Vec<u32>>());
+    assert_eq!(w.brains.n_conn[1], 65);
 }
 
 #[test]

@@ -111,8 +111,8 @@ pub const KIND_SHELL: u8 = 9;
 pub const KIND_TOXIN: u8 = 10;
 /// Kinds are `1..=KINDS`. 0 means "no part" in a frame.
 pub const KINDS: u8 = 10;
-/// The kinds that the add-part mutation draws from. 6 until Task 9 of the M4 plan, then `KINDS`.
-pub const ADDABLE_KINDS: u8 = 6;
+/// The kinds that the add-part mutation draws from.
+pub const ADDABLE_KINDS: u8 = KINDS;
 
 /// The ranges of the four body genes. Constants by decision (`docs/decisions/INDEX.md`, 2026-10-11,
 /// "gene ranges stay constants"): the `len` band of `gate-evolve` is cut from `LEN_RANGE`.
@@ -159,8 +159,11 @@ const JAW_ANCHOR: f32 = 0.0;
 /// The history id of the founder's eye. Its brain connections take `1..=STARTER_CONNS`, its four
 /// parts take the next four ids, and its eye takes this one.
 pub const FOUNDER_EYE_HISTORY: u32 = brain::STARTER_CONNS + FOUNDER_PARTS.len() as u32 + 1;
-/// The last history id that a founder holds. Its hidden genes take the ids after its eye.
-pub const FOUNDER_HISTORIES: u32 = FOUNDER_EYE_HISTORY + brain::STARTER_HIDDEN;
+/// The history id of a hunter founder's jaw (rule P3 of the M4 plan). The founder's hidden genes
+/// take the ids between its eye and this one.
+pub const FOUNDER_JAW_HISTORY: u32 = FOUNDER_EYE_HISTORY + brain::STARTER_HIDDEN + 1;
+/// The last history id that a founder holds. The wires of its triggers take the ids after its jaw.
+pub const FOUNDER_HISTORIES: u32 = FOUNDER_JAW_HISTORY + brain::TRIGGER_CONNS;
 /// The largest size of a brain weight or bias. `math::act` is flat past 3, so a larger number
 /// only hides later mutations.
 const WEIGHT_LIMIT: f32 = 8.0;
@@ -305,6 +308,28 @@ impl BrainGenome {
         let src = sources[rng.below(sources.len() as u32) as usize];
         let dst = targets[rng.below(targets.len() as u32) as usize];
         let weight = rng.gauss() * sigma;
+        self.join(src, dst, weight, next_history);
+    }
+
+    /// As `connect`, into `dst`: a source chosen evenly, then a weight. No target is drawn.
+    fn connect_into(
+        &mut self,
+        sources: &[Node],
+        dst: Node,
+        rng: &mut Rng,
+        sigma: f32,
+        next_history: &mut u32,
+    ) {
+        if self.conns.len() >= MAX_CONN_GENES || sources.is_empty() {
+            return;
+        }
+        let src = sources[rng.below(sources.len() as u32) as usize];
+        let weight = rng.gauss() * sigma;
+        self.join(src, dst, weight, next_history);
+    }
+
+    /// Adds the connection with a new id, unless the pair is joined already.
+    fn join(&mut self, src: Node, dst: Node, weight: f32, next_history: &mut u32) {
         if !self.conns.iter().any(|c| (c.src, c.dst) == (src, dst)) {
             self.conns.push(ConnGene {
                 src,
@@ -379,6 +404,7 @@ impl Genome {
     /// `gauss * founder_sigma * range` and clamped. A random hue. `brain::starter(rng, p)`. Draws in
     /// that order, which is the M1 order. `egg` is `birth_growth` and `old` is `lifespan`, with no
     /// draw. With `founder_eye` above 0 a fifth part follows, an eye of that size, with no draw.
+    /// `World::seed_founders` makes a hunter of it with `arm`.
     pub fn founder(rng: &mut Rng, p: &Params) -> Genome {
         let sigma = p.get(id::FOUNDER_SIGMA);
         let mut near = |default: f32, (lo, hi): (f32, f32)| {
@@ -412,6 +438,22 @@ impl Genome {
         }
     }
 
+    /// Rule P3 of the M4 plan: a Jaw at the nose of size `founder_jaw_size` with history
+    /// `FOUNDER_JAW_HISTORY`, if the list has room, and the wires of `brain::hunter`. The founder
+    /// keeps its Filter. No draw.
+    pub fn arm(&mut self, p: &Params) {
+        if self.parts.len() < MAX_PART_GENES {
+            self.parts.push(PartGene {
+                kind: KIND_JAW,
+                anchor: JAW_ANCHOR,
+                size: p.get(id::FOUNDER_JAW_SIZE),
+                extra: 0.0,
+                history: FOUNDER_JAW_HISTORY,
+            });
+        }
+        brain::hunter(&mut self.brain, p);
+    }
+
     /// Len, wid, and each part size: with chance mut_rate, add gauss * mut_sigma * (max - min), clamp.
     /// Hue: add gauss * hue_sigma, wrap into [0, 1).
     /// Each brain weight, bias: with chance mut_weight_rate, add gauss * mut_weight_sigma.
@@ -434,10 +476,13 @@ impl Genome {
     ///    `*next_history`, and the counter rises. Then each connection that names the original is
     ///    copied for the copy, in gene order and with room, with a new id each and no draw.
     /// 5. Add. With chance mut_part_add, and with room, a new part goes on the end: a kind chosen
-    ///    evenly from `1..=ADDABLE_KINDS`, then an anchor in [0, 1), then an `extra` in [0, 1). Its size is part_new_size,
-    ///    held in the range of its kind. Its id is `*next_history`, and the counter rises. If the
-    ///    body declares inputs with the part that it did not declare without it, part_wires
-    ///    connections follow: each as in group 8, with a source chosen evenly from those inputs.
+    ///    evenly from `1..=ADDABLE_KINDS`, then an anchor in [0, 1), then an `extra` in [0, 1).
+    ///    Its size is part_new_size, held in the range of its kind. Its id is `*next_history`, and
+    ///    the counter rises. If the body declares inputs with the part that it did not declare
+    ///    without it, part_wires connections follow: each as in group 8, with a source chosen
+    ///    evenly from those inputs. If it declares an output that it did not declare without it,
+    ///    part_wires connections into that output follow: each with a source chosen evenly from
+    ///    the declared inputs and then the hidden genes, then a weight of gauss * new_conn_sigma.
     ///
     /// Four M3 groups follow, in this order. With every M3 rate at 0 and part_wires at 0 the draws
     /// are the M2 draws.
@@ -532,7 +577,7 @@ impl Genome {
         let wire_sigma = p.get(id::NEW_CONN_SIGMA);
         if chance(rng, p.get(id::MUT_PART_ADD)) && g.parts.len() < MAX_PART_GENES {
             let wires = p.get(id::PART_WIRES) as usize;
-            let before = brain::ports(&g).inputs;
+            let before = brain::ports(&g);
             let kind = 1 + rng.below(ADDABLE_KINDS as u32) as u8;
             let (lo, hi) = size_range(kind);
             let (anchor, extra) = (rng.unit(), rng.unit());
@@ -543,15 +588,23 @@ impl Genome {
                 extra,
                 history: new_history(next_history),
             });
-            let Ports {
-                mut inputs,
-                outputs,
-            } = brain::ports(&g);
-            inputs.retain(|node| !before.contains(node));
-            let targets = g.brain.targets(outputs);
+            let Ports { inputs, outputs } = brain::ports(&g);
+            let new_inputs: Vec<Node> = (inputs.iter())
+                .filter(|node| !before.inputs.contains(node))
+                .copied()
+                .collect();
+            let targets = g.brain.targets(outputs.clone());
             for _ in 0..wires {
                 g.brain
-                    .connect(&inputs, &targets, rng, wire_sigma, next_history);
+                    .connect(&new_inputs, &targets, rng, wire_sigma, next_history);
+            }
+            let hidden = g.brain.hidden.iter().map(|gene| Node::hidden(gene.id));
+            let sources: Vec<Node> = inputs.iter().copied().chain(hidden).collect();
+            for &output in outputs.iter().filter(|node| !before.outputs.contains(node)) {
+                for _ in 0..wires {
+                    g.brain
+                        .connect_into(&sources, output, rng, wire_sigma, next_history);
+                }
             }
         }
 

@@ -16,8 +16,8 @@ use tidepool_sim::world::{SpawnAt, World, MAX_WORLD_SIZE};
 
 /// The inputs and the outputs that the default body declares: `brain::ports`. It has a
 /// chemoreceptor and no eye.
-const N_IN: usize = 9;
-const N_OUT: usize = 3;
+const N_IN: usize = 11;
+const N_OUT: usize = 4;
 
 /// Founders, plants, a changed parameter, a possessed creature, held manual input, and a piece of
 /// debris and a cloud set by hand. At the defaults the piece decays by `debris_decay` each tick and
@@ -778,7 +778,10 @@ fn a_bad_brain_genome_is_invalid() {
     // Input to hidden, hidden to output, and an output that feeds a hidden neuron: all in range.
     let good = brain(2, &[(0, N_IN), (N_IN, last), (last, N_IN + 1)]);
     let w = with_brain(good).load().expect("load");
-    assert_eq!((w.brains.n_neur[0], w.brains.n_conn[0]), (14, 3));
+    assert_eq!(
+        (w.brains.n_neur[0], w.brains.n_conn[0]),
+        (N_IN as u16 + 2 + N_OUT as u16, 3)
+    );
     assert!(with_brain(brain(most, &[])).load().is_ok());
 
     // A list of a brain genome holds no more than its cap. A genome has one bias and one alpha
@@ -825,8 +828,10 @@ fn a_bad_brain_genome_is_invalid() {
 
 #[test]
 fn a_brain_part_of_the_wrong_length_is_invalid() {
-    // Two creatures with the smallest brain hold 24 activations.
-    for count in [0, 23, 25] {
+    // Two creatures with the smallest brain hold 30 activations.
+    let right = 2 * (N_IN + N_OUT);
+    assert_eq!(right, 30);
+    for count in [0, right - 1, right + 1] {
         let p = Crafted {
             activations: Some(vec![0.0; count]),
             ..Crafted::new(&[0, 1], &[1.0, 2.0])

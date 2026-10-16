@@ -2,8 +2,11 @@
 #![allow(clippy::disallowed_methods)]
 
 use tidepool_sim::ability::{self, MAX_CLOUDS};
+use tidepool_sim::brain::OUT_DASH;
 use tidepool_sim::control::{self, ABILITY_DASH, ABILITY_TOXIN, CAUSE_POISONED};
-use tidepool_sim::genome::{Genome, KIND_FLAGELLUM, KIND_JAW, KIND_TOXIN, REF_WIDTH};
+use tidepool_sim::genome::{
+    Genome, Node, OutGene, KIND_FLAGELLUM, KIND_JAW, KIND_TOXIN, REF_WIDTH,
+};
 use tidepool_sim::params::id;
 use tidepool_sim::world::{SpawnAt, World};
 
@@ -126,12 +129,18 @@ fn a_body_that_cannot_pay_does_not_dash() {
 
 #[test]
 fn the_speed_limit_holds_through_a_dash() {
-    let mut w = one(genome(0.0, 0.0), 0.0);
+    // The brain writes the dash command on its first think, so its dash gene is open.
+    let mut g = genome(0.0, 0.0);
+    g.brain.outs.push(OutGene {
+        node: Node::body(OUT_DASH),
+        bias: 3.0,
+        alpha: 1.0,
+    });
+    let mut w = one(g, 0.0);
     w.params.set(id::DASH_IMPULSE, 8.0);
     let v_max = w.params.get(id::V_MAX);
     // The impulse alone is past the limit, even after a tick of drag.
     assert!(8.0 * w.creatures.flag_push[0] / heft(&w, 0) * 0.92 > v_max);
-    w.creatures.cmd_dash[0] = 1.0;
     w.tick();
     let c = &w.creatures;
     assert_eq!(c.cd_dash[0], 100);

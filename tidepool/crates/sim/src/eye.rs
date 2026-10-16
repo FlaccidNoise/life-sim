@@ -14,15 +14,18 @@ pub const EYE_REACH: f32 = 64.0;
 /// The half angle of a cone in radians is `EYE_HALF_MIN + EYE_HALF_SPAN * extra`.
 pub const EYE_HALF_MIN: f32 = 0.2;
 pub const EYE_HALF_SPAN: f32 = 1.0;
+/// The nearest body of a cone with none.
+const NO_BODY: u32 = u32::MAX;
 /// Added to each side of the box that `see` searches. `math::sin_cos` is good to 1e-4, so a cone
 /// of `EYE_REACH` can pass the box of its exact shape by a tenth of a unit.
 const BOX_MARGIN: f32 = 0.25;
 
-/// Writes the eye inputs of the body in `slot`, from `Brains::in_eye`: two for each cone, in the
+/// Writes the eye inputs of the body in `slot`, from `Brains::in_eye`: three for each cone, in the
 /// order of the cones. The first is the nearness of the nearest plant in the cone and the second
-/// that of the nearest body: 1 at the eye, 0 at the range of the cone and with nothing in it.
-/// Nothing is summed over cones. `brain::ports` declares the two inputs of each cone in the same
-/// order. A body whose brain has no eye input is not scanned.
+/// that of the nearest body: 1 at the eye, 0 at the range of the cone and with nothing in it. The
+/// third is the `jaw_sum` of that nearest body, 0 with none. Nothing is summed over cones.
+/// `brain::ports` declares the three inputs of each cone in the same order. A body whose brain has
+/// no eye input is not scanned.
 ///
 /// Reads the creature grid and the plant grid, so the caller has brought both up to date. Saves
 /// nothing: the inputs are brain activations.
@@ -88,11 +91,23 @@ pub fn see(world: &mut World, slot: usize) {
             }
         });
     };
-    let (mut food, mut body) = (far2, far2);
+    let (mut food, mut body, mut who) = (far2, far2, [NO_BODY; MAX_EYES]);
     nearest(&plants.grid, &plants.x, &plants.y, &mut food);
-    nearest(grid, &c.x, &c.y, &mut body);
+    // The same scan for bodies, which also keeps the nearest one of each cone for its jaw. The
+    // plant scan does not pay for that.
+    grid.for_each_in_box(x0, y0, x1, y1, |j| {
+        let (dx, dy) = (c.x[j as usize] - px, c.y[j as usize] - py);
+        let d2 = dx * dx + dy * dy;
+        let cones = cones[..n].iter().zip(body.iter_mut()).zip(who.iter_mut());
+        for ((&[ax, ay, cos2], best), who) in cones {
+            let along = dx * ax + dy * ay;
+            let inside = (d2 < *best) & (along > 0.0) & (along * along >= cos2 * d2);
+            *best = if inside { d2 } else { *best };
+            *who = if inside { j } else { *who };
+        }
+    });
 
-    let (inputs, _) = brains.inputs_mut(slot)[in_eye as usize..].as_chunks_mut::<2>();
+    let (inputs, _) = brains.inputs_mut(slot)[in_eye as usize..].as_chunks_mut::<3>();
     for (k, input) in inputs.iter_mut().take(n).enumerate() {
         let near = |d2: f32| {
             if d2 < far2[k] {
@@ -103,5 +118,9 @@ pub fn see(world: &mut World, slot: usize) {
         };
         input[0] = (gain * near(food[k])).clamp(0.0, 1.0);
         input[1] = (gain * near(body[k])).clamp(0.0, 1.0);
+        input[2] = match who[k] {
+            NO_BODY => 0.0,
+            j => c.jaw_sum[j as usize],
+        };
     }
 }
