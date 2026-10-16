@@ -1,16 +1,15 @@
-//! The probes of the M2 and M3 rules, and the encounter probe that M4 reads before any rule. Each
-//! runs the default world and prints what it reads. None has a band.
-
 use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
 use std::io::Write;
 
-use tidepool_sim::brain::{self, IN_MATE_SIZE};
+use tidepool_sim::brain::{
+    self, IN_MATE_SIZE, MAX_NEURONS, NO_INPUT, OUT_DASH, OUT_LUNGE, OUT_THRUST, OUT_TOXIN,
+};
 use tidepool_sim::control::ABILITY_DASH;
 use tidepool_sim::creature::MAX_EYES;
 use tidepool_sim::creature::MAX_RADIUS;
 use tidepool_sim::eye::{EYE_HALF_MIN, EYE_HALF_SPAN};
-use tidepool_sim::genome::{Genome, Node, BODY, KIND_CHEMO, KIND_EYE, KIND_FIN};
+use tidepool_sim::genome::{Genome, Node, BODY, KIND_CHEMO, KIND_EYE, KIND_FIN, KIND_SPIKE};
 use tidepool_sim::grid::{Grid, CELL};
 use tidepool_sim::math::sin_cos;
 use tidepool_sim::motor::NO_TOUCH;
@@ -703,6 +702,159 @@ pub fn encounter_probe(argv: &[String]) {
     }
 }
 
+/// A hit within this many ticks before a think is in the context of `dash` and of `toxin`.
+const HIT_TICKS: u32 = 10;
+/// A body seen within this many of the looker's own lengths is in the context of `lunge`.
+const LUNGE_LENGTHS: f32 = 2.0;
+/// The triggers, in the order of a row.
+const HUNT_TRIGGERS: [(u8, &str); 3] = [
+    (OUT_DASH, "dash"),
+    (OUT_LUNGE, "lunge"),
+    (OUT_TOXIN, "toxin"),
+];
+
+/// The thinks of one trigger in a window: those of bodies that declare it.
+#[derive(Default, Clone, Copy)]
+struct Fires {
+    thinks: u64,
+    thinks_in_context: u64,
+    fires: u64,
+    fires_in_context: u64,
+}
+
+/// The kills, the flesh, the debris eaten, the poisonings, and the spikings so far.
+fn hunt_counts(world: &World) -> (u64, f64, f64, u64, u64) {
+    let st = &world.stats;
+    (st.kills, st.flesh, st.debris_eaten, st.poisoned, st.spiked)
+}
+
+/// For the body in `s`, which has just thought on `tick`: whether each trigger of `HUNT_TRIGGERS`
+/// was in its context. `dash`: a hit in the last `HIT_TICKS` ticks, or a jaw seen in a cone.
+/// `lunge`: a body seen in a cone within `LUNGE_LENGTHS` of the body's own lengths. `toxin`: a hit.
+///
+/// What a cone sees is read from the eye inputs as the brain read them, so on a think with no
+/// scan (`see_every`) it is what the last scan saw. The distance of the body seen comes back from
+/// its input, `eye_gain * (1 - d / range)` held in 0 to 1. A clamped 1 gives the farthest `d`
+/// that it can stand for.
+fn contexts(world: &World, s: usize, tick: u32) -> [bool; 3] {
+    let (c, b, p) = (&world.creatures, &world.brains, &world.params);
+    // A hit stamps `hurt_tick` with the tick after it. A stamp of `tick + 1` is a hit after the
+    // think.
+    let at = c.hurt_tick[s];
+    let hit = at != 0 && at <= tick && tick - at < HIT_TICKS;
+    let (mut jaw, mut near) = (false, false);
+    if b.in_eye[s] != NO_INPUT {
+        let (gain, range) = (p.get(id::EYE_GAIN), p.get(id::EYE_RANGE));
+        let inputs = &b.cur[s * MAX_NEURONS + b.in_eye[s] as usize..];
+        for k in 0..(c.n_eyes[s] as usize).min(MAX_EYES) {
+            let (body, jaw_seen) = (inputs[3 * k + 1], inputs[3 * k + 2]);
+            jaw |= jaw_seen > 0.0;
+            let d = (1.0 - body / gain) * c.cone_range(s, k, range);
+            near |= body > 0.0 && d <= LUNGE_LENGTHS * c.length(s);
+        }
+    }
+    [hit || jaw, near, hit]
+}
+
+/// Runs `world` to `ticks` and gives `row` one row at each multiple of `every`: the hunters and the
+/// prey alive, the kills, the flesh, the debris eaten, the poisonings, and the spikings since the
+/// row before, the mean part sums over the living, and for each trigger its thinks and fires since
+/// the row before, with the share of each that came in its context. A fire is a command above 0
+/// on a think, of a body that declares the trigger. A body born on the tick did not think.
+fn hunt(world: &mut World, ticks: u32, every: u32, mut row: impl FnMut(String)) {
+    let mut fires = [Fires::default(); 3];
+    let mut before = hunt_counts(world);
+    while world.tick < ticks {
+        let (tick, uid_before) = (world.tick, world.next_uid);
+        world.tick();
+        let think_every = world.params.get(id::THINK_EVERY) as u32;
+        let (c, b) = (&world.creatures, &world.brains);
+        for s in live(world) {
+            // `brain::thinks`, which the sim keeps to itself.
+            if c.uid[s] >= uid_before || !tick.wrapping_add(s as u32).is_multiple_of(think_every) {
+                continue;
+            }
+            let context = contexts(world, s, tick);
+            for (k, &(port, _)) in HUNT_TRIGGERS.iter().enumerate() {
+                if b.out_at[s][(port - OUT_THRUST) as usize] == NO_INPUT {
+                    continue;
+                }
+                let cmd = match port {
+                    OUT_DASH => c.cmd_dash[s],
+                    OUT_LUNGE => c.cmd_lunge[s],
+                    _ => c.cmd_toxin[s],
+                };
+                let f = &mut fires[k];
+                f.thinks += 1;
+                f.thinks_in_context += u64::from(context[k]);
+                if cmd > 0.0 {
+                    f.fires += 1;
+                    f.fires_in_context += u64::from(context[k]);
+                }
+            }
+        }
+        if !world.tick.is_multiple_of(every) {
+            continue;
+        }
+        let now = hunt_counts(world);
+        let hunters = live(world).filter(|&s| c.jaw_sum[s] > 0.0).count();
+        let mut line = format!(
+            "tick={} hunters={hunters} prey={} kills={} flesh={:.1} debris_eaten={:.1} poisoned={} spiked={} jaw={:.3} spike={:.3} shell={:.3} gland={:.3}",
+            world.tick,
+            c.slots.count() as usize - hunters,
+            now.0 - before.0,
+            now.1 - before.1,
+            now.2 - before.2,
+            now.3 - before.3,
+            now.4 - before.4,
+            mean(live(world).map(|s| c.jaw_sum[s])),
+            mean(live(world).map(|s| world.genomes[s].size_of(KIND_SPIKE))),
+            mean(live(world).map(|s| c.shell_sum[s])),
+            mean(live(world).map(|s| c.gland_sum[s])),
+        );
+        for (f, &(_, name)) in fires.iter().zip(&HUNT_TRIGGERS) {
+            line += &format!(
+                " {name}_thinks={} {name}_fires={} {name}_fire_ctx={:.3} {name}_think_ctx={:.3}",
+                f.thinks,
+                f.fires,
+                f.fires_in_context as f64 / f.fires as f64,
+                f.thinks_in_context as f64 / f.thinks as f64,
+            );
+        }
+        row(line);
+        (fires, before) = ([Fires::default(); 3], now);
+    }
+}
+
+/// `probe-hunt`. One row for each seed at each multiple of `--every`: who hunts, what the hunting
+/// does, and whether each trigger fires in its context.
+pub fn hunt_probe(argv: &[String]) {
+    // `--every` is this probe's own flag. `args` reads the others.
+    let (mut every, mut others) = (4000, Vec::new());
+    let mut it = argv.iter();
+    while let Some(flag) = it.next() {
+        match flag.as_str() {
+            "--every" => every = value::<u32>(flag, it.next().map(String::as_str)),
+            _ => others.push(flag.clone()),
+        }
+    }
+    let a = args(&others, &[1], Some("--ticks"), 36000);
+    if every == 0 || every > a.ticks {
+        usage(&format!(
+            "--every needs a value from 1 to --ticks, which is {}",
+            a.ticks
+        ));
+    }
+    for &seed in &a.seeds {
+        let mut world = default_world(seed, &a.params);
+        hunt(&mut world, a.ticks, every, |row| {
+            println!("seed={seed} {row}");
+            // A killed run keeps the rows it finished.
+            std::io::stdout().flush().expect("flush stdout");
+        });
+    }
+}
+
 /// The Start values of `dash_impulse` and `dash_spin` in the M4 plan.
 const DASH_IMPULSE_START: f32 = 2.0;
 const DASH_SPIN_START: f32 = 0.3;
@@ -847,7 +999,6 @@ pub fn turn_probe(argv: &[String]) {
 #[cfg(test)]
 mod tests {
     use tidepool_sim::genome::{KIND_FILTER, KIND_FIN, KIND_FLAGELLUM};
-    use tidepool_sim::params::id;
     use tidepool_sim::world::SpawnAt;
 
     use super::*;
@@ -1134,6 +1285,33 @@ mod tests {
         assert_eq!(rows.len(), 2, "{rows:?}");
         let touching: f64 = column(&rows[1], "touching").parse().expect("a number");
         assert!(touching > 0.0, "{}", rows[1]);
+    }
+
+    /// The hunt probe reads, never writes, and draws no random number. Half the founders hunt, so
+    /// each trigger that a founder can declare is read.
+    #[test]
+    fn the_hunt_probe_draws_nothing_and_leaves_the_rows_of_the_gates() {
+        let hunters = [(id::FOUNDER_JAW, 0.5)];
+        let mut world = default_world(1, &hunters);
+        let mut rows = Vec::new();
+        hunt(&mut world, PROBE_TICKS, PROBE_TICKS / 2, |r| rows.push(r));
+        let mut plain = default_world(1, &hunters);
+        plain.run(PROBE_TICKS);
+        assert_eq!(world.tick, PROBE_TICKS);
+        assert_eq!(world.state_hash(), plain.state_hash());
+        assert_eq!(rows.len(), 2, "{rows:?}");
+        let number = |name: &str| column(&rows[1], name).parse::<f64>().expect("a number");
+        assert!(
+            number("hunters") > 0.0 && number("prey") > 0.0,
+            "{}",
+            rows[1]
+        );
+        // Every founder has a flagellum and so declares dash, and a hunter declares lunge. Each
+        // body thinks on one tick in `think_every`.
+        let living = number("hunters") + number("prey");
+        assert!(number("dash_thinks") > living * 0.5, "{}", rows[1]);
+        assert!(number("lunge_thinks") > 0.0, "{}", rows[1]);
+        assert_eq!(number("toxin_thinks"), 0.0, "{}", rows[1]);
     }
 
     const PROBE_TICKS: u32 = 300;

@@ -3,13 +3,13 @@
 
 use std::collections::HashMap;
 
-use tidepool_sim::brain::{self, IN_GRAD_FWD, IN_GRAD_SIDE, IN_SCENT, MAX_CONNS};
+use tidepool_sim::brain::{self, IN_GRAD_FWD, IN_GRAD_SIDE, IN_SCENT, MAX_CONNS, TRIGGERS};
 use tidepool_sim::creature::heft;
 use tidepool_sim::genome::{Node, BODY, REF_WIDTH};
 use tidepool_sim::params::id;
 use tidepool_sim::world::World;
 
-use crate::health::{args, default_world, judge, live, Args};
+use crate::health::{args, default_world, judge, live, predation_flag, Args, Bands, Coexist};
 
 // The bands of the gate. `docs/gates.md` holds the table.
 /// A run that ends with fewer creatures than this has died out. The same number is the low end of
@@ -51,6 +51,10 @@ const CONNS: f64 = 15.0;
 /// more, and it read 1 on seed 3 at a variety of 27.3. `variety`, over every hidden neuron, is
 /// printed with no band: a cross can leave a donor's hidden genes unwired, and it counts them.
 const VARIETY: f64 = 2.0;
+/// The predation bands of `--brain`, for a reading at tick 144,000 (choice C6 of the M4 plan). They
+/// work as `PREDATION` of `health.rs` does: unset until a proof sets one, and judged only under
+/// `--predation`.
+const PREDATION: Bands = Bands::OFF;
 
 /// The mean and the standard deviation. Both are 0 for no values.
 pub fn mean_sd(values: impl Iterator<Item = f32>) -> (f64, f64) {
@@ -109,7 +113,7 @@ pub struct Mind {
     pub wired: usize,
     /// Expressed connections.
     pub conns: usize,
-    /// Those with no end on an input of a sense.
+    /// Those with no end on a port that a part declares: an input of a sense, or a trigger.
     pub core: usize,
 }
 
@@ -117,6 +121,11 @@ pub struct Mind {
 /// owns the scent inputs, and they come and go with the chemoreceptor all the same.
 pub fn of_sense(input: Node) -> bool {
     input.owner != BODY || [IN_SCENT, IN_GRAD_FWD, IN_GRAD_SIDE].contains(&input.port)
+}
+
+/// True for a trigger output. A part declares it, as a sense declares its inputs.
+pub fn is_trigger(output: Node) -> bool {
+    TRIGGERS.iter().any(|&(port, _)| Node::body(port) == output)
 }
 
 /// The expressed connections of the slot: source and target as indexes into its block, and the
@@ -158,15 +167,21 @@ pub fn mind(world: &World, s: usize) -> Mind {
     let b = &world.brains;
     let (n, n_in) = (b.n_neur[s] as usize, b.n_in[s] as usize);
     let hidden = n - n_in - b.n_out[s] as usize;
-    let inputs = brain::ports(&world.genomes[s]).inputs;
+    let ports = brain::ports(&world.genomes[s]);
+    let first_out = n - ports.outputs.len();
     let wires: Vec<(usize, usize)> = wires(world, s).map(|(src, dst, _)| (src, dst)).collect();
-    // No connection runs into an input, so only the source of one can be an input of a sense.
-    let sense = |&&(src, _): &&(usize, usize)| inputs.get(src).is_some_and(|&i| of_sense(i));
+    let of_part = |i: usize| match i {
+        _ if i < n_in => of_sense(ports.inputs[i]),
+        _ if i >= first_out => is_trigger(ports.outputs[i - first_out]),
+        _ => false,
+    };
+    // A source can be an output, since a brain is recurrent.
+    let core = |&&(src, dst): &&(usize, usize)| !of_part(src) && !of_part(dst);
     Mind {
         hidden,
         wired: wired_hidden(n_in, hidden, n, &wires),
         conns: wires.len(),
-        core: wires.len() - wires.iter().filter(sense).count(),
+        core: wires.iter().filter(core).count(),
     }
 }
 
@@ -176,7 +191,8 @@ pub fn minds(world: &World) -> Vec<Mind> {
 }
 
 /// A brain shape by the rule of `shapes` and of `variety`: its hidden neurons, and its connections with no
-/// end on an input of a sense. A body that gains or loses a sense keeps its shape.
+/// end on a port that a part declares. A body that gains or loses a sense or a trigger keeps its
+/// shape (M3 soft spot 11).
 pub fn shape(m: &Mind) -> (usize, usize) {
     (m.hidden, m.core)
 }
@@ -233,12 +249,25 @@ fn world_after(seed: u32, a: &Args, blind: Option<usize>) -> World {
     world
 }
 
+/// The default world of the seed at the end of the run, with the predation measures read on the
+/// way.
+fn world_read(seed: u32, a: &Args) -> (World, Coexist) {
+    let (mut world, mut coexist) = (default_world(seed, &a.params), Coexist::default());
+    for _ in 0..a.ticks {
+        world.tick();
+        coexist.record(&world, a.ticks);
+    }
+    (world, coexist)
+}
+
 /// One seed of the gate: the printed measures and the bands that it left. Three runs, one at a
 /// time: the world as given, then with the scent sense blind, then with the eyes blind. With
 /// `brain`, the three brain bands apply, and there is a fourth run: the world with
-/// `hidden_gain=0`, where a hidden neuron sends nothing. That run has no band.
-fn measure(seed: u32, a: &Args, brain: bool) -> (String, Vec<String>) {
-    let world = world_after(seed, a, None);
+/// `hidden_gain=0`, where a hidden neuron sends nothing. That run has no band. With `brain` the
+/// row also holds the predation measures, and with `predation` too the bands of `PREDATION` that
+/// are set apply.
+fn measure(seed: u32, a: &Args, brain: bool, predation: bool) -> (String, Vec<String>) {
+    let (world, coexist) = world_read(seed, a);
     let c = &world.creatures;
     let creatures = c.slots.count();
     let (len, len_sd) = mean_sd(live(&world).map(|s| c.len[s]));
@@ -315,28 +344,33 @@ fn measure(seed: u32, a: &Args, brain: bool) -> (String, Vec<String>) {
     if brain {
         let null = minds(&world_after(seed, a, Some(id::HIDDEN_GAIN)));
         let (hidden_null, conns_null, ..) = brain_measures(&null);
-        row += &format!(" hidden_null={hidden_null:.2} conns_null={conns_null:.1}");
+        let (hunt, hunt_failures) = coexist.read(&world, &PREDATION, predation);
+        failures.extend(hunt_failures);
+        row += &format!(" hidden_null={hidden_null:.2} conns_null={conns_null:.1} {hunt}");
     }
     (row, failures)
 }
 
-/// `gate-evolve`. `--brain` is this gate's own flag. `args` reads the others.
+/// `gate-evolve`. `--brain` and `--predation` are this gate's own flags. `args` reads the others.
 pub fn gate(argv: &[String]) {
+    let (predation, argv) = predation_flag(argv, &PREDATION, "PREDATION of evolve.rs");
     let brain = argv.iter().any(|flag| flag == "--brain");
+    if predation && !brain {
+        crate::usage("--predation needs --brain: gate-evolve reads predation only with --brain");
+    }
     let others: Vec<String> = (argv.iter().filter(|flag| *flag != "--brain"))
         .cloned()
         .collect();
     let a = args(&others, &[1, 2, 3], Some("--ticks"), 36000);
-    if brain {
-        judge("gate-evolve", &a, |seed, a| measure(seed, a, true));
-    } else {
-        judge("gate-evolve", &a, |seed, a| measure(seed, a, false));
-    }
+    judge("gate-evolve", &a, |seed, a| {
+        measure(seed, a, brain, predation)
+    });
 }
 
 #[cfg(test)]
 mod tests {
-    use tidepool_sim::genome::{Genome, KIND_CHEMO, KIND_EYE, KIND_FLAGELLUM};
+    use tidepool_sim::brain::{IN_CONST, OUT_LUNGE};
+    use tidepool_sim::genome::{ConnGene, Genome, KIND_CHEMO, KIND_EYE, KIND_FLAGELLUM, KIND_JAW};
     use tidepool_sim::rng::Rng;
     use tidepool_sim::world::SpawnAt;
 
@@ -380,10 +414,46 @@ mod tests {
         }
         let minds = minds(&world);
         let read = |m: &Mind| (m.hidden, m.wired, m.conns, m.core);
-        // The wire from the hurt input to dash is of the body, so it is in the core.
-        assert_eq!(read(&minds[0]), (4, 4, 65, 29));
-        assert_eq!(read(&minds[1]), (4, 4, 29, 29));
+        // The wire from the hurt input to dash ends on a trigger, so it is not in the core.
+        assert_eq!(read(&minds[0]), (4, 4, 65, 28));
+        assert_eq!(read(&minds[1]), (4, 4, 29, 28));
         assert_eq!(brain_measures(&minds), (4.0, 47.0, 1, 2));
+    }
+
+    /// Two bodies with a jaw, so both declare `lunge`. The second has one more connection, from the
+    /// constant input into `lunge`. A trigger is a port of a part, as a sense is: one shape, and
+    /// two raw shapes.
+    #[test]
+    fn a_wire_into_a_trigger_changes_the_raw_shape_and_not_the_shape() {
+        let mut world = World::new(1, 256.0, 256.0);
+        let mut plain = Genome::founder(&mut Rng::new(1), &world.params);
+        plain.set_size(KIND_JAW, 0.5);
+        let mut wired = plain.clone();
+        wired.brain.conns.push(ConnGene {
+            src: Node::body(IN_CONST),
+            dst: Node::body(OUT_LUNGE),
+            weight: 1.0,
+            history: 1000,
+        });
+        for (genome, x) in [(plain, 50.0), (wired, 150.0)] {
+            let at = SpawnAt {
+                x,
+                y: 100.0,
+                heading: 0.0,
+                growth: 1.0,
+                energy01: 0.5,
+                parent: 0,
+                generation: 0,
+                mark: 0,
+            };
+            world.spawn(genome, at).expect("slot");
+        }
+        let minds = minds(&world);
+        assert_eq!(minds[1].conns, minds[0].conns + 1);
+        assert_eq!(shape(&minds[0]), shape(&minds[1]));
+        assert_eq!(shape_wired(&minds[0]), shape_wired(&minds[1]));
+        let (.., shapes, shapes_raw) = brain_measures(&minds);
+        assert_eq!((shapes, shapes_raw), (1, 2));
     }
 
     /// 40 brains. A shape that one of them holds is under 5% and does not count. A shape that two
