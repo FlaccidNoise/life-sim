@@ -1091,7 +1091,7 @@ fn a_lost_part_leaves_no_connection_behind_after_prune() {
         .push(conn(port, Node::body(OUT_THRUST), 0.5, 900));
     // What the body holds while it has every part.
     let mut whole = g.clone();
-    whole.prune();
+    whole.prune(-1.0);
     let mut lost_eye = false;
     for _ in 0..64 {
         let mut child = g.mutated(&mut rng, &p, &mut 1000);
@@ -1099,7 +1099,7 @@ fn a_lost_part_leaves_no_connection_behind_after_prune() {
         assert_eq!(child.brain.conns, g.brain.conns);
         let gone = g.parts.iter().find(|x| !child.parts.contains(x));
         let gone = gone.expect("one part is lost").history;
-        child.prune();
+        child.prune(-1.0);
         assert!(child.brain.conns.iter().all(|c| !names(c, gone)));
         if gone == eye {
             lost_eye = true;
@@ -1189,7 +1189,7 @@ fn a_thousand_mutations_at_high_rates_always_load_and_express() {
         let before: Vec<u32> = g.brain.hidden.iter().map(|h| h.id).collect();
         // As `repro::step` makes a child.
         g = g.mutated(&mut rng, &p, &mut next_history);
-        g.prune();
+        g.prune(-1.0);
         let (hidden, conns) = (g.brain.hidden.len(), g.brain.conns.len());
         assert!(g.parts.len() <= MAX_PART_GENES, "birth {birth}");
         assert!(

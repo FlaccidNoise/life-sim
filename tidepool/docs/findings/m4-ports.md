@@ -107,6 +107,7 @@ against A's 1,394: the world itself changed, so the per-creature-tick column is 
 
 - **Neuron budget gap.** 35 inputs + 6 outputs + `MAX_HIDDEN` 64 = 105, over `MAX_NEURONS` 96 (M3's
   worst case was 92). `Block::of` drops the hidden genes past the room, and they cost no upkeep. A
-  body with two eyes, a chemoreceptor, and three triggers can hold 55 hidden neurons, not 64. The
+  body with four paired eye genes (eight cones), a chemoreceptor, and three triggers can hold 55
+  hidden neurons, not 64. The
   budgets are unchanged; raising one is the owner's.
 - `shapes` reads 0 on a passing seed. It has no band and is printed for the record.
