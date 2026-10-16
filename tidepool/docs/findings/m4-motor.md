@@ -44,3 +44,63 @@ What the rows say:
 - **The hunter** (a jaw of 0.5 at the nose, 1.15 times the founder's heft) is 8% slower, turns 13%
   slower, and its radius is 6% wider. A jaw costs motion through mass, as rule K1 says it should.
 - Nothing here reads whether evolution keeps a fin. That is the arm below.
+
+## The arms: does evolution keep the fin?
+
+`gate-evolve --seeds 1,4,5,6,8 --ticks 144000` at `f39f38f` (after Task 9), with the fin working
+(arm A) and with `--param fin_torque=0 --param fin_grip=0` (arm B, a fin that does nothing), then
+`probe-census` on the same seeds at tick 144,000 for the mean fin size over the living. One run per
+seed, one at a time, load 3 to 13.
+
+| Seed | A: `fin` mean size | B: `fin` mean size | A creatures | B creatures | A speed | B speed |
+|---|---|---|---|---|---|---|
+| 1 | 0.01 | 0.02 | 1,647 | 1,687 | 0.82 | 0.76 |
+| 4 | 0.02 | 0.00 | 1,355 | 1,344 | 0.93 | 0.89 |
+| 5 | 0.00 | 0.03 | 1,714 | 1,595 | 0.79 | 0.83 |
+| 6 | 0.00 | 0.02 | 1,339 | 1,532 | 0.80 | 0.87 |
+| 8 | 0.02 | 0.00 | 1,375 | 1,421 | 0.75 | 0.76 |
+
+The rows of arm A and arm B:
+
+```
+seed=1 creatures=1647 creatures_noscent=1701 creatures_noeye=1412 len=10.3 len_sd=1.59 parts=7.9 chemo=0.23 chemo_blind=0.05 eye=0.28 eye_blind=0.04 plans=4 speed_cv=0.22 speed=0.82 area=35.5 hidden=3.43 conns=51.4 shapes=3 shapes_raw=3 variety=21.5 variety_wired=18.3 PASS
+seed=4 creatures=1355 creatures_noscent=1311 creatures_noeye=1251 len=8.9 len_sd=1.31 parts=10.1 chemo=0.24 chemo_blind=0.00 eye=0.43 eye_blind=0.03 plans=5 speed_cv=0.32 speed=0.93 area=35.2 hidden=4.53 conns=64.8 shapes=6 shapes_raw=4 variety=23.8 variety_wired=23.5 PASS
+seed=5 creatures=1714 creatures_noscent=1696 creatures_noeye=1318 len=7.8 len_sd=1.13 parts=11.1 chemo=0.16 chemo_blind=0.00 eye=0.33 eye_blind=0.03 plans=3 speed_cv=0.25 speed=0.79 area=30.0 hidden=4.19 conns=58.7 shapes=4 shapes_raw=0 variety=29.9 variety_wired=28.4 PASS
+seed=6 creatures=1339 creatures_noscent=1375 creatures_noeye=1109 len=9.8 len_sd=1.39 parts=9.6 chemo=0.21 chemo_blind=0.03 eye=0.30 eye_blind=0.06 plans=5 speed_cv=0.23 speed=0.80 area=33.2 hidden=4.58 conns=51.7 shapes=3 shapes_raw=4 variety=29.5 variety_wired=29.7 PASS
+seed=8 creatures=1375 creatures_noscent=1468 creatures_noeye=1049 len=9.8 len_sd=1.26 parts=7.1 chemo=0.09 chemo_blind=0.09 eye=0.30 eye_blind=0.01 plans=3 speed_cv=0.25 speed=0.75 area=38.2 hidden=4.74 conns=54.3 shapes=5 shapes_raw=4 variety=13.8 variety_wired=13.6 FAIL(chemo_gap=-0.006 < 0.1)
+gate-evolve 4/5 FAIL
+
+seed=1 creatures=1687 creatures_noscent=1802 creatures_noeye=1284 len=10.1 len_sd=1.33 parts=9.4 chemo=0.25 chemo_blind=0.05 eye=0.43 eye_blind=0.02 plans=5 speed_cv=0.21 speed=0.76 area=32.8 hidden=1.86 conns=47.6 shapes=6 shapes_raw=6 variety=11.2 variety_wired=8.2 PASS
+seed=4 creatures=1344 creatures_noscent=1245 creatures_noeye=1154 len=9.7 len_sd=1.43 parts=9.3 chemo=0.20 chemo_blind=0.03 eye=0.32 eye_blind=0.04 plans=4 speed_cv=0.27 speed=0.89 area=34.2 hidden=4.93 conns=54.2 shapes=3 shapes_raw=1 variety=26.5 variety_wired=25.9 PASS
+seed=5 creatures=1595 creatures_noscent=1789 creatures_noeye=1393 len=10.9 len_sd=1.35 parts=11.2 chemo=0.20 chemo_blind=0.01 eye=0.24 eye_blind=0.04 plans=6 speed_cv=0.23 speed=0.83 area=38.5 hidden=4.25 conns=72.2 shapes=4 shapes_raw=4 variety=27.4 variety_wired=20.4 PASS
+seed=6 creatures=1532 creatures_noscent=1400 creatures_noeye=1130 len=8.7 len_sd=1.59 parts=10.1 chemo=0.19 chemo_blind=0.03 eye=0.35 eye_blind=0.04 plans=4 speed_cv=0.25 speed=0.87 area=28.6 hidden=6.12 conns=71.9 shapes=4 shapes_raw=3 variety=32.2 variety_wired=33.6 PASS
+seed=8 creatures=1421 creatures_noscent=1352 creatures_noeye=1193 len=9.2 len_sd=1.58 parts=8.6 chemo=0.18 chemo_blind=0.00 eye=0.38 eye_blind=0.02 plans=5 speed_cv=0.23 speed=0.76 area=38.4 hidden=3.30 conns=54.1 shapes=6 shapes_raw=3 variety=17.0 variety_wired=10.4 PASS
+gate-evolve 5/5 PASS
+```
+
+- **"Evolution keeps the fin" is not shown.** The fin is near absent at tick 144,000 in both arms:
+  a mean size of 0.00 to 0.02 with the fin working and 0.00 to 0.03 with it dead. The gap is 0 within
+  noise on every seed. A fin arrives by the add-part mutation at 0.1 and is not kept, whether or not
+  it does anything. Nothing chases yet: the fin's payoff, if it has one, comes with predation.
+- **Arm A fails the long gate on seed 8** (`chemo_gap=0.00`: `chemo` 0.09 against `chemo_blind`
+  0.09). This is the first long reading after Task 9, with no M4 rule on, and it is a baseline fact
+  for the retune, not a fin finding: arm B passes 5 of 5 on the same seeds. Seed 8 was the fragile
+  seed of M3 too (`m2-audit-2.md`, `m3-tuning.md`). Task 12 part 2 reads the long gate again with
+  every rule on, and target 5 of the retune is 5 of 5.
+
+## Proposal for `fin_grip`, provisional (choice C8)
+
+**Set `fin_grip` to 0.6.** Reasons, from the rows and nothing else:
+
+1. At 0.3 a fin of 0.3 on the founder body cuts the slip by 13% and costs 6% of top speed. At 0.6
+   it cuts the slip by 28% and costs nothing in top speed (1.000 against 0.996 bare). A fin at 0.6
+   is a trade a body can win; at 0.3 it is a tax with a small return.
+2. Evolution does not keep the fin at 0.3 today (0.00 to 0.02). A value at which the fin at least
+   does not slow its carrier gives the retune's hunters and prey a fin that can pay once something
+   chases. That is the reading the plan asked for before predators are tuned (design rule R4).
+3. The M2 test is already named for 0.6: `a_fin_turns_only_at_speed_and_a_grip_of_0_6_cuts_the_slip`.
+   The default becomes what the test holds.
+
+Rejected: leaving 0.3 (the fin stays a tax, and the carry stays open into the milestone where turning
+decides who lives); a value above 0.6 (no row reads it). The owner picks. The build takes 0.6 as
+provisional and reads it as step 0 of the switch-on (`m4-tuning.md`), with its own gate rows.

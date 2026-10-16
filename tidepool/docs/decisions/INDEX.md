@@ -246,6 +246,11 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
   gave it bias 0, so one wire above 0 fired it on every cooldown and a new Jaw or gland paid for it, a
   selection against mutant hunters before any trial. Rule P2 named founders only; this reads it as
   the rule for every trigger. The three body outputs still rest at 0. → `../findings/m4-audit-1.md`
+- 2026-10-16: **Provisional, owner to confirm: `fin_grip` 0.6 (choice C8, the motor stop).** At 0.3
+  a fin of 0.3 costs 6% of top speed for 13% less slip; at 0.6 it costs no top speed for 28% less
+  slip. Evolution keeps the fin in neither arm at tick 144,000 (mean size 0.00 to 0.03 with the fin
+  working or dead), so the value is picked from the motor rows alone. The M2 test is already named
+  for 0.6. No taper gene (choice C7): the carry is closed. → `../findings/m4-motor.md`
 
 ## Architecture
 
