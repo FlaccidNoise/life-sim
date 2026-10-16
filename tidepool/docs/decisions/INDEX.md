@@ -251,6 +251,13 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
   slip. Evolution keeps the fin in neither arm at tick 144,000 (mean size 0.00 to 0.03 with the fin
   working or dead), so the value is picked from the motor rows alone. The M2 test is already named
   for 0.6. No taper gene (choice C7): the carry is closed. → `../findings/m4-motor.md`
+- 2026-10-16: **Provisional, owner to confirm: the predation bands of `gate-health` at 12,000 ticks.**
+  `kills_late` 20 or more and `flesh_late` 0.01 or more (a world with no predation reads 0 and
+  0.000), `hunt_hi` 0.8 or less and `prey_lo` 150 or more (a world where every body hunts and any
+  body can be bitten reads 1.000 and 0). `hunt_lo` is not a gate at 12,000: hunters arise by
+  mutation in a world with no founder hunter (0.03 to 0.16) and dead jaws are not yet selected
+  out (0.08 to 0.23). The Start world fails `hunt_hi` and `prey_lo` on 3 of 3: every body hunts
+  by the second half. The retune starts from that. → `../findings/m4-gates.md`
 
 ## Architecture
 
