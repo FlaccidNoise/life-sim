@@ -310,3 +310,25 @@ Each line says which of the three claims it makes: the mechanism fires, evolutio
 
 `make check && make gates && make gates-long`, run after the defaults of parts 3 and 4 and the
 `--predation` flag on the `gates-long` line. The rows follow the run.
+
+### The final proof rows (`271eb80`, load 1 to 3)
+
+`make check` exit 0 (306 Vitest tests). `make gates` exit 0: native 2,548 (255 ns), WASM 2,455 at
+1,540 bodies (265 ns per creature-tick), `gate-health` 3 of 3, `gate-evolve` 3 of 3. **`make
+gates-long` exit 2: 3 of 5**, the eye gap on seeds 6 and 8 at 0.080 and 0.082, the long predation
+bands `kills_late` (226 to 1,040) and `flesh_late` (0.012 to 0.041) passing on 5 of 5. The same
+rows as part 4's gland-on run, digit for digit: deterministic, as the exit audit said. Both saved
+worlds are rebaked at these defaults: `m2-world.tdpl` at tick 36,000 holds 1,713 bodies and 515
+pieces of debris; `m2-world-long.tdpl` at 144,000 holds 631 bodies and 136 pieces.
+
+### T6, the gland's first trial, for target 5: hypothesis before the run
+
+The long gate's two misses come with the gland on and not without it; the gland's clouds set
+seeds 6 and 8 on another path. The one gland lever that changes how often a cloud is made without
+changing what it does is `toxin_cost`. **T6 sets `toxin_cost` 4.0** (the top of its range is 10):
+a cloud costs a third of a half store, so a gland fires less and arrives later. Hypothesis: the
+long gate reads the gland-off world's 5 of 5 on at least 4 of 5 seeds, `poisoned` stays at or
+under part 4's on seed 3, and the 12,000 and 36,000 rows are unchanged (no gland exists there).
+If it reads 5 of 5, 4.0 ships; if not, 2.0 stays and target 5 goes to the owner as read.
+
+The rejection proofs with the bands set (audit item 6) run first; their exit codes go to `gates.md`.
