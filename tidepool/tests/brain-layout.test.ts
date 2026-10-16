@@ -6,7 +6,7 @@ import {
   type BrainNeuron,
   type BrainView,
 } from '../src/protocol';
-import { KIND_MATE, layout } from '../src/ui/brain/layout';
+import { FULL_ROW, fullRows, KIND_MATE, LINE_ROW, layout } from '../src/ui/brain/layout';
 
 const neuron = (owner: number, port: number, kind = 0, gene = 0): BrainNeuron => ({
   owner,
@@ -132,4 +132,24 @@ test('two calls give equal output', () => {
   const brain = founder();
   const first = JSON.stringify(layout(brain));
   expect(JSON.stringify(layout(brain))).toBe(first);
+});
+
+// The pitch of the output rows of a canvas `height` CSS pixels tall, as `draw` in BrainPanel.tsx
+// places them: 10 pixels of pad above and below.
+const pitch = (height: number, outputs: number): number => (height - 20) / outputs;
+
+test('output rows never overlap on the still canvas or the panel, at 3 to 6 outputs', () => {
+  // The still canvas is 110 to 240 pixels tall, the panel's 200 to 320 (index.html).
+  for (const height of [110, 140, 200, 240, 320]) {
+    for (let outputs = 3; outputs <= 6; outputs++) {
+      const p = pitch(height, outputs);
+      expect(fullRows(p) ? FULL_ROW : LINE_ROW).toBeLessThanOrEqual(p);
+    }
+  }
+});
+
+test('the death card at 140 pixels puts 5 names on their gauge lines; 3 at 240 keep the words', () => {
+  // 140 pixels is the still canvas in a window 700 pixels tall, where the five names overlapped.
+  expect(fullRows(pitch(140, 5))).toBe(false);
+  expect(fullRows(pitch(240, 3))).toBe(true);
 });

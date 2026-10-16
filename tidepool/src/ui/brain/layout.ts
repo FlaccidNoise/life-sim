@@ -23,6 +23,17 @@ export interface Group {
 /** The kind of the group of the mate inputs. It is not the kind of a part: the body owns them. */
 export const KIND_MATE = 254;
 
+/**
+ * The height of an output row with its name over the gauge and the words of its two ends under it.
+ * Rows closer than this put the name on the gauge's line and leave the words out.
+ */
+export const FULL_ROW = 40;
+/** The height of an output row on one line: the ring of the player's hands round the dot. */
+export const LINE_ROW = 14;
+
+/** True when output rows `pitch` apart have room for the name over the gauge and the words under. */
+export const fullRows = (pitch: number): boolean => pitch >= FULL_ROW;
+
 const MAX_COLUMNS = 4; // of hidden neurons
 const GROUP_GAP = 0.75; // rows between two groups of inputs
 // The ports of the body, as in crates/sim/src/brain.rs: the mate inputs start at `IN_MATE_SIZE`,

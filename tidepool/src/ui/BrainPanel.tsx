@@ -4,7 +4,7 @@
 
 import { useEffect, useRef } from 'preact/hooks';
 import { KIND_CHEMO, KIND_EYE, type BrainView } from '../protocol';
-import { KIND_MATE, layout, type Group, type Placed } from './brain/layout';
+import { fullRows, KIND_MATE, layout, type Group, type Placed } from './brain/layout';
 import { inputLabel, pickPath, strongestPath } from './brain/words';
 import { Note, NoteMark } from './Note';
 import { brain, brainError, brainOpen, changesShown, pulse, steer, wiringChanged } from './state';
@@ -207,12 +207,22 @@ function draw(
   });
 
   // The outputs: a name and a gauge each. The dot is what the brain asks for. The ring is what the
-  // player does, on the outputs that the player's hands hold.
-  for (let i = b.inputs + b.hidden; i < b.neurons.length; i++) {
+  // player does, on the outputs that the player's hands hold. Rows too close for the name over the
+  // gauge put it on the gauge's line, and the gauges start after the widest name.
+  const firstOut = b.inputs + b.hidden;
+  const full = fullRows(b.outputs > 1 ? y(firstOut + 1) - y(firstOut) : h);
+  ctx.font = '600 10px system-ui, sans-serif';
+  const nameWidth = full
+    ? 0
+    : Math.max(
+        ...b.neurons.slice(firstOut).map((n) => ctx.measureText(outputOf(n.port).name).width),
+      );
+  for (let i = firstOut; i < b.neurons.length; i++) {
     const n = b.neurons[i];
     if (!n) continue;
     const out = outputOf(n.port);
-    const from = x(i) + r + 14;
+    const name = x(i) + r + 14;
+    const from = full ? name : name + nameWidth + 10;
     const to = w - 8;
     const mid = y(i);
     // A value of -1 to 1 as a place on the gauge. A gauge from zero has its 0 at the left end.
@@ -222,13 +232,18 @@ function draw(
     };
     ctx.globalAlpha = 0.95;
     ctx.textAlign = 'left';
-    ctx.font = '600 11px system-ui, sans-serif';
-    ctx.fillText(out.name, from, mid - 13);
-    ctx.globalAlpha = 0.6;
-    ctx.font = '10px system-ui, sans-serif';
-    ctx.fillText(out.low, from, mid + 15);
-    ctx.textAlign = 'right';
-    ctx.fillText(out.high, to, mid + 15);
+    if (full) {
+      ctx.font = '600 11px system-ui, sans-serif';
+      ctx.fillText(out.name, from, mid - 13);
+      ctx.globalAlpha = 0.6;
+      ctx.font = '10px system-ui, sans-serif';
+      ctx.fillText(out.low, from, mid + 15);
+      ctx.textAlign = 'right';
+      ctx.fillText(out.high, to, mid + 15);
+    } else {
+      ctx.font = '600 10px system-ui, sans-serif';
+      ctx.fillText(out.name, name, mid);
+    }
     ctx.strokeStyle = INK;
     ctx.globalAlpha = 0.3;
     ctx.lineWidth = 2;
