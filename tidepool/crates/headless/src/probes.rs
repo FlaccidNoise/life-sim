@@ -1,15 +1,18 @@
-//! The probes of the M2 and M3 rules. Each runs the default world and prints what it reads. None
-//! has a band.
+//! The probes of the M2 and M3 rules, and the encounter probe that M4 reads before any rule. Each
+//! runs the default world and prints what it reads. None has a band.
 
 use std::cmp::Reverse;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::Write;
 
 use tidepool_sim::brain::{self, IN_MATE_SIZE};
 use tidepool_sim::creature::MAX_EYES;
+use tidepool_sim::creature::MAX_RADIUS;
 use tidepool_sim::eye::{EYE_HALF_MIN, EYE_HALF_SPAN};
 use tidepool_sim::genome::{Genome, Node, BODY, KIND_CHEMO, KIND_EYE};
-use tidepool_sim::grid::CELL;
+use tidepool_sim::grid::{Grid, CELL};
+use tidepool_sim::math::sin_cos;
+use tidepool_sim::motor::NO_TOUCH;
 use tidepool_sim::world::World;
 
 use crate::evolve::{self, mean_sd, of_sense, top_speed, turn_rate, Mind};
@@ -490,6 +493,213 @@ pub fn mix(argv: &[String]) {
     }
 }
 
+/// Two bodies in overlap, by uid, the lower first.
+type Pair = (u32, u32);
+
+/// `probe-encounter` reads `contact_ticks` over pairs that parted in this many ticks before a row.
+const CONTACT_WINDOW: u32 = 1000;
+
+/// What `motor::step` finds on the coming tick, read from the world before it. Each `Vec<bool>`
+/// holds one value for each slot of `living`.
+struct Meet {
+    living: Vec<usize>,
+    /// Overlaps another body.
+    overlaps: Vec<bool>,
+    /// Overlaps another body inside the cone of its nose.
+    faces: Vec<bool>,
+    /// The same, counting only a full-grown other body.
+    faces_adult: Vec<bool>,
+    pairs: Vec<Pair>,
+    /// Each body and each other body inside its cone that it overlaps, and of those the ones where
+    /// one is the parent of the other.
+    facing_contacts: u32,
+    facing_kin: u32,
+}
+
+/// The overlap test is that of `motor::step`. The cone has half angle `arc` around the heading:
+/// `cos_arc` is its cosine.
+fn meet(world: &World, grid: &mut Grid, cos_arc: f32) -> Meet {
+    let c = &world.creatures;
+    grid.rebuild(&c.slots, &c.x, &c.y);
+    let living: Vec<usize> = live(world).collect();
+    let mut radius = vec![0.0; c.slots.high_water() as usize];
+    for &s in &living {
+        radius[s] = c.radius(s);
+    }
+    let n = living.len();
+    let mut m = Meet {
+        overlaps: vec![false; n],
+        faces: vec![false; n],
+        faces_adult: vec![false; n],
+        pairs: Vec::new(),
+        facing_contacts: 0,
+        facing_kin: 0,
+        living,
+    };
+    for (i, &s) in m.living.iter().enumerate() {
+        let (px, py, ri) = (c.x[s], c.y[s], radius[s]);
+        let (hs, hc) = sin_cos(c.heading[s]);
+        let reach = ri + MAX_RADIUS;
+        grid.for_each_in_box(px - reach, py - reach, px + reach, py + reach, |j| {
+            let j = j as usize;
+            // From this body to the other.
+            let (dx, dy) = (c.x[j] - px, c.y[j] - py);
+            let rs = ri + radius[j];
+            let d2 = dx * dx + dy * dy;
+            if !(d2 < rs * rs && d2 > 0.0) {
+                return;
+            }
+            m.overlaps[i] = true;
+            if s < j {
+                let (a, b) = (c.uid[s], c.uid[j]);
+                m.pairs.push((a.min(b), a.max(b)));
+            }
+            if dx * hc + dy * hs >= cos_arc * d2.sqrt() {
+                m.faces[i] = true;
+                m.faces_adult[i] |= c.growth[j] >= 1.0;
+                m.facing_contacts += 1;
+                m.facing_kin += u32::from(c.parent[s] == c.uid[j] || c.parent[j] == c.uid[s]);
+            }
+        });
+    }
+    m
+}
+
+/// The pairs in overlap, followed from tick to tick.
+#[derive(Default)]
+struct Contacts {
+    /// By pair in overlap now: the first tick of the overlap.
+    open: HashMap<Pair, u32>,
+    /// Of each pair that parted: the first tick it was not in overlap, and its ticks in overlap.
+    parted: Vec<(u32, u32)>,
+}
+
+impl Contacts {
+    /// `pairs` are the pairs in overlap on `tick`, in either order and with repeats.
+    fn see(&mut self, tick: u32, pairs: &[Pair]) {
+        let now: HashSet<Pair> = pairs.iter().map(|&(a, b)| (a.min(b), a.max(b))).collect();
+        let Contacts { open, parted } = self;
+        open.retain(|pair, &mut first| {
+            let held = now.contains(pair);
+            if !held {
+                parted.push((tick, tick - first));
+            }
+            held
+        });
+        for pair in now {
+            open.entry(pair).or_insert(tick);
+        }
+    }
+
+    /// The median ticks in overlap over the pairs that parted in the `CONTACT_WINDOW` ticks up to
+    /// `tick`. Older pairs are dropped.
+    fn median_before(&mut self, tick: u32) -> f32 {
+        self.parted.retain(|&(at, _)| at + CONTACT_WINDOW >= tick);
+        median(self.parted.iter().map(|&(_, ticks)| ticks as f32).collect())
+    }
+}
+
+/// Runs `world` to tick `ticks` and hands `row` one row at each multiple of `every`. The probe
+/// reads the world before each tick and the motor after it. It writes nothing that the world
+/// keeps and draws no random number.
+fn encounter(world: &mut World, ticks: u32, every: u32, arc: f32, mut row: impl FnMut(String)) {
+    let mut grid = Grid::new(world.w, world.h);
+    let cos_arc = sin_cos(arc).1;
+    let mut contacts = Contacts::default();
+    while world.tick < ticks {
+        let tick = world.tick;
+        let m = meet(world, &mut grid, cos_arc);
+        // The row reads the bodies as the motor found them on the last tick before it.
+        let at_row = (tick + 1).is_multiple_of(every);
+        let near = if at_row {
+            nearest_reach(world)
+        } else {
+            (0.0, 0.0)
+        };
+        world.tick();
+        let touch = &world.motor.touch;
+        for (i, &s) in m.living.iter().enumerate() {
+            assert_eq!(
+                m.overlaps[i],
+                touch[s] != NO_TOUCH,
+                "probe-encounter disagrees with motor::step on slot {s} at tick {tick}. Fix: make `meet` use the overlap test and radii of `motor::step`."
+            );
+        }
+        contacts.see(tick, &m.pairs);
+        if at_row {
+            let share = |of: &[bool]| of.iter().filter(|&&b| b).count() as f64 / of.len() as f64;
+            row(format!(
+                "tick={} creatures={} nearest={:.1} reach={:.1} touching={:.3} facing={:.3} facing_adult={:.3} contact_ticks={:.0} kin_share={:.2}",
+                world.tick,
+                m.living.len(),
+                near.0,
+                near.1,
+                share(&m.overlaps),
+                share(&m.faces),
+                share(&m.faces_adult),
+                contacts.median_before(world.tick),
+                f64::from(m.facing_kin) / f64::from(m.facing_contacts),
+            ));
+        }
+    }
+}
+
+/// The median distance from a body to its nearest body, centre to centre, and the median sum of
+/// the radii of the two. Of two at one distance, the lower slot.
+fn nearest_reach(world: &World) -> (f32, f32) {
+    let c = &world.creatures;
+    let living: Vec<usize> = live(world).collect();
+    let (mut gaps, mut reaches) = (Vec::new(), Vec::new());
+    for &s in &living {
+        let mut near = (f32::INFINITY, s);
+        for &o in living.iter().filter(|&&o| o != s) {
+            let (dx, dy) = (c.x[o] - c.x[s], c.y[o] - c.y[s]);
+            let d2 = dx * dx + dy * dy;
+            if d2 < near.0 {
+                near = (d2, o);
+            }
+        }
+        if near.1 != s {
+            gaps.push(near.0.sqrt());
+            reaches.push(c.radius(s) + c.radius(near.1));
+        }
+    }
+    (median(gaps), median(reaches))
+}
+
+/// `probe-encounter`. One row for each seed at each multiple of `--every`: how near the bodies
+/// are, how many touch and face another, and how long a contact lasts.
+pub fn encounter_probe(argv: &[String]) {
+    // `--every` and `--arc` are this probe's own flags. `args` reads the others.
+    let (mut every, mut arc, mut others) = (4000, 0.6, Vec::new());
+    let mut it = argv.iter();
+    while let Some(flag) = it.next() {
+        match flag.as_str() {
+            "--every" => every = value::<u32>(flag, it.next().map(String::as_str)),
+            "--arc" => arc = value::<f32>(flag, it.next().map(String::as_str)),
+            _ => others.push(flag.clone()),
+        }
+    }
+    let a = args(&others, &[1, 2, 3], Some("--ticks"), 12000);
+    if every == 0 || every > a.ticks {
+        usage(&format!(
+            "--every needs a value from 1 to --ticks, which is {}",
+            a.ticks
+        ));
+    }
+    if !(0.0..=std::f32::consts::PI).contains(&arc) {
+        usage("--arc needs a half angle in radians from 0 to 3.14159");
+    }
+    for &seed in &a.seeds {
+        let mut world = default_world(seed, &a.params);
+        encounter(&mut world, a.ticks, every, arc, |row| {
+            println!("seed={seed} {row}");
+            // A killed run keeps the rows it finished.
+            std::io::stdout().flush().expect("flush stdout");
+        });
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use tidepool_sim::genome::{KIND_FILTER, KIND_FIN, KIND_FLAGELLUM};
@@ -706,6 +916,83 @@ mod tests {
         }
         assert!(with_heir > 0 && without > 0, "{with_heir} and {without}");
     }
+
+    /// Two full-grown bodies that overlap, both with heading 0. The one behind has the other
+    /// in its cone, and the one ahead does not. Then a body behind that heads away: nobody faces.
+    #[test]
+    fn facing_counts_a_body_ahead_and_not_one_behind() {
+        let faces = |behind_heading: f32| {
+            let mut world = World::new(1, 256.0, 256.0);
+            let at = |x: f32, heading: f32| SpawnAt {
+                x,
+                y: 100.0,
+                heading,
+                growth: 1.0,
+                energy01: 0.5,
+                parent: 0,
+                generation: 0,
+                mark: 0,
+            };
+            let a = world
+                .spawn(Genome::default(), at(100.0, 0.0))
+                .expect("slot") as usize;
+            let reach = 2.0 * world.creatures.radius(a);
+            world
+                .spawn(Genome::default(), at(100.0 - 0.5 * reach, behind_heading))
+                .expect("slot");
+            let mut grid = Grid::new(world.w, world.h);
+            let m = meet(&world, &mut grid, sin_cos(0.6).1);
+            assert_eq!(m.overlaps, [true, true]);
+            assert_eq!(m.pairs, [(1, 2)]);
+            (m.faces, m.faces_adult)
+        };
+        // Slot 1 is behind slot 0 and heads the same way.
+        assert_eq!(faces(0.0), (vec![false, true], vec![false, true]));
+        // Slot 1 heads away from slot 0.
+        assert_eq!(faces(3.0), (vec![false, false], vec![false, false]));
+    }
+
+    #[test]
+    fn contact_ticks_counts_one_pair_once_until_it_parts() {
+        let mut contacts = Contacts::default();
+        contacts.see(10, &[(1, 2), (2, 1)]);
+        contacts.see(11, &[(2, 1), (1, 3)]);
+        contacts.see(12, &[(1, 2)]);
+        assert_eq!(contacts.parted, [(12, 1)]);
+        contacts.see(13, &[]);
+        assert_eq!(contacts.parted, [(12, 1), (13, 3)]);
+        // They meet again: a new contact.
+        contacts.see(20, &[(1, 2)]);
+        contacts.see(22, &[]);
+        assert_eq!(contacts.parted, [(12, 1), (13, 3), (22, 2)]);
+        assert_eq!(contacts.open.len(), 0);
+        // Sorted 1, 2, 3.
+        assert_eq!(contacts.median_before(22), 2.0);
+        // 12 is out of the window and dropped. Sorted 2, 3.
+        assert_eq!(contacts.median_before(12 + CONTACT_WINDOW + 1), 3.0);
+        assert_eq!(contacts.parted, [(13, 3), (22, 2)]);
+        assert!(contacts.median_before(23 + CONTACT_WINDOW).is_nan());
+    }
+
+    /// The probe reads, never writes, and draws no random number: the world after the probe is
+    /// the world after a plain run.
+    #[test]
+    fn the_probe_draws_nothing_and_leaves_the_rows_of_the_gates() {
+        let mut world = default_world(1, &[]);
+        let mut rows = Vec::new();
+        encounter(&mut world, PROBE_TICKS, PROBE_TICKS / 2, 0.6, |r| {
+            rows.push(r)
+        });
+        let mut plain = default_world(1, &[]);
+        plain.run(PROBE_TICKS);
+        assert_eq!(world.tick, PROBE_TICKS);
+        assert_eq!(world.state_hash(), plain.state_hash());
+        assert_eq!(rows.len(), 2, "{rows:?}");
+        let touching: f64 = column(&rows[1], "touching").parse().expect("a number");
+        assert!(touching > 0.0, "{}", rows[1]);
+    }
+
+    const PROBE_TICKS: u32 = 300;
 
     const PICK: u32 = 150;
     const CHECKED: usize = 10;
