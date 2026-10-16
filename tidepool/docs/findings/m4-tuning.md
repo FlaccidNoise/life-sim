@@ -147,3 +147,31 @@ two thirds of a half store) on the T2 set.** Hypothesis: at 12,000 the hunter sh
 fall (hunters cannot afford to lunge at everything), prey holds over 150 on 3 of 3, `kills_late`
 stays over 20; at 36,000 hunters are under 50% of the living on at least 2 of 3 against T2's 60%.
 If it reads so, the long run follows.
+
+### T5 rows (`c35bf57`)
+
+| | `gate-health --predation` | `gate-evolve` 36k | `hunt_lo` to `hunt_hi` 12k | `prey_lo` | `kills_late` | Hunters : prey at 36k |
+|---|---|---|---|---|---|---|
+| T5 `lunge_cost` 2.0 | 0/3 (`flesh_late` 0.000 to 0.001; seed 2 `kills_late` 2) | 3/3 | 0.01 to 0.19 | 1,087 to 1,293 | 2, 43, 48 | 460 : 1,138; 910 : 564; 923 : 620 |
+
+A dearer lunge delays the hunters on one seed (seed 2: 55 hunters and 20 kills at 12,000, then 910
+hunters by 36,000) and changes nothing on the others against T2 (893 to 1,065 hunters at 36,000). The
+reason is in rule J1: a jaw bites on contact with no lunge; the lunge only raises the bite. The cost
+of hunting at low prey is not reached by any lunge parameter.
+
+### The stop of rule 5, and what ships
+
+Five trials at the boom: the mass ratio sets the pace of the takeover, and no other lever moves it.
+Hunters take over because rule J1 gives a jaw a payoff from the first contact with anyone's young
+and rule K1 gives it no cost but mass, and a hunter keeps its Filter. The draft measured the same
+(C11, C15, C16) and named negative frequency dependence as the need. **That is a rule, and a rule is
+the owner's.** The trials for the takeover stop here, with 7 of 12 unspent.
+
+What ships, on the owner's instruction that every rule is on: **the ratio-3 set.** It is the world
+the rows like best: 1,340 to 1,520 bodies at 12,000 with hunters at a fifth and prey everywhere,
+486 to 904 bodies at 144,000 with every M2 and brain band held on 5 of 5 seeds, 240 to 690 kills per
+2,000 ticks, a boom and bust on one seed in three and persistent prey on another. Its defaults are
+written below. The predation bands stay in the code as provisional and are not judged by `make
+gates`: this world fails `flesh_late` at 12,000 (0.001 to 0.002 against 0.01) and `hunt_hi` and
+`prey_lo` at 144,000 (every seed), so target 1 and target 4 are not met, and they go to the owner
+with these rows. Targets 2, 3, and 5 are read in part 2 below.

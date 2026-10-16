@@ -1087,8 +1087,10 @@ mod tests {
     /// chemoreceptor taken from every founder: nobody has a sense.
     #[test]
     fn a_census_row_reads_the_senses_of_a_world() {
+        // `founder_jaw` is 0 too: a fifth of the founders carry a jaw at the default.
         let no_eye = [
             (id::FOUNDER_EYE, 0.0),
+            (id::FOUNDER_JAW, 0.0),
             (id::MUT_PART_ADD, 0.0),
             (id::MUT_PART_REMOVE, 0.0),
             (id::MUT_PART_DUP, 0.0),

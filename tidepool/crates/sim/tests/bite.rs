@@ -25,6 +25,14 @@ fn still_water() -> World {
         w.params.set(k, 0.0);
     }
     w.params.set(id::BITE_RATE, 0.5);
+    // The tests were written at the Off defaults: any body can be bitten, no guard does anything,
+    // a shell adds no drag, and a lunge does not raise the bite. Each test that reads one of these
+    // sets it itself.
+    w.params.set(id::BITE_MASS_RATIO, 0.0);
+    w.params.set(id::SHELL_BLOCK, 0.0);
+    w.params.set(id::SPIKE_HURT, 0.0);
+    w.params.set(id::SHELL_DRAG, 0.0);
+    w.params.set(id::LUNGE_BITE, 1.0);
     w
 }
 

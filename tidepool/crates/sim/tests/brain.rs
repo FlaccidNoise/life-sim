@@ -211,7 +211,7 @@ fn the_starter_brain_of_a_founder_with_an_eye_adds_the_eye_wires() {
     assert_eq!(wire(&g.conns[55]), (eye(EYE_FOOD_A), TURN, look));
     assert_eq!(wire(&g.conns[56]), (eye(EYE_FOOD_B), TURN, -look));
     // After the accept wires, rule P2 of M4: a hit to dash, and teeth seen on one side turn the
-    // body to the other side and dash. At the Off value of `starter_flee` each weight is 0.
+    // body to the other side and dash, each at `starter_flee`.
     let (dash, flee) = (Node::body(OUT_DASH), p.get(id::STARTER_FLEE));
     let want = [
         (Node::body(IN_HURT), dash, flee),
@@ -221,7 +221,6 @@ fn the_starter_brain_of_a_founder_with_an_eye_adds_the_eye_wires() {
         (eye(EYE_JAW_B), dash, flee),
     ];
     assert_eq!(g.conns[60..].iter().map(wire).collect::<Vec<_>>(), want);
-    assert_eq!(flee, 0.0);
 }
 
 #[test]
@@ -525,6 +524,7 @@ fn a_body_hit_on_the_left_reads_a_negative_side() {
     // right. Each biter faces its prey from 7 units away.
     let mut w = still_world();
     w.params.set(id::BITE_RATE, 0.5);
+    w.params.set(id::BITE_MASS_RATIO, 0.0); // the biter is not three times its prey
     let mut jawed = Genome::default();
     jawed.set_size(KIND_JAW, 0.5);
     let left = put(&mut w, Genome::default(), 300.0, 500.0, 0.0);

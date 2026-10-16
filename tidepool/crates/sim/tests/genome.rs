@@ -1297,9 +1297,10 @@ fn a_new_jaw_arrives_with_part_wires_into_lunge() {
 fn with_founder_jaw_0_no_founder_draw_is_added() {
     // The draws of `seed_founders` as the M3 rule makes them: a genome, 8 places of 3 draws, a
     // heading, and an age.
-    let p = Params::new();
-    assert_eq!(p.get(id::FOUNDER_JAW), 0.0);
+    let mut p = Params::new();
+    p.set(id::FOUNDER_JAW, 0.0);
     let mut w = World::new(3, 1536.0, 1024.0);
+    w.params.set(id::FOUNDER_JAW, 0.0);
     let mut rng = w.rng_spawn.clone();
     w.seed_founders(5, 0);
     let mut genomes = Vec::new();

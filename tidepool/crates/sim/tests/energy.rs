@@ -179,6 +179,8 @@ fn a_creature_dies_at_its_own_old_gene() {
 fn a_juvenile_that_starves_is_counted() {
     let mut w = empty();
     still(&mut w);
+    // The first body's corpse must not feed the second.
+    w.params.set(id::CORPSE_SHARE, 0.0);
     add(&mut w, 500.0, 1.0, 0.01, |_| {});
     w.run(50);
     assert_eq!((w.creatures.slots.count(), w.stats.starved_juv), (0, 0));
