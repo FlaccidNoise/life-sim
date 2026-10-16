@@ -65,3 +65,38 @@ trial is one change on top of step 4, read at 12,000 (`gate-health --predation`)
 | T3 | `shell_block` 2.0 and `spike_hurt` 2.0 (the guards, one group) | A shell of 0.5 blocks a whole bite and a spike of 0.5 costs a biter its bite in energy. At 12,000 no founder has either, so nothing changes; by 36,000 a guard that arrives by mutation pays at once, and `shell` or `spike` in `probe-hunt` rises above 0.1 on at least one seed. Not expected to break the takeover alone. |
 | T4 | `bite_rate` 0.2 | A bite of 1.2 per tick: a median contact of 6 ticks moves 7, under a newborn's store, so most contacts wound and do not kill. Kills fall by two thirds, the takeover slows, but a jaw still pays over a life: `hunt_hi` still near 1.0 by 12,000 on 3 of 3. |
 
+### T1 to T4 rows (`f9c67ef`, load 1 to 2)
+
+| Trial | `gate-health --predation` | `gate-evolve` 36k | Bodies 12k | `hunt_lo` to `hunt_hi` 12k | `prey_lo` | `kills_late` | `flesh_late` | Hunters : prey at 36k (`probe-hunt`) |
+|---|---|---|---|---|---|---|---|---|
+| T1 ratio 2.0 | **3/3** | 0/3 (`eye_gap` 0.05 to 0.08) | 1,243 to 1,287 | 0.11 to 0.66 | 437 to 801 | 490 to 911 | 0.02 to 0.03 | 840 to 1,035 : 6 to 22 |
+| T2 ratio 3.0 | 0/3 (`flesh_late` 0.001 to 0.002 < 0.01) | **3/3** | 1,337 to 1,516 | 0.09 to 0.29 | 925 to 1,224 | 43 to 83 | 0.001 to 0.002 | 893 to 1,065 : 490 to 648 |
+| T3 guards ×2 | 0/3 (`hunt_hi` 1.0, `prey_lo` 0) | 0/3 | 551 to 637 | 0.99 to 1.00 | 0 | 2,030 to 2,590 | 0.16 to 0.20 | 200 to 307 : 0 |
+| T4 `bite_rate` 0.2 | 0/3 (the same) | 0/3 | 554 to 769 | 0.94 to 1.00 | 0 | 1,959 to 2,339 | 0.16 to 0.21 | 203 to 332 : 0 |
+
+- **The mass ratio is the one lever that moves the world, and it moves the speed of the takeover,
+  not its end.** At 2.0 prey survives the first 12,000 ticks (every predation band passes) and is
+  gone by 24,000 (`prey` 5 to 56). At 3.0 hunters rise from 17% to 60% of the living over 36,000
+  ticks with 490 to 648 prey left and a healthy world (1,383 to 1,713 bodies, `len` 9.5 to 10.7,
+  both senses held, `gate-evolve` 3 of 3). The trend is the same.
+- T2 fails only my provisional `flesh_late` band of 0.01: it reads 0.001 to 0.002 with 43 to 83
+  kills per 2,000 ticks. The bad world reads 0.000 exactly, so the band's value is a choice between
+  0.000 and this world's rows, as the plan's method says. It is not changed on one trial.
+- **Stronger guards (T3) and a weaker bite (T4) change nothing at 12,000 or 36,000.** No founder
+  has a guard; by 36,000 the mean spike and shell sizes are 0.00 to 0.07. A bite of 1.2 per tick
+  still kills a newborn in two contacts.
+- The starter wires work: `lunge_fire_ctx` 0.98 to 0.99 at 12,000 (a lunge fires with a body in the
+  cone) and `dash_fire_ctx` 0.99 to 1.00 (a dash fires with a hit or teeth in view) on every seed.
+
+**Four trials at the boom.** Rule 5 says stop and report when four trials at a boom move nothing.
+T1 and T2 moved the speed, not the end, and T3 and T4 moved nothing. Before the report, one reading
+the trials cannot give: whether a guard that arrives by mutation gives prey a foothold over
+144,000 ticks. A shell or a spike pays only when hunters are common, and costs mass always: that is
+the frequency dependence the draft named, if evolution finds it in time. The ratio-3 world is the
+one where prey is still there to find it.
+
+**Hypothesis for the long read, before the run:** `gate-evolve --brain` at 144,000 on seeds 1, 4, 5,
+6, 8 with the T2 set (ratio 3.0). Hunters pass 0.8 of the living on at least 3 of 5 seeds by the
+second half (`hunt_hi` fails), prey holds over 150 on at most 2 of 5, the mean shell or spike size
+in `probe-hunt` at 144,000 stays under 0.1 on 3 of 3 seeds, and the M2 and brain bands pass on 4 of
+5 (the scent on seed 8 is the known fragile one).
