@@ -32,9 +32,12 @@ The previous handoff (mid-M4) is at `git show 9a0b25a:HANDOFF.md`.
 
 ## What comes next
 
-1. The owner plays (`make dev`, `/?world=/m2-world.tdpl`) and answers the open problems of
-   `m4-exit.md`: the takeover rule, the bench's reference population (C9), the bands, the provisional
-   entries, the budgets.
+1. The owner answered on 2026-10-16 by delegation: hunters that eat only meat, a herbivore to
+   carnivore spectrum, and "research it and decide" for the rest. The decisions are in
+   `tidepool/docs/decisions/INDEX.md` (2026-10-16), the evidence in
+   `tidepool/docs/research/diet-coexistence.md`, and the plan in
+   `tidepool/docs/plans/2026-10-16-m4-retune-diet.md`, which **waits for the owner's go**. The
+   owner's playtest checks stay open.
 2. M5 (Deep time) has no plan yet. It carries from M4: the kill marks lost when the page holds
    every buffer, the eye gap's changed meaning (the jaw input is not scaled by `eye_gain`), and the
    guards and gland that evolution does not use. Fixed after the exit, unpushed: the still brain's

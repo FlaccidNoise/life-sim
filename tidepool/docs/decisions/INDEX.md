@@ -241,25 +241,28 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
   feature that fails its measurement stays on and goes to the owner as a finding, since deleting
   it is the owner's call. The hard stops of the plan are unchanged. → `../plans/2026-10-14-m4-teeth.md`
   "How the build runs without the owner"
-- 2026-10-16: **Provisional, owner to confirm: a trigger output that arrives by mutation or a cross
-  rests closed at `starter_trigger_bias`, as a founder's does.** Found by the mid-build audit: `prune`
+- 2026-10-16: **Decided by the owner's delegation of 2026-10-16 (was provisional): a trigger output
+  that arrives by mutation or a cross rests closed at `starter_trigger_bias`, as a founder's does.** Found by the mid-build audit: `prune`
   gave it bias 0, so one wire above 0 fired it on every cooldown and a new Jaw or gland paid for it, a
   selection against mutant hunters before any trial. Rule P2 named founders only; this reads it as
   the rule for every trigger. The three body outputs still rest at 0. → `../findings/m4-audit-1.md`
-- 2026-10-16: **Provisional, owner to confirm: `fin_grip` 0.6 (choice C8, the motor stop).** At 0.3
+- 2026-10-16: **Decided by the owner's delegation of 2026-10-16 (was provisional): `fin_grip` 0.6
+  (choice C8, the motor stop).** At 0.3
   a fin of 0.3 costs 6% of top speed for 13% less slip; at 0.6 it costs no top speed for 28% less
   slip. Evolution keeps the fin in neither arm at tick 144,000 (mean size 0.00 to 0.03 with the fin
   working or dead), so the value is picked from the motor rows alone. The M2 test is already named
   for 0.6. No taper gene (choice C7): the carry is closed. → `../findings/m4-motor.md`
-- 2026-10-16: **Provisional, owner to confirm: the predation bands of `gate-health` at 12,000 ticks.**
+- 2026-10-16: **Withdrawn 2026-10-16 (was provisional): the predation bands of `gate-health` at
+  12,000 ticks.** The diet retune sets them again from its own rows (Task 7 of
+  `../plans/2026-10-16-m4-retune-diet.md`). The record of what they were:
   `kills_late` 20 or more and `flesh_late` 0.01 or more (a world with no predation reads 0 and
   0.000), `hunt_hi` 0.8 or less and `prey_lo` 150 or more (a world where every body hunts and any
   body can be bitten reads 1.000 and 0). `hunt_lo` is not a gate at 12,000: hunters arise by
   mutation in a world with no founder hunter (0.03 to 0.16) and dead jaws are not yet selected
   out (0.08 to 0.23). The Start world fails `hunt_hi` and `prey_lo` on 3 of 3: every body hunts
   by the second half. The retune starts from that. → `../findings/m4-gates.md`
-- 2026-10-16: **Provisional, owner to confirm: the predation bands of the long gate at 144,000 ticks
-  are `kills_late` 20 or more and `flesh_late` 0.01 or more, judged under `--brain --predation`.**
+- 2026-10-16: **Withdrawn 2026-10-16 (was provisional), reset by the diet retune's Task 7: the
+  predation bands of the long gate at 144,000 ticks were `kills_late` 20 or more and `flesh_late` 0.01 or more, judged under `--brain --predation`.**
   A world with a dead jaw (`bite_rate=0`) reads 0 and 0.000 on 5 of 5 seeds; the default world
   240 to 690 and 0.022 to 0.037. `hunt_lo` is not a gate at either length: a dead jaw costs a tenth
   of a part's mass and drifts to 4% to 96% of the living by 144,000. `hunt_hi` and `prey_lo` are not
@@ -279,6 +282,34 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
   met; target 5 is met with the gland off (5 of 5) and not with it on (3 of 5, the eye gap on seeds
   6 and 8 at 0.08). Untried levers: the guards at ratio 3 or 4.0, `founder_jaw`, `corpse_share`, a
   wider range for the ratio. → `../findings/m4-tuning.md`
+- 2026-10-16: **The owner delegated the open M4 choices.** "I'm good with whatever rule change makes
+  the most sense in terms of realistic simulation behavior", and for the rest: research it and make
+  the decision that makes the most sense. The entries below dated 2026-10-16 that say "by the
+  owner's delegation" rest on this. The plan for the rule still waits for the owner's go.
+- 2026-10-16: **The takeover is answered by a diet gene with the trade-off on intake (rule D1).** One
+  body gene `diet` in [0, 1]: Filter intake times `(1 − diet)^diet_k`, a bite's take times
+  `diet^diet_k`, `diet_k` above 1, so `diet` 1 is an obligate carnivore and 0 a pure herbivore. The
+  owner asked for hunters that eat only meat and a herbivore to carnivore spectrum. The literature
+  says a trade-off on digestion alone lets one specialist win, and one on intake with an exponent
+  above 1 lets a lineage split (Rueffler et al. 2006). The draft measured a lasting split on 8 of 8
+  seeds with a continuous diet gene and a generalist penalty. Predator interference (I1) is held in
+  reserve. A gene, not a ratio of mouth sizes: the owner asked for a preference, and a gene is one
+  number that a chart and a card can show. → `../research/diet-coexistence.md`,
+  `../plans/2026-10-16-m4-retune-diet.md`
+- 2026-10-16: **The eye's jaw input is scaled by `eye_gain` (rule E1), by the owner's delegation.**
+  A blind eye must not see teeth, or the eye gap of the long gate does not measure blindness
+  (item 5 of `../findings/m4-audit-2.md`). → `../plans/2026-10-16-m4-retune-diet.md` Task 1
+- 2026-10-16: **"The shipped set" (provisional) is superseded by the diet retune.** The ratio-3 set
+  stays the default until the retune ships its own.
+- 2026-10-16: **A bigger world is M6, built as zones with gaps, not as more area, by the owner's
+  delegation.** The owner asked for a much bigger world with independent pockets of evolution. The
+  literature: linked patches kept predator and prey three times longer than one tank of the same
+  volume, and too much migration synchronises patches and favours over-exploiting hunters
+  (`../research/diet-coexistence.md` (d)). The draft: world size alone was cosmetic, and isolation
+  came from barriers, not gaps. Throughput is per body, so more area at the same density would break
+  the time-skip budget. M6's column already has zones and narrow gaps: the gap width is its
+  migration lever, measured with too little and too much. After the diet retune and M5, since
+  pockets need coexistence to diversify. → `../roadmap.md` M6
 
 ## Architecture
 
@@ -305,6 +336,17 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
   seeded 3072 by 1536 world. The seeded world was an estimate from before the ecology existed and does
   not hold its population. The floor and the reference population of 1,500 do not change.
   → `../gates.md`, `../findings/m1-tuning.md`
+- 2026-10-16: **The throughput floor is read per creature-tick: at most 278 nanoseconds at the
+  reference world, which is 2,400 ticks per second at 1,500 bodies (choice C9), by the owner's
+  delegation.** The M4 world holds 1,540 bodies, so it read 2,385 to 2,451 ticks per second at 265 to
+  272 ns: faster per body than the floor asks, and failing one reading in three on the extra bodies.
+  The per-body reading says whether the code got slower. How long a skip takes in a world that holds
+  more bodies is M5's exit, not this gate. The void line stays.
+  → `../plans/2026-10-16-m4-retune-diet.md` Task 5, `../findings/m4-exit.md` "Throughput"
+- 2026-10-16: **The debris pool stays 4,096 pieces and `MAX_NEURONS` stays 96, by the owner's
+  delegation.** The pool is 13% used at tick 36,000. A body with eight cones holds 55 hidden neurons
+  and not the 64 planned, but bodies hold about 4 hidden neurons at tick 144,000. Neither budget is
+  near a measured limit. → `../findings/m4-exit.md` "Open problems" item 5
 - 2026-10-10: A world side is at most 16,384 units. The scent field has 8-unit cells, so a larger bound
   let a crafted snapshot allocate about 512 MB. → `../../crates/sim/src/world.rs` (`MAX_WORLD_SIZE`)
 - 2026-10-10: The fertility map is made when the founders are seeded, not when the world is made, so
