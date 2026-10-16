@@ -42,7 +42,7 @@ pub struct Control {
     pub killer: u32,
     /// The readout of the killer's brain at the kill (`brain::readout`). Empty with no killer.
     pub killer_brain: Vec<u32>,
-    /// The abilities that the player holds: `ABILITY_` bits. Stored. No rule reads it yet.
+    /// The abilities that the player holds: `ABILITY_` bits. Read while the input is manual.
     pub abilities: u32,
     /// Scratch, not saved. The last list that `write_heirs` made.
     pub heirs: Vec<u32>,
@@ -155,13 +155,18 @@ impl World {
 }
 
 /// If a creature is possessed and the input is manual, the player's values replace that slot's
-/// commands. Its `cmd_accept` is 1 while the player courts and -1 while not.
+/// commands. Its `cmd_accept` is 1 while the player courts and -1 while not. Each of its ability
+/// commands is 1 with its `ABILITY_` bit held and -1 without (rule X2 of the M4 plan).
 pub fn apply(world: &mut World) {
     let (c, slot) = (&world.control, world.control.possessed_slot as usize);
     if c.possessed != 0 && c.manual {
         world.creatures.cmd_thrust[slot] = c.thrust;
         world.creatures.cmd_turn[slot] = c.turn;
         world.creatures.cmd_accept[slot] = if c.accept { 1.0 } else { -1.0 };
+        let held = |bit: u32| if c.abilities & bit != 0 { 1.0 } else { -1.0 };
+        world.creatures.cmd_dash[slot] = held(ABILITY_DASH);
+        world.creatures.cmd_lunge[slot] = held(ABILITY_LUNGE);
+        world.creatures.cmd_toxin[slot] = held(ABILITY_TOXIN);
     }
 }
 
