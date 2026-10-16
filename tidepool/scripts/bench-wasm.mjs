@@ -153,7 +153,10 @@ const mid = tps.length >> 1;
 const median = tps.length % 2 === 1 ? tps[mid] : (tps[mid - 1] + tps[mid]) / 2;
 const alive = aliveMeans.reduce((a, b) => a + b, 0) / aliveMeans.length;
 const pass = median >= floor;
+// The cost of one body for one tick: it reads whether the code got slower in a world that holds fewer
+// bodies (choice C9 of the M4 plan).
+const nsPerCreatureTick = Math.round(1e9 / (median * alive));
 console.log(
-  `bench-wasm creatures=${alive.toFixed(0)} median_tps=${median.toFixed(0)} floor=${floor.toFixed(0)} ${pass ? 'PASS' : 'FAIL'}`,
+  `bench-wasm creatures=${alive.toFixed(0)} median_tps=${median.toFixed(0)} ns_per_creature_tick=${nsPerCreatureTick} floor=${floor.toFixed(0)} ${pass ? 'PASS' : 'FAIL'}`,
 );
 process.exit(pass ? 0 : 1);

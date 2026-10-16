@@ -23,6 +23,16 @@ const LATE_BIRTH_TICKS: u32 = 2000;
 const PARKED_ENERGY01: f32 = 0.9;
 const PARKED_SPEED: f32 = 0.05;
 
+// The predation bands, read over a run of 12,000 ticks (choice C6 of the M4 plan). `None` is a
+// band that is not set: the gate prints the measure and does not judge it. A band that is set is
+// judged only under `--predation`. `docs/gates.md` holds the proofs.
+const PREDATION: Bands = Bands::OFF;
+/// The hunter share and the prey count are sampled on each multiple of this many ticks in the second
+/// half of the run.
+const HUNT_SAMPLE_TICKS: u32 = 500;
+/// `kills_late` and `flesh_late` count the last this many ticks of the run.
+const LATE_HUNT_TICKS: u32 = 2000;
+
 /// A creature within this many of its own lengths of a plant is near it.
 const NEAR_LENGTHS: f32 = 2.0;
 /// The side of the cell that `probe-density` counts creatures in.
@@ -113,15 +123,167 @@ impl FirstBuds {
     }
 }
 
-/// One seed of the gate: the printed measures and the bands that it left.
-fn measure(seed: u32, a: &Args) -> (String, Vec<String>) {
+/// The least and the most of each predation measure that the gate accepts. Each is `None` until
+/// its proof sets it. `hunt_hi` is a most. The others are a least.
+pub struct Bands {
+    pub hunt_lo: Option<f64>,
+    pub hunt_hi: Option<f64>,
+    pub prey_lo: Option<u32>,
+    pub kills_late: Option<u64>,
+    pub flesh_late: Option<f64>,
+}
+
+impl Bands {
+    pub const OFF: Bands = Bands {
+        hunt_lo: None,
+        hunt_hi: None,
+        prey_lo: None,
+        kills_late: None,
+        flesh_late: None,
+    };
+
+    fn any(&self) -> bool {
+        self.hunt_lo.is_some()
+            || self.hunt_hi.is_some()
+            || self.prey_lo.is_some()
+            || self.kills_late.is_some()
+            || self.flesh_late.is_some()
+    }
+}
+
+/// Removes `--predation` from the flags. A usage error when it is there and `bands` sets none, so
+/// that the flag never passes a world that nothing judged. `name` is where the bands are.
+pub fn predation_flag(argv: &[String], bands: &Bands, name: &str) -> (bool, Vec<String>) {
+    let on = argv.iter().any(|flag| flag == "--predation");
+    if on && !bands.any() {
+        usage(&format!(
+            "--predation judges no band: every predation band is None. Fix: set the bands in {name} from their proofs in docs/gates.md, or leave out --predation"
+        ));
+    }
+    let others = argv.iter().filter(|flag| *flag != "--predation");
+    (on, others.cloned().collect())
+}
+
+/// The five measures of "How the gate reads 'predators and prey coexist'" in the M4 plan. A hunter
+/// is a living body with a `jaw_sum` above 0, and prey is one with none.
+#[derive(Default)]
+pub struct Coexist {
+    /// The least and the most hunter share, and the least prey count, over the samples.
+    hunt_lo: f64,
+    hunt_hi: f64,
+    prey_lo: u32,
+    samples: u32,
+    /// The kills, the flesh, and every energy eaten (plants, debris, flesh) when the late window
+    /// opens. Zero for a run shorter than the window: the window is then the whole run.
+    before: (u64, f64, f64),
+}
+
+/// The kills, the flesh, and every energy eaten so far.
+fn hunt_stats(world: &World) -> (u64, f64, f64) {
+    let st = &world.stats;
+    (st.kills, st.flesh, st.eaten + st.debris_eaten + st.flesh)
+}
+
+impl Coexist {
+    /// Call after each tick of a run of `ticks`.
+    pub fn record(&mut self, world: &World, ticks: u32) {
+        if world.tick > ticks / 2 && world.tick.is_multiple_of(HUNT_SAMPLE_TICKS) {
+            let c = &world.creatures;
+            let living = c.slots.count();
+            let hunters = live(world).filter(|&s| c.jaw_sum[s] > 0.0).count() as u32;
+            // A world with nobody alive has no hunter.
+            let share = f64::from(hunters) / f64::from(living.max(1));
+            if self.samples == 0 {
+                (self.hunt_lo, self.hunt_hi, self.prey_lo) = (share, share, u32::MAX);
+            }
+            self.hunt_lo = self.hunt_lo.min(share);
+            self.hunt_hi = self.hunt_hi.max(share);
+            self.prey_lo = self.prey_lo.min(living - hunters);
+            self.samples += 1;
+        }
+        if world.tick == ticks.saturating_sub(LATE_HUNT_TICKS) {
+            self.before = hunt_stats(world);
+        }
+    }
+
+    /// The five columns of a row, and the bands of `bands` that the run left when `judged`. A run
+    /// with no sample prints `none` for the three sampled measures, and fails each of their bands.
+    /// `flesh_late` is 0 when nothing was eaten in the window.
+    pub fn read(&self, world: &World, bands: &Bands, judged: bool) -> (String, Vec<String>) {
+        let (kills, flesh, eaten) = hunt_stats(world);
+        let kills_late = kills - self.before.0;
+        let eaten_late = eaten - self.before.2;
+        let flesh_late = if eaten_late > 0.0 {
+            (flesh - self.before.1) / eaten_late
+        } else {
+            0.0
+        };
+        let sampled = |v: String| {
+            if self.samples > 0 {
+                v
+            } else {
+                "none".to_string()
+            }
+        };
+        let (lo_s, hi_s) = (
+            format!("{:.3}", self.hunt_lo),
+            format!("{:.3}", self.hunt_hi),
+        );
+        let (lo_s, hi_s, prey_s) = (
+            sampled(lo_s),
+            sampled(hi_s),
+            sampled(self.prey_lo.to_string()),
+        );
+        let row = format!(
+            "hunt_lo={lo_s} hunt_hi={hi_s} prey_lo={prey_s} kills_late={kills_late} flesh_late={flesh_late:.3}"
+        );
+        let mut failures = Vec::new();
+        if !judged {
+            return (row, failures);
+        }
+        let some = self.samples > 0;
+        let mut band = |ok: bool, what: String| {
+            if !ok {
+                failures.push(what);
+            }
+        };
+        if let Some(lo) = bands.hunt_lo {
+            band(some && self.hunt_lo >= lo, format!("hunt_lo={lo_s} < {lo}"));
+        }
+        if let Some(hi) = bands.hunt_hi {
+            band(some && self.hunt_hi <= hi, format!("hunt_hi={hi_s} > {hi}"));
+        }
+        if let Some(lo) = bands.prey_lo {
+            band(
+                some && self.prey_lo >= lo,
+                format!("prey_lo={prey_s} < {lo}"),
+            );
+        }
+        if let Some(lo) = bands.kills_late {
+            band(kills_late >= lo, format!("kills_late={kills_late} < {lo}"));
+        }
+        if let Some(lo) = bands.flesh_late {
+            band(
+                flesh_late >= lo,
+                format!("flesh_late={flesh_late:.3} < {lo}"),
+            );
+        }
+        (row, failures)
+    }
+}
+
+/// One seed of the gate: the printed measures and the bands that it left. With `predation`, the
+/// bands of `PREDATION` that are set apply too.
+fn measure(seed: u32, a: &Args, predation: bool) -> (String, Vec<String>) {
     let mut world = default_world(seed, &a.params);
     let mut first_buds = FirstBuds::default();
+    let mut coexist = Coexist::default();
     let (mut min_late, mut births_before_late) = (u32::MAX, 0);
     for _ in 0..a.ticks {
         let uid_before = world.next_uid;
         world.tick();
         first_buds.record(&world, uid_before);
+        coexist.record(&world, a.ticks);
         if world.tick > a.ticks / 2 {
             min_late = min_late.min(world.creatures.slots.count());
         }
@@ -191,24 +353,24 @@ fn measure(seed: u32, a: &Args) -> (String, Vec<String>) {
         format!("mean_chemo={mean_chemo:.2} < {MEAN_CHEMO}"),
     );
     band(parked <= PARKED, format!("parked={parked:.2} > {PARKED}"));
+    let (hunt, hunt_failures) = coexist.read(&world, &PREDATION, predation);
+    failures.extend(hunt_failures);
     let row = format!(
-        "seed={seed} creatures={creatures} min_late={min_late} plants={plants} births_late={births_late} max_gen={max_gen} mean_chemo={mean_chemo:.2} parked={parked:.2} first_bud={first_bud} juv_starved={juv_starved:.2} to_bud={to_bud:.2}"
+        "seed={seed} creatures={creatures} min_late={min_late} plants={plants} births_late={births_late} max_gen={max_gen} mean_chemo={mean_chemo:.2} parked={parked:.2} first_bud={first_bud} juv_starved={juv_starved:.2} to_bud={to_bud:.2} {hunt}"
     );
     (row, failures)
 }
 
-/// `gate-health`.
+/// `gate-health`. `--predation` is this gate's own flag. `args` reads the others.
 pub fn gate(argv: &[String]) {
-    judge(
-        "gate-health",
-        &args(argv, &[1, 2, 3], Some("--ticks"), 12000),
-        measure,
-    );
+    let (predation, others) = predation_flag(argv, &PREDATION, "PREDATION of health.rs");
+    let a = args(&others, &[1, 2, 3], Some("--ticks"), 12000);
+    judge("gate-health", &a, |seed, a| measure(seed, a, predation));
 }
 
 /// Prints the row that `measure` makes for each seed, with the bands that the seed left. Exit 0
 /// only when every seed stays inside every band.
-pub fn judge(gate: &str, a: &Args, measure: fn(u32, &Args) -> (String, Vec<String>)) {
+pub fn judge(gate: &str, a: &Args, measure: impl Fn(u32, &Args) -> (String, Vec<String>)) {
     let mut passed = 0;
     for &seed in &a.seeds {
         let (row, failures) = measure(seed, a);
@@ -374,5 +536,78 @@ pub fn probe_skip(argv: &[String]) {
             );
         }
         std::io::stdout().flush().expect("flush stdout");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use tidepool_sim::genome::{Genome, KIND_JAW};
+    use tidepool_sim::world::SpawnAt;
+
+    use super::*;
+
+    fn spawn(world: &mut World, jaw: bool) {
+        let mut genome = Genome::default();
+        if jaw {
+            genome.set_size(KIND_JAW, 0.5);
+        }
+        let at = SpawnAt {
+            x: 20.0 + 20.0 * world.creatures.slots.count() as f32,
+            y: 100.0,
+            heading: 0.0,
+            growth: 1.0,
+            energy01: 0.5,
+            parent: 0,
+            generation: 0,
+            mark: 0,
+        };
+        world.spawn(genome, at).expect("slot");
+    }
+
+    /// A run of 3,000 ticks, set by hand: samples at 2,000, 2,500, and 3,000, and a late window
+    /// from 1,000. The tick at 1,500 is in the first half and is not sampled: it holds no hunter.
+    #[test]
+    fn the_predation_measures_read_the_second_half_and_the_late_window() {
+        let mut world = World::new(1, 256.0, 256.0);
+        let mut coexist = Coexist::default();
+        let mut at = |world: &mut World, tick: u32| {
+            world.tick = tick;
+            coexist.record(world, 3000);
+        };
+        for _ in 0..3 {
+            spawn(&mut world, false);
+        }
+        (world.stats.kills, world.stats.flesh, world.stats.eaten) = (2, 1.0, 5.0);
+        at(&mut world, 1000);
+        at(&mut world, 1500);
+        spawn(&mut world, true);
+        at(&mut world, 2000);
+        spawn(&mut world, true);
+        at(&mut world, 2499);
+        at(&mut world, 2500);
+        (world.stats.kills, world.stats.flesh) = (5, 4.0);
+        (world.stats.eaten, world.stats.debris_eaten) = (8.0, 2.0);
+        at(&mut world, 3000);
+        let (row, failures) = coexist.read(&world, &PREDATION, false);
+        // 1 hunter of 4, then 2 of 5. Flesh 3 of 3 + 2 + 3 eaten.
+        assert_eq!(
+            row,
+            "hunt_lo=0.250 hunt_hi=0.400 prey_lo=3 kills_late=3 flesh_late=0.375"
+        );
+        assert!(failures.is_empty());
+
+        let bands = Bands {
+            hunt_lo: Some(0.3),
+            hunt_hi: Some(0.3),
+            prey_lo: Some(4),
+            kills_late: Some(4),
+            flesh_late: Some(0.4),
+        };
+        assert_eq!(coexist.read(&world, &bands, false).1.len(), 0);
+        assert_eq!(coexist.read(&world, &bands, true).1.len(), 5);
+        assert!(Coexist::default()
+            .read(&world, &bands, true)
+            .0
+            .starts_with("hunt_lo=none hunt_hi=none prey_lo=none"));
     }
 }
