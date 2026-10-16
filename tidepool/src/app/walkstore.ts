@@ -1,12 +1,17 @@
 // What the walkthrough keeps between visits, in `localStorage`. Every call is in a `try`: with
 // storage blocked or full, the walk lives in memory for this visit and the game plays the same.
 
-import { BEATS, type BeatId, type Walk } from './walkthrough';
+import { BEATS, firstBite, type BeatId, type Walk } from './walkthrough';
 
 const KEY = 'tidepool.walk';
 
-/** The playtest log: seconds since the page loaded, at the first showing of a beat and when done. */
-export type Log = Partial<Record<BeatId, { shown?: number; done?: number }>>;
+/**
+ * The playtest log: seconds since the page loaded, at the first showing of a beat and when done.
+ * `firstBite` is beat 11: see `firstBite` in src/app/walkthrough.ts.
+ */
+export type Log = Partial<Record<BeatId, { shown?: number; done?: number }>> & {
+  firstBite?: ReturnType<typeof firstBite>;
+};
 
 export interface Stored {
   done: BeatId[];
@@ -36,6 +41,10 @@ function read(text: string | null): Stored {
     if (typeof entry.done === 'number') times.done = entry.done;
     if (id in log && Object.keys(times).length > 0) stored.log[id] = times;
   }
+  const bite = log.firstBite;
+  if (typeof bite === 'number' || bite === 'bitten first' || bite === 'no hunter seen') {
+    stored.log.firstBite = bite;
+  }
   return stored;
 }
 
@@ -59,7 +68,8 @@ export function saveWalk(stored: Stored): void {
 
 /**
  * `log` with the time `seconds` on each beat that `after` showed for the first time or finished, and
- * `before` had not. The same `log` when there is none.
+ * `before` had not, and with `firstBite` of `after` when it differs from that of `before`. A first
+ * bite already in the log stays. The same `log` when there is nothing new.
  */
 export function note(log: Log, before: Walk, after: Walk, seconds: number): Log {
   let out = log;
@@ -73,6 +83,12 @@ export function note(log: Log, before: Walk, after: Walk, seconds: number): Log 
         [id]: { ...out[id], ...(shown && { shown: seconds }), ...(done && { done: seconds }) },
       };
     }
+  }
+  const bite = firstBite(after);
+  const kept = out.firstBite !== undefined && out.firstBite !== 'no hunter seen';
+  if (bite !== firstBite(before) && !kept) {
+    out = { ...out, firstBite: bite };
+    if (bite === undefined) delete out.firstBite;
   }
   return out;
 }

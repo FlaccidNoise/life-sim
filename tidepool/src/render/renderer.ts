@@ -1,7 +1,7 @@
 // WebGL2 renderer: the depth gradient, then one instanced draw of every plant in a frame, then one of
 // every piece of debris, then one of every creature, placed between the last two frames, then one of
-// their parts, then one of every toxin cloud. In Play each program dims what the possessed body does
-// not see. It owns the GL context of its canvas.
+// their parts, then one of every toxin cloud, then the mark of a kill. In Play each program but the
+// mark's dims what the possessed body does not see. It owns the GL context of its canvas.
 
 import {
   C_ENERGY,
@@ -25,6 +25,7 @@ import {
   PLANT_STRIDE,
   WORLD_H,
   type FrameView,
+  type Kill,
   type Part,
 } from '../protocol';
 import {
@@ -80,6 +81,12 @@ export interface Renderer {
   ): void;
   /** The share of a full store at which a body buds. The energy ring has its notch there. */
   setBudAt(share: number): void;
+  /**
+   * Beat 11: rings on the killer of `kill` for `KILLER_SECONDS` and on its place for
+   * `PLACE_SECONDS`, from `timeSeconds`. `from` is the frame that holds the kill. A new mark takes
+   * the place of the last.
+   */
+  markKill(kill: Kill, from: FrameView, timeSeconds: number): void;
   dispose(): void;
 }
 
@@ -99,6 +106,39 @@ const TAU = 2 * Math.PI;
 const CILIA_BEAT = 6; // radians per second
 // FLAG_BUDDED stays set this long at normal speed: BUD_FLASH in crates/sim/src/frame.rs.
 const PULSE_SECONDS = 2;
+// The mark of a kill: choice C10 option A of docs/plans/2026-10-14-m4-teeth.md.
+const KILLER_SECONDS = 2;
+const PLACE_SECONDS = 1;
+const MARK_FADE_SECONDS = 0.5; // the ring on the killer fades out over its last half second
+const KILLER_RING_PAD = 3; // world units outside the half length of the killer
+const PLACE_RING_FROM = 3; // world units: the ring on the place grows from this by PLACE_RING_GROWTH
+const PLACE_RING_GROWTH = 8;
+const MARK_FLOATS = 4; // x, y, radius, alpha
+const MARK_VERT = `#version 300 es
+layout(location = 0) in vec2 a_corner;
+layout(location = 1) in vec4 a_mark; // x, y, radius, alpha
+uniform vec4 u_view;
+uniform float u_px;
+out vec2 v_at; // world units from the centre
+flat out vec3 v_mark; // radius, alpha, world units per pixel
+void main() {
+  v_at = a_corner * (a_mark.z + 3.0 * u_px);
+  v_mark = vec3(a_mark.zw, u_px);
+  gl_Position = vec4((a_mark.xy + v_at - u_view.xy) * u_view.zw, 0.0, 1.0);
+}
+`;
+const MARK_FRAG = `#version 300 es
+precision highp float;
+in vec2 v_at;
+flat in vec3 v_mark;
+out vec4 o_color;
+void main() {
+  // A thin pale ring, 3 pixels wide, with a soft edge. Not dimmed by sight: the mark is the game's.
+  float px = abs(length(v_at) - v_mark.x) / v_mark.z;
+  float a = v_mark.y * clamp(2.0 - px, 0.0, 1.0);
+  o_color = vec4(vec3(1.0, 0.86, 0.5) * a, a);
+}
+`;
 
 function compile(gl: WebGL2RenderingContext, type: GLenum, source: string): WebGLShader {
   const shader = gl.createShader(type);
@@ -190,6 +230,10 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
   const instances = new Float32Array(MAX_CREATURES * INSTANCE_FLOATS);
   const parts = layer(PART_VERT, PART_FRAG, PART_ATTRIBUTES, MAX_PARTS);
   const partInstances = new Float32Array(MAX_PARTS * PART_INSTANCE_FLOATS);
+  const marks = layer(MARK_VERT, MARK_FRAG, [MARK_FLOATS], 2);
+  const markInstances = new Float32Array(2 * MARK_FLOATS);
+  // The kill on show. `uid` is of the killer, 0 when the frame of the kill did not hold it.
+  let mark: { x: number; y: number; uid: number; at: number } | null = null;
   // The outline of the body of each slot.
   const outlines = new Float64Array(MAX_CREATURES * OUTLINE_FLOATS);
   // The creature records of the frame being drawn, with each body placed between the last two
@@ -369,6 +413,29 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
       drawLayer(parts, cam, partInstances, 0, PART_INSTANCE_FLOATS, partCount);
       const cloudCount = Math.min(cur.cloudCount, MAX_CLOUDS);
       drawLayer(clouds, cam, f32, cur.cloudBase, CLOUD_STRIDE, cloudCount);
+
+      const age = mark ? timeSeconds - mark.at : 0;
+      if (mark && age >= KILLER_SECONDS) mark = null;
+      if (mark) {
+        let shown = 0;
+        if (age < PLACE_SECONDS) {
+          const grown = PLACE_RING_FROM + PLACE_RING_GROWTH * (age / PLACE_SECONDS);
+          markInstances.set([mark.x, mark.y, grown, 1 - age / PLACE_SECONDS]);
+          shown = 1;
+        }
+        // The killer as it is drawn. A frame that no longer holds it shows the place alone.
+        for (let i = 0; mark.uid !== 0 && i < count; i++) {
+          const r = base + i * CREATURE_STRIDE;
+          if (posedU32[r + C_UID] !== mark.uid) continue;
+          const radius = (posedF32[r + C_LENGTH] ?? 0) / 2 + KILLER_RING_PAD;
+          const fade = Math.min((KILLER_SECONDS - age) / MARK_FADE_SECONDS, 1);
+          const ring = [posedF32[r + C_X] ?? 0, posedF32[r + C_Y] ?? 0, radius, fade];
+          markInstances.set(ring, shown * MARK_FLOATS);
+          shown++;
+          break;
+        }
+        drawLayer(marks, cam, markInstances, 0, MARK_FLOATS, shown);
+      }
     },
 
     setBudAt(share) {
@@ -376,8 +443,20 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
       gl.uniform1f(uBudAt, share);
     },
 
+    markKill(kill, from, timeSeconds) {
+      let uid = 0;
+      for (let i = 0; i < from.creatureCount; i++) {
+        const r = from.creatureBase + i * CREATURE_STRIDE;
+        if (from.u32[r + C_SLOT] !== kill.killerSlot) continue;
+        uid = from.u32[r + C_UID] ?? 0;
+        break;
+      }
+      mark = { x: kill.x, y: kill.y, uid, at: timeSeconds };
+    },
+
     dispose() {
-      for (const { vao, buffer, program } of [backdrop, plants, debris, creatures, parts, clouds]) {
+      const layers = [backdrop, plants, debris, creatures, parts, clouds, marks];
+      for (const { vao, buffer, program } of layers) {
         gl.deleteVertexArray(vao);
         gl.deleteBuffer(buffer);
         gl.deleteProgram(program);

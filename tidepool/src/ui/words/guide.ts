@@ -28,19 +28,21 @@ export const CHAPTERS: { id: ChapterId; title: string; text: string[] }[] = [
     id: 'body',
     title: 'A body',
     text: [
-      'A body is one rounded shape with parts on it. Its genes set its length, its width, and its parts: a mouth, a flagellum or cilia that push it, a fin that steers it, a chemoreceptor that smells plants, an eye. A gene makes one part or a mirrored pair, and a body holds at most {maxParts} such genes.',
-      'Energy is the only currency, and the ring around your body shows its store. A mouth takes energy from each plant the body touches, with no order from the brain. Energy pays for upkeep at every moment, for growth, and for children. A body with none left starves.',
-      'Every part adds mass. Mass costs energy to build, and a heavier body pays more upkeep for as long as it lives. That is the whole cost of a part: it has no fee of its own. Thrust costs energy too, and so does each hidden neuron and each connection of the brain.',
+      'A body is one rounded shape. Its genes set its length, width, and parts: each gene makes one part or a mirrored pair, and a body holds at most {maxParts} such genes.',
+      'A mouth eats what it touches, with no order from the brain. Flagella and cilia push, a fin steers, a chemoreceptor smells plants, an eye sees. A jaw bites what it faces and touches, and the biter gains what the bite takes. A body with a jaw is a hunter.',
+      'A spike hurts what bites from its side. A shell plate blocks part of a bite from its side, and slows its body. A toxin gland releases a cloud that drains every other body inside it.',
+      'Energy is the only currency, and the ring around your body shows its store. It pays for upkeep, growth, and children. Every part adds mass, which costs energy to build and upkeep for life. Thrust and the brain cost energy too.',
     ],
   },
   {
     id: 'brain',
     title: 'A brain',
     text: [
-      'Every body carries a brain that runs many times a second, also while you steer: your hands replace only its outputs.',
-      'Inputs, on the left, are numbers that the body senses, such as its energy, the smell of plants, what each eye sees. Outputs, on the right, are thrust, turn, and accept, the answer to a mate.',
-      'Hidden neurons sit between. A connection carries one neuron’s value to another, times its weight: a positive weight adds, a negative one takes away. A neuron sums what arrives, adds a fixed number, its bias, and squashes the result into a fixed range. A connection that loops back makes a brain recurrent.',
-      'A brain keeps only the values of its neurons. A slow neuron, one with a long time constant, holds part of its old value. That is all its memory, and it ends with the body. The wiring is set at birth. It does not learn.',
+      'A brain runs many times a second, also while you steer: your hands replace only its outputs.',
+      'Inputs, on the left, are numbers the body senses: its energy, the smell of plants, how hard and where it was hit, and for each eye the plants, bodies, and teeth it sees.',
+      'Outputs, on the right, are thrust, turn, and accept, the answer to a mate. Parts add triggers: dash with a pushing flagellum, lunge with a jaw, toxin with a gland. A trigger above zero fires if the body can pay, then rests a while.',
+      'Hidden neurons sit between. A connection carries a neuron’s value to another, times its weight. A neuron sums what arrives, adds its bias, and squashes the result. A loop makes a brain recurrent.',
+      'A slow neuron, one with a long time constant, holds part of its old value: the only memory, lost with the body. The wiring is set at birth. It does not learn.',
     ],
   },
   {
@@ -79,9 +81,9 @@ export const CHAPTERS: { id: ChapterId; title: string; text: string[] }[] = [
     text: [
       'This world is a program, run from a seed: a number that fixes every random draw. Same seed, same play, same world.',
       'Nothing is trained. There is no gradient, the signal that training uses to push a network toward a target. Brains change only between a parent and its child: neuroevolution.',
-      'The first creatures have brains wired by hand so that they can feed. Everything after is copy, random change, and unequal survival.',
+      'The first creatures have brains wired by hand so that they can feed. So were their hunting and their fleeing. Everything after is copy, random change, and unequal survival.',
       'Each part, connection, and hidden neuron carries a history id from when it appeared. Crossover, which mixes the genes of a mate into a child, lines genes up by that id: a method from NEAT (Stanley and Miikkulainen, 2002). With mixing on, grown bodies that touch and both accept exchange genes.',
-      'For speed, a brain holds at most {maxNeurons} neurons and {maxConns} connections, and a body {maxParts} part genes. Your picks, of an heir or of a mate, are selection by a chooser, as a breeder does.',
+      'For speed, a brain holds at most {maxNeurons} neurons and {maxConns} connections, and a body {maxParts} part genes. Your picks of heirs and mates are selection by a chooser.',
     ],
   },
 ];

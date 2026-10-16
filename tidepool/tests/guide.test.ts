@@ -5,6 +5,7 @@
 import { readFileSync } from 'node:fs';
 import type { ComponentChild, VNode } from 'preact';
 import { beforeEach, expect, test } from 'vitest';
+import * as protocol from '../src/protocol';
 import type { Kin } from '../src/protocol';
 import { Note, NoteMark } from '../src/ui/Note';
 import {
@@ -33,7 +34,16 @@ import {
   fill,
   type EntryId,
 } from '../src/ui/words/guide';
-import { BUD, COUNTER, FIRST_DEATH, LINE, MATE, REFUSE, STARVING } from '../src/ui/words/lines';
+import {
+  BUD,
+  COUNTER,
+  FIRST_DEATH,
+  KIND,
+  LINE,
+  MATE,
+  REFUSE,
+  STARVING,
+} from '../src/ui/words/lines';
 import { NOTE, NOTE_UI, type NoteId } from '../src/ui/words/notes';
 import { createSim } from '../src/worker/wasm';
 
@@ -87,8 +97,9 @@ const KIN: Kin = {
 
 // The page as it is when the thing that a note is on is up.
 function show(id: NoteId | null): void {
-  mode.value = id === 'death' || id === null ? 'watch' : 'play';
-  death.value = id === 'death' ? { cause: 'starved', heirs: [], first: true } : null;
+  const dead = id === 'death' || id === 'hunter';
+  mode.value = dead || id === null ? 'watch' : 'play';
+  death.value = dead ? { cause: 'eaten', heirs: [], first: true } : null;
   brainOpen.value = id === 'brain' || id === 'wiring';
   changesShown.value = id === 'wiring';
   mate.value = id === 'mate' ? { you: KIN, other: KIN, state: 'apart' } : null;
@@ -104,7 +115,7 @@ beforeEach(() => {
 });
 
 test('there is one note for each thing that the plan gives a mark', () => {
-  expect(NOTE_IDS).toEqual(['brain', 'wiring', 'bud', 'mate', 'score', 'death']);
+  expect(NOTE_IDS).toEqual(['brain', 'wiring', 'bud', 'mate', 'score', 'death', 'hunter']);
 });
 
 test.each(NOTE_IDS)(
@@ -251,6 +262,7 @@ test('each mark sits on the thing that its note explains', () => {
     mate: 'MateCard.tsx',
     score: 'App.tsx',
     death: 'DeathOverlay.tsx',
+    hunter: 'DeathOverlay.tsx',
   };
   for (const id of NOTE_IDS) {
     const source = text(`../src/ui/${on[id]}`);
@@ -488,4 +500,84 @@ test('the word "evolve" is on no button', () => {
   ];
   expect(labels.length).toBeGreaterThan(10);
   for (const label of labels) expect(label).not.toMatch(/evolve/i);
+});
+
+// Task 14 of docs/plans/2026-10-14-m4-teeth.md: the M4 part of beat 12, and what the guide says of the
+// parts and the triggers of M4. When one of these fails, the code has moved on: write the words again
+// in src/ui/words, and then change the check.
+test('the killer card follows the line of beat 12 on a first death, and a death by a bite has the hunter note', () => {
+  expect(NOTE.hunter.text).toBe(
+    'A hunter is a body with a Jaw. Its brain was born with its wiring. Nothing in it changed during its life.',
+  );
+  expect(NOTE.hunter.more).toBe('brain');
+  const overlay = text('../src/ui/DeathOverlay.tsx');
+  // The cause line holds the card, and on a first death it comes after the line and the heirs.
+  const cause = overlay.indexOf('const causeLine = (');
+  expect(overlay.indexOf('{card && <KillerBody card={card} />}', cause)).toBeGreaterThan(cause);
+  const line = overlay.indexOf('{FIRST_DEATH}');
+  const heirs = overlay.indexOf('{heirs.map(', line);
+  expect(line).toBeGreaterThan(cause);
+  expect(heirs).toBeGreaterThan(line);
+  expect(overlay.indexOf('{lineFirst && causeLine}', heirs)).toBeGreaterThan(heirs);
+  // A hunter is a body with a jaw: the mark is on a death by a bite, and on no other.
+  expect(overlay).toContain(`{cause === 'eaten' && <NoteMark id="hunter" />}`);
+  expect(rust('control.rs')).toContain('pub const CAUSE_EATEN');
+  expect(rust('bite.rs').replace(/\/\/.*$/gm, '')).toContain('(j as u32, CAUSE_EATEN, s as u32)');
+});
+
+test('the guide names each kind of part, and says what a jaw, a spike, a shell, and a gland do', () => {
+  const kinds = Object.entries(protocol)
+    .filter(([name]) => name.startsWith('KIND_') && name !== 'KIND_HIDDEN')
+    .map(([, kind]) => kind as number);
+  expect(kinds).toHaveLength(10);
+  // Each kind has a name in the words of the cards.
+  for (const kind of kinds) expect(KIND[kind], `kind ${kind}`).toBeDefined();
+  const body = CHAPTERS.find((c) => c.id === 'body')?.text.join(' ') ?? '';
+  for (const kind of [
+    protocol.KIND_JAW,
+    protocol.KIND_SPIKE,
+    protocol.KIND_SHELL,
+    protocol.KIND_TOXIN,
+  ]) {
+    expect(body.toLowerCase(), KIND[kind]).toContain(KIND[kind]);
+  }
+  const code = (file: string): string => rust(file).replace(/\/\/.*$/gm, '');
+  // "A jaw bites what it faces and touches": the nearest body that overlaps it, inside its cone.
+  expect(body).toContain('A jaw bites what it faces and touches');
+  expect(code('motor.rs')).toContain('along > 0.0 && along * along >= jaw_cos2 * d2');
+  // "The biter gains what the bite takes."
+  expect(code('bite.rs')).toContain('c.energy[j] -= take;\n        c.energy[s] += take;');
+  // "A spike hurts what bites from its side": the biter loses what a spike in its arc hurts.
+  expect(code('bite.rs')).toContain('KIND_SPIKE if held(spike_cos2) => spike += c.guard_size[k]');
+  expect(code('bite.rs')).toContain('c.energy[s] -= hurt;');
+  // "A shell plate blocks part of a bite from its side, and slows its body."
+  expect(code('bite.rs')).toContain('KIND_SHELL if held(shell_cos2) => shell += c.guard_size[k]');
+  expect(code('bite.rs')).toContain('(bite * (1.0 - (shell_block * shell).min(1.0)))');
+  expect(code('motor.rs')).toContain('drag_fwd + shell_drag * c.shell_sum[s]');
+  // "A toxin gland releases a cloud that drains every other body inside it."
+  expect(code('ability.rs')).toContain('c.uid[j] == maker');
+  expect(code('ability.rs')).toContain('c.energy[j] -= take;');
+  // "A mouth eats what it touches": the plants, and then the debris.
+  expect(code('energy.rs')).toContain('debris');
+});
+
+test('chapter 2 says what fires each trigger, as ability.rs does', () => {
+  const brain = CHAPTERS.find((c) => c.id === 'brain')?.text.join(' ') ?? '';
+  expect(brain).toContain('dash with a pushing flagellum, lunge with a jaw, toxin with a gland');
+  const code = rust('ability.rs').replace(/\/\/.*$/gm, '');
+  // Each fires with its part, its trigger above zero, its cooldown at zero, and its cost paid.
+  expect(code).toMatch(
+    /flag > 0\.0\s+&& c\.cmd_dash\[s\] > 0\.0\s+&& c\.cd_dash\[s\] == 0\s+&& pay\(/,
+  );
+  expect(code).toMatch(
+    /jaw > 0\.0\s+&& c\.cmd_lunge\[s\] > 0\.0\s+&& c\.cd_lunge\[s\] == 0\s+&& pay\(/,
+  );
+  expect(code).toMatch(/gland > 0\.0\s+&& c\.cmd_toxin\[s\] > 0\.0\s+&& c\.cd_toxin\[s\] == 0/);
+  // A pushing flagellum: `flag_push` sums the push of the flagella toward the tail.
+  expect(rust('creature.rs')).toContain('flag_push += size * push_of(anchor);');
+  // Chapter 6: the founders' hunting and fleeing, wired by hand as their feeding was.
+  const machine = CHAPTERS.find((c) => c.id === 'machine')?.text.join(' ') ?? '';
+  expect(machine).toContain(
+    'The first creatures have brains wired by hand so that they can feed. So were their hunting and their fleeing.',
+  );
 });

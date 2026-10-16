@@ -112,8 +112,9 @@ export function DeathOverlay(props: {
         role={lineFirst ? undefined : 'status'}
         tabIndex={lineFirst ? undefined : -1}
       >
-        {CAUSE_TEXT[cause]}
+        {CAUSE_TEXT[cause]} {cause === 'eaten' && <NoteMark id="hunter" />}
       </p>
+      <Note id="hunter" />
       {card && <KillerBody card={card} />}
     </>
   );

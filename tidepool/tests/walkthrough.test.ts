@@ -2,6 +2,8 @@ import { afterEach, expect, test, vi } from 'vitest';
 import {
   BEATS,
   begin,
+  firstBite,
+  huntFacts,
   leadsDeath,
   split,
   step,
@@ -11,7 +13,25 @@ import {
   type Walk,
 } from '../src/app/walkthrough';
 import { loadWalk, note, saveWalk } from '../src/app/walkstore';
-import type { BrainConn, BrainNeuron, BrainView } from '../src/protocol';
+import {
+  C_FLAGS,
+  C_PARTS,
+  C_SLOT,
+  CREATURE_STRIDE,
+  FLAG_DASH,
+  FLAG_HURT,
+  FLAG_POSSESSED,
+  FRAME_HEADER_WORDS,
+  KIND_FILTER,
+  KIND_JAW,
+  NO_SLOT,
+  viewFrame,
+  type BrainConn,
+  type BrainNeuron,
+  type BrainView,
+  type FrameView,
+  type Kill,
+} from '../src/protocol';
 import { LINE } from '../src/ui/words/lines';
 
 const DT = 0.05;
@@ -31,6 +51,9 @@ const WATCH: Facts = {
   busy: false,
   card: false,
   courted: false,
+  huntersInView: 0,
+  killInView: 0,
+  bitten: false,
 };
 // In a body, hands off. `STEER` is the same body under the player's hands.
 const PLAY: Facts = { ...WATCH, mode: 'play', uid: 7 };
@@ -40,6 +63,7 @@ interface Seen {
   t: number;
   line: string | null;
   pulse: 'brain' | 'score' | null;
+  mark: boolean;
 }
 
 /** Steps `walk` for `seconds` with the facts that `at` gives for each time. */
@@ -53,7 +77,7 @@ function run(
     const t = i * DT;
     const out = step(walk, typeof at === 'function' ? at(t) : at, DT);
     walk = out.walk;
-    seen.push({ t, line: out.line, pulse: out.pulse });
+    seen.push({ t, line: out.line, pulse: out.pulse, mark: out.mark });
   }
   return { walk, seen };
 }
@@ -345,6 +369,125 @@ test('beat 12: a death with the plain layout does not use up the beat', () => {
   expect(run(died.walk, { ...PLAY, uid: 9 }, 1).walk.done).toContain('firstDeath');
 });
 
+// Beat 11: docs/plans/2026-10-14-m4-teeth.md, Task 14 and choice C10 option A. Draw only: the first
+// kill in view in a life marks the killer and the place, and the log keeps what came first.
+const JAW = KIND_JAW | (128 << 16);
+const MOUTH = KIND_FILTER | (128 << 16);
+
+/** A frame of `bodies`, with the body in slot `possessed` the player's, and `kills` in view. */
+function frameOf(
+  bodies: { slot: number; flags?: number; parts?: number[] }[],
+  possessed: number,
+  kills: Kill[] = [],
+): FrameView {
+  const u32 = new Uint32Array(FRAME_HEADER_WORDS + bodies.length * CREATURE_STRIDE);
+  [u32[1], u32[5]] = [bodies.length, possessed];
+  bodies.forEach((body, i) => {
+    const r = FRAME_HEADER_WORDS + i * CREATURE_STRIDE;
+    [u32[r + C_SLOT], u32[r + C_FLAGS]] = [body.slot, body.flags ?? 0];
+    (body.parts ?? []).forEach((word, k) => (u32[r + C_PARTS + k] = word));
+  });
+  return { ...viewFrame(u32.buffer), kills };
+}
+
+test('beat 11: the frame gives the hunters in view, the kills by others, and a hit on the player', () => {
+  const none = frameOf(
+    [
+      { slot: 1, parts: [MOUTH] },
+      { slot: 2, parts: [MOUTH] },
+    ],
+    1,
+  );
+  expect(huntFacts(none)).toEqual({ huntersInView: 0, killInView: 0, bitten: false });
+  const bodies = [
+    { slot: 1, parts: [MOUTH, JAW], flags: FLAG_POSSESSED },
+    { slot: 2, parts: [MOUTH] },
+    { slot: 3, parts: [MOUTH, 0, JAW, JAW] },
+    { slot: 4, parts: [JAW], flags: FLAG_HURT },
+  ];
+  const kills = [
+    { x: 1, y: 2, killerSlot: 3 },
+    { x: 5, y: 5, killerSlot: 1 },
+  ];
+  // The jaw and the kill of the player's own body are not a hunter seen, and a hit on another body
+  // is not a bite on the player.
+  expect(huntFacts(frameOf(bodies, 1, kills))).toEqual({
+    huntersInView: 2,
+    killInView: 1,
+    bitten: false,
+  });
+  // In Watch every body with a jaw is a hunter in view, and every kill is by another.
+  expect(huntFacts(frameOf(bodies, NO_SLOT, kills))).toEqual({
+    huntersInView: 3,
+    killInView: 2,
+    bitten: false,
+  });
+});
+
+test('beat 11: a hit on the body of the player is a bite on it, and a dash is not', () => {
+  const hit = frameOf([{ slot: 1, flags: FLAG_POSSESSED | FLAG_HURT }], 1);
+  expect(huntFacts(hit).bitten).toBe(true);
+  const dashed = frameOf([{ slot: 1, flags: FLAG_POSSESSED | FLAG_DASH }], 1);
+  expect(huntFacts(dashed).bitten).toBe(false);
+});
+
+const HUNTED: Facts = { ...PLAY, huntersInView: 1 };
+const KILL: Facts = { ...HUNTED, killInView: 1 };
+const marks = (seen: Seen[]): number[] => seen.filter((s) => s.mark).map((s) => s.t);
+
+test('beat 11: a life with no hunter in view has no mark, and the log says no hunter was seen', () => {
+  // Nothing to say before a life.
+  expect(firstBite(run(begin(), WATCH, 10).walk)).toBeUndefined();
+  const { walk, seen } = run(past('possess'), PLAY, 30);
+  expect(marks(seen)).toEqual([]);
+  expect(firstBite(walk)).toBe('no hunter seen');
+  // A hunter in view, and no bite yet: nothing to say.
+  expect(firstBite(run(walk, HUNTED, 1).walk)).toBeUndefined();
+});
+
+test('beat 11: a bite before any hunter in view is "bitten first", and the first bite holds', () => {
+  const { walk, seen } = run(past('possess'), { ...PLAY, bitten: true }, 1);
+  expect(marks(seen)).toEqual([]);
+  expect(firstBite(walk)).toBe('bitten first');
+  // A hunter seen after it, and a kill, change nothing in the log.
+  const later = run(walk, { ...KILL, bitten: true }, 5);
+  expect(firstBite(later.walk)).toBe('bitten first');
+  // A hunter in view and a bite on one frame: the hunter was not seen before the bite.
+  expect(firstBite(step(past('possess'), { ...HUNTED, bitten: true }, DT).walk)).toBe(
+    'bitten first',
+  );
+});
+
+test('beat 11: the first kill in view marks once, and the log keeps the seconds of hunters before the bite', () => {
+  // Hunters in view for 3.5 seconds, a kill among them at 3, none for 1.5, then 1 more second.
+  const hunt = (t: number): Facts =>
+    t < 3 ? HUNTED : t < 3.5 ? KILL : t < 5 ? PLAY : { ...HUNTED, bitten: t >= 6 };
+  const { walk, seen } = run(past('possess'), hunt, 8);
+  expect(marks(seen)).toHaveLength(1);
+  expect(marks(seen)[0]).toBeCloseTo(3, 5);
+  // No text: the mark is drawn, and no line shows with it.
+  expect(seen.find((s) => s.mark)?.line).toBeNull();
+  expect(firstBite(walk)).toBe(4.5);
+});
+
+test('beat 11: one mark in a life, and the life of an heir marks again', () => {
+  const one = run(past('possess'), (t) => (t < 1 || t >= 2 ? KILL : PLAY), 4);
+  expect(marks(one.seen)).toHaveLength(1);
+  const heir = run(one.walk, { ...KILL, uid: 8 }, 2);
+  expect(marks(heir.seen)).toHaveLength(1);
+  // No life, no mark: Watch, and under the death overlay.
+  expect(marks(run(past('possess'), { ...WATCH, killInView: 2 }, 2).seen)).toEqual([]);
+  expect(marks(run(past('possess'), { ...KILL, dead: true }, 2).seen)).toEqual([]);
+});
+
+test('beat 11: a hunter in view under the death overlay is not counted', () => {
+  // After a death the camera goes to the killer.
+  const died = run(past('possess'), { ...WATCH, dead: true, huntersInView: 3 }, 5);
+  expect(died.walk.hunted).toBe(0);
+  // In Watch a hunter on the screen is seen.
+  expect(run(past('possess'), { ...WATCH, huntersInView: 1 }, 2).walk.hunted).toBeCloseTo(2, 5);
+});
+
 // A whole first life, with every beat in it.
 const life = (t: number): Facts => {
   if (t < 5) return WATCH;
@@ -593,6 +736,34 @@ test('the log keeps the first time that a beat showed and the first time it was 
   });
   // Nothing new: the same log.
   expect(note(log, done, done, 20)).toBe(log);
+});
+
+test('the log keeps beat 11: seconds of hunters before the first bite, "bitten first", or "no hunter seen"', () => {
+  const start = begin(['possess']);
+  const lived: Walk = { ...start, lived: true };
+  expect(note({}, start, lived, 3)).toEqual({ firstBite: 'no hunter seen' });
+  const seenHunter: Walk = { ...lived, hunted: 2 };
+  expect(note({ firstBite: 'no hunter seen' }, lived, seenHunter, 4)).toEqual({});
+  const bit: Walk = { ...seenHunter, bite: 2.04 };
+  expect(note({}, seenHunter, bit, 5)).toEqual({ firstBite: 2 });
+  // The first bite stays in the log, also over the bite of a later visit.
+  const again: Walk = { ...begin(), lived: true, bite: 0 };
+  expect(note({ firstBite: 2 }, begin(), again, 9)).toEqual({ firstBite: 2 });
+  expect(note({ firstBite: 'no hunter seen' }, begin(), again, 9)).toEqual({
+    firstBite: 'bitten first',
+  });
+  // Nothing new: the same log.
+  const log = { firstBite: 2 };
+  expect(note(log, bit, bit, 20)).toBe(log);
+  // The store keeps it, and reads only what it knows.
+  const storage = memory();
+  vi.stubGlobal('localStorage', storage);
+  saveWalk({ ...NONE, log: { firstBite: 'bitten first' } });
+  expect(loadWalk(false).log).toEqual({ firstBite: 'bitten first' });
+  saveWalk({ ...NONE, log: { firstBite: 3.5 } });
+  expect(loadWalk(false).log).toEqual({ firstBite: 3.5 });
+  storage.setItem('tidepool.walk', '{"log":{"firstBite":"soon"}}');
+  expect(loadWalk(false).log).toEqual({});
 });
 
 test('the way in shows to a player who has been here before', () => {
