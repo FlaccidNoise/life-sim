@@ -183,3 +183,39 @@ not form: `herb_jaw` falls, the population stays over 1,200, herbivores stay the
 are bounded by them. Expect cycles. At 144,000: herbivores 0.10 or more, carnivores 0.10 or more,
 `diet_sd` 0.20 or more on 3 of 5 seeds. If the guild holds as omnivores (0.3 to 0.7) and not as
 carnivores, the next lever is the gap, then the ratio, in that order.
+
+### T5 rows (`0a0c2d8`)
+
+The saved worlds were rebaked at the defaults first (the parameter table grew by one):
+`m2-world.tdpl` hash `881cbf22`, `m2-world-long.tdpl` hash `c13a40e5`, the same bodies as before.
+
+| Seed | tick | creatures | herb | omni | carn | diet_sd | hunt | kills since last row |
+|---|---|---|---|---|---|---|---|---|
+| 1, 2, 3 | 1,000 | 862 to 925 | 0.91 to 0.93 | 0.07 to 0.09 | 0.000 to 0.002 | 0.15 to 0.17 | 0.10 to 0.13 | 237 to 338 |
+| 1, 2, 3 | 12,000 | 1,257 to 1,415 | 0.95 to 0.99 | 0.006 to 0.050 | 0.000 to 0.001 | 0.07 to 0.10 | 0.12 to 0.47 | 58 to 91 |
+| 1 | 144,000 | 1,244 | 0.043 | 0.868 | 0.088 | 0.13 | 0.995 | 8,760 |
+| 4 | 144,000 | 1,331 | 0.996 | 0.004 | 0.000 | 0.07 | 0.340 | 5 |
+| 5 | 144,000 | 1,231 | 0.196 | 0.729 | 0.075 | 0.19 | 0.957 | 6,616 |
+| 6 | 144,000 | 930 | 0.210 | 0.697 | 0.094 | 0.21 | 0.970 | 3,401 |
+| 8 | 144,000 | 1,004 | 0.107 | 0.770 | 0.124 | 0.19 | 0.874 | 5,752 |
+
+Minimums over the second half (target 1 reads these): herb 0.021, 0.981, 0.099, 0.210, 0.097; carn
+0.088, 0.000, 0.059, 0.007, 0.117; `diet_sd` 0.13, 0.07, 0.18, 0.20, 0.18. **Target 1: 0 of 5.**
+
+**Half confirmed.** No cloud: the world holds 930 to 1,331 bodies at 144,000. A diet ladder evolves
+on 4 of 5 seeds, from below: the founder hunters fade by 12,000, then omnivores climb out of the
+herbivores by 48,000 and carnivores out of the omnivores, with kills of 3,400 to 8,800 per 24,000
+ticks. On seed 8 carnivores without a Filter's use hold 0.11 to 0.13 from 72,000 on, and herbivores
+lose their jaws (`herb_jaw` 0.009 at 120,000). Seed 4 never climbs. The middle is too large:
+omnivores 0.70 to 0.87 squeeze both ends.
+
+## T6: `diet_k` 2.0 — hypothesis before the run
+
+Rule 4: for omnivores taking over, `diet_k` up. Change from T5: `--param diet_k=2.0`. A body at 0.5
+takes 25% of each food, not 35%.
+
+Expected: on the seeds that climb, the middle thins and both ends grow: omnivores under 0.6,
+herbivores and carnivores 0.10 or more on at least 3 of 5 seeds, `diet_sd` over 0.20. The risk: a
+weaker gradient near 0 (a step to 0.1 gains 1% of a bite, not 3%) slows the climb, so seeds like 4
+may become two or three. If the climb fails on most seeds, `diet_k` goes back to 1.5 and the next
+lever is the gap (0.35).
