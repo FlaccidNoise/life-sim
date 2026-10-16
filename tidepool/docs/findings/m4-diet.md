@@ -417,3 +417,35 @@ through every reading below. The seeded rows are deterministic and stand. The be
 The eye gap: since E1, a blind eye no longer sees teeth, and the blind arm sits at the level an eye
 drifts to when it carries nothing (the baseline section). The sighted arm is 0.015 to 0.086 over it.
 The band of 0.1 is the owner's; the finding is that sight is weakly selected in this world.
+
+## Exit (2026-10-16)
+
+Built: rules D1 (the diet gene), D2 (a food chain, an amendment), E1 (a blind eye sees no teeth),
+the per-creature-tick bench gate, `probe-diet`, the diet on the page, the diet bands of the long gate.
+Audited fresh (no High finding; the Medium items are fixed or listed below). Seen in the browser: a
+real "Eaten." card that names the killer's diet ("Generation 0 · eats both", `img` not kept), both
+rebaked worlds load with no console error. Found and fixed on the way: a world file that loaded
+while the tab's visibility changed failed with "got `speed` before `init`" (`8bb1eb7`).
+
+**For the owner, in the order they block:**
+
+1. **The shape (target 1, not met).** The shipped set gives a ladder from plants to flesh on every
+   seed, but omnivores are the largest guild (0.57 to 0.83 at 144,000) and carnivores dip under
+   0.10. Is that the spectrum wanted, or is 10% at each end the bar? The levers measured are spent;
+   the next would be a rule (I1, crowded hunters catch less, or prey that learn).
+2. **Rule D2 and the rule 6 deviation**, both logged in `../decisions/INDEX.md`, owner to confirm.
+3. **The founding (target 2, not met).** The founder hunters fade before 12,000 at every value
+   tried; the ladder re-forms from the herbivores by 24,000. At 12,000 the world is herbivores.
+4. **The eye gap band (0.1).** Since E1 the gap measures blindness honestly and reads 0.015 to 0.086
+   at 144,000 and −0.020 to 0.063 at 36,000: sight is weakly selected. `make gates` and
+   `make gates-long` exit non-zero on it alone. A band or a rule for the owner.
+5. **The bench.** The diet rules cost about 2.5% to 3% per creature-tick (interleaved A/B, load 10).
+   The floor and its bad-input proof could not be read: the machine ran at load 10 to 138 all day.
+   Read on a quiet machine, against `../life-sim-ab` (`cfd5386`, kept for this).
+6. **Jaws on herbivores.** Herbivores keep jaws on most seeds (0.46 to 1.00 at 144,000). The jaw
+   gives the lunge, a second dash, whatever it bites: likely the reason, not measured. A design
+   question: should a lunge need a bite to pay?
+
+**Owner checks (play):** open `/?world=/m2-world-long.tdpl`, possess a body, and read the diet line
+on the mate card. Find a herbivore, an omnivore, and a carnivore in one world. Be eaten by a
+carnivore and read "eats flesh" on the card. Does the guide's line about a jaw make sense?

@@ -1,6 +1,6 @@
-# Handoff — Tidepool: M4 (Teeth) is built, on, measured, and waits for the owner
+# Handoff — Tidepool: the M4 diet retune is built, on, measured, and waits for the owner
 
-**Date:** 2026-10-16, morning. **Project:** life-sim, subproject `tidepool/`. The draft in `src/` at
+**Date:** 2026-10-16, evening. **Project:** life-sim, subproject `tidepool/`. The draft in `src/` at
 the repo root is frozen.
 
 The previous handoff (mid-M4) is at `git show 9a0b25a:HANDOFF.md`.
@@ -32,17 +32,22 @@ The previous handoff (mid-M4) is at `git show 9a0b25a:HANDOFF.md`.
 
 ## What comes next
 
-1. The owner answered on 2026-10-16 by delegation: hunters that eat only meat, a herbivore to
-   carnivore spectrum, and "research it and decide" for the rest. The decisions are in
-   `tidepool/docs/decisions/INDEX.md` (2026-10-16), the evidence in
-   `tidepool/docs/research/diet-coexistence.md`, and the plan in
-   `tidepool/docs/plans/2026-10-16-m4-retune-diet.md`, **approved by the owner on 2026-10-16 and being built**. The
-   owner's playtest checks stay open.
-2. M5 (Deep time) has no plan yet. It carries from M4: the kill marks lost when the page holds
-   every buffer, the eye gap's changed meaning (the jaw input is not scaled by `eye_gain`), and the
-   guards and gland that evolution does not use. Fixed after the exit, unpushed: the still brain's
-   overlapping output labels (`9258483`) and the killer missing from the card when it died in the
-   same kill list (`5c81aea`, `3010972`, snapshot format 10, both saved worlds rebaked).
+1. **The diet retune is built and shipped on** (`tidepool/docs/plans/2026-10-16-m4-retune-diet.md`,
+   approved 2026-10-16). Rows and verdict: `tidepool/docs/findings/m4-diet.md`; its "Exit" section
+   lists the six questions for the owner in the order they block: the shape (omnivores the largest
+   guild, carnivores under 10% at times), rule D2 and the rule 6 deviation to confirm, the founding
+   (no hunters at 12,000), the eye gap band (fails on its own since E1 made the gap honest), the
+   bench (unreadable at load 10 to 138; about 2.5% to 3% cost), and jaws on herbivores. Evidence:
+   `tidepool/docs/research/diet-coexistence.md`. Decisions: `tidepool/docs/decisions/INDEX.md`
+   2026-10-16.
+2. **Unpushed:** everything since `5344ada` (the M4 exit), on `main`. The owner said "no push
+   mid-plan"; push when the owner says so.
+3. M5 (Deep time) has no plan yet. It carries: the kill marks lost when the page holds every buffer,
+   the guards and gland that evolution does not use, and the eye's jaw input unclamped above 1
+   (audit, low). Fixed after the M4 exit: the still brain's labels (`9258483`), the killer card for a
+   killer that died in the same kill list (`5c81aea`, `3010972`), the eye's jaw input scaled by
+   `eye_gain` (E1), a world file failing to load when the tab's visibility changed (`8bb1eb7`).
+4. The bigger world is M6 (zones with gaps), decided 2026-10-16.
 
 ## Warnings
 
@@ -55,6 +60,12 @@ The previous handoff (mid-M4) is at `git show 9a0b25a:HANDOFF.md`.
   commit message.
 - Leftover agent browser tabs run the sim and load the machine: close them before a bench.
 - `bd` does not start in this repo. Open problems live in the findings files.
+- Two reference worktrees: `../life-sim-ref` (`7b8c74f`, the M4 bench reference) and `../life-sim-ab`
+  (`cfd5386`, before the diet gene, for the diet retune's bench A/B). Keep both until the bench is
+  read on a quiet machine.
+- The machine runs `llama-server` processes and other projects' tests: check `uptime` and `ps` before
+  any bench; at a load over 5 a reading is not a reading.
+- Snapshot format 11, ABI 9. The saved worlds (gitignored) are rebaked at the shipped set.
 
 ## Key files
 

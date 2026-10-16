@@ -15,7 +15,7 @@ creature among creatures that each run an evolved neural network. It shares no c
 ## Status
 
 M0 (foundation) and M1 (first swim) are built, audited, and pushed. M2 (Bodies) is built from
-`docs/plans/2026-10-11-m2-bodies.md` and pushed. **`make check`, `make gates`, and `make gates-long`
+`docs/plans/2026-10-11-m2-bodies.md` and pushed. **At the M2 exit `make check`, `make gates`, and `make gates-long`
 all exit 0.** The first audit (`docs/findings/m2-audit.md`) found that evolution removed the senses by
 tick 144,000. The cause was the upkeep of a part, and the owner deleted that rule on 2026-10-12
 (`docs/findings/m2-senses.md`). The second audit, at the head, is `docs/findings/m2-audit-2.md`: no
@@ -30,7 +30,12 @@ The owner's checks are open. The walkthrough
 (`docs/plans/2026-10-14-m4-teeth.md`), at the recommended option of every choice and C9 at B. M4 is
 built with every rule on by the owner's instruction of 2026-10-16, measured, and audited twice
 (`docs/findings/m4-audit-1.md`, `m4-audit-2.md`); its exit record is `docs/findings/m4-exit.md`. The
-roadmap's coexistence is not met and is the owner's finding; the owner's checks are open.** The plan says which owner stops the build runs through and which stops are hard
+roadmap's coexistence is not met and is the owner's finding; the owner's checks are open.** **The diet retune (`docs/plans/2026-10-16-m4-retune-diet.md`) was approved and built on 2026-10-16:
+a diet gene from plants to flesh (D1), a food chain (D2), and a blind eye that sees no teeth (E1)
+ship on. Its targets are not all met and its open questions are the owner's
+(`docs/findings/m4-diet.md` "Exit"). `make gates` and `make gates-long` exit non-zero on the eye gap
+alone, and the bench could not be read on a loaded machine.** The plan says which owner stops the
+build runs through and which stops are hard
 ("How the build runs without the owner"). A choice logged as "provisional, owner to confirm" in
 `docs/decisions/INDEX.md` is not final.
 
