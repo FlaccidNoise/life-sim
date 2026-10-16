@@ -60,7 +60,33 @@ those are present (`dash_fire_ctx` 0.99 against `dash_think_ctx` 0.09 to 0.15, b
 
 Rows follow the run of `make check && make gates && make gates-long` at the final defaults.
 
-ROWS_PLACEHOLDER
+At `271eb80`, 2026-10-16, load 1 to 3. `make check` exit 0 (306 Vitest tests), `make gates` exit 0,
+**`make gates-long` exit 2: 3 of 5** (the eye gap on seeds 6 and 8 at 0.080 and 0.082; every other
+band on every seed, the long predation bands included). Columns that do not change the verdict
+are elided; the full rows are in the orchestrator's log and `m4-tuning.md`.
+
+```
+bench creatures=1540 median_tps=2548 ns_per_creature_tick=255 floor=2400 PASS
+bench-wasm creatures=1540 median_tps=2455 ns_per_creature_tick=265 floor=2400 PASS
+seed=1 creatures=1516 min_late=1390 plants=2229 births_late=2881 ... hunt_lo=0.091 hunt_hi=0.193 prey_lo=1224 kills_late=43 flesh_late=0.001 PASS
+seed=2 creatures=1355 min_late=1241 plants=2076 births_late=2459 ... hunt_lo=0.133 hunt_hi=0.204 prey_lo=1078 kills_late=83 flesh_late=0.002 PASS
+seed=3 creatures=1337 min_late=1237 plants=1965 births_late=2378 ... hunt_lo=0.159 hunt_hi=0.294 prey_lo=925 kills_late=62 flesh_late=0.001 PASS
+gate-health 3/3 PASS
+seed=1 creatures=1713 creatures_noscent=1590 creatures_noeye=1639 len=9.5 len_sd=1.57 parts=8.3 chemo=0.44 chemo_blind=0.31 eye=0.17 eye_blind=0.03 ... variety_wired=13.0 PASS
+seed=2 creatures=1383 creatures_noscent=1572 creatures_noeye=1131 len=10.7 len_sd=2.09 parts=8.5 chemo=0.47 chemo_blind=0.28 eye=0.18 eye_blind=0.02 ... variety_wired=11.2 PASS
+seed=3 creatures=1473 creatures_noscent=1249 creatures_noeye=1493 len=10.4 len_sd=1.56 parts=8.0 chemo=0.45 chemo_blind=0.25 eye=0.14 eye_blind=0.03 ... variety_wired=11.7 PASS
+gate-evolve 3/3 PASS
+seed=1 creatures=631 creatures_noscent=725 creatures_noeye=582 len=18.4 len_sd=2.78 parts=9.2 chemo=0.71 chemo_blind=0.09 eye=0.15 eye_blind=0.07 ... variety_wired=12.9 hunt_lo=0.715 hunt_hi=1.000 prey_lo=0 kills_late=380 flesh_late=0.026 FAIL(eye_gap=0.080 < 0.1)
+seed=4 creatures=774 creatures_noscent=973 creatures_noeye=960 len=15.6 len_sd=3.37 parts=10.1 chemo=0.53 chemo_blind=0.03 eye=0.15 eye_blind=0.04 ... variety_wired=14.9 hunt_lo=0.883 hunt_hi=1.000 prey_lo=0 kills_late=383 flesh_late=0.022 PASS
+seed=5 creatures=925 creatures_noscent=961 creatures_noeye=689 len=14.9 len_sd=3.41 parts=11.9 chemo=0.68 chemo_blind=0.01 eye=0.20 eye_blind=0.06 ... variety_wired=31.7 hunt_lo=0.913 hunt_hi=1.000 prey_lo=0 kills_late=1040 flesh_late=0.041 PASS
+seed=6 creatures=939 creatures_noscent=870 creatures_noeye=1338 len=13.8 len_sd=4.33 parts=11.2 chemo=0.55 chemo_blind=0.16 eye=0.15 eye_blind=0.06 ... variety_wired=13.0 hunt_lo=0.936 hunt_hi=1.000 prey_lo=0 kills_late=374 flesh_late=0.014 FAIL(eye_gap=0.082 < 0.1)
+seed=8 creatures=813 creatures_noscent=657 creatures_noeye=781 len=15.6 len_sd=3.07 parts=9.4 chemo=0.44 chemo_blind=0.09 eye=0.16 eye_blind=0.04 ... variety_wired=9.8 hunt_lo=0.842 hunt_hi=0.949 prey_lo=42 kills_late=226 flesh_late=0.012 PASS
+gate-evolve 3/5 FAIL
+```
+
+The same rows as part 4's gland-on run, digit for digit. Both saved worlds are rebaked at these
+defaults: `m2-world.tdpl` at tick 36,000 (1,713 bodies, 515 pieces of debris, hash `5ec2fb48`) and
+`m2-world-long.tdpl` at 144,000 (631 bodies, 136 pieces, hash `7583a4bd`).
 
 ## Throughput
 
@@ -106,6 +132,23 @@ density would not be the limit, and it was not: the first contact kills.
 - The eye gap at 144,000 sits at its band on some seeds with every rule on.
 - `OUT_DASH` is declared by the flagellum sum but fires on `flag_push`: a side flagellum carries a
   dead output.
+
+## Browser checks, done by the orchestrator
+
+On the rebaked worlds, Chrome at 1280 by 800, no console error on any page (`m4-look.md` has the
+pictures, under `img/`):
+
+- **Task 6, the draw:** the four kinds, debris, the hurt flash, and the kill mark are seen on the
+  36,000-tick world. A cloud and the dash wake are not singled out. The draw timing is not measured.
+- **Task 7, a real death by a bite:** seen in a founder world under `?debug` with `founder_jaw=0.5`
+  and `bite_mass_ratio=0`, through the page's own `died` path: "Eaten.", the killer with its jaw,
+  generation 3, its brain with `dash` and `lunge`, "Sees another body on the right. Lunges.", the
+  heirs first. The no-killer state was seen too ("You starved."). Defect: the still brain's five
+  output labels overlap.
+- **Task 14, beat 11:** the kill mark rings a killer in view in the 36,000-tick world within the
+  first seconds of a possession. The playtest log's `firstBite` entry was not read.
+- **Task 13, the buttons:** a possessed hunter shows Dash and Lunge from its parts; a lunge fires on
+  F and its cost showed (the juvenile starved on it).
 
 ## Owner checks
 
