@@ -275,3 +275,27 @@ diet_sigma=0.1` (`diet_k` 1.5, `founder_hunter_diet` 0.6, ratio 1.15, gap 0.25).
 Expected: a larger step lets a herbivore lineage jump the valley near 0, so the ladder forms on 5
 of 5 seeds and earlier, and the spread rises (more bodies at the ends). Target 1 on 2 or more
 seeds. The middle may stay large: if so, T9 is `diet_k` 1.75 on this base.
+
+### T8 rows (`b59b7fb`)
+
+| Seed | 144,000: creatures | herb | omni | carn | diet_sd | kills | second half: herb_min, carn_min, sd_min |
+|---|---|---|---|---|---|---|---|
+| 1 | 934 | 0.099 | 0.830 | 0.072 | 0.16 | 5,026 | 0.023, 0.072, 0.13 |
+| 4 | 963 | 0.377 | 0.574 | 0.049 | 0.22 | 3,953 | 0.269, 0.035, 0.18 |
+| 5 | 1,045 | 0.195 | 0.656 | 0.149 | 0.22 | 4,464 | 0.195, 0.075, 0.22 |
+| 6 | 890 | 0.260 | 0.701 | 0.039 | 0.18 | 3,235 | 0.224, 0.020, 0.17 |
+| 8 | 933 | 0.088 | 0.742 | 0.170 | 0.17 | 6,616 | 0.088, 0.073, 0.17 |
+
+At 12,000 on seeds 1 to 3: omnivores 0.025 to 0.041 and carnivores 0.000 to 0.008, with 188 and
+306 kills on seeds 1 and 2. **Confirmed in part:** the ladder forms on 5 of 5 seeds, seed 4
+included, and starts before 12,000. Target 1: 0 of 5; the middle is still 0.57 to 0.83 and the
+carnivores dip under 0.10 in the second half on every seed.
+
+## T9: `diet_k` 1.75 — hypothesis before the run
+
+Rule 4, the shape. Change from T8: `--param diet_k=1.75` (`diet_sigma` 0.1, `founder_hunter_diet`
+0.6, ratio 1.15, gap 0.25). A body at 0.5 takes 30% of each food, not 35%.
+
+Expected: the larger step keeps the climb that `diet_k` 2.0 lost with the smaller one, and the
+middle thins: omnivores under 0.6 and the ends 0.10 or more on 2 or more seeds. If the climb fails
+again on most seeds, 1.5 stays and T10 is the gap (0.35) on the T8 base.
