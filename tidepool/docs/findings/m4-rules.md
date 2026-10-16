@@ -14,7 +14,8 @@ against the Task 2 block of the plan (the M3 exit rows plus `variety_wired`):
 | Task 2, skeleton | `949860c` | identical | 0 |
 | Task 4, debris | `8ef278c` | identical | 0 |
 | Task 3, bite and shell drag | `c11edc0` | identical | 0 |
-| Task 5, dash, lunge, toxin | see below | | |
+| Task 5, dash, lunge, toxin | `f4cb651` | identical | 0 |
+| Task 6, the page draws teeth (draw only) | `ae5f9ef` | not a sim change | 0 |
 
 The state hash changed once, at Task 2 (format 9). No later merge changed the rows.
 
@@ -147,4 +148,21 @@ Readings the plan left open, as built:
   freed the old one at tick 30, under a test that then freed a dead slot.
 
 **Switch-on:** a default world of 400 founders gives one hash after 2,000 ticks with and without
-the Task 5 code (the agent's check), and the gate rows at the merge are below.
+the Task 5 code (the agent's check), and the gate rows at the merge (`f4cb651`) are identical to
+the baseline, by `diff`.
+
+## The size of the debris pool with `corpse_share=0.5`
+
+`run --seed 1 --creatures 400 --plants 1200`, at `f4cb651`, load 4.5. A point reading at the end of
+the run, not a mean: `run` prints the pool once.
+
+| Ticks | `corpse_share` | Creatures | Debris pieces |
+|---|---|---|---|
+| 12,000 | 0 | 1,458 | 0 |
+| 12,000 | 0.5 | 1,517 | 278 |
+| 36,000 | 0.5 | 1,687 | 545 |
+
+545 pieces at tick 36,000 is 13% of the pool of 4,096. With `debris_decay` 0.0005 a piece loses
+half its energy in about 1,400 ticks, so the pool holds roughly the deaths of the last 2,000 to
+3,000 ticks that no Filter reached. The pool did not fill. The 36,000 world holds 1,687 bodies
+against 1,633 at Off: debris is food.
