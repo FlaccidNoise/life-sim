@@ -58,3 +58,38 @@ they take over (herbivores under 0.10), rule 3.
 
 Read: `probe-diet` 12,000 on seeds 1 to 3, then 144,000 on seeds 1, 4, 5, 6, 8. The gates follow
 only if target 1 is met.
+
+### T1 rows (`c4ed5f5`, load 18 to 89)
+
+| Seed | tick | herb | omni | carn | diet_sd | hunt | kills since last row |
+|---|---|---|---|---|---|---|---|
+| 1, 2, 3 | 3,000 | 1.000 | 0.000 | 0.000 | 0.04 | 0.053, 0.020, 0.004 | 4, 21, 7 |
+| 1, 2, 3 | 12,000 | 0.999 | 0.001 | 0.000 | 0.05 to 0.06 | 0.211, 0.141, 0.034 | 6, 1, 0 |
+| 1 | 144,000 | 0.996 | 0.004 | 0.000 | 0.07 | 0.746 | 67 |
+| 4 | 144,000 | 0.999 | 0.001 | 0.000 | 0.06 | 0.782 | 92 |
+| 5 | 144,000 | 0.997 | 0.003 | 0.000 | 0.07 | 0.684 | 89 |
+| 6 | 144,000 | 0.997 | 0.003 | 0.000 | 0.07 | 0.956 | 117 |
+| 8 | 144,000 | 0.992 | 0.008 | 0.000 | 0.07 | 0.084 | 2 |
+
+**Falsified, in the other direction.** The founder hunters are gone before tick 3,000 on every
+seed and no carnivore comes back: herbivores are 0.99 or more at every sample to 144,000, mean
+`diet` 0.05 to 0.08. What T1 shows:
+
+- The jaw takeover is over: kills fall from 2,026 to 8,144 per 24,000 ticks at baseline to 0 to
+  200. But jaws still spread on herbivores (`herb_jaw` up to 0.956 on seed 6), where a bite takes
+  `0.06^1.5`, about 1.5% of a full bite. Not explained yet: the lunge the jaw gives, or drift.
+- Near `diet` 0 a step toward flesh costs plant intake at once (about `1.5·d`) and gains almost no
+  meat (`d^1.5`), so no herbivore lineage climbs. Carnivory has to come from the founders.
+- A crossover passes `diet` and the jaw separately, so a hunter's mate can bud a high-diet body
+  with no jaw, which starves at 9% filter.
+
+## T2: `founder_hunter_diet` 0.6 — hypothesis before the run
+
+Rule 2: for carnivores dying out, the founding first. Change: `--param diet_k=1.5 --param
+founder_hunter_diet=0.6`. A founder hunter filters 25% and bites 46%: an omnivore that does not
+starve while it learns to hunt.
+
+Expected: the founder hunters survive the founding on most seeds, as an omnivore guild of 0.05 to
+0.15 at 12,000. By 144,000 one of two things: the guild is pulled to flesh (carn 0.10 or more on 3
+of 5 seeds) or back to plants (carn under 0.02). I expect the second on most seeds, by the same
+missing gradient as T1, but slower. If so, T3 is `founder_jaw` up (rule 2's next lever).
