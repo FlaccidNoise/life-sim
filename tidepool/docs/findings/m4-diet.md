@@ -299,3 +299,27 @@ Rule 4, the shape. Change from T8: `--param diet_k=1.75` (`diet_sigma` 0.1, `fou
 Expected: the larger step keeps the climb that `diet_k` 2.0 lost with the smaller one, and the
 middle thins: omnivores under 0.6 and the ends 0.10 or more on 2 or more seeds. If the climb fails
 again on most seeds, 1.5 stays and T10 is the gap (0.35) on the T8 base.
+
+### T9 rows (`f3d55fe`, load 9 to 125)
+
+| Seed | 144,000: creatures | herb | omni | carn | diet_sd | kills | second half: herb_min, carn_min, sd_min |
+|---|---|---|---|---|---|---|---|
+| 1 | 1,008 | 0.170 | 0.819 | 0.011 | 0.13 | 6,724 | 0.170, 0.007, 0.13 |
+| 4 | 1,115 | 0.608 | 0.385 | 0.007 | 0.19 | 3,697 | 0.608, 0.003, 0.18 |
+| 5 | 1,585 | 0.955 | 0.045 | 0.000 | 0.10 | 251 | 0.955, 0.000, 0.09 |
+| 6 | 1,455 | 0.973 | 0.027 | 0.000 | 0.09 | 28 | 0.973, 0.000, 0.09 |
+| 8 | 1,245 | 0.980 | 0.020 | 0.000 | 0.09 | 0 | 0.966, 0.000, 0.09 |
+
+**Falsified.** At 1.75 the climb fails on 3 of 5 seeds even with the larger step, and where it
+climbs the middle holds and carnivores stay under 0.02. `diet_k` stays 1.5.
+
+## T10: `bite_diet_gap` 0.35 — hypothesis before the run
+
+The last trial. Change from T8: `--param bite_diet_gap=0.35` (`diet_k` 1.5, `diet_sigma` 0.1,
+`founder_hunter_diet` 0.6, ratio 1.15). An omnivore at 0.5 bites only bodies at 0.15 or under; a
+carnivore at 0.85 bites the omnivore band up to 0.5.
+
+Expected: carnivores feed on omnivores, which grows the flesh end and thins the middle; herbivores
+lose some omnivore predators. Target 1 on 2 or more seeds, the ladder kept on 4 or more. The risk: a
+founder hunter at 0.6 bites only bodies at 0.25 or under, the herbivores, so the founding is as in
+T8.
