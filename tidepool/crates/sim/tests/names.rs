@@ -350,11 +350,11 @@ fn a_genome_with_65_hidden_genes_does_not_load() {
         Some(LoadError::Invalid("brain genome output count"))
     );
 
-    // A port is one byte. The word of the port of the first out gene comes after 5 body genes, the
+    // A port is one byte. The word of the port of the first out gene comes after 6 body genes, the
     // part count, 5 words per part, the hidden count, 3 words per hidden gene, the out count, and
     // the owner.
     let g = founder(7);
-    let port_at = 4 * (5 + 1 + 5 * g.parts.len() + 1 + 3 * g.brain.hidden.len() + 1 + 1);
+    let port_at = 4 * (6 + 1 + 5 * g.parts.len() + 1 + 3 * g.brain.hidden.len() + 1 + 1);
     let mut bytes = saved(&g);
     assert_eq!(bytes[port_at..port_at + 4], [OUT_THRUST, 0, 0, 0]);
     bytes[port_at + 1] = 1;

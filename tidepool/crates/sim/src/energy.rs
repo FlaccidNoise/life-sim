@@ -1,6 +1,7 @@
 //! Eating, upkeep, growth, and death.
 //!
-//! A filter mouth feeds on every plant the body touches, with no brain output. A full creature
+//! A filter mouth feeds on every plant the body touches, with no brain output, at
+//! `(1 - diet)^diet_k` of its rate (rule D1 of the diet plan). A full creature
 //! takes nothing, and no bite takes a plant under its death reserve. Upkeep is paid for mass, for
 //! being a body, for each hidden neuron and each expressed connection of the brain, and for thrust,
 //! and a long `old` gene raises all of it. A juvenile with a reserve builds mass. A creature with
@@ -11,7 +12,7 @@
 use crate::control::{CAUSE_OLD_AGE, CAUSE_STARVED};
 use crate::debris::DEBRIS_RADIUS;
 use crate::genome::{REF_AREA, REF_WIDTH};
-use crate::math::pow075;
+use crate::math::{pow075, pow_quarters};
 use crate::params::id;
 use crate::plant;
 use crate::snapshot::{LoadError, Reader, Writer};
@@ -29,6 +30,7 @@ pub fn contact(world: &mut World) {
     let (per_mass, intake_rate) = (p.get(id::ENERGY_PER_MASS), p.get(id::INTAKE_RATE));
     let (bite_fraction, plant_cap) = (p.get(id::BITE_FRACTION), p.get(id::PLANT_CAP));
     let death_reserve = p.get(id::PLANT_DEATH_RESERVE);
+    let diet_k = p.get(id::DIET_K);
     let (c, plants, stats) = (&mut world.creatures, &mut world.plants, &mut world.stats);
     let debris = &mut world.debris;
     // With no debris the pass is skipped, so a world without it pays nothing for it.
@@ -39,7 +41,10 @@ pub fn contact(world: &mut World) {
         }
         let (x, y, radius) = (c.x[s], c.y[s], c.radius(s));
         // The mouth follows the area. For the reference body it is the length.
-        let mut budget = intake_rate * c.filter[s] * (c.area(s) / REF_WIDTH);
+        let mut budget = intake_rate
+            * c.filter[s]
+            * (c.area(s) / REF_WIDTH)
+            * pow_quarters(1.0 - c.diet[s], diet_k);
         let mut room = per_mass * c.area(s) - c.energy[s];
         let mut energy = c.energy[s];
         // The centre of a plant that the body touches is at most this far away.

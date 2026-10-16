@@ -44,7 +44,7 @@ fn mix<G: Clone, K: PartialEq>(
 /// Parts and connections line up by history id, hidden genes by id, and out genes by the output
 /// that they name. A shared gene keeps the home's kind and the home's two ends.
 ///
-/// Draws in this order: `len`, `wid`, `egg`, `old`, the parts, the hidden genes, the out genes,
+/// Draws in this order: `len`, `wid`, `egg`, `old`, `diet`, the parts, the hidden genes, the out genes,
 /// the connections. In each list the shared genes come first, in the home's order, and then the
 /// donor's own, in the donor's order. See `mix` for what makes a draw.
 ///
@@ -58,6 +58,7 @@ pub fn cross(home: &Genome, donor: &Genome, rng: &mut Rng, p: &Params) -> Genome
         (&mut g.wid, donor.wid),
         (&mut g.egg, donor.egg),
         (&mut g.old, donor.old),
+        (&mut g.diet, donor.diet),
     ] {
         if rng.unit() < rates.0 {
             *gene = theirs;

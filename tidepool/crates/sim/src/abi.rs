@@ -18,7 +18,7 @@ use crate::math::{sin_cos, wrap_angle};
 use crate::params::{ParamDef, DEFS};
 use crate::world::{self, World};
 
-pub const ABI_VERSION: u32 = 8;
+pub const ABI_VERSION: u32 = 9;
 
 thread_local! {
     /// Why the last `tp_new` or `tp_load` returned null.

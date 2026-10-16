@@ -9,7 +9,7 @@ use crate::plant;
 use crate::world::World;
 
 pub const HEADER_WORDS: u32 = 50;
-pub const CREATURE_STRIDE: u32 = 25;
+pub const CREATURE_STRIDE: u32 = 26;
 pub const PLANT_STRIDE: u32 = 4;
 pub const DEBRIS_STRIDE: u32 = 3;
 pub const CLOUD_STRIDE: u32 = 4;
@@ -94,9 +94,9 @@ fn pack(part: &PartGene) -> u32 {
 /// `hidden | conns << 16` for the hidden neurons and the connections that its brain expresses, then
 /// `PART_WORDS` part words in gene order. A place with no part holds 0. The next word is the growth,
 /// a float: the share of its full size that the body has grown. The length and the width are as
-/// the body is now, so the length over the growth is the length gene. The last word is the age, a
-/// float: the share of its life that the body has lived, `age / old`, as the age input of its brain
-/// reads it.
+/// the body is now, so the length over the growth is the length gene. Then the age, a float: the
+/// share of its life that the body has lived, `age / old`, as the age input of its brain reads it.
+/// The last word is the `diet` gene as the body expresses it, a float in 0 to 1.
 /// Plant record: x, y, radius, reserve01.
 /// Debris record: x, y, and its energy as a share of the capacity of the reference body, held at 1.
 /// Cloud record: x, y, radius, and its ticks left as a share of `toxin_ticks`, held at 1.
@@ -255,6 +255,7 @@ pub fn write(world: &mut World, x0: f32, y0: f32, x1: f32, y1: f32) -> u32 {
         frame.extend_from_slice(&parts);
         frame.push(c.growth[s].to_bits());
         frame.push((c.age[s] as f32 / c.old[s]).to_bits());
+        frame.push(c.diet[s].to_bits());
         records += 1;
     });
     frame[1] = records;
@@ -455,7 +456,7 @@ mod tests {
         write(&mut w, 0.0, 0.0, 1536.0, 1024.0);
         for (slot, growth) in [(9u32, 0.4f32), (4, 1.0)] {
             let r = record(&w, slot);
-            assert_eq!(r[CREATURE - 2], growth.to_bits());
+            assert_eq!(r[CREATURE - 3], growth.to_bits());
             assert_eq!(r[9] & FLAG_JUVENILE != 0, growth < 1.0);
             let gene = f32::from_bits(r[3]) / growth;
             assert!(
@@ -468,7 +469,7 @@ mod tests {
     /// The page does not hand over a body near the end of its life. The share is the age input of
     /// the brain, in `sense.rs`.
     #[test]
-    fn a_record_ends_with_the_age_share_of_a_young_body_and_of_an_old_one() {
+    fn a_record_holds_the_age_share_of_a_young_body_and_of_an_old_one() {
         let mut w = World::new(5, 1536.0, 1024.0);
         w.seed_founders(50, 0);
         // The lifespan of a founder is 4,800 ticks.
@@ -476,12 +477,33 @@ mod tests {
         write(&mut w, 0.0, 0.0, 1536.0, 1024.0);
         for (slot, share) in [(4u32, 0.1f32), (9, 0.95)] {
             let s = slot as usize;
-            let last = record(&w, slot)[CREATURE - 1];
+            let age = record(&w, slot)[CREATURE - 2];
             assert_eq!(
-                last,
+                age,
                 (w.creatures.age[s] as f32 / w.creatures.old[s]).to_bits()
             );
-            assert!((f32::from_bits(last) - share).abs() < 1e-6, "slot {slot}");
+            assert!((f32::from_bits(age) - share).abs() < 1e-6, "slot {slot}");
+        }
+    }
+
+    /// The page names what a body eats from the last word (Task 4 of the diet plan). A gene out of
+    /// range, as a load can hold, is sent as the body expresses it.
+    #[test]
+    fn a_record_ends_with_the_diet() {
+        let mut w = World::new(5, 1536.0, 1024.0);
+        w.seed_founders(50, 0);
+        for (s, diet) in [(4usize, 0.3f32), (9, 7.0)] {
+            w.genomes[s].diet = diet;
+            let g = w.genomes[s].clone();
+            w.creatures.express(s, &g);
+        }
+        write(&mut w, 0.0, 0.0, 1536.0, 1024.0);
+        for (slot, diet) in [(4u32, 0.3f32), (9, 1.0)] {
+            assert_eq!(
+                record(&w, slot)[CREATURE - 1],
+                diet.to_bits(),
+                "slot {slot}"
+            );
         }
     }
 

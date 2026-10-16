@@ -1,10 +1,10 @@
 // Constants and layouts shared by the page and the worker. The frame layout mirrors
 // crates/sim/src/frame.rs. tests/abi.test.ts fails if the two disagree.
 
-export const ABI_VERSION = 8;
+export const ABI_VERSION = 9;
 export const TICK_HZ = 20;
 export const FRAME_HEADER_WORDS = 50;
-export const CREATURE_STRIDE = 25;
+export const CREATURE_STRIDE = 26;
 export const PLANT_STRIDE = 4;
 // A debris record: x, y, and its energy as a share of the capacity of the reference body.
 export const DEBRIS_STRIDE = 3;
@@ -36,8 +36,9 @@ const KILL_WORDS = 3;
 // PART_WORDS part words follow from C_PARTS. The word at C_BRAIN is `hidden | conns << 16`: the
 // hidden neurons and the connections that the brain of the body expresses. The word at C_GROWTH is
 // a float: the share of its full size that the body has grown. The length and the width are as the
-// body is now, so the length over the growth is the length gene. The last word, at C_AGE, is a
-// float: the share of its life that the body has lived.
+// body is now, so the length over the growth is the length gene. The word at C_AGE is a float: the
+// share of its life that the body has lived. The last word, at C_DIET, is a float: the `diet` gene,
+// 0 (eats only plants) to 1 (eats only flesh).
 export const C_X = 0,
   C_Y = 1,
   C_HEADING = 2,
@@ -52,6 +53,7 @@ export const C_UID = 7,
 export const C_PARTS = 11;
 export const C_GROWTH = 23;
 export const C_AGE = 24;
+export const C_DIET = 25;
 export const FLAG_LINEAGE = 1,
   FLAG_POSSESSED = 2,
   FLAG_JUVENILE = 4,

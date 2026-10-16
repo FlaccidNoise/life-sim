@@ -15,7 +15,7 @@ use tidepool_sim::snapshot::{Reader, Writer};
 fn founder(seed: u64) -> Genome {
     let mut g = Genome::founder(&mut Rng::new(seed), &Params::new());
     let own = seed as f32 / 16.0;
-    (g.egg, g.old) = (0.3 + own, 3000.0 + own);
+    (g.egg, g.old, g.diet) = (0.3 + own, 3000.0 + own, own);
     for part in &mut g.parts {
         (part.anchor, part.extra) = (own, own);
     }
@@ -275,6 +275,7 @@ fn two_crosses_from_one_generator_state_are_equal() {
         (h.wid, d.wid, c.wid),
         (h.egg, d.egg, c.egg),
         (h.old, d.old, c.old),
+        (h.diet, d.diet, c.diet),
     ] {
         assert_ne!(ours, theirs);
         assert_eq!(got == theirs, drawn(swap));

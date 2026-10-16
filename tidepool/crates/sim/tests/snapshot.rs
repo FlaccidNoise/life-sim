@@ -137,6 +137,7 @@ fn a_load_expresses_every_body_again() {
                 c.hue[s],
                 c.egg[s],
                 c.old[s],
+                c.diet[s],
                 c.flag_push[s],
                 c.flag_side[s],
                 c.cilia[s],
@@ -210,6 +211,7 @@ fn every_saved_field_is_in_the_hash_and_survives_a_load() {
         ("genome egg", |w| w.genomes[S].egg += 0.1),
         ("genome old", |w| w.genomes[S].old += 1.0),
         ("genome hue", |w| w.genomes[S].hue += 0.1),
+        ("genome diet", |w| w.genomes[S].diet += 0.1),
         // A part that changes what the body declares. `brain::load` reads one activation for
         // each neuron that the loaded genome expresses, so the block is expressed again.
         ("part kind", |w| {
@@ -526,7 +528,7 @@ impl Crafted {
                 ..Genome::default()
             };
             if self.wild_genome {
-                (genome.len, genome.wid, genome.egg, genome.old) = (v, v, v, v);
+                (genome.len, genome.wid, genome.egg, genome.old, genome.diet) = (v, v, v, v, v);
                 for part in &mut genome.parts {
                     (part.anchor, part.size, part.extra) = (v, v, v);
                 }

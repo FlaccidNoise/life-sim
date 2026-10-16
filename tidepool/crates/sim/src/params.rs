@@ -273,6 +273,23 @@ table! {
     STARTER_FLEE "starter_flee" 2.0 -8.0 8.0;
     /// Founder brain: bias of each trigger output.
     STARTER_TRIGGER_BIAS "starter_trigger_bias" -1.0 -3.0 3.0;
+    /// The generalist penalty of rule D1: a Filter takes `(1 - diet)^diet_k` and a bite
+    /// `diet^diet_k`. In steps of `DIET_K_STEP`. 0: both factors are 1, the M4 world.
+    DIET_K "diet_k" 0.0 0.0 4.0;
+    /// Diet drift per birth.
+    DIET_SIGMA "diet_sigma" 0.05 0.0 0.5;
+    /// The `diet` gene of a founder with no Jaw.
+    FOUNDER_DIET "founder_diet" 0.0 0.0 1.0;
+    /// The `diet` gene of a hunter founder. At 0.8 and `diet_k` 1.5 its Filter takes 9%.
+    FOUNDER_HUNTER_DIET "founder_hunter_diet" 0.8 0.0 1.0;
+}
+
+/// `diet_k` moves in steps of this, so that `math::pow_quarters` gives its power exactly.
+pub const DIET_K_STEP: f32 = 0.25;
+
+/// True when `v` is not a value that parameter `i` can hold: only `diet_k` has a step.
+pub fn off_step(i: usize, v: f32) -> bool {
+    i == id::DIET_K && (v / DIET_K_STEP).fract() != 0.0
 }
 
 #[derive(Clone)]
@@ -298,9 +315,14 @@ impl Params {
         self.v[i]
     }
 
-    /// Clamps to `[min, max]`. NaN is ignored.
+    /// Clamps to `[min, max]`, and moves `diet_k` to its nearest step. NaN is ignored.
     pub fn set(&mut self, i: usize, v: f32) {
         if !v.is_nan() {
+            let v = if i == id::DIET_K {
+                (v / DIET_K_STEP).round() * DIET_K_STEP
+            } else {
+                v
+            };
             self.v[i] = v.clamp(DEFS[i].min, DEFS[i].max);
         }
     }
@@ -313,8 +335,9 @@ impl Params {
         w.f32s(&self.v);
     }
 
-    /// `Invalid` when the count differs from the table or a value is outside its range. A loaded
-    /// table holds only values that `set` could have stored, so rule code can trust the ranges.
+    /// `Invalid` when the count differs from the table, a value is outside its range, or `diet_k`
+    /// is off its step. A loaded table holds only values that `set` could have stored, so rule code
+    /// can trust the ranges.
     pub fn load(r: &mut Reader) -> Result<Params, LoadError> {
         let v = r.f32s()?;
         if v.len() != DEFS.len() {
@@ -325,6 +348,11 @@ impl Params {
             .any(|(x, d)| !(d.min..=d.max).contains(x))
         {
             return Err(LoadError::Invalid("parameter out of range"));
+        }
+        if v.iter().enumerate().any(|(i, &x)| off_step(i, x)) {
+            return Err(LoadError::Invalid(
+                "diet_k is not a multiple of 0.25: use 0, 0.25, 0.5, and so on to 4",
+            ));
         }
         Ok(Params { v })
     }
@@ -358,5 +386,24 @@ mod tests {
             Params::load(&mut Reader::new(&w.bytes)).err(),
             Some(LoadError::Invalid("parameter out of range"))
         );
+    }
+
+    #[test]
+    fn diet_k_is_held_to_its_step() {
+        let mut p = Params::new();
+        p.set(id::DIET_K, 1.4);
+        assert_eq!(p.get(id::DIET_K), 1.5);
+        p.set(id::DIET_K, 9.0);
+        assert_eq!(p.get(id::DIET_K), 4.0);
+        assert!(!off_step(id::DIET_K, 1.25) && off_step(id::DIET_K, 1.3));
+        assert!(!off_step(id::DIET_SIGMA, 0.05));
+
+        p.v[id::DIET_K] = 1.3;
+        let mut w = Writer::new();
+        p.save(&mut w);
+        assert!(matches!(
+            Params::load(&mut Reader::new(&w.bytes)).err(),
+            Some(LoadError::Invalid(why)) if why.starts_with("diet_k")
+        ));
     }
 }

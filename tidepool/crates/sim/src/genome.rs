@@ -1,4 +1,5 @@
-//! What a creature inherits: a body shape, a life history, a hue, a list of parts, and a brain.
+//! What a creature inherits: a body shape, a life history, a hue, a diet, a list of parts, and a
+//! brain.
 
 use crate::brain::{self, Ports, N_OUT_MAX};
 use crate::params::{id, Params, DEFS};
@@ -93,6 +94,8 @@ pub struct Genome {
     /// Ticks until death by old age.
     pub old: f32,
     pub hue: f32,
+    /// Rule D1 of the diet plan: 0 eats only plants and debris, 1 only flesh. In `DIET_RANGE`.
+    pub diet: f32,
     /// At most `MAX_PART_GENES`.
     pub parts: Vec<PartGene>,
     pub brain: BrainGenome,
@@ -120,6 +123,7 @@ pub const LEN_RANGE: (f32, f32) = (6.0, 24.0);
 pub const WID_RANGE: (f32, f32) = (0.3, 0.9);
 pub const EGG_RANGE: (f32, f32) = (0.2, 0.7);
 pub const OLD_RANGE: (f32, f32) = (1200.0, 9600.0);
+pub const DIET_RANGE: (f32, f32) = (0.0, 1.0);
 /// By kind. The four M1 kinds keep their M1 ranges.
 pub const SIZE_RANGE: [(f32, f32); KINDS as usize + 1] = [
     (0.0, 0.0),
@@ -251,8 +255,8 @@ impl Default for BrainGenome {
     }
 }
 
-/// The reference body with hue 0 and the smallest brain. `egg` and `old` are the defaults of
-/// `birth_growth` and `lifespan`.
+/// The reference body with hue 0 and the smallest brain. `egg`, `old`, and `diet` are the defaults
+/// of `birth_growth`, `lifespan`, and `founder_diet`.
 impl Default for Genome {
     fn default() -> Genome {
         Genome {
@@ -261,6 +265,7 @@ impl Default for Genome {
             egg: DEFS[id::BIRTH_GROWTH].default,
             old: DEFS[id::LIFESPAN].default,
             hue: 0.0,
+            diet: DEFS[id::FOUNDER_DIET].default,
             parts: founder_parts(),
             brain: BrainGenome::default(),
         }
@@ -408,8 +413,8 @@ impl BrainGenome {
 impl Genome {
     /// The reference body, with each of len, wid, and the four part sizes moved by
     /// `gauss * founder_sigma * range` and clamped. A random hue. `brain::starter(rng, p)`. Draws in
-    /// that order, which is the M1 order. `egg` is `birth_growth` and `old` is `lifespan`, with no
-    /// draw. With `founder_eye` above 0 a fifth part follows, an eye of that size, with no draw.
+    /// that order, which is the M1 order. `egg` is `birth_growth`, `old` is `lifespan`, and `diet`
+    /// is `founder_diet`, with no draw. With `founder_eye` above 0 a fifth part follows, an eye of that size, with no draw.
     /// `World::seed_founders` makes a hunter of it with `arm`.
     pub fn founder(rng: &mut Rng, p: &Params) -> Genome {
         let sigma = p.get(id::FOUNDER_SIGMA);
@@ -439,6 +444,7 @@ impl Genome {
             egg: p.get(id::BIRTH_GROWTH),
             old: p.get(id::LIFESPAN),
             hue,
+            diet: p.get(id::FOUNDER_DIET),
             parts,
             brain: brain::starter(rng, p),
         }
@@ -446,8 +452,9 @@ impl Genome {
 
     /// Rule P3 of the M4 plan: a Jaw at the nose of size `founder_jaw_size` with history
     /// `FOUNDER_JAW_HISTORY`, if the list has room, and the wires of `brain::hunter`. The founder
-    /// keeps its Filter. No draw.
+    /// keeps its Filter. Its `diet` is `founder_hunter_diet` (rule D1 of the diet plan). No draw.
     pub fn arm(&mut self, p: &Params) {
+        self.diet = p.get(id::FOUNDER_HUNTER_DIET);
         if self.parts.len() < MAX_PART_GENES {
             self.parts.push(PartGene {
                 kind: KIND_JAW,
@@ -462,12 +469,13 @@ impl Genome {
 
     /// Len, wid, and each part size: with chance mut_rate, add gauss * mut_sigma * (max - min), clamp.
     /// Hue: add gauss * hue_sigma, wrap into [0, 1).
+    /// Diet: add gauss * diet_sigma, clamp to [0, 1].
     /// Each brain weight, bias: with chance mut_weight_rate, add gauss * mut_weight_sigma.
     /// Each alpha: with chance mut_weight_rate, add gauss * 0.1, clamp to [0.05, 1].
     /// Weights and biases are clamped to [-8, 8].
     ///
-    /// Draws in this order: len, wid, each part size in gene order, the hue, the weights, the
-    /// biases, the alphas. That is the M1 order. The biases are those of the hidden genes and then
+    /// Draws in this order: len, wid, each part size in gene order, the hue, the diet, the weights,
+    /// the biases, the alphas. That is the M1 order with the diet after the hue. The biases are those of the hidden genes and then
     /// those of the out genes, each in gene order, and so are the alphas.
     ///
     /// Five M2 groups follow, in this order. A group whose rate is 0 makes no draw, so with every
@@ -521,6 +529,8 @@ impl Genome {
         let hue = g.hue + rng.gauss() * p.get(id::HUE_SIGMA);
         // A hue just below 0 rounds up to exactly 1. The `%` sends that to 0.
         g.hue = (hue - hue.floor()) % 1.0;
+        let (lo, hi) = DIET_RANGE;
+        g.diet = (g.diet + rng.gauss() * p.get(id::DIET_SIGMA)).clamp(lo, hi);
         let (rate, sigma) = (p.get(id::MUT_WEIGHT_RATE), p.get(id::MUT_WEIGHT_SIGMA));
         let limit = (-WEIGHT_LIMIT, WEIGHT_LIMIT);
         for conn in &mut g.brain.conns {
@@ -736,7 +746,7 @@ impl Genome {
     }
 
     pub fn save(&self, w: &mut Writer) {
-        for gene in [self.len, self.wid, self.egg, self.old, self.hue] {
+        for gene in [self.len, self.wid, self.egg, self.old, self.hue, self.diet] {
             w.f32(gene);
         }
         w.u32(self.parts.len() as u32);
@@ -755,6 +765,7 @@ impl Genome {
     /// their caps: see `BrainGenome::load`.
     pub fn load(r: &mut Reader) -> Result<Genome, LoadError> {
         let (len, wid, egg, old, hue) = (r.f32()?, r.f32()?, r.f32()?, r.f32()?, r.f32()?);
+        let diet = r.f32()?;
         let count = r.u32()? as usize;
         if count > MAX_PART_GENES {
             return Err(LoadError::Invalid("genome part count"));
@@ -779,6 +790,7 @@ impl Genome {
             egg,
             old,
             hue,
+            diet,
             parts,
             brain: BrainGenome::load(r)?,
         })

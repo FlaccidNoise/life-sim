@@ -279,7 +279,7 @@ Rules:
   outside the eye cones of the possessed body. M6 adds depth lighting: fog and caustics in the
   fragment shader, bloom on a 5-level mip chain in `RGBA16F`.
 - Parts ride in every creature record, so the page needs no cache by `uid`. The frame is
-  `FRAME_HEADER_WORDS` (34) words, then one record of `CREATURE_STRIDE` (25) words for each creature
+  `FRAME_HEADER_WORDS` (34) words, then one record of `CREATURE_STRIDE` (26) words for each creature
   in view, then one record of `PLANT_STRIDE` (4) words for each plant in view. A word is a `u32`,
   and a float is stored by its bit pattern. `crates/sim/src/frame.rs` writes it and
   `src/protocol.ts` reads it.
@@ -291,12 +291,13 @@ Rules:
   - Creature record: x, y, heading, length, width, hue, energy as a share of capacity, then `uid`,
     slot, flags (lineage 1, possessed 2, juvenile 4, budded 8, born of a cross 16, willing to mate 32,
     holds a donor 64), the brain word `hidden | conns << 16`, then `PART_WORDS` (12) part words in
-    gene order, then the growth (the share of its full size) and the age as a share of its life. A
+    gene order, then the growth (the share of its full size), the age as a share of its life, and
+    the `diet` gene (0 eats only plants, 1 only flesh). A
     part word is `kind | anchor << 8 | size << 16 | extra << 24`, each of the three values scaled
     from 0 to 1 onto a byte. A place with no part is 0. The grown length over the growth is the
     length gene.
   - Plant record: x, y, radius, reserve as a share of the cap.
-  - A full frame is at most 4 x (34 + 4,096 x 25 + 8,192 x 4) bytes. The page buffers have that
+  - A full frame is at most 4 x (34 + 4,096 x 26 + 8,192 x 4) bytes. The page buffers have that
     size.
 - `webglcontextlost` shows the error panel with a Reload button. A rebuild on `webglcontextrestored` is
   not built yet. A device with no WebGL2 gets a plain explanation, not a blank page.

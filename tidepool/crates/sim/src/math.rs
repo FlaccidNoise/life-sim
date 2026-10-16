@@ -49,6 +49,30 @@ pub fn pow075(x: f32) -> f32 {
     }
 }
 
+/// `x` to the power `k`, for `k` in steps of 0.25: `n = round(4k)` quarters. The whole part of
+/// `n / 4` is a product of `x`, and the quarter left over is a square root or a fourth root by
+/// square roots, so a whole `k` is exact. 1 for `n = 0`, for any `x`. 0 for `x <= 0` and `n > 0`.
+pub fn pow_quarters(x: f32, k: f32) -> f32 {
+    let n = (4.0 * k).round() as u32;
+    if n == 0 {
+        return 1.0;
+    }
+    if x <= 0.0 {
+        return 0.0;
+    }
+    let half = x.sqrt();
+    let mut v = match n % 4 {
+        0 => 1.0,
+        1 => half.sqrt(),
+        2 => half,
+        _ => half * half.sqrt(),
+    };
+    for _ in 0..n / 4 {
+        v *= x;
+    }
+    v
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -63,6 +87,48 @@ mod tests {
             assert!((s - es).abs() < 1e-4 && (c - ec).abs() < 1e-4, "at {a}");
             a += 0.01;
         }
+    }
+
+    #[test]
+    fn pow_quarters_is_exact_at_whole_and_half_powers() {
+        let (r25, r5) = (0.25f32.sqrt(), 0.5f32.sqrt());
+        assert_eq!(r25, 0.5);
+        let cases = [
+            // (x, k, x^k)
+            (0.0, 0.0, 1.0),
+            (0.25, 0.0, 1.0),
+            (0.5, 0.0, 1.0),
+            (1.0, 0.0, 1.0),
+            (0.0, 1.0, 0.0),
+            (0.25, 1.0, 0.25),
+            (0.5, 1.0, 0.5),
+            (1.0, 1.0, 1.0),
+            (0.0, 1.5, 0.0),
+            (0.25, 1.5, 0.125),
+            (0.5, 1.5, 0.5 * r5),
+            (1.0, 1.5, 1.0),
+            (0.0, 2.5, 0.0),
+            (0.25, 2.5, 0.03125),
+            (0.5, 2.5, 0.25 * r5),
+            (1.0, 2.5, 1.0),
+        ];
+        for (x, k, want) in cases {
+            assert_eq!(pow_quarters(x, k), want, "{x}^{k}");
+        }
+    }
+
+    #[test]
+    #[allow(clippy::disallowed_methods)]
+    fn pow_quarters_is_close_to_std_at_every_quarter() {
+        for q in 0..=16 {
+            let k = q as f32 / 4.0;
+            for i in 0..=100 {
+                let x = i as f32 / 100.0;
+                let want = (x as f64).powf(k as f64) as f32;
+                assert!((pow_quarters(x, k) - want).abs() < 1e-6, "{x}^{k}");
+            }
+        }
+        assert_eq!(pow_quarters(-1.0, 1.5), 0.0);
     }
 
     #[test]

@@ -80,6 +80,8 @@ pub struct Creatures {
     pub hue: Vec<f32>,
     pub egg: Vec<f32>,
     pub old: Vec<f32>,
+    /// The `diet` gene, held in 0 to 1. One that is not finite is 0.
+    pub diet: Vec<f32>,
     /// The sum of `size * push_of(anchor)` over the flagella.
     pub flag_push: Vec<f32>,
     /// The sum of `size * side_of(anchor)` over the flagella.
@@ -167,6 +169,7 @@ impl Default for Creatures {
             hue: floats(),
             egg: floats(),
             old: floats(),
+            diet: floats(),
             flag_push: floats(),
             flag_side: floats(),
             cilia: floats(),
@@ -253,8 +256,8 @@ impl Creatures {
     /// guards are made as eye cones are, at `anchor * PI` from the heading, one on the midline and a
     /// pair elsewhere, to `MAX_JAWS` and `MAX_GUARDS`. Their genes still count in the sums.
     ///
-    /// A loaded genome can hold any float. A part value that is not finite counts as 0, and each
-    /// one is held in 0 to 1, so every sum here is finite. `Genome::part_sum` counts a size the
+    /// A loaded genome can hold any float. A part value or a `diet` that is not finite counts as 0,
+    /// and each one is held in 0 to 1, so every sum here is finite. `Genome::part_sum` counts a size the
     /// same way.
     pub fn express(&mut self, s: usize, g: &Genome) {
         (self.len[s], self.wid[s], self.hue[s]) = (g.len, g.wid, g.hue);
@@ -266,6 +269,7 @@ impl Creatures {
                 0.0
             }
         };
+        self.diet[s] = unit(g.diet);
         let (mut flag_push, mut flag_side) = (0.0, 0.0);
         let (mut cilia, mut fin, mut filter, mut chemo) = (0.0, 0.0, 0.0, 0.0);
         let (mut plain_sum, mut eye_sum, mut cones) = (0.0, 0.0, 0);

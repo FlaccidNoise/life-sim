@@ -1290,10 +1290,10 @@ mod tests {
     }
 
     /// The hunt probe reads, never writes, and draws no random number. Half the founders hunt, so
-    /// each trigger that a founder can declare is read.
+    /// each trigger that a founder can declare is read. No part is added, so no body has a gland.
     #[test]
     fn the_hunt_probe_draws_nothing_and_leaves_the_rows_of_the_gates() {
-        let hunters = [(id::FOUNDER_JAW, 0.5)];
+        let hunters = [(id::FOUNDER_JAW, 0.5), (id::MUT_PART_ADD, 0.0)];
         let mut world = default_world(1, &hunters);
         let mut rows = Vec::new();
         hunt(&mut world, PROBE_TICKS, PROBE_TICKS / 2, |r| rows.push(r));

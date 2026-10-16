@@ -4,7 +4,7 @@
 use crate::control::{CAUSE_EATEN, CAUSE_SPIKED};
 use crate::creature::MAX_GUARDS;
 use crate::genome::{KIND_SHELL, KIND_SPIKE, REF_WIDTH};
-use crate::math::sin_cos;
+use crate::math::{pow_quarters, sin_cos};
 use crate::motor::NO_TOUCH;
 use crate::params::id;
 use crate::snapshot::{LoadError, Reader, Writer};
@@ -33,7 +33,8 @@ pub(crate) fn side(y: f32) -> f32 {
 /// Each live slot `s` in ascending order with a body `j` in a jaw cone, as the motor found it on
 /// this tick, bites `j` unless either is at 0 energy or less, `s` is lighter than
 /// `bite_mass_ratio` times `j`, or `s` is full. The bite is `bite_rate` times the jaws that hold
-/// `j` times the mouth of `s`, and `lunge_bite` times that during a lunge. The guards of `j` whose
+/// `j` times the mouth of `s` times `diet^diet_k` of `s` (rule D1 of the diet plan), and
+/// `lunge_bite` times that during a lunge. A spike hurts in proportion to that bite. The guards of `j` whose
 /// arc holds `s`, at the places of this tick after the motor, block a share of it (shells) and
 /// hurt `s` (spikes). What `j` loses `s` gains. What a spike hurts is lost.
 ///
@@ -47,7 +48,7 @@ pub fn step(world: &mut World) {
     }
     let (ratio, per_mass) = (p.get(id::BITE_MASS_RATIO), p.get(id::ENERGY_PER_MASS));
     let (lunge_bite, spike_hurt) = (p.get(id::LUNGE_BITE), p.get(id::SPIKE_HURT));
-    let shell_block = p.get(id::SHELL_BLOCK);
+    let (shell_block, diet_k) = (p.get(id::SHELL_BLOCK), p.get(id::DIET_K));
     let (shell_cos2, spike_cos2) = (cos2(p.get(id::SHELL_ARC)), cos2(p.get(id::SPIKE_ARC)));
     // `World::tick` after this tick, as the frame reads a stamp.
     let stamp = world.tick.wrapping_add(1);
@@ -74,7 +75,8 @@ pub fn step(world: &mut World) {
         if room <= 0.0 {
             continue;
         }
-        let mut bite = rate * motor.bite_jaws[s] * (area / REF_WIDTH);
+        let mut bite =
+            rate * motor.bite_jaws[s] * (area / REF_WIDTH) * pow_quarters(c.diet[s], diet_k);
         if c.lunge_left[s] > 0 {
             bite *= lunge_bite;
         }

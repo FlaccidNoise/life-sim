@@ -276,8 +276,8 @@ fn a_genome_with_too_many_parts_or_a_bad_kind_does_not_load() {
     let mut w = Writer::new();
     Genome::founder(&mut Rng::new(1), &Params::new()).save(&mut w);
     assert!(Genome::load(&mut Reader::new(&w.bytes)).is_ok());
-    // After the 5 floats: the part count, then the kind of the first part.
-    let (count_at, kind_at) = (5 * 4, 6 * 4);
+    // After the 6 floats: the part count, then the kind of the first part.
+    let (count_at, kind_at) = (6 * 4, 7 * 4);
     let patched = |at: usize, v: u32| {
         let mut bytes = w.bytes.clone();
         bytes[at..at + 4].copy_from_slice(&v.to_le_bytes());
@@ -319,7 +319,7 @@ fn a_full_genome_loads_as_it_was_saved() {
             history: 100 + n,
         });
     }
-    (g.egg, g.old) = (0.3, 2000.0);
+    (g.egg, g.old, g.diet) = (0.3, 2000.0, 0.6);
     let mut w = Writer::new();
     g.save(&mut w);
     let mut r = Reader::new(&w.bytes);
@@ -330,6 +330,7 @@ fn a_full_genome_loads_as_it_was_saved() {
         (loaded.len, loaded.wid, loaded.egg, loaded.old, loaded.hue),
         (g.len, g.wid, 0.3, 2000.0, g.hue)
     );
+    assert_eq!(loaded.diet, 0.6);
     assert_eq!(loaded.brain.conns.len(), g.brain.conns.len());
 }
 
@@ -377,7 +378,8 @@ fn with_every_m2_rate_at_0_a_mutation_makes_the_m1_draws_and_no_more() {
     let brain_draws = brain.conns.len() + 2 * (brain.hidden.len() + brain.outs.len());
 
     // The M1 draws, stepped by hand at the M1 rates of the defaults: one draw for the chance of
-    // each gene and a `gauss` for each hit, in the M1 order, and a `gauss` for the hue. The
+    // each gene and a `gauss` for each hit, in the M1 order, and a `gauss` each for the hue and
+    // the diet. The
     // mutation with every M2 rate at 0 must leave the generator in the same place.
     let (mut stepped, mut hits) = (Rng::new(11), 0);
     let mut step = |rng: &mut Rng, rate: f32, genes: usize| {
@@ -390,19 +392,20 @@ fn with_every_m2_rate_at_0_a_mutation_makes_the_m1_draws_and_no_more() {
     };
     step(&mut stepped, zero.get(id::MUT_RATE), 2 + g.parts.len());
     stepped.gauss();
+    stepped.gauss();
     step(&mut stepped, zero.get(id::MUT_WEIGHT_RATE), brain_draws);
     assert!(hits > 0, "no gene mutated, so a hit is not tested");
     assert_eq!(zero_rng.0, stepped.0);
     assert_ne!(saved(&by_zero), saved(&g));
 
     // With the M1 rates at 0 too, the count of draws is known: one for each body gene and each
-    // brain number, and four for the hue.
+    // brain number, and four each for the hue and the diet.
     let mut still = zero.clone();
     still.set(id::MUT_RATE, 0.0);
     still.set(id::MUT_WEIGHT_RATE, 0.0);
     let (mut still_rng, mut counted) = (Rng::new(11), Rng::new(11));
     g.mutated(&mut still_rng, &still, &mut 100);
-    for _ in 0..2 + g.parts.len() + 4 + brain_draws {
+    for _ in 0..2 + g.parts.len() + 8 + brain_draws {
         counted.next_u64();
     }
     assert_eq!(still_rng.0, counted.0);
@@ -416,7 +419,7 @@ fn with_every_m2_rate_at_0_a_mutation_makes_the_m1_draws_and_no_more() {
         let sizes: Vec<f32> = g.parts[..5].iter().map(|x| x.size).collect();
         let weights: Vec<f32> = g.brain.conns.iter().map(|c| c.weight).collect();
         let (bias, alpha) = (biases(g), alphas(g));
-        (g.len, g.wid, g.hue, sizes, weights, bias, alpha)
+        (g.len, g.wid, g.hue, g.diet, sizes, weights, bias, alpha)
     };
     assert_eq!(m1(&by_on), m1(&by_zero));
 }
@@ -591,7 +594,7 @@ const M3_RATES: [usize; 4] = [
 ];
 
 /// The table with every mutation at rate 0 and no founder eye. A child then differs from its
-/// parent by its hue and by the one rule that a test switches on.
+/// parent by its hue, its diet, and the one rule that a test switches on.
 fn quiet() -> Params {
     let mut p = off();
     p.set(id::MUT_RATE, 0.0);
@@ -655,10 +658,10 @@ fn names(c: &ConnGene, owner: u32) -> bool {
 }
 
 /// The draws of a mutation with every rate at 0: one for each body gene and each brain number, and
-/// four for the hue.
+/// four each for the hue and the diet.
 fn m1_draws(g: &Genome) -> usize {
     let b = &g.brain;
-    2 + g.parts.len() + 4 + b.conns.len() + 2 * (b.hidden.len() + b.outs.len())
+    2 + g.parts.len() + 8 + b.conns.len() + 2 * (b.hidden.len() + b.outs.len())
 }
 
 /// The state of a generator after this many draws.
@@ -705,7 +708,7 @@ fn with_every_m3_rate_at_0_a_mutation_makes_the_m2_draws() {
 
     // With the M3 rules on, the generator goes further and every M2 gene is as it was: each new
     // draw comes after every M2 draw.
-    let m2 = |g: &Genome| (g.len, g.wid, g.egg, g.old, g.hue, g.parts.clone());
+    let m2 = |g: &Genome| (g.len, g.wid, g.egg, g.old, g.hue, g.diet, g.parts.clone());
     let mut on_rng = Rng::new(11);
     let by_on = g.mutated(&mut on_rng, &on, &mut 100);
     assert_ne!(on_rng.0, zero_rng.0);

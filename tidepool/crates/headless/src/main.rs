@@ -6,7 +6,7 @@ mod probes;
 use std::process::exit;
 use std::str::FromStr;
 
-use tidepool_sim::params::{Params, DEFS};
+use tidepool_sim::params::{off_step, Params, DEFS, DIET_K_STEP};
 use tidepool_sim::world::{size_ok, World, MAX_WORLD_SIZE};
 
 const USAGE: &str = "usage: tidepool-headless run --seed <u32> --ticks <u32> --creatures <u32> [--plants <u32>] [--world <W>x<H>] [--out <path>] [--param <name>=<value>]...
@@ -52,8 +52,8 @@ fn world_size(flag: &str, v: Option<&str>) -> (f32, f32) {
     (w, h)
 }
 
-/// One `--param name=value`: the parameter's index and the value. An unknown name or a value
-/// outside the parameter's range is a usage error.
+/// One `--param name=value`: the parameter's index and the value. An unknown name, a value
+/// outside the parameter's range, or a `diet_k` off its step is a usage error.
 fn param(flag: &str, v: Option<&str>) -> (usize, f32) {
     let Some((name, number)) = v.and_then(|s| s.split_once('=')) else {
         usage(&format!("{flag} needs <name>=<value>, like drag_fwd=0.1"))
@@ -70,6 +70,11 @@ fn param(flag: &str, v: Option<&str>) -> (usize, f32) {
         usage(&format!(
             "{flag} {name}={number} is outside the range {} to {}",
             d.min, d.max
+        ));
+    }
+    if off_step(i, x) {
+        usage(&format!(
+            "{flag} {name}={number} is not a multiple of {DIET_K_STEP}. Use 0, 0.25, 0.5, and so on"
         ));
     }
     (i, x)

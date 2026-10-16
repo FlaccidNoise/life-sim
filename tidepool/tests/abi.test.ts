@@ -24,10 +24,11 @@ test('frame layout constants match the module', () => {
   expect(n('tp_frame_max_eyes')).toBe(P.MAX_EYES);
   expect(n('tp_heir_stride')).toBe(P.HEIR_STRIDE);
   expect(P.C_BRAIN + 1).toBe(P.C_PARTS);
-  // The growth follows the part words. The age is the last word of a record.
+  // The growth follows the part words, then the age. The diet is the last word of a record.
   expect(P.C_GROWTH).toBe(P.C_PARTS + n('tp_frame_part_words'));
   expect(P.C_AGE).toBe(P.C_GROWTH + 1);
-  expect(P.C_AGE).toBe(n('tp_frame_creature_stride') - 1);
+  expect(P.C_DIET).toBe(P.C_AGE + 1);
+  expect(P.C_DIET).toBe(n('tp_frame_creature_stride') - 1);
 });
 
 test('the brain layout constants of the module are those of crates/sim/src/brain.rs', () => {
@@ -190,6 +191,8 @@ test('a frame of the whole world holds every creature', () => {
     // A founder starts at under half of its life, and 10 ticks are 1/480 of one.
     expect(f.f32[o + P.C_AGE]).toBeGreaterThan(0);
     expect(f.f32[o + P.C_AGE]).toBeLessThan(0.51);
+    // A founder with no jaw starts at `founder_diet`, 0.
+    expect(f.f32[o + P.C_DIET]).toBe(0);
     // A founder starts at 0.5 and has paid 10 ticks of upkeep with nothing to eat.
     expect(f.f32[o + P.C_ENERGY]).toBeGreaterThan(0.45);
     expect(f.f32[o + P.C_ENERGY]).toBeLessThan(0.5);
