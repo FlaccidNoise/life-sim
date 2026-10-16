@@ -308,7 +308,7 @@ test('the guide holds the six chapters of the plan in reading order, each short'
   for (const [i, chapter] of CHAPTERS.entries()) {
     const count = words(fill(CHAPTER_TEXTS[i] ?? ''));
     expect(count, `${chapter.title} is ${count} words`).toBeGreaterThanOrEqual(80);
-    expect(count, `${chapter.title} is ${count} words`).toBeLessThanOrEqual(200);
+    expect(count, `${chapter.title} is ${count} words`).toBeLessThanOrEqual(160);
     // A few short paragraphs, and no wall of text.
     expect(chapter.text.length).toBeGreaterThanOrEqual(2);
     for (const paragraph of chapter.text) expect(words(paragraph), paragraph).toBeLessThan(70);
