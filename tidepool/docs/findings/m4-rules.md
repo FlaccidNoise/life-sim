@@ -48,6 +48,25 @@ What the rows say:
   about 3% per creature-tick at a load of 13, one reading. The loop does nothing per body here but
   the `bite_target` test.
 
+## Task 8: the cost of Task 5 at Off, found and fixed
+
+`make gates` at `7c3588d` read native 2,707 and WASM 2,515, under the skeleton's 3,057 and 2,735.
+The native binary at each merge commit, twice each, in one sitting (the table is in the plan under
+Task 8), put the cost at Task 5: 2,970 before, 2,737 after, about 8%. `ability::step` wrote four
+`saturating_sub` counts per body per tick, each already 0 for every body at Off. The fix at
+`7b8c74f` reads a count at 0 without writing it, and a body with no command above 0 skips the fire
+checks. Interleaved A/B against the pre-Task-5 binary, three rounds each, load 5 to 10:
+
+| | Pre-Task-5 (`c11edc0`) | Head with the fix (`7b8c74f`) |
+|---|---|---|
+| Native ticks/s | 2,974, 2,981, 2,982 | 2,899, 2,951, 2,935 |
+| WASM ticks/s | 2,847, 2,847, 2,866 | 2,820, 2,827, 2,835 |
+
+The fix leaves about 1% to 1.5% for the remaining loads of the loop. The gate rows at the fix are
+identical to the baseline. **The "before" of every throughput reading from Task 9 on is the fixed
+head: WASM about 2,830 at 1,394 bodies, 253 ns per creature-tick.** A single bench reading on this
+machine swings by 10% with load: an A/B in one sitting is the way to read a task's cost.
+
 ## Task 3: rule J1, the bite, and rule D1, shell drag (`c11edc0`)
 
 Twelve tests in `crates/sim/tests/bite.rs`, the names of the plan. The deliberate break (the cone
