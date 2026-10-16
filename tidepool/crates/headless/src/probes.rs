@@ -826,10 +826,9 @@ fn hunt(world: &mut World, ticks: u32, every: u32, mut row: impl FnMut(String)) 
     }
 }
 
-/// `probe-hunt`. One row for each seed at each multiple of `--every`: who hunts, what the hunting
-/// does, and whether each trigger fires in its context.
-pub fn hunt_probe(argv: &[String]) {
-    // `--every` is this probe's own flag. `args` reads the others.
+/// `--every` is a flag of the probes that sample, so `args` does not read it. Returns the
+/// `--every` value, 4000 by default, and the arguments of the others.
+fn sampling_args(argv: &[String]) -> (u32, crate::health::Args) {
     let (mut every, mut others) = (4000, Vec::new());
     let mut it = argv.iter();
     while let Some(flag) = it.next() {
@@ -845,9 +844,123 @@ pub fn hunt_probe(argv: &[String]) {
             a.ticks
         ));
     }
+    (every, a)
+}
+
+/// `probe-hunt`. One row for each seed at each multiple of `--every`: who hunts, what the hunting
+/// does, and whether each trigger fires in its context.
+pub fn hunt_probe(argv: &[String]) {
+    let (every, a) = sampling_args(argv);
     for &seed in &a.seeds {
         let mut world = default_world(seed, &a.params);
         hunt(&mut world, a.ticks, every, |row| {
+            println!("seed={seed} {row}");
+            // A killed run keeps the rows it finished.
+            std::io::stdout().flush().expect("flush stdout");
+        });
+    }
+}
+
+/// The cut points of `probe-diet`, which are those of the targets in
+/// `docs/plans/2026-10-16-m4-retune-diet.md`: a herbivore has a diet below `HERB_BELOW`, a
+/// carnivore one above `CARN_ABOVE`, and an omnivore one between the two, both included.
+const HERB_BELOW: f32 = 0.3;
+const CARN_ABOVE: f32 = 0.7;
+
+/// What `probe-diet` reads of the living at one tick. Every share is 0 for nobody alive.
+#[derive(Default)]
+struct DietSample {
+    creatures: usize,
+    herb: f64,
+    omni: f64,
+    carn: f64,
+    mean: f64,
+    sd: f64,
+    /// The share of the living with a jaw: a hunter is a body with a `jaw_sum` above 0, as in
+    /// `probe-hunt` and the health gate (`health.rs` `Predation`).
+    hunt: f64,
+    /// The share of the carnivores, and of the herbivores, with a jaw.
+    carn_jaw: f64,
+    herb_jaw: f64,
+}
+
+fn diet_sample(world: &World) -> DietSample {
+    let c = &world.creatures;
+    // Counts of herbivores, omnivores, carnivores, and of each with a jaw.
+    let (mut n, mut jawed) = ([0u32; 3], [0u32; 3]);
+    for s in live(world) {
+        let class = match c.diet[s] {
+            d if d < HERB_BELOW => 0,
+            d if d <= CARN_ABOVE => 1,
+            _ => 2,
+        };
+        n[class] += 1;
+        jawed[class] += u32::from(c.jaw_sum[s] > 0.0);
+    }
+    let share = |part: u32, whole: u32| {
+        if whole == 0 {
+            0.0
+        } else {
+            f64::from(part) / f64::from(whole)
+        }
+    };
+    let living = n.iter().sum();
+    let (mean, sd) = evolve::mean_sd(live(world).map(|s| c.diet[s]));
+    DietSample {
+        creatures: living as usize,
+        herb: share(n[0], living),
+        omni: share(n[1], living),
+        carn: share(n[2], living),
+        mean,
+        sd,
+        hunt: share(jawed.iter().sum(), living),
+        carn_jaw: share(jawed[2], n[2]),
+        herb_jaw: share(jawed[0], n[0]),
+    }
+}
+
+/// Runs `world` to `ticks` and gives `row` one row at each multiple of `every` and at `ticks`,
+/// then one `end` row: the least herbivore share, carnivore share, and diet spread over the rows
+/// after `ticks / 2`. `kills` is the kills since the row before.
+fn diet(world: &mut World, ticks: u32, every: u32, mut row: impl FnMut(String)) {
+    let (mut kills, mut mins) = (world.stats.kills, [f64::INFINITY; 3]);
+    while world.tick < ticks {
+        world.run((every - world.tick % every).min(ticks - world.tick));
+        let d = diet_sample(world);
+        row(format!(
+            "tick={} creatures={} herb={:.3} omni={:.3} carn={:.3} diet_mean={:.2} diet_sd={:.2} hunt={:.3} kills={} carn_jaw={:.3} herb_jaw={:.3}",
+            world.tick,
+            d.creatures,
+            d.herb,
+            d.omni,
+            d.carn,
+            d.mean,
+            d.sd,
+            d.hunt,
+            world.stats.kills - kills,
+            d.carn_jaw,
+            d.herb_jaw,
+        ));
+        kills = world.stats.kills;
+        if world.tick > ticks / 2 {
+            for (min, x) in mins.iter_mut().zip([d.herb, d.carn, d.sd]) {
+                *min = min.min(x);
+            }
+        }
+    }
+    row(format!(
+        "end herb_min={:.3} carn_min={:.3} sd_min={:.2}",
+        mins[0], mins[1], mins[2]
+    ));
+}
+
+/// `probe-diet`. One row for each seed at each multiple of `--every`: the diet of the living, and
+/// who has a jaw. Then one `end` row for the seed, which is what the targets of the plan read.
+pub fn diet_probe(argv: &[String]) {
+    let (every, a) = sampling_args(argv);
+    for &seed in &a.seeds {
+        let mut world = default_world(seed, &a.params);
+        diet(&mut world, a.ticks, every, |row| {
             println!("seed={seed} {row}");
             // A killed run keeps the rows it finished.
             std::io::stdout().flush().expect("flush stdout");
@@ -1314,6 +1427,55 @@ mod tests {
         assert!(number("dash_thinks") > living * 0.5, "{}", rows[1]);
         assert!(number("lunge_thinks") > 0.0, "{}", rows[1]);
         assert_eq!(number("toxin_thinks"), 0.0, "{}", rows[1]);
+    }
+
+    /// The probe reads, never writes, and draws no random number. The shares of the three classes
+    /// sum to 1, and the `end` row reads the second half.
+    #[test]
+    fn the_diet_probe_draws_nothing_and_its_shares_sum_to_one() {
+        let params = [(id::MUT_PART_ADD, 0.0)];
+        let mut world = default_world(1, &params);
+        let mut rows = Vec::new();
+        diet(&mut world, PROBE_TICKS, PROBE_TICKS / 2, |r| rows.push(r));
+        let mut plain = default_world(1, &params);
+        plain.run(PROBE_TICKS);
+        assert_eq!(world.state_hash(), plain.state_hash());
+        assert_eq!(rows.len(), 3, "{rows:?}");
+        let number = |name: &str| column(&rows[1], name).parse::<f64>().expect("a number");
+        let sum = number("herb") + number("omni") + number("carn");
+        assert!((sum - 1.0).abs() < 0.0025, "{sum} in {}", rows[1]);
+        assert!(number("creatures") > 0.0, "{}", rows[1]);
+        assert_eq!(column(&rows[2], "herb_min"), column(&rows[1], "herb"));
+    }
+
+    #[test]
+    fn a_world_of_diet_0_9_reads_all_carnivore() {
+        let mut world = default_world(1, &[(id::MUT_PART_ADD, 0.0)]);
+        let slots: Vec<usize> = live(&world).collect();
+        for s in slots {
+            world.genomes[s].diet = 0.9;
+            world.creatures.diet[s] = 0.9;
+        }
+        let d = diet_sample(&world);
+        assert_eq!((d.herb, d.omni, d.carn), (0.0, 0.0, 1.0));
+        assert!(
+            (d.mean - 0.9).abs() < 1e-6 && d.sd < 1e-6,
+            "{} {}",
+            d.mean,
+            d.sd
+        );
+    }
+
+    #[test]
+    fn a_world_of_nobody_reads_zeros_and_not_nan() {
+        let mut world = World::new(1, 256.0, 256.0);
+        let mut rows = Vec::new();
+        diet(&mut world, 2, 1, |r| rows.push(r));
+        assert_eq!(
+            rows[0],
+            "tick=1 creatures=0 herb=0.000 omni=0.000 carn=0.000 diet_mean=0.00 diet_sd=0.00 hunt=0.000 kills=0 carn_jaw=0.000 herb_jaw=0.000"
+        );
+        assert_eq!(rows[2], "end herb_min=0.000 carn_min=0.000 sd_min=0.00");
     }
 
     const PROBE_TICKS: u32 = 300;

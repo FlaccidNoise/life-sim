@@ -24,6 +24,7 @@ const USAGE: &str = "usage: tidepool-headless run --seed <u32> --ticks <u32> --c
        tidepool-headless probe-mix [--seed <u32>] [--ticks <u32>] [--param <name>=<value>]...
        tidepool-headless probe-encounter [--seeds <u32>,<u32>,...] [--ticks <u32>] [--every <u32>] [--arc <radians>] [--param <name>=<value>]...
        tidepool-headless probe-hunt [--seed <u32>] [--ticks <u32>] [--every <u32>] [--param <name>=<value>]...
+       tidepool-headless probe-diet [--seeds <u32>,<u32>,...] [--ticks <u32>] [--every <u32>] [--param <name>=<value>]...
        tidepool-headless probe-turn [--param <name>=<value>]...";
 
 /// The default world: 1536 by 1024, 400 founder creatures, 1,200 founder plants. The health gate
@@ -143,7 +144,8 @@ fn main() {
         Some("probe-mix") => probes::mix(&args[1..]),
         Some("probe-encounter") => probes::encounter_probe(&args[1..]),
         Some("probe-hunt") => probes::hunt_probe(&args[1..]),
+        Some("probe-diet") => probes::diet_probe(&args[1..]),
         Some("probe-turn") => probes::turn_probe(&args[1..]),
-        _ => usage("expected a subcommand: run, bench, gate-health, gate-evolve, probe-density, probe-skip, probe-plants, probe-heirs, probe-crowd, probe-plans, probe-census, probe-brains, probe-mix, probe-encounter, probe-hunt, or probe-turn"),
+        _ => usage("expected a subcommand: run, bench, gate-health, gate-evolve, probe-density, probe-skip, probe-plants, probe-heirs, probe-crowd, probe-plans, probe-census, probe-brains, probe-mix, probe-encounter, probe-hunt, probe-diet, or probe-turn"),
     }
 }
