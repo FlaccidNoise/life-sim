@@ -22,7 +22,7 @@ defaults of that day: no part upkeep, and `plant_growth` 0.03.
 | Health | `make gates` (runs `target/release/tidepool-headless gate-health`) | `gate-health --param plant_growth=0`, and `gate-health --param basal=0.01` | Both: every seed `FAIL`, `gate-health 0/3 FAIL`, exit 1. The full output is in "Health gate" below. | 2026-10-12 |
 | CI | `.github/workflows/tidepool.yml` runs `make check`, `bench --floor 800`, `scripts/bench-wasm.mjs --floor 800`, `gate-health`, and `gate-evolve` | Two commits on a throwaway branch `ci-proof`: `pub fn bad(x: f32) -> f32 { x.sin() }` added to `crates/sim/src/lib.rs`, and then, with that reverted, `--floor 1000000000` on the `bench-wasm.mjs` step of the workflow | Run 38179267371 failed at `make check`: ``error: use of a disallowed method `f32::sin` ``. Run 38179352131 failed at the WASM bench step: `bench-wasm creatures=1539 median_tps=1801 floor=1000000000 FAIL`, and the health gate step was skipped | 2026-10-11 |
 | Evolution | `target/release/tidepool-headless gate-evolve`. In `make gates` and in CI since Task 13 of the M2 plan | One world for each band: five Start values that let a small body win (`len`), no mutation of a body gene (`len_sd`), parts that can only be lost in a world where no sense works (`parts`), `scent_deposit=0` (scent gap), `eye_range=0` (eye gap), senses that read almost nothing (both gaps, against chance), `fert_radius=25` (`creatures`), `fert_radius=40` (`chemo_blind run died`), and `fert_radius=50 scent_deposit=0` (`eye_blind run died`) | Each run exits 1. The named band is among the failures of every seed, or of 1 seed of 3 for the two blind-run checks and for `len_sd` where the spread drains. Five of these have a new input since 2026-10-11. Two changes to the plan: the `parts` proof needed a harder input, and the gap bands went from 0.02 to 0.10. The full output and the limits are in "Gate-evolve" below | 2026-10-12 |
-| Evolution, M3 bands | `make gates-long` (`gate-evolve --brain` at tick 144,000) for `hidden`, `conns`, `variety`. `make gates` for `speed_cv` | A brain that is the largest cost of a body (`hidden`, `conns`), the four structural rates at 0 (`variety`), every body mutation off (`speed_cv`) | Each `0/3`, exit 1 at the M3 defaults. "The brain bands" and "The `speed_cv` band" below. Provisional | 2026-10-14 |
+| Evolution, M3 bands | `make gates-long` (`gate-evolve --brain` at tick 144,000) for `hidden`, `conns`, `variety_wired`. `make gates` for `speed_cv` | A brain that is the largest cost of a body (`hidden`, `conns`), the four structural rates at 0 (`variety_wired`), every body mutation off (`speed_cv`) | Each `0/3`, exit 1 at the M3 defaults. "The brain bands" and "The `speed_cv` band" below. Confirmed by the owner 2026-10-15 | 2026-10-15 |
 
 ## Notes
 
@@ -883,11 +883,12 @@ tick 36,000 too. The seeds that passed at tick 36,000 and failed at tick 144,000
 (`chemo_gap=0.016` and `0.067`, the same check 14). They show that the long reading sees what the
 short one does not.
 
-### The brain bands (M3, provisional)
+### The brain bands (M3)
 
 `gate-evolve --brain` reads three more bands at tick 144,000. They are in `make gates-long` only from
-the close of the M3 retune, and not in `make gates` or CI. **Provisional: the owner has not confirmed
-them.** The rows, the hypothesis, and the limits are in `findings/m3-brains.md`.
+the close of the M3 retune, and not in `make gates` or CI. **The owner confirmed them on 2026-10-15,
+and from that day the third band reads `variety_wired`** (the proof is below). The rows, the
+hypothesis, and the limits are in `findings/m3-brains.md`.
 
 | Band | Fails under | Bad input of the head | It read | The good world read |
 |---|---|---|---|---|
@@ -907,6 +908,21 @@ because the defaults were still at their Off values.
 | `conns` | The same | 8.1, 8.7, 7.9 | `0/3`, exit 1. Seeds 1 and 5 pass both sense gaps, so there the brain bands are the only rejector |
 | `variety` | The four structural rates at 0 | 1.0, 1.0, 1.0 | `0/3`, exit 1, and no other band fails |
 
+**The band reads `variety_wired` from 2026-10-15** (the owner's decision: a cross can leave a donor's
+hidden genes unwired, and `variety` counts them). The band stays at 2.0. `variety` is printed with no
+band. The proof again, at `869fc20`, seeds 1, 4, 5 at tick 144,000 with `--brain`, load 19 to 21:
+
+```
+$ target/release/tidepool-headless gate-evolve --brain --ticks 144000 --seeds 1,4,5 --param mut_conn_add=0 --param mut_conn_remove=0 --param mut_neuron_add=0 --param mut_neuron_remove=0
+seed=1 ... hidden=4.00 conns=57.3 shapes=1 shapes_raw=2 variety=1.0 variety_wired=1.0 FAIL(variety_wired=1.0 < 2)
+seed=4 ... hidden=4.00 conns=53.0 shapes=1 shapes_raw=5 variety=1.0 variety_wired=1.0 FAIL(variety_wired=1.0 < 2)
+seed=5 ... hidden=4.00 conns=57.2 shapes=1 shapes_raw=2 variety=1.0 variety_wired=1.0 FAIL(variety_wired=1.0 < 2)
+gate-evolve 0/3 FAIL
+```
+
+Exit 1. `variety_wired` is the only band that fails on each seed. The good world read 12 to 38 on
+seeds 1, 4, 5, 6, 8 (`findings/m3-exit.md`).
+
 What the bands do not show:
 - **Use.** `hidden - hidden_null` reads +3.18, -0.65, +1.10 in the good world and +1.45, -0.87, +0.92
   by chance. It has no band.
@@ -917,10 +933,10 @@ What the bands do not show:
   seed 3 at `shapes=1`, `variety=27.3` (`findings/m3-tuning.md` Part 3). `shapes` and `shapes_raw`
   are printed and have no band.
 
-### The `speed_cv` band (M3, provisional)
+### The `speed_cv` band (M3)
 
 From 2026-10-14 `gate-evolve` fails a seed whose `speed_cv` reads under 0.10, in `make gates` and
-in the long gate. **Provisional: the owner has not confirmed it.** The default world read 0.22 to
+in the long gate. **The owner confirmed it on 2026-10-15.** The default world read 0.22 to
 0.25 at tick 36,000 and 0.23 to 0.28 at tick 144,000 on seeds 1, 4, 5, 6, 8 (`findings/m3-tuning.md`
 Part 5). The bad input sets `mut_rate`, `mut_shape_rate`, `mut_part_add`, `mut_part_remove`, and
 `mut_part_dup` to 0. That world also fails both sense gaps, so this band is not its only rejector.
