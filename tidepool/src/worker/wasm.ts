@@ -40,10 +40,17 @@ export interface Sim {
   release(): void;
   /** The uid of the possessed creature, or 0. */
   possessed(): number;
-  /** `accept`: the player courts. The core stores it, and no rule reads it yet. */
-  input(manual: boolean, thrust: number, turn: number, accept: boolean): void;
+  /**
+   * `accept`: the player courts. `abilities`: the abilities held, a mask of 1 dash, 2 lunge, and 4
+   * toxin. The core stores it, and no rule reads it yet.
+   */
+  input(manual: boolean, thrust: number, turn: number, accept: boolean, abilities: number): void;
   /** 0 for none. Set when the possessed creature dies. Cleared by the next possess. */
   deathCause(): number;
+  /** The uid of the body that killed the possessed creature, or 0. Set and cleared with `deathCause`. */
+  killer(): number;
+  /** The readout of the killer's brain at the kill, as `readBrain` reads it. A copy. 0 words with no killer. */
+  killerBrain(): Uint32Array;
   /** At most 5, highest `energy01` first. */
   heirs(): Heir[];
   /** The readout of the creature with this uid, as `readBrain` reads it. A copy. 0 words if it is not alive. */
@@ -89,8 +96,18 @@ interface Exports {
   tp_possess(world: Ptr, uid: number): number;
   tp_release(world: Ptr): void;
   tp_possessed(world: Ptr): number;
-  tp_input(world: Ptr, manual: number, thrust: number, turn: number, accept: number): void;
+  tp_input(
+    world: Ptr,
+    manual: number,
+    thrust: number,
+    turn: number,
+    accept: number,
+    abilities: number,
+  ): void;
   tp_death_cause(world: Ptr): number;
+  tp_killer(world: Ptr): number;
+  tp_killer_brain_len(world: Ptr): number;
+  tp_killer_brain_ptr(world: Ptr): Ptr;
   tp_heir_stride(): number;
   tp_heirs_write(world: Ptr): number;
   tp_heirs_ptr(world: Ptr): Ptr;
@@ -172,9 +189,15 @@ export function createSim(
     possess: (uid) => x.tp_possess(world, uid) !== 0,
     release: () => x.tp_release(world),
     possessed: () => x.tp_possessed(world) >>> 0,
-    input: (manual, thrust, turn, accept) =>
-      x.tp_input(world, manual ? 1 : 0, thrust, turn, accept ? 1 : 0),
+    input: (manual, thrust, turn, accept, abilities) =>
+      x.tp_input(world, manual ? 1 : 0, thrust, turn, accept ? 1 : 0, abilities),
     deathCause: () => x.tp_death_cause(world) >>> 0,
+    killer: () => x.tp_killer(world) >>> 0,
+    killerBrain() {
+      const words = x.tp_killer_brain_len(world) >>> 0;
+      if (words === 0) return new Uint32Array(0);
+      return new Uint32Array(x.memory.buffer, x.tp_killer_brain_ptr(world) >>> 0, words).slice();
+    },
     heirs() {
       const words = (x.tp_heirs_write(world) >>> 0) * HEIR_STRIDE;
       const ptr = x.tp_heirs_ptr(world) >>> 0;

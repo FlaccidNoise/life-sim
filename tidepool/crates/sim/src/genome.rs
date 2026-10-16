@@ -105,8 +105,14 @@ pub const KIND_FILTER: u8 = 3;
 pub const KIND_CHEMO: u8 = 4;
 pub const KIND_FIN: u8 = 5;
 pub const KIND_EYE: u8 = 6;
+pub const KIND_JAW: u8 = 7;
+pub const KIND_SPIKE: u8 = 8;
+pub const KIND_SHELL: u8 = 9;
+pub const KIND_TOXIN: u8 = 10;
 /// Kinds are `1..=KINDS`. 0 means "no part" in a frame.
-pub const KINDS: u8 = 6;
+pub const KINDS: u8 = 10;
+/// The kinds that the add-part mutation draws from. 6 until Task 9 of the M4 plan, then `KINDS`.
+pub const ADDABLE_KINDS: u8 = 6;
 
 /// The ranges of the four body genes. Constants by decision (`docs/decisions/INDEX.md`, 2026-10-11,
 /// "gene ranges stay constants"): the `len` band of `gate-evolve` is cut from `LEN_RANGE`.
@@ -115,11 +121,15 @@ pub const WID_RANGE: (f32, f32) = (0.3, 0.9);
 pub const EGG_RANGE: (f32, f32) = (0.2, 0.7);
 pub const OLD_RANGE: (f32, f32) = (1200.0, 9600.0);
 /// By kind. The four M1 kinds keep their M1 ranges.
-pub const SIZE_RANGE: [(f32, f32); 7] = [
+pub const SIZE_RANGE: [(f32, f32); KINDS as usize + 1] = [
     (0.0, 0.0),
     (0.0, 1.0),
     (0.0, 1.0),
     (0.2, 1.0),
+    (0.0, 1.0),
+    (0.0, 1.0),
+    (0.0, 1.0),
+    (0.0, 1.0),
     (0.0, 1.0),
     (0.0, 1.0),
     (0.0, 1.0),
@@ -142,8 +152,10 @@ pub const FOUNDER_EYE_ANCHOR: f32 = 0.2;
 /// Set once, from 0.4: at 0.4 the page showed a blind strip ahead of a founder
 /// (`docs/findings/m2-eyes.md`).
 pub const FOUNDER_EYE_EXTRA: f32 = 0.5;
-/// Where `set_size` puts a fin on a body that has none.
+/// Where `set_size` puts a fin, or a part of M4 that is not a jaw, on a body that has none.
 const FIN_ANCHOR: f32 = 0.6;
+/// Where `set_size` puts a jaw on a body that has none: the nose, as a hunter founder's jaw.
+const JAW_ANCHOR: f32 = 0.0;
 /// The history id of the founder's eye. Its brain connections take `1..=STARTER_CONNS`, its four
 /// parts take the next four ids, and its eye takes this one.
 pub const FOUNDER_EYE_HISTORY: u32 = brain::STARTER_CONNS + FOUNDER_PARTS.len() as u32 + 1;
@@ -422,7 +434,7 @@ impl Genome {
     ///    `*next_history`, and the counter rises. Then each connection that names the original is
     ///    copied for the copy, in gene order and with room, with a new id each and no draw.
     /// 5. Add. With chance mut_part_add, and with room, a new part goes on the end: a kind chosen
-    ///    evenly, then an anchor in [0, 1), then an `extra` in [0, 1). Its size is part_new_size,
+    ///    evenly from `1..=ADDABLE_KINDS`, then an anchor in [0, 1), then an `extra` in [0, 1). Its size is part_new_size,
     ///    held in the range of its kind. Its id is `*next_history`, and the counter rises. If the
     ///    body declares inputs with the part that it did not declare without it, part_wires
     ///    connections follow: each as in group 8, with a source chosen evenly from those inputs.
@@ -521,7 +533,7 @@ impl Genome {
         if chance(rng, p.get(id::MUT_PART_ADD)) && g.parts.len() < MAX_PART_GENES {
             let wires = p.get(id::PART_WIRES) as usize;
             let before = brain::ports(&g).inputs;
-            let kind = 1 + rng.below(KINDS as u32) as u8;
+            let kind = 1 + rng.below(ADDABLE_KINDS as u32) as u8;
             let (lo, hi) = size_range(kind);
             let (anchor, extra) = (rng.unit(), rng.unit());
             g.parts.push(PartGene {
@@ -635,6 +647,7 @@ impl Genome {
         let (anchor, extra) = match (founder, kind) {
             (Some(part), _) => (part.1, 0.0),
             (None, KIND_EYE) => (FOUNDER_EYE_ANCHOR, FOUNDER_EYE_EXTRA),
+            (None, KIND_JAW) => (JAW_ANCHOR, 0.0),
             (None, _) => (FIN_ANCHOR, 0.0),
         };
         if self.parts.len() < MAX_PART_GENES {

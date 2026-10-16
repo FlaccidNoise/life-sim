@@ -1,5 +1,6 @@
 //! The player's hold on one creature: pick, possess, release, input, heirs, and the cause of death.
 
+use crate::brain::READOUT_MAX_WORDS;
 use crate::creature::MARK_LINEAGE;
 use crate::params::id;
 use crate::snapshot::{LoadError, Reader, Writer};
@@ -8,6 +9,17 @@ use crate::world::World;
 pub const CAUSE_NONE: u32 = 0;
 pub const CAUSE_STARVED: u32 = 1;
 pub const CAUSE_OLD_AGE: u32 = 2;
+/// Bitten to 0 (rule J1 of the M4 plan).
+pub const CAUSE_EATEN: u32 = 3;
+/// Drained to 0 by a toxin cloud (rule A3).
+pub const CAUSE_POISONED: u32 = 4;
+/// A biter that the spike of its prey hurt to 0 (rule J1).
+pub const CAUSE_SPIKED: u32 = 5;
+/// The bits of the player's ability mask (rule X2).
+pub const ABILITY_DASH: u32 = 1;
+pub const ABILITY_LUNGE: u32 = 2;
+pub const ABILITY_TOXIN: u32 = 4;
+const ABILITY_BITS: u32 = ABILITY_DASH | ABILITY_LUNGE | ABILITY_TOXIN;
 /// uid, slot, x, y, energy01, generation, hue. The floats are stored by bit pattern.
 pub const HEIR_STRIDE: usize = 7;
 pub const MAX_HEIRS: usize = 5;
@@ -26,6 +38,12 @@ pub struct Control {
     pub death_cause: u32,
     /// Buds of the possessed body since it was possessed.
     pub buds: u32,
+    /// The uid of the body that killed the possessed body, set with `death_cause`. 0 for none.
+    pub killer: u32,
+    /// The readout of the killer's brain at the kill (`brain::readout`). Empty with no killer.
+    pub killer_brain: Vec<u32>,
+    /// The abilities that the player holds: `ABILITY_` bits. Stored. No rule reads it yet.
+    pub abilities: u32,
     /// Scratch, not saved. The last list that `write_heirs` made.
     pub heirs: Vec<u32>,
 }
@@ -85,24 +103,28 @@ impl World {
         self.control.possessed = uid;
         self.control.possessed_slot = slot;
         self.control.death_cause = CAUSE_NONE;
+        self.control.killer = 0;
+        self.control.killer_brain.clear();
         self.control.buds = 0;
-        self.input(false, 0.0, 0.0, false);
+        self.input(false, 0.0, 0.0, false, 0);
         true
     }
 
     /// The creature keeps its mark.
     pub fn release(&mut self) {
         self.control.possessed = 0;
-        self.input(false, 0.0, 0.0, false);
+        self.input(false, 0.0, 0.0, false, 0);
     }
 
-    /// Clamps `thrust` to `[0, 1]` and `turn` to `[-1, 1]`. NaN counts as 0.
-    pub fn input(&mut self, manual: bool, thrust: f32, turn: f32, accept: bool) {
+    /// Clamps `thrust` to `[0, 1]` and `turn` to `[-1, 1]`. NaN counts as 0. `abilities` keeps its
+    /// three `ABILITY_` bits.
+    pub fn input(&mut self, manual: bool, thrust: f32, turn: f32, accept: bool, abilities: u32) {
         let clean = |v: f32, lo: f32| if v.is_nan() { 0.0 } else { v.clamp(lo, 1.0) };
         self.control.manual = manual;
         self.control.thrust = clean(thrust, 0.0);
         self.control.turn = clean(turn, -1.0);
         self.control.accept = accept;
+        self.control.abilities = abilities & ABILITY_BITS;
     }
 
     /// Live creatures with the lineage mark, highest `energy01` first, ties by lower slot. At most
@@ -143,7 +165,8 @@ pub fn apply(world: &mut World) {
     }
 }
 
-/// Everything but `possessed_slot` and `heirs`, so a reload keeps the player in their body.
+/// Everything but `possessed_slot` and `heirs`, so a reload keeps the player in their body and a
+/// reload during the death card keeps the killer.
 pub fn save(world: &World, w: &mut Writer) {
     let c = &world.control;
     w.u32(c.possessed);
@@ -153,9 +176,13 @@ pub fn save(world: &World, w: &mut Writer) {
     w.u32(c.accept as u32);
     w.u32(c.death_cause);
     w.u32(c.buds);
+    w.u32(c.killer);
+    w.u32s(&c.killer_brain);
+    w.u32(c.abilities);
 }
 
-/// A possessed uid must be alive. The input must be what `World::input` could have stored.
+/// A possessed uid must be alive. The input must be what `World::input` could have stored. A killer
+/// must be a uid that the world has given out, and its readout no longer than a full brain's.
 pub fn load(world: &mut World, r: &mut Reader) -> Result<(), LoadError> {
     let possessed = r.u32()?;
     let possessed_slot = match possessed {
@@ -176,10 +203,22 @@ pub fn load(world: &mut World, r: &mut Reader) -> Result<(), LoadError> {
     }
     let accept = flag(r.u32()?, "control accept flag")?;
     let death_cause = r.u32()?;
-    if death_cause > CAUSE_OLD_AGE {
+    if death_cause > CAUSE_SPIKED {
         return Err(LoadError::Invalid("death cause"));
     }
     let buds = r.u32()?;
+    let killer = r.u32()?;
+    if killer >= world.next_uid {
+        return Err(LoadError::Invalid("killer uid not below next uid"));
+    }
+    let killer_brain = r.u32s()?;
+    if killer_brain.len() > READOUT_MAX_WORDS as usize {
+        return Err(LoadError::Invalid("killer brain length"));
+    }
+    let abilities = r.u32()?;
+    if abilities & !ABILITY_BITS != 0 {
+        return Err(LoadError::Invalid("control ability mask"));
+    }
     world.control = Control {
         possessed,
         possessed_slot,
@@ -189,6 +228,9 @@ pub fn load(world: &mut World, r: &mut Reader) -> Result<(), LoadError> {
         accept,
         death_cause,
         buds,
+        killer,
+        killer_brain,
+        abilities,
         heirs: Vec::new(),
     };
     Ok(())

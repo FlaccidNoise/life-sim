@@ -1,22 +1,36 @@
 // Constants and layouts shared by the page and the worker. The frame layout mirrors
 // crates/sim/src/frame.rs. tests/abi.test.ts fails if the two disagree.
 
-export const ABI_VERSION = 6;
+export const ABI_VERSION = 7;
 export const TICK_HZ = 20;
-export const FRAME_HEADER_WORDS = 34;
+export const FRAME_HEADER_WORDS = 50;
 export const CREATURE_STRIDE = 25;
 export const PLANT_STRIDE = 4;
+// A debris record: x, y, and its energy as a share of the capacity of the reference body.
+export const DEBRIS_STRIDE = 3;
+// A cloud record: x, y, radius, and its ticks left as a share of `toxin_ticks`.
+export const CLOUD_STRIDE = 4;
 export const PART_WORDS = 12;
 export const MAX_EYES = 8;
+export const MAX_FRAME_KILLS = 4;
 export const NO_SLOT = 0xffffffff;
 
 // Word offsets in a frame header. A cone is CONE_WORDS floats: its direction in world radians, the
-// cosine of its half angle, and its range in world units.
+// cosine of its half angle, and its range in world units. After the cones: the debris and cloud
+// records, the `hurt_side` of the possessed body as a float, and the kills in view since the last
+// frame, their count and then MAX_FRAME_KILLS places of KILL_WORDS: x and y as floats and the slot
+// of the killer.
 const F_LINEAGE_ALIVE = 7,
   F_BUDS = 8,
   F_CONE_COUNT = 9,
-  F_CONES = 10;
+  F_CONES = 10,
+  F_DEBRIS_COUNT = 34,
+  F_CLOUD_COUNT = 35,
+  F_HURT_SIDE = 36,
+  F_KILL_COUNT = 37,
+  F_KILLS = 38;
 const CONE_WORDS = 3;
+const KILL_WORDS = 3;
 
 // Word offsets in a creature record. The first seven are floats, the next four are integers, and
 // PART_WORDS part words follow from C_PARTS. The word at C_BRAIN is `hidden | conns << 16`: the
@@ -44,7 +58,10 @@ export const FLAG_LINEAGE = 1,
   FLAG_BUDDED = 8, // the body budded a short time ago
   FLAG_MIXED = 16, // the body was born of a cross
   FLAG_WILLING = 32, // the body accepts a mate now
-  FLAG_DONOR = 64; // the body holds the genes of a partner for its next bud
+  FLAG_DONOR = 64, // the body holds the genes of a partner for its next bud
+  FLAG_BIT = 128, // a bite of the body took energy a short time ago
+  FLAG_HURT = 256, // the body lost energy to a hit a short time ago
+  FLAG_DASH = 512; // the body dashed or lunged a short time ago
 
 // The kinds of part. They mirror the `KIND_` constants in crates/sim/src/genome.rs.
 export const KIND_FLAGELLUM = 1,
@@ -52,7 +69,11 @@ export const KIND_FLAGELLUM = 1,
   KIND_FILTER = 3,
   KIND_CHEMO = 4,
   KIND_FIN = 5,
-  KIND_EYE = 6;
+  KIND_EYE = 6,
+  KIND_JAW = 7,
+  KIND_SPIKE = 8,
+  KIND_SHELL = 9,
+  KIND_TOXIN = 10;
 
 /** One part of a body. `anchor`, `size`, and `extra` are 0 to 1 each, in steps of 1/255. */
 export interface Part {
@@ -92,6 +113,13 @@ export interface Kin {
   parts: Part[]; // in gene order
 }
 
+/** A death with a killer, in view, since the last frame. */
+export interface Kill {
+  x: number;
+  y: number;
+  killerSlot: number; // the slot of the killer at the kill
+}
+
 /** An eye cone of the possessed body, in world space. */
 export interface Cone {
   dir: number; // radians
@@ -113,8 +141,15 @@ export interface FrameView {
   readonly lineageAlive: number; // living creatures with the lineage mark
   readonly buds: number; // buds of the possessed body since it was possessed
   readonly cones: Cone[]; // of the possessed body. Empty with nothing possessed.
+  readonly debrisCount: number;
+  readonly cloudCount: number;
+  // The side of the last hit on the possessed body: -1 to 1, negative on the side of negative angles.
+  readonly hurtSide: number;
+  readonly kills: Kill[];
   readonly creatureBase: number; // word index of the first creature record
   readonly plantBase: number;
+  readonly debrisBase: number;
+  readonly cloudBase: number;
 }
 
 export function viewFrame(buffer: ArrayBuffer): FrameView {
@@ -122,6 +157,13 @@ export function viewFrame(buffer: ArrayBuffer): FrameView {
   const f32 = new Float32Array(buffer);
   const word = (i: number): number => u32[i] ?? 0;
   const creatureCount = word(1);
+  const plantBase = FRAME_HEADER_WORDS + creatureCount * CREATURE_STRIDE;
+  const debrisBase = plantBase + word(2) * PLANT_STRIDE;
+  const kills: Kill[] = [];
+  for (let k = 0; k < Math.min(word(F_KILL_COUNT), MAX_FRAME_KILLS); k++) {
+    const o = F_KILLS + k * KILL_WORDS;
+    kills.push({ x: f32[o] ?? 0, y: f32[o + 1] ?? 0, killerSlot: word(o + 2) });
+  }
   const cones: Cone[] = [];
   for (let k = 0; k < Math.min(word(F_CONE_COUNT), MAX_EYES); k++) {
     const o = F_CONES + k * CONE_WORDS;
@@ -141,8 +183,14 @@ export function viewFrame(buffer: ArrayBuffer): FrameView {
     lineageAlive: word(F_LINEAGE_ALIVE),
     buds: word(F_BUDS),
     cones,
+    debrisCount: word(F_DEBRIS_COUNT),
+    cloudCount: word(F_CLOUD_COUNT),
+    hurtSide: f32[F_HURT_SIDE] ?? 0,
+    kills,
     creatureBase: FRAME_HEADER_WORDS,
-    plantBase: FRAME_HEADER_WORDS + creatureCount * CREATURE_STRIDE,
+    plantBase,
+    debrisBase,
+    cloudBase: debrisBase + word(F_DEBRIS_COUNT) * DEBRIS_STRIDE,
   };
 }
 
@@ -245,10 +293,16 @@ export const FOUNDER_PLANTS = 1200;
 // crates/headless/src/bench.rs and scripts/bench-wasm.mjs.
 export const BENCH_SETTLE_TICKS = 12000;
 export const FRAME_POOL = 3;
+// The pools of the core: creatures, plants, debris, and clouds.
 export const MAX_FRAME_BYTES =
-  4 * (FRAME_HEADER_WORDS + 4096 * CREATURE_STRIDE + 8192 * PLANT_STRIDE);
+  4 *
+  (FRAME_HEADER_WORDS +
+    4096 * CREATURE_STRIDE +
+    8192 * PLANT_STRIDE +
+    4096 * DEBRIS_STRIDE +
+    256 * CLOUD_STRIDE);
 
-export type DeathCause = 'starved' | 'old age';
+export type DeathCause = 'starved' | 'old age' | 'eaten' | 'poisoned' | 'spiked';
 
 /** One row of the parameter table in crates/sim/src/params.rs. */
 export interface ParamInfo {

@@ -79,6 +79,10 @@ const STARTER_BIAS_SIGMA: f32 = 0.05;
 pub const READOUT_HEADER_WORDS: u32 = 6;
 pub const READOUT_NEURON_WORDS: u32 = 6;
 pub const READOUT_CONN_WORDS: u32 = 3;
+/// The words of the readout of a full brain: the most that `readout` writes.
+pub const READOUT_MAX_WORDS: u32 = READOUT_HEADER_WORDS
+    + MAX_NEURONS as u32 * READOUT_NEURON_WORDS
+    + MAX_CONNS as u32 * READOUT_CONN_WORDS;
 /// The kind of a hidden neuron in the readout. A neuron of the body has kind 0.
 const READOUT_HIDDEN: u32 = 255;
 

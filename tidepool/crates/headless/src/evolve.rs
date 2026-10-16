@@ -453,7 +453,7 @@ mod tests {
                 let s = world.spawn(genome, at).expect("slot") as usize;
                 world.creatures.bud_cooldown[s] = 1_000_000;
                 assert!(world.possess(world.creatures.uid[s]));
-                world.input(true, 1.0, turn, false);
+                world.input(true, 1.0, turn, false, 0);
                 world.run(150);
                 let c = &world.creatures;
                 let speed = (c.vx[s] * c.vx[s] + c.vy[s] * c.vy[s]).sqrt();

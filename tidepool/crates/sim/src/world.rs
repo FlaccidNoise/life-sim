@@ -1,10 +1,14 @@
 //! The world: every piece of simulation state, the tick, and the state hash.
 
+use crate::ability::{self, Clouds};
+use crate::bite;
 use crate::brain::{self, Brains};
-use crate::control::{self, Control};
+use crate::control::{self, Control, CAUSE_EATEN, CAUSE_POISONED, CAUSE_SPIKED};
 use crate::creature::{Creatures, MAX_CREATURES};
+use crate::debris::{self, Debris};
 use crate::energy;
 use crate::field::{self, Field};
+use crate::frame::KILL_LOG;
 use crate::genome::{Genome, FOUNDER_HISTORIES};
 use crate::grid::Grid;
 use crate::mate;
@@ -57,6 +61,8 @@ pub struct World {
     pub next_history: u32,
     pub plants: Plants,
     pub fertility: Fertility,
+    pub debris: Debris,
+    pub clouds: Clouds,
     pub scent: Field,
     pub brains: Brains,
     pub control: Control,
@@ -80,6 +86,9 @@ pub struct World {
     pub readout: Vec<u32>,
     /// Scratch. The last snapshot that `tp_save` made. Never saved.
     pub save_buf: Vec<u8>,
+    /// Scratch. The deaths with a killer since the last `frame::write`, at most `KILL_LOG`: the x
+    /// and the y of the dead body by bit pattern, and the slot of the killer. Never saved.
+    pub kills: Vec<[u32; 3]>,
 }
 
 /// True when both sides are at least 1 and at most `MAX_WORLD_SIZE`. False for NaN and infinity.
@@ -106,6 +115,8 @@ impl World {
             next_history: FOUNDER_HISTORIES + 1,
             plants: Plants::new(w, h),
             fertility: Fertility::new(w, h),
+            debris: Debris::new(w, h),
+            clouds: Clouds::default(),
             scent: Field::new(w, h),
             brains: Brains::new(MAX_CREATURES),
             control: Control::default(),
@@ -119,11 +130,13 @@ impl World {
             frame: Vec::new(),
             readout: Vec::new(),
             save_buf: Vec::new(),
+            kills: Vec::new(),
         }
     }
 
     /// Allocates a slot, sets every array from the genome and `at`, and expresses the body and the
     /// brain. The new body accepts no mate, touches none, was born of no cross, and holds no donor.
+    /// It fires no ability, waits on no cooldown, and has not bitten or been hit.
     /// The heading is wrapped and the place is clamped to the world. A spawn with a parent counts
     /// as a birth. None if the pool is full.
     pub fn spawn(&mut self, genome: Genome, at: SpawnAt) -> Option<u32> {
@@ -142,6 +155,9 @@ impl World {
         (c.cmd_thrust[s], c.cmd_turn[s], c.cmd_accept[s]) = (0.0, 0.0, 0.0);
         (c.mate_size[s], c.mate_kin[s], c.mixed_with[s]) = (0.0, 0.0, 0);
         (c.age[s], c.bud_cooldown[s]) = (0, 0);
+        (c.cmd_dash[s], c.cmd_lunge[s], c.cmd_toxin[s]) = (0.0, 0.0, 0.0);
+        (c.cd_dash[s], c.cd_lunge[s], c.cd_toxin[s], c.lunge_left[s]) = (0, 0, 0, 0);
+        (c.hurt[s], c.hurt_side[s], c.bit_tick[s], c.hurt_tick[s]) = (0.0, 0.0, 0, 0);
         (c.generation[s], c.parent[s], c.mark[s]) = (at.generation, at.parent, at.mark);
         c.express(s, &genome);
         c.growth[s] = at.growth;
@@ -155,18 +171,46 @@ impl World {
         Some(slot)
     }
 
-    /// Frees the slot and counts a death. If the creature was possessed, records the cause and
-    /// ends the possession.
-    pub fn kill(&mut self, slot: u32, cause: u32) {
-        self.creatures.slots.free(slot);
-        self.creatures.uid[slot as usize] = 0;
-        self.stats.deaths = self.stats.deaths.saturating_add(1);
-        let c = &mut self.control;
-        if c.possessed != 0 && c.possessed_slot == slot {
-            c.death_cause = cause;
+    /// Frees the slot and counts a death, and a death by a bite, a cloud, or a spike by its cause
+    /// (rule X1 of the M4 plan). `killer` is the slot of the body that killed this one. A killer
+    /// that is no longer alive counts as none. A death with a killer goes in `kills` for the frame.
+    ///
+    /// If the creature was possessed, records the cause, the uid of the killer or 0, and the
+    /// readout of the killer's brain as it is now, and ends the possession.
+    pub fn kill(&mut self, slot: u32, cause: u32, killer: Option<u32>) {
+        let s = slot as usize;
+        let killer = killer.filter(|&k| self.creatures.slots.is_alive(k));
+        if let Some(k) = killer {
+            if self.kills.len() < KILL_LOG {
+                let (x, y) = (self.creatures.x[s], self.creatures.y[s]);
+                self.kills.push([x.to_bits(), y.to_bits(), k]);
+            }
+        }
+        let stats = &mut self.stats;
+        match cause {
+            CAUSE_EATEN => stats.kills = stats.kills.saturating_add(1),
+            CAUSE_POISONED => stats.poisoned = stats.poisoned.saturating_add(1),
+            CAUSE_SPIKED => stats.spiked = stats.spiked.saturating_add(1),
+            _ => {}
+        }
+        stats.deaths = stats.deaths.saturating_add(1);
+        let control = &self.control;
+        if control.possessed != 0 && control.possessed_slot == slot {
+            let uid = killer.map_or(0, |k| self.creatures.uid[k as usize]);
+            let mut brain = Vec::new();
+            if uid != 0 {
+                // `readout` writes the scratch of `tp_brain_write`. The page's copy of it stays.
+                let page = std::mem::take(&mut self.readout);
+                brain::readout(self, uid);
+                brain = std::mem::replace(&mut self.readout, page);
+            }
+            let c = &mut self.control;
+            (c.death_cause, c.killer, c.killer_brain) = (cause, uid, brain);
             c.possessed = 0;
             c.manual = false;
         }
+        self.creatures.slots.free(slot);
+        self.creatures.uid[s] = 0;
     }
 
     /// Makes the starting world: the fertility map, then the creatures, then the plants. Call it
@@ -224,12 +268,16 @@ impl World {
         sense::step(self);
         brain::step(self);
         control::apply(self);
+        ability::step(self);
         motor::step(self);
         mate::step(self);
+        bite::step(self);
+        ability::clouds(self);
         energy::contact(self);
         energy::life(self);
         repro::step(self);
         plant::step(self);
+        debris::step(self);
         field::step(self);
         // Wraps: a snapshot can hold any tick, and a debug build panics on overflow.
         self.tick = self.tick.wrapping_add(1);
@@ -265,11 +313,14 @@ impl World {
         sense::save(self, &mut w);
         brain::save(self, &mut w);
         control::save(self, &mut w);
+        ability::save(self, &mut w);
         motor::save(self, &mut w);
         mate::save(self, &mut w);
+        bite::save(self, &mut w);
         energy::save(self, &mut w);
         repro::save(self, &mut w);
         plant::save(self, &mut w);
+        debris::save(self, &mut w);
         field::save(self, &mut w);
         w.bytes
     }
@@ -323,11 +374,14 @@ impl World {
         sense::load(&mut world, &mut r)?;
         brain::load(&mut world, &mut r)?;
         control::load(&mut world, &mut r)?;
+        ability::load(&mut world, &mut r)?;
         motor::load(&mut world, &mut r)?;
         mate::load(&mut world, &mut r)?;
+        bite::load(&mut world, &mut r)?;
         energy::load(&mut world, &mut r)?;
         repro::load(&mut world, &mut r)?;
         plant::load(&mut world, &mut r)?;
+        debris::load(&mut world, &mut r)?;
         field::load(&mut world, &mut r)?;
         r.end()?;
         Ok(world)

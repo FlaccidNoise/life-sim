@@ -16,7 +16,7 @@ use crate::frame;
 use crate::params::{ParamDef, DEFS};
 use crate::world::{self, World};
 
-pub const ABI_VERSION: u32 = 6;
+pub const ABI_VERSION: u32 = 7;
 
 thread_local! {
     /// Why the last `tp_new` or `tp_load` returned null.
@@ -174,7 +174,8 @@ pub unsafe extern "C" fn tp_possessed(world: *const World) -> u32 {
 }
 
 /// `manual` is 0 for the brain and any other value for the player. `accept` is 0 for a player who
-/// does not court and any other value for one who does.
+/// does not court and any other value for one who does. `abilities` is a mask of the `ABILITY_`
+/// bits in `control.rs`: 1 dash, 2 lunge, 4 toxin. Other bits are dropped.
 #[no_mangle]
 pub unsafe extern "C" fn tp_input(
     world: *mut World,
@@ -182,9 +183,10 @@ pub unsafe extern "C" fn tp_input(
     thrust: f32,
     turn: f32,
     accept: u32,
+    abilities: u32,
 ) {
     if let Some(w) = world.as_mut() {
-        w.input(manual != 0, thrust, turn, accept != 0);
+        w.input(manual != 0, thrust, turn, accept != 0, abilities);
     }
 }
 
@@ -193,6 +195,30 @@ pub unsafe extern "C" fn tp_input(
 #[no_mangle]
 pub unsafe extern "C" fn tp_death_cause(world: *const World) -> u32 {
     world.as_ref().map_or(0, |w| w.control.death_cause)
+}
+
+/// The uid of the body that killed the possessed creature. 0 for none. Set and cleared with
+/// `tp_death_cause`.
+#[no_mangle]
+pub unsafe extern "C" fn tp_killer(world: *const World) -> u32 {
+    world.as_ref().map_or(0, |w| w.control.killer)
+}
+
+/// The words of the readout of the killer's brain at the kill, as `tp_brain_write` lays them out.
+/// 0 with no killer.
+#[no_mangle]
+pub unsafe extern "C" fn tp_killer_brain_len(world: *const World) -> u32 {
+    world
+        .as_ref()
+        .map_or(0, |w| w.control.killer_brain.len() as u32)
+}
+
+/// Valid until the next tick, possess, `tp_load` of this world, or `tp_free`.
+#[no_mangle]
+pub unsafe extern "C" fn tp_killer_brain_ptr(world: *const World) -> *const u32 {
+    world
+        .as_ref()
+        .map_or(ptr::null(), |w| w.control.killer_brain.as_ptr())
 }
 
 #[no_mangle]
@@ -227,6 +253,22 @@ pub extern "C" fn tp_frame_creature_stride() -> u32 {
 #[no_mangle]
 pub extern "C" fn tp_frame_plant_stride() -> u32 {
     frame::PLANT_STRIDE
+}
+
+#[no_mangle]
+pub extern "C" fn tp_frame_debris_stride() -> u32 {
+    frame::DEBRIS_STRIDE
+}
+
+#[no_mangle]
+pub extern "C" fn tp_frame_cloud_stride() -> u32 {
+    frame::CLOUD_STRIDE
+}
+
+/// The kills in view that the frame header has room for.
+#[no_mangle]
+pub extern "C" fn tp_frame_max_kills() -> u32 {
+    frame::MAX_FRAME_KILLS as u32
 }
 
 /// The part words of a creature record.
@@ -364,7 +406,7 @@ mod tests {
             tp_param_set(a, id::REPEL as u32, 0.5);
             tp_seed_founders(a, 300, 0);
             assert_eq!(tp_possess(a, 7), 1);
-            tp_input(a, 1, 1.0, -1.0, 1);
+            tp_input(a, 1, 1.0, -1.0, 1, 0xFF);
             tp_tick(a, 50);
             assert_eq!((tp_tick_count(a), tp_stat(a, 0)), (50, 300.0));
             assert_eq!((tp_world_w(a), tp_world_h(a)), (1536.0, 1024.0));
@@ -380,6 +422,7 @@ mod tests {
                 (7, 0.5)
             );
             assert!((*b).control.accept);
+            assert_eq!((*b).control.abilities, 7);
             tp_free(a);
             tp_free(b);
         }
@@ -430,7 +473,9 @@ mod tests {
             tp_param_set(null, 0, 1.0);
             assert_eq!(tp_param_get(null, 0), 0.0);
             tp_release(null);
-            tp_input(null, 1, 1.0, 1.0, 1);
+            tp_input(null, 1, 1.0, 1.0, 1, 1);
+            assert_eq!((tp_killer(null), tp_killer_brain_len(null)), (0, 0));
+            assert!(tp_killer_brain_ptr(null).is_null());
             assert_eq!(tp_brain_write(null, 1), 0);
             assert!(tp_brain_ptr(null).is_null());
             assert_eq!((tp_pick(null, 0.0, 0.0, 9.0), tp_possess(null, 1)), (0, 0));
@@ -494,12 +539,33 @@ mod tests {
             assert_eq!((first, tp_possess(w, first)), (4, 1));
             assert_eq!((tp_possess(w, second), tp_possess(w, 999)), (1, 0));
             assert_eq!((tp_possessed(w), tp_death_cause(w)), (second, 0));
-            (&mut *w).kill(8, crate::control::CAUSE_STARVED);
+            (&mut *w).kill(8, crate::control::CAUSE_STARVED, None);
             assert_eq!((tp_possessed(w), tp_death_cause(w)), (0, 1));
+            assert_eq!((tp_killer(w), tp_killer_brain_len(w)), (0, 0));
             assert_eq!((tp_heir_stride(), tp_heirs_write(w)), (7, 1));
             let heir = std::slice::from_raw_parts(tp_heirs_ptr(w), 7);
             assert_eq!((heir[0], heir[1]), (first, 3));
             assert_eq!(tp_stat(w, crate::stats::STAT_LINEAGE_ALIVE), 1.0);
+            tp_free(w);
+        }
+    }
+
+    #[test]
+    fn a_killer_and_its_brain_at_the_kill_read_through_the_abi() {
+        unsafe {
+            let w = tp_new(1, 1536.0, 1024.0);
+            tp_seed_founders(w, 20, 0);
+            assert_eq!(tp_possess(w, 4), 1);
+            // Slot 3 holds uid 4, and slot 8 holds uid 9.
+            (&mut *w).kill(3, crate::control::CAUSE_EATEN, Some(8));
+            assert_eq!((tp_death_cause(w), tp_killer(w)), (3, 9));
+            let words =
+                tp_brain_header_words() + 20 * tp_brain_neuron_words() + 60 * tp_brain_conn_words();
+            assert_eq!(tp_killer_brain_len(w), words);
+            let header = std::slice::from_raw_parts(tp_killer_brain_ptr(w), 6);
+            assert_eq!(header, [9, 13, 4, 3, 60, 0]);
+            assert_eq!(tp_possess(w, 9), 1);
+            assert_eq!((tp_killer(w), tp_killer_brain_len(w)), (0, 0));
             tp_free(w);
         }
     }

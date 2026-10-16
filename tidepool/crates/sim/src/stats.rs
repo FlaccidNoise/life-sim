@@ -30,6 +30,14 @@ pub struct Stats {
     pub starved_juv: u64,
     /// Plants removed because their reserve fell under `plant_death_reserve`.
     pub plant_deaths: u64,
+    /// Energy that bites took from bodies (rule J1 of the M4 plan).
+    pub flesh: f64,
+    /// Deaths by a bite, by a toxin cloud, and by a spike.
+    pub kills: u64,
+    pub poisoned: u64,
+    pub spiked: u64,
+    /// Energy that creatures took from debris (rule F1).
+    pub debris_eaten: f64,
 }
 
 impl Stats {
@@ -39,6 +47,11 @@ impl Stats {
         w.u64(self.eaten.to_bits());
         w.u64(self.starved_juv);
         w.u64(self.plant_deaths);
+        w.u64(self.flesh.to_bits());
+        w.u64(self.kills);
+        w.u64(self.poisoned);
+        w.u64(self.spiked);
+        w.u64(self.debris_eaten.to_bits());
     }
 
     pub fn load(r: &mut Reader) -> Result<Stats, LoadError> {
@@ -48,6 +61,11 @@ impl Stats {
             eaten: f64::from_bits(r.u64()?),
             starved_juv: r.u64()?,
             plant_deaths: r.u64()?,
+            flesh: f64::from_bits(r.u64()?),
+            kills: r.u64()?,
+            poisoned: r.u64()?,
+            spiked: r.u64()?,
+            debris_eaten: f64::from_bits(r.u64()?),
         })
     }
 }

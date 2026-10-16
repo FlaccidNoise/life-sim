@@ -277,7 +277,7 @@ fn a_genome_with_too_many_parts_or_a_bad_kind_does_not_load() {
         patched(count_at, too_many),
         Some(LoadError::Invalid("genome part count"))
     );
-    for kind in [0, 9, 256 + KIND_EYE as u32] {
+    for kind in [0, KINDS as u32 + 1, 256 + KIND_EYE as u32] {
         assert_eq!(
             patched(kind_at, kind),
             Some(LoadError::Invalid("genome part kind")),
@@ -287,7 +287,7 @@ fn a_genome_with_too_many_parts_or_a_bad_kind_does_not_load() {
     // A world that holds such a genome does not load either.
     let mut world = World::new(1, 256.0, 256.0);
     let mut g = Genome::default();
-    g.parts[0].kind = 9;
+    g.parts[0].kind = KINDS + 1;
     world.spawn(g, at(10.0)).expect("slot");
     assert_eq!(
         World::load(&world.save()).err(),
@@ -446,8 +446,11 @@ fn add_puts_a_small_new_part_on_the_end_with_a_new_id() {
         assert_eq!(ids(&child), ids(&g));
         kinds[new.kind as usize] = true;
     }
-    // Every kind comes up.
-    assert_eq!(kinds, [false, true, true, true, true, true, true]);
+    // Every kind of M3 comes up, and no kind of M4: the mutation draws from `ADDABLE_KINDS`.
+    assert_eq!(
+        kinds,
+        [false, true, true, true, true, true, true, false, false, false, false]
+    );
 }
 
 #[test]
@@ -529,8 +532,11 @@ fn duplicate_copies_kind_size_and_extra_under_a_new_id() {
         kinds[copy.kind as usize] = true;
     }
     assert!(moved, "no copy moved along the outline");
-    // Each of the five parts is copied in some birth. The founder has no Fin.
-    assert_eq!(kinds, [false, true, true, true, true, false, true]);
+    // Each of the five parts is copied in some birth. The founder has no Fin and no part of M4.
+    assert_eq!(
+        kinds,
+        [false, true, true, true, true, false, true, false, false, false, false]
+    );
     // With no part there is nothing to copy.
     let mut bare = Genome::default();
     bare.parts.clear();

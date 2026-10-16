@@ -404,7 +404,7 @@ fn the_donor_of_a_dead_partner_still_gives_a_brood() {
     let partner = w.creatures.uid[b];
     assert_eq!(donor(&w, a), partner);
 
-    w.kill(b as u32, CAUSE_STARVED);
+    w.kill(b as u32, CAUSE_STARVED, None);
     let cap = w.params.get(id::ENERGY_PER_MASS) * w.creatures.area(a);
     w.creatures.energy[a] = 0.95 * cap;
     w.tick();

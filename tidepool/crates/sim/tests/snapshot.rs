@@ -1,6 +1,9 @@
+use tidepool_sim::ability::MAX_CLOUDS;
+use tidepool_sim::brain::READOUT_HEADER_WORDS;
 use tidepool_sim::brain::{self, IN_CONST, IN_ENERGY, MAX_NEURONS, N_OUT_MAX};
-use tidepool_sim::control::{CAUSE_OLD_AGE, CAUSE_STARVED};
+use tidepool_sim::control::{CAUSE_EATEN, CAUSE_OLD_AGE, CAUSE_SPIKED, CAUSE_STARVED};
 use tidepool_sim::creature::{MAX_CREATURES, MAX_EYES};
+use tidepool_sim::debris::MAX_DEBRIS;
 use tidepool_sim::frame;
 use tidepool_sim::genome::{
     BrainGenome, ConnGene, Genome, HiddenGene, Node, OutGene, KIND_EYE, MAX_CONN_GENES, MAX_HIDDEN,
@@ -16,13 +19,27 @@ use tidepool_sim::world::{SpawnAt, World, MAX_WORLD_SIZE};
 const N_IN: usize = 9;
 const N_OUT: usize = 3;
 
-/// Founders, plants, a changed parameter, a possessed creature, and held manual input.
+/// Founders, plants, a changed parameter, a possessed creature, held manual input, and a piece of
+/// debris and a cloud set by hand. At the defaults no rule reads or changes the two.
 fn world_at(ticks: u32) -> World {
     let mut w = World::new(9, 1536.0, 1024.0);
     w.params.set(id::REPEL, 0.5);
     w.seed_founders(400, 1200);
     assert!(w.possess(w.creatures.uid[3]));
-    w.input(true, 0.8, 0.5, false);
+    w.input(true, 0.8, 0.5, false, 0);
+    let d = w.debris.slots.alloc().expect("debris slot") as usize;
+    (w.debris.x[d], w.debris.y[d], w.debris.energy[d]) = (100.0, 200.0, 5.0);
+    w.debris.dirty = true;
+    let k = w.clouds.slots.alloc().expect("cloud slot") as usize;
+    let c = &mut w.clouds;
+    (
+        c.x[k],
+        c.y[k],
+        c.radius[k],
+        c.left[k],
+        c.drain[k],
+        c.maker[k],
+    ) = (300.0, 400.0, 20.0, 30, 0.5, 2);
     w.run(ticks);
     w
 }
@@ -175,6 +192,15 @@ fn every_saved_field_is_in_the_hash_and_survives_a_load() {
         ("mixed_with", |w| w.creatures.mixed_with[S] = 1),
         ("mark", |w| w.creatures.mark[S] ^= 1),
         ("bud_cooldown", |w| w.creatures.bud_cooldown[S] += 1),
+        ("cmd_dash", |w| w.creatures.cmd_dash[S] += 0.1),
+        ("cmd_lunge", |w| w.creatures.cmd_lunge[S] += 0.1),
+        ("cmd_toxin", |w| w.creatures.cmd_toxin[S] += 0.1),
+        ("cd_dash", |w| w.creatures.cd_dash[S] += 1),
+        ("cd_lunge", |w| w.creatures.cd_lunge[S] += 1),
+        ("cd_toxin", |w| w.creatures.cd_toxin[S] += 1),
+        ("lunge_left", |w| w.creatures.lunge_left[S] += 1),
+        ("hurt", |w| w.creatures.hurt[S] += 0.5),
+        ("hurt_side", |w| w.creatures.hurt_side[S] -= 0.5),
         ("genome len", |w| w.genomes[S].len += 1.0),
         ("genome wid", |w| w.genomes[S].wid += 0.1),
         ("genome egg", |w| w.genomes[S].egg += 0.1),
@@ -245,17 +271,36 @@ fn every_saved_field_is_in_the_hash_and_survives_a_load() {
         ("eaten", |w| w.stats.eaten += 0.5),
         ("starved_juv", |w| w.stats.starved_juv += 1),
         ("plant_deaths", |w| w.stats.plant_deaths += 1),
+        ("flesh", |w| w.stats.flesh += 0.5),
+        ("kills", |w| w.stats.kills += 1),
+        ("poisoned", |w| w.stats.poisoned += 1),
+        ("spiked", |w| w.stats.spiked += 1),
+        ("debris_eaten", |w| w.stats.debris_eaten += 0.5),
         ("possessed", |w| assert!(w.possess(w.creatures.uid[S]))),
-        ("manual input", |w| w.input(true, 0.3, -0.2, false)),
-        ("accept input", |w| w.input(true, 0.8, 0.5, true)),
-        ("death cause", |w| w.kill(3, CAUSE_OLD_AGE)),
+        ("manual input", |w| w.input(true, 0.3, -0.2, false, 0)),
+        ("accept input", |w| w.input(true, 0.8, 0.5, true, 0)),
+        ("death cause", |w| w.kill(3, CAUSE_OLD_AGE, None)),
         ("buds", |w| w.control.buds += 1),
+        ("killer", |w| w.control.killer = 2),
+        ("killer_brain", |w| w.control.killer_brain.push(7)),
+        ("abilities", |w| w.input(true, 0.8, 0.5, false, 2)),
+        ("cloud slots", |w| w.clouds.slots.free(0)),
+        ("cloud x", |w| w.clouds.x[0] += 1.0),
+        ("cloud y", |w| w.clouds.y[0] += 1.0),
+        ("cloud radius", |w| w.clouds.radius[0] += 1.0),
+        ("cloud left", |w| w.clouds.left[0] += 1),
+        ("cloud drain", |w| w.clouds.drain[0] += 0.1),
+        ("cloud maker", |w| w.clouds.maker[0] = 3),
         ("plant slots", |w| w.plants.slots.free(S as u32)),
         ("plant x", |w| w.plants.x[S] += 1.0),
         ("plant y", |w| w.plants.y[S] += 1.0),
         ("plant reserve", |w| w.plants.reserve[S] *= 0.5),
         ("plant cap", |w| w.plants.cap[S] += 1.0),
         ("fertility", |w| w.fertility.v[S] = 0.123),
+        ("debris slots", |w| w.debris.slots.free(0)),
+        ("debris x", |w| w.debris.x[0] += 1.0),
+        ("debris y", |w| w.debris.y[0] += 1.0),
+        ("debris energy", |w| w.debris.energy[0] += 1.0),
         ("scent", |w| w.scent.a[S] += 1.0),
     ];
     let base = world_at(50).state_hash();
@@ -309,6 +354,11 @@ fn garbage_is_rejected_without_panic() {
 const HEADER_BYTES: usize = 4 * (5 + 4 * 2);
 /// The `f32` creature fields. They come before the integer fields.
 const FLOATS_BEFORE: usize = 13;
+/// The `f32` creature fields of M4 that follow the integer fields: the three ability commands,
+/// then, after the four counters, `hurt` and `hurt_side`.
+const COMMANDS: usize = 3;
+const COUNTERS: usize = 4;
+const HURTS: usize = 2;
 
 /// A payload written by hand in the order of `World::save_payload`. A test changes one part.
 struct Crafted {
@@ -335,6 +385,18 @@ struct Crafted {
     control: (u32, u32, f32, f32, u32),
     /// The accept flag of the control block.
     accept: u32,
+    /// The killer uid, the killer's brain, and the ability mask of the control block.
+    killer: u32,
+    killer_brain: Vec<u32>,
+    abilities: u32,
+    /// The cloud pool. `cloud_field` is the x, the y, the radius, and the drain of every cloud.
+    cloud_slots: Vec<u32>,
+    cloud_field: Vec<f32>,
+    cloud_left: Vec<u32>,
+    cloud_maker: Vec<u32>,
+    /// The debris pool. `debris_field` is the x, the y, and the energy of every piece.
+    debris_slots: Vec<u32>,
+    debris_field: Vec<f32>,
     /// The uid of the donor that every live slot holds, with the default genome. 0 for none.
     donor: u32,
     plant_slots: Vec<u32>,
@@ -371,6 +433,15 @@ impl Crafted {
             activations: None,
             control: (0, 0, 0.0, 0.0, 0),
             accept: 0,
+            killer: 0,
+            killer_brain: vec![],
+            abilities: 0,
+            cloud_slots: vec![],
+            cloud_field: vec![],
+            cloud_left: vec![],
+            cloud_maker: vec![],
+            debris_slots: vec![],
+            debris_field: vec![],
             donor: 0,
             plant_slots: vec![],
             plant_place: vec![],
@@ -426,7 +497,16 @@ impl Crafted {
         p.u32s(&self.mixed_with);
         p.u8s(&vec![0; self.field.len()]); // mark
         p.u32s(&vec![0; self.field.len()]); // bud_cooldown
-                                            // The neurons of every block. The inputs follow the parts of each genome.
+        for _ in 0..COMMANDS {
+            p.f32s(&self.field);
+        }
+        for _ in 0..COUNTERS {
+            p.u32s(&vec![0; self.field.len()]); // the three cooldowns and lunge_left
+        }
+        for _ in 0..HURTS {
+            p.f32s(&self.field);
+        }
+        // The neurons of every block. The inputs follow the parts of each genome.
         let mut neurons = 0;
         for i in 0..self.live.len() {
             // A field of the wrong length has failed the load before a genome is read.
@@ -453,6 +533,11 @@ impl Crafted {
         p.u64(0f64.to_bits()); // eaten
         p.u64(0); // starved_juv
         p.u64(0); // plant_deaths
+        p.u64(0f64.to_bits()); // flesh
+        p.u64(0); // kills
+        p.u64(0); // poisoned
+        p.u64(0); // spiked
+        p.u64(0f64.to_bits()); // debris_eaten
         let zeros = vec![0.0; neurons];
         p.f32s(self.activations.as_ref().unwrap_or(&zeros));
         let (possessed, manual, thrust, turn, cause) = self.control;
@@ -463,6 +548,16 @@ impl Crafted {
         p.u32(self.accept);
         p.u32(cause);
         p.u32(0); // buds
+        p.u32(self.killer);
+        p.u32s(&self.killer_brain);
+        p.u32(self.abilities);
+        p.u32s(&self.cloud_slots);
+        p.f32s(&self.cloud_field); // x
+        p.f32s(&self.cloud_field); // y
+        p.f32s(&self.cloud_field); // radius
+        p.u32s(&self.cloud_left);
+        p.f32s(&self.cloud_field); // drain
+        p.u32s(&self.cloud_maker);
         for _ in &self.live {
             p.u32(self.donor);
             if self.donor != 0 {
@@ -475,6 +570,10 @@ impl Crafted {
         p.f32s(&self.plant_reserve);
         p.f32s(&self.plant_cap);
         p.f32s(&self.fertility);
+        p.u32s(&self.debris_slots);
+        p.f32s(&self.debris_field); // x
+        p.f32s(&self.debris_field); // y
+        p.f32s(&self.debris_field); // energy
         p.f32s(&self.scent);
         p.bytes
     }
@@ -785,7 +884,7 @@ fn a_bad_control_block_is_invalid() {
         ((5, 1, 0.0, -1.5, 0), "control input out of range"),
         ((5, 1, f32::NAN, 0.0, 0), "control input out of range"),
         ((5, 1, 0.0, f32::NAN, 0), "control input out of range"),
-        ((0, 0, 0.0, 0.0, 3), "death cause"),
+        ((0, 0, 0.0, 0.0, CAUSE_SPIKED + 1), "death cause"),
     ] {
         assert_eq!(
             with_control(control).err(),
@@ -802,6 +901,109 @@ fn a_bad_control_block_is_invalid() {
         with_accept(2).err(),
         Some(LoadError::Invalid("control accept flag"))
     );
+    // A death of M4, with its killer, the killer's brain, and the mask of the abilities held.
+    let eaten = Crafted {
+        control: (0, 0, 0.0, 0.0, CAUSE_EATEN),
+        killer: 5,
+        killer_brain: vec![5, 0, 0, 0, 0, 0],
+        abilities: 7,
+        ..Crafted::uids(0, 9, &[3, 5])
+    };
+    let w = eaten.load().expect("load");
+    let c = &w.control;
+    assert_eq!((c.death_cause, c.killer, c.abilities), (CAUSE_EATEN, 5, 7));
+    assert_eq!(c.killer_brain.len(), READOUT_HEADER_WORDS as usize);
+    for (bad, reason) in [
+        (
+            Crafted {
+                killer: 9,
+                ..Crafted::uids(0, 9, &[3, 5])
+            },
+            "killer uid not below next uid",
+        ),
+        (
+            Crafted {
+                abilities: 8,
+                ..Crafted::uids(0, 9, &[3, 5])
+            },
+            "control ability mask",
+        ),
+    ] {
+        assert_eq!(bad.err(), Some(LoadError::Invalid(reason)));
+    }
+}
+
+#[test]
+fn a_crafted_cloud_and_a_crafted_piece_of_debris_load() {
+    let p = Crafted {
+        cloud_slots: vec![3],
+        cloud_field: vec![20.0],
+        cloud_left: vec![5],
+        cloud_maker: vec![2],
+        debris_slots: vec![0, 6],
+        debris_field: vec![10.0, 30.0],
+        ..Crafted::uids(0, 9, &[3, 5])
+    };
+    let mut w = p.load().expect("load");
+    let cl = &w.clouds;
+    assert_eq!((cl.slots.count(), cl.slots.high_water()), (1, 4));
+    assert_eq!(
+        (cl.x[3], cl.radius[3], cl.left[3], cl.maker[3]),
+        (20.0, 20.0, 5, 2)
+    );
+    let d = &w.debris;
+    assert_eq!((d.slots.count(), d.slots.high_water()), (2, 7));
+    assert_eq!((d.x[6], d.y[6], d.energy[6]), (30.0, 30.0, 30.0));
+    // The grid of the debris is rebuilt, so the frame finds both pieces.
+    frame::write(&mut w, 0.0, 0.0, 64.0, 64.0);
+    assert_eq!(w.frame[34..36], [2, 1]);
+}
+
+#[test]
+fn a_bad_cloud_or_debris_pool_is_invalid() {
+    let cloud = |slots: &[u32], field: f32, left: u32, maker: u32| Crafted {
+        cloud_slots: slots.to_vec(),
+        cloud_field: vec![field; slots.len()],
+        cloud_left: vec![left; slots.len()],
+        cloud_maker: vec![maker; slots.len()],
+        ..Crafted::uids(0, 9, &[3, 5])
+    };
+    let debris = |slots: &[u32], field: Vec<f32>| Crafted {
+        debris_slots: slots.to_vec(),
+        debris_field: field,
+        ..Crafted::uids(0, 9, &[3, 5])
+    };
+    let cases = [
+        (cloud(&[3, 3], 1.0, 5, 2), "cloud slots not ascending"),
+        (cloud(&[MAX_CLOUDS], 1.0, 5, 2), "cloud slot past capacity"),
+        (
+            Crafted {
+                cloud_left: vec![5],
+                ..cloud(&[0, 1], 1.0, 5, 2)
+            },
+            "cloud field length",
+        ),
+        (cloud(&[0], 1.0, 0, 2), "cloud out of range"),
+        (cloud(&[0], 1.0, 5, 9), "cloud out of range"),
+        (cloud(&[0], -1.0, 5, 2), "cloud out of range"),
+        (cloud(&[0], f32::NAN, 5, 2), "cloud out of range"),
+        (cloud(&[0], f32::INFINITY, 5, 2), "cloud out of range"),
+        (debris(&[5, 2], vec![1.0; 2]), "debris slots not ascending"),
+        (
+            debris(&[MAX_DEBRIS], vec![1.0]),
+            "debris slot past capacity",
+        ),
+        (debris(&[0, 1], vec![1.0]), "debris field length"),
+        (debris(&[0], vec![-0.5]), "debris energy out of range"),
+        (debris(&[0], vec![f32::NAN]), "debris energy out of range"),
+        (
+            debris(&[0], vec![f32::INFINITY]),
+            "debris energy out of range",
+        ),
+    ];
+    for (bad, reason) in cases {
+        assert_eq!(bad.err(), Some(LoadError::Invalid(reason)), "{reason}");
+    }
 }
 
 #[test]
@@ -958,7 +1160,7 @@ fn counters_at_the_top_of_their_range_do_not_panic_or_wrap_a_uid() {
     assert_eq!((w.creatures.slots.count(), w.next_uid), (1, u32::MAX));
     assert_eq!(w.creatures.uid[0], last);
     World::load(&w.save()).expect("the world still loads");
-    w.kill(0, CAUSE_STARVED);
+    w.kill(0, CAUSE_STARVED, None);
     assert_eq!(w.stat(STAT_DEATHS), 3.0);
     World::load(&w.save()).expect("the empty world still loads");
 }
@@ -989,6 +1191,15 @@ fn every_cut_of_a_payload_is_an_error() {
     let p = Crafted {
         brain: brain(1, &[(0, N_IN), (N_IN, N_IN + 1)]),
         control: (2, 1, 0.5, 0.5, 0),
+        killer: 1,
+        killer_brain: vec![1, 0, 0, 0, 0, 0],
+        abilities: 3,
+        cloud_slots: vec![0],
+        cloud_field: vec![5.0],
+        cloud_left: vec![9],
+        cloud_maker: vec![1],
+        debris_slots: vec![2],
+        debris_field: vec![4.0],
         donor: 1,
         plant_slots: vec![0, 4],
         plant_place: vec![10.0, 40.0],

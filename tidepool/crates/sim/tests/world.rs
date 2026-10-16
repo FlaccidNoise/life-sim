@@ -189,7 +189,7 @@ fn kill_frees_the_slot_and_the_next_creature_there_has_a_new_uid() {
     for _ in 0..3 {
         w.spawn(Genome::default(), at(100.0, 100.0)).expect("slot");
     }
-    w.kill(1, CAUSE_OLD_AGE);
+    w.kill(1, CAUSE_OLD_AGE, None);
     assert_eq!((w.stat(STAT_CREATURES), w.stat(STAT_DEATHS)), (2.0, 1.0));
     assert_eq!(w.creatures.uid[1], 0);
     assert_eq!(w.pick(100.0, 100.0, 1.0), 1);
@@ -216,7 +216,7 @@ fn stats_describe_the_living() {
     assert_eq!(w.stat(STAT_MAX_GENERATION), 9.0);
     assert_eq!(w.stat(STAT_LINEAGE_ALIVE), 2.0);
     assert!((w.stat(STAT_MEAN_ENERGY01) - 0.6).abs() < 1e-6);
-    w.kill(1, CAUSE_OLD_AGE);
+    w.kill(1, CAUSE_OLD_AGE, None);
     assert_eq!(w.stat(STAT_MAX_GENERATION), 4.0);
     assert_eq!(w.stat(99), -1.0);
 }
