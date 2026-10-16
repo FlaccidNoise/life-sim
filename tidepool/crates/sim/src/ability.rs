@@ -192,10 +192,11 @@ pub fn clouds(world: &mut World) {
     }
     // A body drained to 0 takes nothing more, so it is in the list once.
     dead.sort_unstable();
-    for (slot, maker) in dead {
-        let killer = world.slot_of(maker);
-        world.kill(slot, CAUSE_POISONED, killer);
-    }
+    let dead: Vec<_> = dead
+        .into_iter()
+        .map(|(slot, maker)| (slot, CAUSE_POISONED, world.slot_of(maker)))
+        .collect();
+    world.kill_all(&dead);
 }
 
 /// The live slots, then each field for those slots in the order of the struct.

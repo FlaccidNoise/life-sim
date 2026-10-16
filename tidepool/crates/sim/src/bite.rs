@@ -123,9 +123,8 @@ pub fn step(world: &mut World) {
     }
     // A body at 0 is skipped by every later bite, so a slot is in `dead` once.
     dead.sort_unstable_by_key(|d| d.0);
-    for (slot, cause, killer) in dead {
-        world.kill(slot, cause, Some(killer));
-    }
+    let dead: Vec<_> = dead.into_iter().map(|(s, c, k)| (s, c, Some(k))).collect();
+    world.kill_all(&dead);
 }
 
 /// Writes nothing: the bite target is motor scratch, and the hurt is a creature field.

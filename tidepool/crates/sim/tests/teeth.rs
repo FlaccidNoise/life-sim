@@ -3,7 +3,7 @@
 
 use std::f32::consts::PI;
 use tidepool_sim::brain::{READOUT_HEADER_WORDS, READOUT_MAX_WORDS};
-use tidepool_sim::control::CAUSE_EATEN;
+use tidepool_sim::control::{CAUSE_EATEN, CAUSE_SPIKED};
 use tidepool_sim::creature::{MAX_GUARDS, MAX_JAWS};
 use tidepool_sim::genome::{
     Genome, PartGene, ADDABLE_KINDS, KINDS, KIND_JAW, KIND_SHELL, KIND_SPIKE, KIND_TOXIN,
@@ -176,6 +176,26 @@ fn teeth_world() -> World {
     w.input(true, 0.5, 0.25, false, 5);
     w.kill(9, CAUSE_EATEN, Some(12));
     w
+}
+
+#[test]
+fn a_victim_whose_killer_dies_earlier_in_the_same_kill_list_keeps_its_killer_on_the_card() {
+    let mut w = World::new(5, 1536.0, 1024.0);
+    w.seed_founders(50, 0);
+    let (hunter, prey) = (w.creatures.uid[5], w.creatures.uid[9]);
+    assert!(w.possess(prey));
+    // Body 5 bit body 9 to 0 and a spike of body 9 took body 5 to 0, as `bite::step` lists them.
+    w.kill_all(&[(5, CAUSE_SPIKED, Some(9)), (9, CAUSE_EATEN, Some(5))]);
+    assert_eq!(
+        (w.control.killer, w.control.death_cause),
+        (hunter, CAUSE_EATEN)
+    );
+    assert_eq!(w.control.killer_brain[0], hunter);
+    assert!(w.control.killer_brain.len() > READOUT_HEADER_WORDS as usize);
+    assert!(!w.creatures.slots.is_alive(5) && !w.creatures.slots.is_alive(9));
+    assert_eq!((w.slot_of(hunter), w.slot_of(prey)), (None, None));
+    assert_eq!(w.stats.kills, 1);
+    assert_eq!(w.stats.spiked, 1);
 }
 
 #[test]

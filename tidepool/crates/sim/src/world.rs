@@ -87,8 +87,9 @@ pub struct World {
     /// Scratch. The last snapshot that `tp_save` made. Never saved.
     pub save_buf: Vec<u8>,
     /// Scratch. The deaths with a killer since the last `frame::write`, at most `KILL_LOG`: the x
-    /// and the y of the dead body by bit pattern, and the slot of the killer. Never saved.
-    pub kills: Vec<[u32; 3]>,
+    /// and the y of the dead body by bit pattern, and the slot and the uid of the killer. Never
+    /// saved.
+    pub kills: Vec<[u32; 4]>,
 }
 
 /// True when both sides are at least 1 and at most `MAX_WORLD_SIZE`. False for NaN and infinity.
@@ -171,19 +172,39 @@ impl World {
         Some(slot)
     }
 
-    /// Frees the slot and counts a death, and a death by a bite, a cloud, or a spike by its cause
-    /// (rule X1 of the M4 plan). `killer` is the slot of the body that killed this one. A killer
-    /// that is no longer alive counts as none. A death with a killer goes in `kills` for the frame.
+    /// Ends the body in `slot` (`die`) and frees its slot.
+    pub fn kill(&mut self, slot: u32, cause: u32, killer: Option<u32>) {
+        self.die(slot, cause, killer);
+        self.free_body(slot);
+    }
+
+    /// Kills each `(slot, cause, killer)` of `dead`, in its order: every `die` first, then every
+    /// free. A killer that dies in the same list is still alive at its victims' `die`, so their
+    /// kill marks and the possessed body's card keep it.
+    pub fn kill_all(&mut self, dead: &[(u32, u32, Option<u32>)]) {
+        for &(slot, cause, killer) in dead {
+            self.die(slot, cause, killer);
+        }
+        for &(slot, _, _) in dead {
+            self.free_body(slot);
+        }
+    }
+
+    /// Counts a death, and a death by a bite, a cloud, or a spike by its cause (rule X1 of the M4
+    /// plan), and leaves the debris. `killer` is the slot of the body that killed this one. A
+    /// killer that is no longer alive counts as none. A death with a killer goes in `kills` for the
+    /// frame. The slot stays alive until `free_body`.
     ///
     /// If the creature was possessed, records the cause, the uid of the killer or 0, and the
     /// readout of the killer's brain as it is now, and ends the possession.
-    pub fn kill(&mut self, slot: u32, cause: u32, killer: Option<u32>) {
+    fn die(&mut self, slot: u32, cause: u32, killer: Option<u32>) {
         let s = slot as usize;
         let killer = killer.filter(|&k| self.creatures.slots.is_alive(k));
         if let Some(k) = killer {
             if self.kills.len() < KILL_LOG {
                 let (x, y) = (self.creatures.x[s], self.creatures.y[s]);
-                self.kills.push([x.to_bits(), y.to_bits(), k]);
+                let uid = self.creatures.uid[k as usize];
+                self.kills.push([x.to_bits(), y.to_bits(), k, uid]);
             }
         }
         let stats = &mut self.stats;
@@ -227,8 +248,11 @@ impl World {
                 }
             }
         }
+    }
+
+    fn free_body(&mut self, slot: u32) {
         self.creatures.slots.free(slot);
-        self.creatures.uid[s] = 0;
+        self.creatures.uid[slot as usize] = 0;
     }
 
     /// Makes the starting world: the fertility map, then the creatures, then the plants. Call it

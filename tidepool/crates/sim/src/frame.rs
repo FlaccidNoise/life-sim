@@ -88,7 +88,8 @@ fn pack(part: &PartGene) -> u32 {
 /// world radians, the cosine of its half angle, and its range in world units. A place past the
 /// count holds zeros. Then debris records, cloud records, the `hurt_side` of the possessed body as
 /// a float (0 with none), and the kills in view since the last frame: their count, then
-/// `MAX_FRAME_KILLS` places of x and y as floats and the slot of the killer, as it was at the kill.
+/// `MAX_FRAME_KILLS` places of x and y as floats and the slot of the killer, or `NO_SLOT` when that
+/// body is no longer alive.
 /// Creature record: x, y, heading, length, width, hue, energy01, then uid, slot, flags, and
 /// `hidden | conns << 16` for the hidden neurons and the connections that its brain expresses, then
 /// `PART_WORDS` part words in gene order. A place with no part holds 0. The next word is the growth,
@@ -165,8 +166,14 @@ pub fn write(world: &mut World, x0: f32, y0: f32, x1: f32, y1: f32) -> u32 {
         frame[HURT_SIDE_AT] = c.hurt_side[s].to_bits();
     }
     let mut shown = 0;
-    for &[x, y, killer] in kills.iter() {
+    for &[x, y, killer, uid] in kills.iter() {
         if shown < MAX_FRAME_KILLS && in_view(f32::from_bits(x), f32::from_bits(y)) {
+            // A killer that died since, or whose slot a newborn holds, is no slot.
+            let killer = if c.slots.is_alive(killer) && c.uid[killer as usize] == uid {
+                killer
+            } else {
+                NO_SLOT
+            };
             let at = KILLS_AT + shown * KILL_WORDS as usize;
             frame[at..at + KILL_WORDS as usize].copy_from_slice(&[x, y, killer]);
             shown += 1;
@@ -646,6 +653,23 @@ mod tests {
         // A kill is drawn by one frame.
         view(&mut w);
         assert_eq!(w.frame[KILL_COUNT_AT], 0);
+        // A killer alive at the kill that dies before the frame, here in the same list, and whose
+        // slot a newborn takes, is no slot in the header: the mark rings no body.
+        let late = (w.creatures.x[0], w.creatures.y[0]);
+        w.kill_all(&[
+            (0, crate::control::CAUSE_EATEN, Some(1)),
+            (1, crate::control::CAUSE_SPIKED, Some(0)),
+        ]);
+        assert_eq!(w.creatures.slots.alloc(), Some(0));
+        w.creatures.uid[0] = 999;
+        view(&mut w);
+        assert_eq!(w.frame[KILL_COUNT_AT], 2);
+        let (x, y) = late;
+        assert_eq!(
+            w.frame[KILLS_AT..KILLS_AT + 3],
+            [x.to_bits(), y.to_bits(), NO_SLOT]
+        );
+        assert_eq!(w.frame[KILLS_AT + 5], NO_SLOT);
         w.release();
         view(&mut w);
         assert_eq!(w.frame[HURT_SIDE_AT], 0);

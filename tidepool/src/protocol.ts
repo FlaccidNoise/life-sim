@@ -160,7 +160,7 @@ export function killerIn(frame: FrameView, uid: number, generation: number): Kil
 export interface Kill {
   x: number;
   y: number;
-  killerSlot: number; // the slot of the killer at the kill
+  killerSlot: number; // the slot of the killer, or NO_SLOT when it is no longer alive
 }
 
 /** An eye cone of the possessed body, in world space. */
