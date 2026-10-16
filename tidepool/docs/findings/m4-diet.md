@@ -219,3 +219,35 @@ herbivores and carnivores 0.10 or more on at least 3 of 5 seeds, `diet_sd` over 
 weaker gradient near 0 (a step to 0.1 gains 1% of a bite, not 3%) slows the climb, so seeds like 4
 may become two or three. If the climb fails on most seeds, `diet_k` goes back to 1.5 and the next
 lever is the gap (0.35).
+
+### T6 rows (`2034f38`)
+
+| Seed | 144,000: creatures | herb | omni | carn | diet_sd | hunt | kills | second half: herb_min, carn_min, sd_min |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 1,633 | 0.999 | 0.001 | 0.000 | 0.06 | 0.021 | 0 | 0.999, 0.000, 0.06 |
+| 4 | 1,236 | 0.769 | 0.224 | 0.006 | 0.17 | 0.695 | 3,476 | 0.769, 0.000, 0.14 |
+| 5 | 1,606 | 0.999 | 0.001 | 0.000 | 0.06 | 0.352 | 37 | 0.998, 0.000, 0.06 |
+| 6 | 1,403 | 0.994 | 0.006 | 0.000 | 0.06 | 0.185 | 1 | 0.994, 0.000, 0.05 |
+| 8 | 1,391 | 0.997 | 0.003 | 0.000 | 0.06 | 0.630 | 2 | 0.997, 0.000, 0.06 |
+
+At 12,000 on seeds 1 to 3: herbivores 0.999 to 1.000. **Falsified, by the risk named before the
+run:** at `diet_k` 2.0 the climb fails on 4 of 5 seeds. The bracket: 1.5 climbs and lets the middle
+take most bodies, 2.0 does not climb.
+
+**A deviation from rule 6, with its reason.** Six trials have not met target 1, and rule 6 says to
+build I1 now. Rule 6 was written when D1 stood alone and I1 was the stabiliser in reserve. D2 has
+since given the stability (no cloud, no crash, 930 to 1,331 bodies in T5). What fails is the shape
+(the middle too large) and the founding (seed 4 never climbs, nothing at 12,000), and predator
+interference acts on neither. The remaining four trials go to the founding and the shape. I1 stays
+in reserve for the owner.
+
+## T7: `founder_hunter_diet` 0.4 — hypothesis before the run
+
+Rule 2, the founding. Change from T5: `--param founder_hunter_diet=0.4` (T5's `diet_k` 1.5, ratio
+1.15, gap 0.25). A founder hunter filters 46% and bites 25%, and bites only bodies at 0.15 or under.
+T5 showed the ladder climbs out of omnivores, so the founders start as omnivores.
+
+Expected: the founder guild holds through 12,000 on seeds 1 to 3 (omnivores 0.05 or more) and the
+ladder forms on 5 of 5 seeds, seed 4 included. The shape stays T5's (the middle large), so target 1
+may still miss on the ends. If the founders still fade, the founding is not the gate and the
+remaining trials go to the shape (`diet_k` 1.75, then the gap).
