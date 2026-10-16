@@ -1,8 +1,5 @@
 // GLSL sources. Four programs: the depth gradient, the plants, the creatures, and their parts. Each
 // entity is one instanced quad, and its fragment shader draws the shape. Colours are premultiplied.
-//
-// The creature and part sources take a look (`Look` in parts.ts) as `LOOK`. With LOOK 0 a source is
-// the draw of M2. The owner picks one look, and then the others and `LOOK` are deleted.
 
 import { KIND_CHEMO, KIND_EYE, KIND_FILTER, KIND_FIN, KIND_FLAGELLUM, MAX_EYES } from '../protocol';
 
@@ -130,9 +127,8 @@ vec4 over(vec4 under, vec3 rgb, float a) {
 }
 `;
 
-// The numbers of the looks that only a shader uses. Those that place a part or shape an outline are
-// in parts.ts.
-const LOOKS = `
+// The numbers that only a shader uses. Those that place a part or shape an outline are in parts.ts.
+const NUMBERS = `
 const float SWELL_JOIN = 0.6; // a swell runs into the outline over this many half widths
 const float FAN_HALF = 0.9; // the half angle of the fan of a mouth, radians
 const float FAN_FILL = 0.5; // how solid the fan is
@@ -152,27 +148,17 @@ const float MIXED_BAND_HALF = 0.13; // its half thickness, in half widths
 const float MIXED_BAND_ALPHA = 0.75;
 `;
 
-export const creatureVert = (look: number): string => `#version 300 es
-#define LOOK ${look}
+export const CREATURE_VERT = `#version 300 es
 layout(location = 0) in vec2 a_corner;
 layout(location = 1) in vec4 a_pose; // x, y, heading, hue
 layout(location = 2) in vec4 a_body; // length, width, energy01, flags
 layout(location = 3) in vec3 a_life; // the cilia size, the bud pulse from 0 to 1, 1 for the mark of a cross
-#if LOOK >= 1
 layout(location = 4) in vec2 a_ends; // the widths of the nose and the tail, as shares of the width
 flat out vec2 v_ends; // the radius of the round nose and of the round tail
-#endif
-#if LOOK == 3
-// The swells of the outline: for each, its x on the axis and its radius. A radius of 0 is no swell.
-layout(location = 5) in vec4 a_swell_a;
-layout(location = 6) in vec4 a_swell_b;
-flat out vec2 v_swell[4];
-#endif
-#if LOOK == 4
-// Look 4 has two swells, as one vector: the array of look 3 cost a tenth of the draw time.
+// The two swells of the outline, as one vector: for each, its x on the axis and its radius. A radius
+// of 0 is no swell. An array of swells cost a tenth of the draw time.
 layout(location = 5) in vec4 a_swells;
 flat out vec4 v_swells;
-#endif
 uniform vec4 u_view;
 out vec2 v_p; // the body frame in world units: +x is forward
 flat out vec3 v_rgb;
@@ -196,43 +182,24 @@ void main() {
   v_marks = vec4(flags & 1, (flags >> 1) & 1, a_life.y, a_life.z);
   v_rgb2 = a_life.z > 0.0 ? tint(fract(a_pose.w + 0.5), a_body.z) : vec3(0.0);
   v_seen = seen(a_pose.xy);
-#if LOOK >= 1
   v_ends = a_ends * 0.5 * wid;
-#endif
-#if LOOK == 3
-  v_swell[0] = a_swell_a.xy;
-  v_swell[1] = a_swell_a.zw;
-  v_swell[2] = a_swell_b.xy;
-  v_swell[3] = a_swell_b.zw;
-#endif
-#if LOOK == 4
   v_swells = a_swells;
-#endif
 }
 `;
 
-export const creatureFrag = (look: number): string => `#version 300 es
-#define LOOK ${look}
+export const CREATURE_FRAG = `#version 300 es
 precision highp float;
 in vec2 v_p;
 flat in vec3 v_rgb;
 flat in vec4 v_body;
 flat in vec4 v_marks;
 flat in vec3 v_rgb2;
-#if LOOK >= 1
 flat in vec2 v_ends;
-#endif
-#if LOOK == 3
-flat in vec2 v_swell[4];
-#endif
-#if LOOK == 4
 flat in vec4 v_swells;
-#endif
 uniform float u_beat; // the phase of the cilia beat, radians
 uniform float u_bud_at; // the share of a full store at which a body buds
 out vec4 o_color;
-${SHAPES}${LOOKS}
-#if LOOK == 4
+${SHAPES}${NUMBERS}
 // The distance \`d\` to an outline, with a swell joined to it smoothly: a circle on the axis, as its
 // x and its radius.
 float swollen(float d, vec2 swell, float join) {
@@ -241,11 +208,9 @@ float swollen(float d, vec2 swell, float join) {
   float close = max(join - abs(d - to), 0.0);
   return min(d, to) - 0.25 * close * close / join;
 }
-#endif
 void main() {
   float hl = v_body.x;
   float hw = v_body.y;
-#if LOOK >= 1
   // The outline: every point within a radius of a segment on the x axis. The radius runs from that
   // of the round tail to that of the round nose.
   float run = 2.0 * hl - v_ends.x - v_ends.y; // between the centres of the two round ends
@@ -265,29 +230,9 @@ void main() {
   float round_membrane = bend > 0.0
     ? 0.5 * side + bend * atan(cap.x, cap.y + 1e-6)
     : abs(along - 0.5 * side);
-#else
-  // The capsule: every point within hw of a segment on the x axis.
-  float straight = max(hl - hw, 0.0);
-  vec2 cap = vec2(max(abs(v_p.x) - straight, 0.0), v_p.y);
-  float d = length(cap) - hw;
-  float round_membrane = min(abs(v_p.x), straight) + hw * atan(cap.x, abs(cap.y) + 1e-6);
-  float bend = abs(v_p.x) > straight ? hw : 0.0; // the radius of the round end at this point
-#endif
-#if LOOK == 3
-  // The outline swells round each mouth: a circle on the axis, joined to the outline smoothly.
-  float join = SWELL_JOIN * hw;
-  for (int k = 0; k < 4; k++) {
-    if (v_swell[k].y <= 0.0) continue;
-    float swell = length(v_p - vec2(v_swell[k].x, 0.0)) - v_swell[k].y;
-    float close = max(join - abs(d - swell), 0.0);
-    d = min(d, swell) - 0.25 * close * close / join;
-  }
-#endif
-#if LOOK == 4
   d = swollen(swollen(d, v_swells.xy, SWELL_JOIN * hw), v_swells.zw, SWELL_JOIN * hw);
-  // A point out of reach of the body draws nothing. Look 4 stops there.
+  // A point out of reach of the body draws nothing.
   if (d > OUT_OF_REACH * hw + 2.0 * u_px) discard;
-#endif
   vec3 pale = mix(v_rgb, vec3(1.0), 0.4);
 
   // The cilia: hairs that stand on the membrane, longer and thicker with size. The beat runs
@@ -363,14 +308,13 @@ void main() {
 }
 `;
 
-export const partFrag = (look: number): string => `#version 300 es
-#define LOOK ${look}
+export const PART_FRAG = `#version 300 es
 precision highp float;
 in vec2 v_p;
 flat in vec3 v_rgb;
 flat in vec3 v_part;
 out vec4 o_color;
-${SHAPES}${LOOKS}
+${SHAPES}${NUMBERS}
 // The distance to the segment from a to b.
 float segment(vec2 p, vec2 a, vec2 b) {
   vec2 ab = b - a;
@@ -415,32 +359,18 @@ void main() {
     float turn = atan(p.y, p.x) + 0.1 * sin(phase - 5.0 * r);
     float gap = 0.42;
     float bristle = line(abs(fract(turn / gap) - 0.5) * gap * r * size, 0.04 * size);
-#if LOOK >= 2
     // A mouth: a solid fan that opens out of the body, with bristles in it and a bright lip.
     float flank = r * sin(clamp(abs(turn) - FAN_HALF, -1.5708, 1.5708));
     float fan = fill(max(r - 1.0, flank) * size);
     c = over(c, v_rgb, FAN_FILL * fan);
     c = over(c, pale, 0.8 * bristle * fan);
     c = over(c, pale, 0.9 * line((r - 1.0 + FAN_LIP) * size, FAN_LIP * size) * fill(flank * size));
-#else
-    // A mouth: a rim, and a fan of bristles that sweep the water in front of it.
-    float fan = fill((0.35 - r) * size) * fill((r - 1.0) * size) * step(abs(turn), 2.1);
-    c = vec4(pale, 1.0) * 0.8 * bristle * fan;
-    c = over(c, pale, 0.9 * line((r - 0.35) * size, 0.06 * size));
-#endif
   } else if (kind == ${KIND_CHEMO}) {
-#if LOOK >= 2
     // A feeler: a stalk that forks, with a knob on each tip.
     vec2 q = vec2(p.x, abs(p.y));
     float d = min(segment(q, vec2(0.0), FORK_AT), segment(q, FORK_AT, FORK_TIP));
     c = over(c, v_rgb, 0.9 * fill((d - FORK_THICK) * size));
     c = over(c, pale, 0.95 * fill((length(q - FORK_TIP) - FORK_KNOB) * size));
-#else
-    // A stalk with a knob: it holds a sensor out into the water.
-    float stalk = line(p.y * size, 0.05 * size) * step(0.0, p.x) * fill((p.x - 0.8) * size);
-    c = vec4(v_rgb, 1.0) * 0.8 * stalk;
-    c = over(c, pale, 0.95 * fill((length(p - vec2(0.8, 0.0)) - 0.22) * size));
-#endif
   } else if (kind == ${KIND_FIN}) {
     // A blade whose tip trails toward the tail.
     float d = triangle(p, vec2(-0.1, -0.4), vec2(-0.1, 0.5), vec2(1.0, 0.95)) * size;

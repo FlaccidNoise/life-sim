@@ -36,12 +36,10 @@ import {
   buildParts,
   endsOf,
   hasMixedMark,
-  lookOf,
   outlineOf,
   partsOf,
   swellAt,
   taperOf,
-  type Look,
 } from '../src/render/parts';
 
 const BODY = { x: 100, y: 50, length: 12, width: 6 };
@@ -66,12 +64,12 @@ function frameOf(heading: number, words: number[]): FrameView {
 }
 
 /** The instances of a frame at 10 pixels per world unit, as rows of PART_INSTANCE_FLOATS. */
-function instancesOf(frame: FrameView, pxPerUnit = 10, look: Look = 0): number[][] {
+function instancesOf(frame: FrameView, pxPerUnit = 10): number[][] {
   const out = new Float32Array(64 * PART_INSTANCE_FLOATS);
-  // Look 4 takes the outline of the body of each slot. The body of `frameOf` is in slot 0.
+  // The draw takes the outline of the body of each slot. The body of `frameOf` is in slot 0.
   const outline = new Float64Array(OUTLINE_FLOATS);
   outlineOf(partsOf(frame.u32, frame.creatureBase), 1, BODY.length, BODY.width, outline, 0);
-  const count = buildParts(frame, pxPerUnit, 0, out, look, outline);
+  const count = buildParts(frame, pxPerUnit, 0, out, outline);
   return Array.from({ length: count }, (_, i) =>
     Array.from(out.subarray(i * PART_INSTANCE_FLOATS, (i + 1) * PART_INSTANCE_FLOATS)),
   );
@@ -143,7 +141,7 @@ test('anchor 0 is the nose and anchor 1 is the tail', () => {
   expect(anchorPoint(0.5, 12, 6, -1).y).toBeCloseTo(-3, 5);
 });
 
-// The looks of `?look`. Look 1: the outline narrows toward the end that carries less part size.
+// The outline narrows toward the end that carries less part size.
 
 const part = (kind: number, anchor: number, size: number): Part => ({
   kind,
@@ -211,14 +209,11 @@ test('part size at the nose tapers one way and at the tail the other', () => {
   expect(more).toBeLessThan(1);
 });
 
-test('a body with no part draws as today', () => {
+test('a body with no part has no taper', () => {
   expect(taperOf([])).toBe(0);
   // A part in the middle of the body is at neither end.
   expect(taperOf([part(KIND_CILIA, 0.5, 0.4)])).toBeCloseTo(0, 6);
   expect(endsOf(0)).toEqual([1, 1]);
-  for (const look of [1, 2, 3, 4] as const) {
-    expect(instancesOf(frameOf(0, []), 10, look).length).toBe(0);
-  }
   for (const anchor of [0, 0.2, 0.5, 0.9, 1]) {
     expect(anchorPoint(anchor, 12, 6, 1, 0)).toEqual(anchorPoint(anchor, 12, 6, 1));
   }
@@ -234,39 +229,28 @@ test('a part of a tapered body sits on the narrowed outline', () => {
   // toward the narrow end.
   expect(anchorPoint(0.5, 12, 6, 1, 1).y).toBeCloseTo((3 * (1 + tailShare)) / 2, 5);
   expect(anchorPoint(0.5, 12, 6, 1, 1).angle).toBeGreaterThan(anchorPoint(0.5, 12, 6, 1).angle);
-  // Near the narrow end a part is nearer the axis than today.
-  const today = anchorPoint(0.8, 12, 6, 1);
+  // Near the narrow end a part is nearer the axis than on an outline with no taper.
+  const level = anchorPoint(0.8, 12, 6, 1);
   const narrowed = anchorPoint(0.8, 12, 6, 1, 1);
-  expect(narrowed.x).toBeCloseTo(today.x, 5);
-  expect(narrowed.y).toBeLessThan(today.y);
+  expect(narrowed.x).toBeCloseTo(level.x, 5);
+  expect(narrowed.y).toBeLessThan(level.y);
   expect(narrowed.y).toBeGreaterThan(0);
   // The other way round, the nose narrows.
   expect(anchorPoint(0.2, 12, 6, -1, -1).y).toBeGreaterThan(anchorPoint(0.2, 12, 6, -1).y);
 });
 
-test('look 0 and look 1 draw each part at the size of today, and look 2 at twice that', () => {
-  const frame = frameOf(0.7, [word(KIND_FLAGELLUM, 1, 0.6), word(KIND_EYE, 0.2, 0.2)]);
-  const today = instancesOf(frame);
-  expect(instancesOf(frame, 10, 0)).toEqual(today);
-  const sizes = (look: Look): number[] => instancesOf(frame, 10, look).map((row) => row[3] ?? NaN);
-  expect(sizes(1)).toEqual(today.map((row) => row[3]));
-  for (const look of [2, 3] as const) {
-    sizes(look).forEach((size, i) => expect(size).toBeCloseTo(2 * (today[i]?.[3] ?? NaN), 5));
-  }
-});
-
-test('in look 1 the parts of a body follow its taper', () => {
+test('the parts of a body follow its taper', () => {
   // All the part size is at the nose, so the tail narrows. The eye pair near the tail closes up.
   const words = [word(KIND_FILTER, 0, 1), word(KIND_EYE, 0.8, 0.01)];
-  const [, a, b] = instancesOf(frameOf(0, words)).map(offset);
-  const [, c, d] = instancesOf(frameOf(0, words), 10, 1).map(offset);
-  if (!a || !b || !c || !d) throw new Error('an eye off the midline made no pair');
-  expect(c.dx).toBeCloseTo(a.dx, 4);
-  expect(Math.abs(c.dy)).toBeLessThan(Math.abs(a.dy));
+  const [, c, d] = instancesOf(frameOf(0, words)).map(offset);
+  if (!c || !d) throw new Error('an eye off the midline made no pair');
+  const level = anchorPoint(0.8, BODY.length, BODY.width, 1);
+  expect(c.dx).toBeCloseTo(level.x, 4);
+  expect(Math.abs(c.dy)).toBeLessThan(Math.abs(level.y));
   expect(d.dy).toBeCloseTo(-c.dy, 4);
 });
 
-test('in look 3 the outline swells at a mouth, and the mouth sits on the swell', () => {
+test('a mouth swells the outline round its place, and a larger mouth swells more', () => {
   // A mouth at the nose of a body with no taper: the swell is round the centre of the round nose.
   const small = swellAt(part(KIND_FILTER, 0, 0.2), BODY.length, BODY.width, 0);
   const big = swellAt(part(KIND_FILTER, 0, 0.8), BODY.length, BODY.width, 0);
@@ -281,29 +265,18 @@ test('in look 3 the outline swells at a mouth, and the mouth sits on the swell',
   const side = swellAt(part(KIND_FILTER, 0.5, 0.8), BODY.length, BODY.width, 0);
   expect(side.x).toBeCloseTo(0, 5);
   expect(side.r).toBeCloseTo(big.r, 5);
-
-  // The mouth pair of look 3 is on the circle of the swell. In look 2 it is on the outline.
-  const frame = frameOf(0, [word(KIND_FILTER, 0.5, 0.8)]);
-  const lone = part(KIND_FILTER, 128 / 255, 204 / 255); // the word, as `unpackPart` reads it
-  const mouth = swellAt(lone, BODY.length, BODY.width, taperOf([lone]));
-  for (const { dx, dy } of instancesOf(frame, 10, 3).map(offset)) {
-    expect(Math.hypot(dx - mouth.x, dy)).toBeCloseTo(mouth.r, 4);
-  }
-  for (const { dy } of instancesOf(frame, 10, 2).map(offset)) {
-    expect(Math.abs(dy)).toBeLessThan(mouth.r);
-  }
 });
 
-// Look 4: the taper and the swells, with each part at the size of today.
+// The swells of the outline, and the parts on them.
 
-/** The outline of look 4 of a body of the size of BODY that carries `parts`. */
+/** The outline of a body of the size of BODY that carries `parts`. */
 function outlined(parts: readonly Part[]): { taper: number; swells: number[] } {
   const out = new Float64Array(OUTLINE_FLOATS);
   outlineOf(parts, 1, BODY.length, BODY.width, out, 0);
   return { taper: out[OUTLINE_TAPER] ?? NaN, swells: [...out.subarray(OUTLINE_SWELLS)] };
 }
 
-test('look 4 draws each part at the size of today', () => {
+test('each part draws at the reach of its kind for its size, times the body scale', () => {
   const frame = frameOf(0.7, [
     word(KIND_FLAGELLUM, 1, 0.6),
     word(KIND_FILTER, 0, 0.6),
@@ -311,26 +284,62 @@ test('look 4 draws each part at the size of today', () => {
     word(KIND_FIN, 0.7, 0.3),
     word(KIND_EYE, 0.2, 0.2),
   ]);
-  const sizes = (look: Look): number[] => instancesOf(frame, 10, look).map((row) => row[3] ?? NaN);
-  expect(sizes(4).length).toBe(8);
-  expect(sizes(4)).toEqual(sizes(0));
+  // REACH in parts.ts, at each size as `unpackPart` reads it.
+  const scale = Math.sqrt(BODY.length * BODY.width);
+  const flagellum = 1.9 * (153 / 255);
+  const mouth = 0.08 + 0.2 * (153 / 255);
+  const feeler = 0.1 + 0.3 * (128 / 255);
+  const fin = 0.1 + 0.4 * (77 / 255);
+  const eye = 0.05 + 0.12 * (51 / 255);
+  const sizes = instancesOf(frame).map((row) => row[3] ?? NaN);
+  expect(sizes.length).toBe(8);
+  [flagellum, mouth, feeler, feeler, fin, fin, eye, eye].forEach((reach, i) =>
+    expect(sizes[i]).toBeCloseTo(reach * scale, 5),
+  );
 });
 
-test('in look 4 a body with no mouth has no swell', () => {
+test('a body with no mouth has no swell', () => {
   const carried = [part(KIND_FLAGELLUM, 1, 0.9), part(KIND_EYE, 0.2, 0.2)];
   const { taper, swells } = outlined(carried);
   expect(taper).toBe(taperOf(carried));
   expect(swells).toEqual([0, 0, 0, 0]);
-  // With no swell to sit on, each part is where look 1 draws it.
-  const frame = frameOf(0.7, [word(KIND_FLAGELLUM, 1, 0.6), word(KIND_EYE, 0.2, 0.2)]);
-  expect(instancesOf(frame, 10, 4)).toEqual(instancesOf(frame, 10, 1));
+  // With no swell to sit on, each part is on the tapered outline.
+  const frame = frameOf(0, [word(KIND_FLAGELLUM, 1, 0.6), word(KIND_EYE, 0.2, 0.2)]);
+  const lean = taperOf(partsOf(frame.u32, frame.creatureBase));
+  const rows = instancesOf(frame);
+  const places = [
+    anchorPoint(1, BODY.length, BODY.width, 1, lean),
+    anchorPoint(0.2, BODY.length, BODY.width, 1, lean),
+    anchorPoint(0.2, BODY.length, BODY.width, -1, lean),
+  ];
+  expect(rows.length).toBe(places.length);
+  rows.forEach((row, i) => {
+    expect(offset(row).dx).toBeCloseTo(places[i]?.x ?? NaN, 4);
+    expect(offset(row).dy).toBeCloseTo(places[i]?.y ?? NaN, 4);
+    expect(row[2]).toBeCloseTo(places[i]?.angle ?? NaN, 4);
+  });
 });
 
-test('in look 4 the outline swells at each place with a mouth, and a larger mouth swells more', () => {
+test('the outline of one body is pinned', () => {
+  // A failure here means the outline that the owner picked on 2026-10-15 changed. Fix: undo the
+  // change to TAPER_FULL, NARROWEST, MOUTH_SWELL, or the code that uses them, or ask the owner.
+  const { taper, swells } = outlined([
+    part(KIND_FLAGELLUM, 1, 0.6),
+    part(KIND_FILTER, 0, 0.8),
+    part(KIND_EYE, 0.2, 0.2),
+    part(KIND_FILTER, 0.5, 0.3),
+  ]);
+  expect(taper).toBeCloseTo(-0.40669578, 6);
+  [3.79305677, 3.08972052, 0, 3.04722906].forEach((value, i) =>
+    expect(swells[i]).toBeCloseTo(value, 6),
+  );
+});
+
+test('the outline swells at each place with a mouth, and a larger mouth swells more', () => {
   const nose = part(KIND_FILTER, 0, 0.8);
   const { taper, swells } = outlined([nose, part(KIND_EYE, 0.2, 0.2), part(KIND_FILTER, 0.5, 0.3)]);
   const [noseX = NaN, noseR = NaN, sideX = NaN, sideR = NaN] = swells;
-  // Each swell is round the same place as that of look 3, and wider than the outline is there.
+  // Each swell is round the place that `swellAt` gives, and wider than the outline is there.
   const [, tail] = endsOf(taper);
   const atNose = BODY.width / 2;
   const atSide = ((1 + tail) / 2) * (BODY.width / 2);
@@ -362,7 +371,7 @@ test('in look 4 the outline swells at each place with a mouth, and a larger mout
   expect(Math.min(first[1] ?? 0, first[3] ?? 0)).toBeGreaterThan(0);
 });
 
-test('in look 4 the outline of a body is made again only when the body or its size changes', () => {
+test('the outline of a body is made again only when the body or its size changes', () => {
   const mouth = [part(KIND_FILTER, 0, 0.8)];
   const out = new Float64Array(3 * OUTLINE_FLOATS).fill(9);
   const slot = (): number[] => [...out.subarray(OUTLINE_FLOATS, 2 * OUTLINE_FLOATS)];
@@ -385,37 +394,46 @@ test('in look 4 the outline of a body is made again only when the body or its si
   expect(slot()).toEqual([8, 14, 8, 0, 0, 0, 0, 0]);
 });
 
-test('in look 4 a part inside the swell of a mouth sits on its edge', () => {
+test('a part inside the swell of a mouth sits on its edge', () => {
   const words = [word(KIND_FILTER, 0, 0.8), word(KIND_EYE, 0.2, 0.2), word(KIND_FIN, 0.9, 0.3)];
   const body = frameOf(0, words);
-  const [x = NaN, r = NaN] = outlined(partsOf(body.u32, body.creatureBase)).swells;
+  const carried = partsOf(body.u32, body.creatureBase);
+  const [x = NaN, r = NaN] = outlined(carried).swells;
+  const lean = taperOf(carried);
+  const fin = carried[2]?.anchor ?? NaN;
 
   const from = ({ dx, dy }: { dx: number; dy: number }): number => Math.hypot(dx - x, dy);
-  const today = instancesOf(body, 10, 1).map(offset);
-  const rows = instancesOf(body, 10, 4);
+  const rows = instancesOf(body);
   const [lip, eyeA, eyeB, finA, finB] = rows.map(offset);
   if (!lip || !eyeA || !eyeB || !finA || !finB) throw new Error('the body made no 5 instances');
-  // The mouth and the eye pair are on the circle of the swell. Look 1 has the eyes inside it.
+  // The mouth and the eye pair are on the circle of the swell. On the outline the eyes are inside it.
   for (const at of [lip, eyeA, eyeB]) expect(from(at)).toBeCloseTo(r, 4);
-  expect(from(today[1] ?? eyeA)).toBeLessThan(r - 0.1);
+  const onOutline = anchorPoint(0.2, BODY.length, BODY.width, 1, lean);
+  expect(from({ dx: onOutline.x, dy: onOutline.y })).toBeLessThan(r - 0.1);
   expect(eyeB.dy).toBeCloseTo(-eyeA.dy, 4);
   // An eye on the swell points out from its centre.
   expect(rows[1]?.[2]).toBeCloseTo(Math.atan2(eyeA.dy, eyeA.dx - x), 4);
-  // The fin pair, near the tail, is out of the swell: it stays where look 1 draws it.
-  expect([finA, finB]).toEqual(today.slice(3));
+  // The fin pair, near the tail, is out of the swell: it stays on the tapered outline.
+  for (const [at, side] of [
+    [finA, 1],
+    [finB, -1],
+  ] as const) {
+    const place = anchorPoint(fin, BODY.length, BODY.width, side, lean);
+    expect(at.dx).toBeCloseTo(place.x, 4);
+    expect(at.dy).toBeCloseTo(place.y, 4);
+  }
 
-  // A body too small on screen for its parts has no swell: its outline is not read.
+  // A body too small on screen for its parts has no swell and no taper: its outline is not read.
   const far = (PART_LOD_PX - 1) / BODY.length;
   const lash = frameOf(0, [word(KIND_FLAGELLUM, 0.05, 0.6), ...words]);
-  expect(instancesOf(lash, far, 4)).toEqual(instancesOf(lash, far));
-});
-
-test('the look of the address is 1, 2, 3, or 4, and anything else is today', () => {
-  expect(lookOf('1')).toBe(1);
-  expect(lookOf('2')).toBe(2);
-  expect(lookOf('3')).toBe(3);
-  expect(lookOf('4')).toBe(4);
-  for (const text of [null, '', '0', '5', '-1', '1.5', 'x']) expect(lookOf(text)).toBe(0);
+  const anchor = partsOf(lash.u32, lash.creatureBase)[0]?.anchor ?? NaN;
+  const pair = instancesOf(lash, far).map(offset);
+  expect(pair.length).toBe(2);
+  pair.forEach(({ dx, dy }, i) => {
+    const place = anchorPoint(anchor, BODY.length, BODY.width, i === 0 ? 1 : -1);
+    expect(dx).toBeCloseTo(place.x, 4);
+    expect(dy).toBeCloseTo(place.y, 4);
+  });
 });
 
 test('only a body that is both mixed and young draws the mark of a cross', () => {

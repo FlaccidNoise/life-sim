@@ -17,7 +17,6 @@ import {
   FLAG_BUDDED,
   FRAME_HEADER_WORDS,
   KIND_CILIA,
-  KIND_FILTER,
   MAX_EYES,
   PART_WORDS,
   PLANT_STRIDE,
@@ -37,20 +36,17 @@ import {
   hasMixedMark,
   outlineOf,
   partsOf,
-  swellAt,
-  taperOf,
-  type Look,
 } from './parts';
 import { sightOf } from './sight';
 import {
   BACKGROUND_FRAG,
   BACKGROUND_VERT,
+  CREATURE_FRAG,
+  CREATURE_VERT,
+  PART_FRAG,
   PART_VERT,
   PLANT_FRAG,
   PLANT_VERT,
-  creatureFrag,
-  creatureVert,
-  partFrag,
 } from './shaders';
 
 export class RendererError extends Error {}
@@ -83,8 +79,7 @@ export interface Renderer {
 const MAX_CREATURES = 4096; // the creature pool of the core
 const MAX_PLANTS = 8192; // the plant pool of the core
 const MAX_PARTS = MAX_CREATURES * PART_WORDS * 2; // a part gene makes a pair at most
-// a_pose, a_body, a_life, and for the looks a_ends, a_swell_a or the a_swells of look 4, a_swell_b
-const CREATURE_ATTRIBUTES = [4, 4, 3, 2, 4, 4];
+const CREATURE_ATTRIBUTES = [4, 4, 3, 2, 4]; // a_pose, a_body, a_life, a_ends, a_swells
 const I_ENDS = 11; // the float of an instance at which a_ends starts
 const I_SWELLS = 13; // and its swells: an x and a radius each
 const INSTANCE_FLOATS = I_SWELLS + 2 * MAX_SWELLS;
@@ -150,8 +145,8 @@ function instancedQuad(
   return { vao, buffer };
 }
 
-/** Throws RendererError when WebGL2 is missing. `look` is 0 for the draw of M2. */
-export function createRenderer(canvas: HTMLCanvasElement, look: Look = 0): Renderer {
+/** Throws RendererError when WebGL2 is missing. */
+export function createRenderer(canvas: HTMLCanvasElement): Renderer {
   const gl = canvas.getContext('webgl2', { alpha: false, antialias: false });
   if (!gl) {
     throw new RendererError(
@@ -177,19 +172,14 @@ export function createRenderer(canvas: HTMLCanvasElement, look: Look = 0): Rende
   const backdrop = layer(BACKGROUND_VERT, BACKGROUND_FRAG, [], 0);
   const uHeight = gl.getUniformLocation(backdrop.program, 'u_height');
   const plants = layer(PLANT_VERT, PLANT_FRAG, [PLANT_STRIDE], MAX_PLANTS);
-  const creatures = layer(
-    creatureVert(look),
-    creatureFrag(look),
-    CREATURE_ATTRIBUTES,
-    MAX_CREATURES,
-  );
+  const creatures = layer(CREATURE_VERT, CREATURE_FRAG, CREATURE_ATTRIBUTES, MAX_CREATURES);
   const uBeat = gl.getUniformLocation(creatures.program, 'u_beat');
   const uBudAt = gl.getUniformLocation(creatures.program, 'u_bud_at');
   const instances = new Float32Array(MAX_CREATURES * INSTANCE_FLOATS);
-  const parts = layer(PART_VERT, partFrag(look), PART_ATTRIBUTES, MAX_PARTS);
+  const parts = layer(PART_VERT, PART_FRAG, PART_ATTRIBUTES, MAX_PARTS);
   const partInstances = new Float32Array(MAX_PARTS * PART_INSTANCE_FLOATS);
-  // In look 4, the outline of the body of each slot.
-  const outlines = new Float64Array(look === 4 ? MAX_CREATURES * OUTLINE_FLOATS : 0);
+  // The outline of the body of each slot.
+  const outlines = new Float64Array(MAX_CREATURES * OUTLINE_FLOATS);
   // The creature records of the frame being drawn, with each body placed between the last two
   // frames. The bodies and their parts are both drawn from it.
   const posedU32 = new Uint32Array(FRAME_HEADER_WORDS + MAX_CREATURES * CREATURE_STRIDE);
@@ -305,19 +295,16 @@ export function createRenderer(canvas: HTMLCanvasElement, look: Look = 0): Rende
         posedF32[r + C_HEADING] = heading;
         if (slot === cur.possessedSlot) lag = heading - (f32[r + C_HEADING] ?? 0);
 
-        // A body too small on screen for its parts has no cilia either, and the outline of today.
+        // A body too small on screen for its parts has no cilia either, and an outline with no taper
+        // and no swell.
         const carried = length * cam.scale >= PART_LOD_PX ? partsOf(u32, r) : NO_PARTS;
         let cilia = 0;
         for (const part of carried) if (part.kind === KIND_CILIA) cilia += part.size;
-        // In look 4 a body that draws a part has its outline in `outlines`, for its parts too.
-        const shaped = look === 4 && carried.length > 0;
+        // A body that draws a part has its outline in `outlines`, for its parts too.
+        const shaped = carried.length > 0;
         const outline = slot * OUTLINE_FLOATS;
         if (shaped) outlineOf(carried, u32[r + C_UID] ?? 0, length, width, outlines, outline);
-        const taper = shaped
-          ? (outlines[outline + OUTLINE_TAPER] ?? 0)
-          : look >= 1
-            ? taperOf(carried)
-            : 0;
+        const taper = shaped ? (outlines[outline + OUTLINE_TAPER] ?? 0) : 0;
         // One pulse for each time the flag is set. A body that comes into view with the flag set
         // starts its pulse then.
         const budded = (flags & FLAG_BUDDED) !== 0;
@@ -339,22 +326,13 @@ export function createRenderer(canvas: HTMLCanvasElement, look: Look = 0): Rende
         const [nose, tail] = endsOf(taper);
         instances[o + I_ENDS] = nose;
         instances[o + I_ENDS + 1] = tail;
-        // In look 3 the outline swells at each mouth. A radius of 0 is no swell.
+        // The swells are those of the outline. A radius of 0 is no swell.
         instances.fill(0, o + I_SWELLS, o + INSTANCE_FLOATS);
-        let swells = 0;
-        for (const part of look === 3 ? carried : NO_PARTS) {
-          if (part.kind !== KIND_FILTER || swells === MAX_SWELLS) continue;
-          const swell = swellAt(part, length, width, taper);
-          instances[o + I_SWELLS + 2 * swells] = swell.x;
-          instances[o + I_SWELLS + 2 * swells + 1] = swell.r;
-          swells++;
-        }
-        // In look 4 the swells are those of the outline.
         for (let k = OUTLINE_SWELLS; shaped && k < OUTLINE_FLOATS; k++) {
           instances[o + I_SWELLS + k - OUTLINE_SWELLS] = outlines[outline + k] ?? 0;
         }
       }
-      const partCount = buildParts(posed, cam.scale, timeSeconds, partInstances, look, outlines);
+      const partCount = buildParts(posed, cam.scale, timeSeconds, partInstances, outlines);
 
       // The cones of the header are those of `cur`. They turn with the body as it is drawn.
       const sight = sightOf(posed);

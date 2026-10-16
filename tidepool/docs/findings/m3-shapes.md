@@ -185,3 +185,13 @@ show a stale outline for a body with the same uid, length, and width.
    open `/?world=/m2-world.tdpl&look=4`.
 2. Looks 2 and 3 break the plan's limit on draw time. Look 4 reads near it on a loaded machine. The
    picked look gets one reading on a quiet machine and on a phone before the others are deleted.
+
+## Decided
+
+The owner picked look 4 on 2026-10-15. It is now the only draw of a body. Looks 0 (the draw of M2),
+1, 2, and 3, the `Look` type, `lookOf`, `?look`, and the `LOOK` define of the shaders are deleted in
+the commit that adds this section. The pictures and numbers above stay as the record of the choice.
+
+Still open: the draw time of look 4 on a quiet machine and on a phone. Owner check 7 of
+`m3-exit.md` asks for `/?bench` on a phone and on a slower laptop. `/?bench` reads the worker, not
+the draw (see "Bench"), so the draw needs its own reading too.
