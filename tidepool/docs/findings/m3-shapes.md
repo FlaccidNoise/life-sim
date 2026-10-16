@@ -195,3 +195,7 @@ the commit that adds this section. The pictures and numbers above stay as the re
 Still open: the draw time of look 4 on a quiet machine and on a phone. Owner check 7 of
 `m3-exit.md` asks for `/?bench` on a phone and on a slower laptop. `/?bench` reads the worker, not
 the draw (see "Bench"), so the draw needs its own reading too.
+
+Checked by the orchestrator at `a1d1ef5`: `/?world=/m2-world-long.tdpl` on a fresh port draws the
+long world with the tapered outlines and the part marks, and the console holds no error or warning.
+No test compiles GLSL, so this was the first compile of the shaders without the `LOOK` define.
