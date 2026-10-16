@@ -1,6 +1,6 @@
 # Tidepool M4 retune — Diet
 
-Status: **Written 2026-10-16. Waits for the owner's go.** The owner chose the direction on
+Status: **Approved by the owner on 2026-10-16 ("Go on the diet plan. Approved."). Being built.** The owner chose the direction on
 2026-10-16: hunters that eat only meat, and one spectrum from herbivore through omnivore to
 carnivore that evolution moves along. The owner left the exact rule to the evidence. The evidence is
 `../research/diet-coexistence.md`. The decisions are in `../decisions/INDEX.md` under 2026-10-16.

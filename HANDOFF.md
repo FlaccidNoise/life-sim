@@ -36,7 +36,7 @@ The previous handoff (mid-M4) is at `git show 9a0b25a:HANDOFF.md`.
    carnivore spectrum, and "research it and decide" for the rest. The decisions are in
    `tidepool/docs/decisions/INDEX.md` (2026-10-16), the evidence in
    `tidepool/docs/research/diet-coexistence.md`, and the plan in
-   `tidepool/docs/plans/2026-10-16-m4-retune-diet.md`, which **waits for the owner's go**. The
+   `tidepool/docs/plans/2026-10-16-m4-retune-diet.md`, **approved by the owner on 2026-10-16 and being built**. The
    owner's playtest checks stay open.
 2. M5 (Deep time) has no plan yet. It carries from M4: the kill marks lost when the page holds
    every buffer, the eye gap's changed meaning (the jaw input is not scaled by `eye_gain`), and the

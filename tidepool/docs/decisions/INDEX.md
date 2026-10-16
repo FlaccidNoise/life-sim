@@ -285,7 +285,7 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
 - 2026-10-16: **The owner delegated the open M4 choices.** "I'm good with whatever rule change makes
   the most sense in terms of realistic simulation behavior", and for the rest: research it and make
   the decision that makes the most sense. The entries below dated 2026-10-16 that say "by the
-  owner's delegation" rest on this. The plan for the rule still waits for the owner's go.
+  owner's delegation" rest on this. The owner approved the plan the same day: "Go on the diet plan. Approved."
 - 2026-10-16: **The takeover is answered by a diet gene with the trade-off on intake (rule D1).** One
   body gene `diet` in [0, 1]: Filter intake times `(1 − diet)^diet_k`, a bite's take times
   `diet^diet_k`, `diet_k` above 1, so `diet` 1 is an obligate carnivore and 0 a pure herbivore. The
