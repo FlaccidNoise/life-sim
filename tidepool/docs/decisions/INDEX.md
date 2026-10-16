@@ -304,6 +304,14 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
   carnivore holds. Prey defined only by size gives no food that only hunters need. The draft's
   "cannibalism off" restored the predator and prey balance (predators 85% to 41%).
   → `../findings/m4-diet.md` T1 to T4, `../plans/2026-10-16-m4-retune-diet.md`
+- 2026-10-16: **Design principle, the owner's words: "we need to have benefits and costs for
+  everything and all these parts and systems need to be isolated but co-working in interesting
+  ways", balanced for uniqueness, randomness, creativity, and variation.** Read as: each part does
+  one job, every benefit has a cost, and what bodies can do comes from parts working together, not
+  from one part doing two jobs. First application: the lunge leaves the jaw, and the omnivore middle
+  is thinned without walls at the ends. → `../plans/2026-10-16-m4-retune-parts.md`
+- 2026-10-16: **The diet retune's shape is not the end state: the owner wants fewer omnivores and
+  more plant eaters and meat eaters.** → `../plans/2026-10-16-m4-retune-parts.md` P2, P4
 - 2026-10-16: **The diet rules ship on with T8's set, owner to confirm: `diet_k` 1.5, `diet_sigma`
   0.1, `founder_hunter_diet` 0.6, `bite_mass_ratio` 1.15, `bite_diet_gap` 0.25.** Of ten trials it is
   the only set with a ladder from plants to flesh on 5 of 5 seeds at 144,000. Target 1 (herbivores
