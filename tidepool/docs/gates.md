@@ -1118,8 +1118,32 @@ The commands and every row: `findings/m4-gates.md` (12,000) and `findings/m4-tun
 (144,000). The `flesh_late` band at 12,000 was set at 0.01 before the good world was read, and the
 shipped world reads 0.001 to 0.002 there: it is left as set, with the rows, for the owner.
 
-**The rejection proofs with the bands set** (the rows above printed PASS because their runs had no
-`--predation`): see "Rejection with the flag" below, added after the final proof.
+**Rejection with the flag** (the rows above printed PASS because their runs had no `--predation`).
+At `271eb80`, the defaults on, load 2, 2026-10-16:
+
+```
+=== R1 gate-health --predation bite_rate=0 
+seed=1 creatures=1512 min_late=1380 births_late=2878 hunt_lo=0.133 hunt_hi=0.199 prey_lo=1205 kills_late=0 flesh_late=0.000 FAIL(kills_late=0 < 20, flesh_late=0.000 < 0.01)
+seed=2 creatures=1343 min_late=1241 births_late=2120 hunt_lo=0.194 hunt_hi=0.272 prey_lo=948 kills_late=0 flesh_late=0.000 FAIL(kills_late=0 < 20, flesh_late=0.000 < 0.01)
+seed=3 creatures=1333 min_late=1239 births_late=2286 hunt_lo=0.079 hunt_hi=0.175 prey_lo=1097 kills_late=0 flesh_late=0.000 FAIL(kills_late=0 < 20, flesh_late=0.000 < 0.01)
+gate-health 0/3 FAIL
+R1 exit 1
+=== R2 gate-health --predation founder_jaw=1 bite_mass_ratio=0 
+seed=1 creatures=593 min_late=581 births_late=3476 hunt_lo=1.000 hunt_hi=1.000 prey_lo=0 kills_late=3327 flesh_late=0.611 FAIL(hunt_hi=1.000 > 0.8, prey_lo=0 < 150)
+seed=2 creatures=585 min_late=552 births_late=3028 hunt_lo=0.998 hunt_hi=1.000 prey_lo=0 kills_late=2742 flesh_late=0.556 FAIL(hunt_hi=1.000 > 0.8, prey_lo=0 < 150)
+seed=3 creatures=604 min_late=584 births_late=3301 hunt_lo=0.996 hunt_hi=1.000 prey_lo=0 kills_late=3107 flesh_late=0.617 FAIL(hunt_hi=1.000 > 0.8, prey_lo=0 < 150)
+gate-health 0/3 FAIL
+R2 exit 1
+=== R3 gate-evolve --brain --predation bite_rate=0 seed 1 144k 
+seed=1 creatures=1710 ns=1557 ne=1349 len=10.7 len_sd=1.32 parts=7.8 chemo=0.15 chemo_blind=0.00 eye=0.29 eye_blind=0.01 hunt_lo=0.043 hunt_hi=0.369 prey_lo=1024 kills_late=0 flesh_late=0.000 FAIL(kills_late=0 < 20, flesh_late=0.000 < 0.01)
+gate-evolve 0/1 FAIL
+R3 exit 1
+=== T6 toxin_cost=4.0 at 144k, seeds 1,4,5,6,8 
+```
+
+Each exits 1: `kills_late` and `flesh_late` reject the world with no predation at 12,000 (R1) and
+at 144,000 (R3), and `hunt_hi` and `prey_lo` reject the world where every body hunts and any body
+can be bitten (R2). The gates count.
 
 **What the eye gap measures since M4.** The eye's third input, the jaw size of the nearest body in
 the cone, is not scaled by `eye_gain`, so the blind arm (`eye_gain=0`) still sees teeth and its flee
