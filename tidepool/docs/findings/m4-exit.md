@@ -31,8 +31,10 @@ the owner with the levers it names; the draft measured the same shape and named 
 dependence as the need, which is a rule.
 
 "Being hunted by something that learned to dash is frightening and its cause is always shown": the
-cause is shown (the card, the hurt flash on the side of the hit, the kill mark), the dash fires in
-context (`dash_fire_ctx` 0.9 to 1.0), and "frightening" is the owner's playtest.
+cause is shown (the card, the hurt flash on the side of the hit, the kill mark) except for a killer
+that died in the same kill list, the dash fires with a hit or teeth in view ten times as often as
+those are present (`dash_fire_ctx` 0.99 against `dash_think_ctx` 0.09 to 0.15, by hand wiring, so
+"learned to dash" is not measured), and "frightening" is the owner's playtest.
 
 ## What was built, by task
 
@@ -71,7 +73,8 @@ reference population are the owner's (`m4-tuning.md` Part 2).
 ## The hunt as measured
 
 See `m4-tuning.md`: part 1 (the switch-on), part 3 (five trials, the stop), the long read, part 2
-(the jaw gap: evolution grows a jaw that bites, 0.2 to 1.0, and not one that cannot, 0.1 to 0.2),
+(the jaw gap: on 2 of 3 seeds evolution grows a jaw that bites, 0.5 to 1.0, and not one that cannot,
+0.1; on the third the two read alike),
 part 4 (the gland fires, evolution keeps it on one seed in three). The encounter rows of Task 1 said
 density would not be the limit, and it was not: the first contact kills.
 

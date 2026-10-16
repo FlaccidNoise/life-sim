@@ -1096,8 +1096,12 @@ The settled-world row: a second load read 4,004 ticks per second and 6.0 s. The 
 `gate-health` and `gate-evolve --brain` print `hunt_lo`, `hunt_hi`, `prey_lo`, `kills_late`,
 `flesh_late` on every row ("How the gate reads" in the M4 plan). A band is judged only under
 `--predation`, which is a usage error while every band is unset, so the flag can never pass a world
-that nothing judged. **Not in `make gates` or `make gates-long` yet:** the default world fails the
-share bands (the owner's finding, `findings/m4-tuning.md`). The proofs, at `832527f` and `8435888`:
+that nothing judged. **Where they are judged:** `make gates-long` passes `--brain --predation`, so the
+two long bands (`kills_late` 20, `flesh_late` 0.01 at 144,000) are judged there. `make gates` and CI
+pass no `--predation`: the four 12,000-tick bands judge nothing anywhere, because the shipped world
+fails `flesh_late` 0.01 and the share bands fail at 144,000 (the owner's finding,
+`findings/m4-tuning.md`). Choice C6 put the 12,000-tick reading in CI; it is not there until the
+owner sets the bands. The proofs, at `832527f` and `8435888`:
 
 | Band | Where | Fails | Bad input | It read | Good world |
 |---|---|---|---|---|---|
@@ -1113,3 +1117,12 @@ share bands (the owner's finding, `findings/m4-tuning.md`). The proofs, at `8325
 The commands and every row: `findings/m4-gates.md` (12,000) and `findings/m4-tuning.md` Part 2
 (144,000). The `flesh_late` band at 12,000 was set at 0.01 before the good world was read, and the
 shipped world reads 0.001 to 0.002 there: it is left as set, with the rows, for the owner.
+
+**The rejection proofs with the bands set** (the rows above printed PASS because their runs had no
+`--predation`): see "Rejection with the flag" below, added after the final proof.
+
+**What the eye gap measures since M4.** The eye's third input, the jaw size of the nearest body in
+the cone, is not scaled by `eye_gain`, so the blind arm (`eye_gain=0`) still sees teeth and its flee
+wires still work. `eye_gap` now reads what the eye's food and body inputs add over an eye that sees
+teeth only. Scaling the jaw input by `eye_gain` would restore the M3 meaning and is a rule change,
+the owner's (`findings/m4-audit-2.md` item 5).
