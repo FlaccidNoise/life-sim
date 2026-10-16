@@ -41,6 +41,14 @@ learns to hunt). Both are parameters.
 is. Today the blind arm of the eye gap still sees teeth (item 5 of `../findings/m4-audit-2.md`), so
 the gate does not measure blindness. Not a tuning lever: a fix to what the gate measures.
 
+**D2, a food chain (amendment of 2026-10-16, after T1 to T4).** A body bites only a body whose
+`diet` is at least `bite_diet_gap` under its own. Off: −1, any body. T1 to T3 showed hunters
+starving at `bite_mass_ratio` 3.0, and T4 at 1.15 showed every body biting every other into a
+cannibal cloud of 190 to 320 bodies: with prey defined as "anything smaller", a hunter's success
+never depletes a food that only hunters need, which is the frequency dependence D1 rests on. The
+draft measured the same lever ("cannibalism off": predators eat only lower-diet prey) as the one
+that restored it. One parameter, built by the orchestrator (`../findings/m4-diet.md` T4).
+
 **Held in reserve, I1, predator interference.** A bite's take is divided by `1 + interference · n`,
 where `n` is the number of other bodies with a jaw within `interference_radius` of the biter. Built
 only if D1 fails its targets after its trials (Part 3, rule 6). The evidence: predator-dependent

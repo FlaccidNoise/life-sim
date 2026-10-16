@@ -32,7 +32,8 @@ pub(crate) fn side(y: f32) -> f32 {
 ///
 /// Each live slot `s` in ascending order with a body `j` in a jaw cone, as the motor found it on
 /// this tick, bites `j` unless either is at 0 energy or less, `s` is lighter than
-/// `bite_mass_ratio` times `j`, or `s` is full. The bite is `bite_rate` times the jaws that hold
+/// `bite_mass_ratio` times `j`, the `diet` of `j` is not at least `bite_diet_gap` under that of `s`
+/// (rule D2 of the diet retune), or `s` is full. The bite is `bite_rate` times the jaws that hold
 /// `j` times the mouth of `s` times `diet^diet_k` of `s` (rule D1 of the diet plan), and
 /// `lunge_bite` times that during a lunge. A spike hurts in proportion to that bite. The guards of `j` whose
 /// arc holds `s`, at the places of this tick after the motor, block a share of it (shells) and
@@ -49,6 +50,7 @@ pub fn step(world: &mut World) {
     let (ratio, per_mass) = (p.get(id::BITE_MASS_RATIO), p.get(id::ENERGY_PER_MASS));
     let (lunge_bite, spike_hurt) = (p.get(id::LUNGE_BITE), p.get(id::SPIKE_HURT));
     let (shell_block, diet_k) = (p.get(id::SHELL_BLOCK), p.get(id::DIET_K));
+    let diet_gap = p.get(id::BITE_DIET_GAP);
     let (shell_cos2, spike_cos2) = (cos2(p.get(id::SHELL_ARC)), cos2(p.get(id::SPIKE_ARC)));
     // `World::tick` after this tick, as the frame reads a stamp.
     let stamp = world.tick.wrapping_add(1);
@@ -67,7 +69,7 @@ pub fn step(world: &mut World) {
         if c.energy[s] <= 0.0 || c.energy[j] <= 0.0 {
             continue;
         }
-        if motor.mass[s] < ratio * motor.mass[j] {
+        if motor.mass[s] < ratio * motor.mass[j] || c.diet[s] - c.diet[j] < diet_gap {
             continue;
         }
         let area = c.area(s);

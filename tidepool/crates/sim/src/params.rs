@@ -282,6 +282,9 @@ table! {
     FOUNDER_DIET "founder_diet" 0.0 0.0 1.0;
     /// The `diet` gene of a hunter founder. At 0.8 and `diet_k` 1.5 its Filter takes 9%.
     FOUNDER_HUNTER_DIET "founder_hunter_diet" 0.8 0.0 1.0;
+    /// Rule D2 of the diet retune, a food chain: a body bites only a body whose `diet` is at least
+    /// this much under its own. −1: any body, the M4 world.
+    BITE_DIET_GAP "bite_diet_gap" -1.0 -1.0 1.0;
 }
 
 /// `diet_k` moves in steps of this, so that `math::pow_quarters` gives its power exactly.

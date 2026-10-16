@@ -296,6 +296,14 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
   reserve. A gene, not a ratio of mouth sizes: the owner asked for a preference, and a gene is one
   number that a chart and a card can show. → `../research/diet-coexistence.md`,
   `../plans/2026-10-16-m4-retune-diet.md`
+- 2026-10-16: **Amendment to the diet retune, rule D2, a food chain: a body bites only a body whose
+  `diet` is at least `bite_diet_gap` under its own, by the owner's delegation; the owner to confirm
+  at the exit.** Not the plan's named reserve (I1). T1 to T3: at `bite_mass_ratio` 3.0 the founder
+  hunters starve before tick 1,000, with gene mixing on or off. T4: at 1.15 every body bites every
+  other, the world becomes a cannibal cloud of 190 to 320 bodies at `diet` 0.25 to 0.46, and no
+  carnivore holds. Prey defined only by size gives no food that only hunters need. The draft's
+  "cannibalism off" restored the predator and prey balance (predators 85% to 41%).
+  → `../findings/m4-diet.md` T1 to T4, `../plans/2026-10-16-m4-retune-diet.md`
 - 2026-10-16: **The eye's jaw input is scaled by `eye_gain` (rule E1), by the owner's delegation.**
   A blind eye must not see teeth, or the eye gap of the long gate does not measure blindness
   (item 5 of `../findings/m4-audit-2.md`). → `../plans/2026-10-16-m4-retune-diet.md` Task 1
