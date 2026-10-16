@@ -132,7 +132,7 @@ pub fn life(world: &mut World) {
     }
 
     for (slot, cause) in deaths {
-        world.kill(slot, cause);
+        world.kill(slot, cause, None);
     }
 }
 

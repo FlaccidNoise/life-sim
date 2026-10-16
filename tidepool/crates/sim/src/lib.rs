@@ -1,7 +1,10 @@
 pub mod abi;
+pub mod ability;
+pub mod bite;
 pub mod brain;
 pub mod control;
 pub mod creature;
+pub mod debris;
 pub mod energy;
 pub mod eye;
 pub mod field;

@@ -451,7 +451,7 @@ fn the_readout_of_a_founder_names_every_neuron() {
     assert!(w.possess(uid));
     brain::readout(&mut w, uid);
     assert_eq!(w.readout[5], 0);
-    w.input(true, 1.0, 0.0, false);
+    w.input(true, 1.0, 0.0, false, 0);
     brain::readout(&mut w, uid);
     assert_eq!(w.readout[5], 1);
     let other = w.creatures.uid[8];
@@ -600,7 +600,7 @@ fn a_world_with_a_donor_is_the_same_in_a_reload() {
 
     // A body that dies gives up its slot, and the next body in that slot holds no donor.
     let mut w = start(true);
-    w.kill(5, 1);
+    w.kill(5, 1, None);
     let born = w.spawn(Genome::default(), at(300.0)).expect("slot");
     assert_eq!(born, 5);
     assert!(w.donors[5].is_none());

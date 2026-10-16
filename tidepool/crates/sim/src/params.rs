@@ -39,6 +39,9 @@ macro_rules! table {
 // `mut_conn_remove` from 0.05, `mix_rate` from 0 (mixing on), and `fixed_upkeep` from 0.0337, which
 // let a founder pay the 0.0375 of the M2 founder's brain. The other defaults are arithmetic, not
 // measurement.
+//
+// The rows from `bite_rate` on are for the M4 rules (`docs/plans/2026-10-14-m4-teeth.md`). Each
+// holds its Off value, at which its rule does nothing, until Task 12 of that plan switches it on.
 table! {
     /// The founder's `old` gene: ticks until death by old age. The minimum is the bottom of
     /// `OLD_RANGE`.
@@ -210,6 +213,66 @@ table! {
     MIX_SWAP "mix_swap" 0.5 0.0 1.0;
     /// Chance that a gene only the donor holds is taken.
     MIX_FOREIGN "mix_foreign" 0.25 0.0 1.0;
+    /// Energy per tick per unit jaw per unit of mouth (`area / REF_WIDTH`).
+    BITE_RATE "bite_rate" 0.0 0.0 5.0;
+    /// Half angle of a jaw cone, radians.
+    JAW_ARC "jaw_arc" 0.6 0.1 1.5;
+    /// A body bites only a body this many times lighter. 0: any body.
+    BITE_MASS_RATIO "bite_mass_ratio" 0.0 0.0 3.0;
+    /// Half angle that a spike guards.
+    SPIKE_ARC "spike_arc" 0.8 0.1 1.5;
+    /// Energy lost by a biter per unit of bite per unit of spike.
+    SPIKE_HURT "spike_hurt" 0.0 0.0 4.0;
+    /// Half angle that a shell plate guards.
+    SHELL_ARC "shell_arc" 0.8 0.1 1.5;
+    /// Share of a bite blocked per unit of shell, held at 1.
+    SHELL_BLOCK "shell_block" 0.0 0.0 4.0;
+    /// Forward drag per unit of shell.
+    SHELL_DRAG "shell_drag" 0.0 0.0 0.5;
+    /// Share of a dead body's energy and built mass left as debris.
+    CORPSE_SHARE "corpse_share" 0.0 0.0 1.0;
+    /// Share of a piece's energy lost each tick.
+    DEBRIS_DECAY "debris_decay" 0.0005 0.0 0.1;
+    /// A piece under this is removed.
+    DEBRIS_MIN "debris_min" 0.1 0.0 5.0;
+    /// Ticks between two uses of one ability.
+    ABILITY_COOLDOWN "ability_cooldown" 100.0 1.0 2000.0;
+    /// Speed gained per unit of rear flagellum, over heft.
+    DASH_IMPULSE "dash_impulse" 0.0 0.0 8.0;
+    /// Spin gained per unit of turn command per unit of rear flagellum, over heft.
+    DASH_SPIN "dash_spin" 0.0 0.0 2.0;
+    /// Energy per unit of mouth for one dash.
+    DASH_COST "dash_cost" 0.0 0.0 5.0;
+    /// Speed gained per unit of jaw, over heft.
+    LUNGE_IMPULSE "lunge_impulse" 0.0 0.0 8.0;
+    /// Bite multiplier during a lunge.
+    LUNGE_BITE "lunge_bite" 1.0 1.0 4.0;
+    /// Ticks that a lunge's bite lasts.
+    LUNGE_TICKS "lunge_ticks" 10.0 1.0 100.0;
+    /// Energy per unit of mouth for one lunge.
+    LUNGE_COST "lunge_cost" 0.0 0.0 5.0;
+    /// Energy per tick per unit of gland, from each body in the cloud.
+    TOXIN_DRAIN "toxin_drain" 0.0 0.0 4.0;
+    /// Cloud radius in the maker's lengths.
+    TOXIN_RADIUS "toxin_radius" 2.0 0.5 8.0;
+    /// Ticks a cloud lasts.
+    TOXIN_TICKS "toxin_ticks" 60.0 1.0 600.0;
+    /// Energy per unit of mouth for one cloud.
+    TOXIN_COST "toxin_cost" 0.0 0.0 10.0;
+    /// Scale of the hurt input: a loss of a tenth of capacity reads 1.
+    HURT_GAIN "hurt_gain" 10.0 0.0 100.0;
+    /// Share of founders with a Jaw.
+    FOUNDER_JAW "founder_jaw" 0.0 0.0 1.0;
+    /// Size of a founder's Jaw.
+    FOUNDER_JAW_SIZE "founder_jaw_size" 0.5 0.0 1.0;
+    /// Hunter founder brain: seen body to turn.
+    STARTER_CHASE "starter_chase" 0.0 -8.0 8.0;
+    /// Hunter founder brain: seen body to lunge.
+    STARTER_LUNGE "starter_lunge" 0.0 -8.0 8.0;
+    /// Founder brain: seen teeth and a hit to dash, seen teeth to turn away.
+    STARTER_FLEE "starter_flee" 0.0 -8.0 8.0;
+    /// Founder brain: bias of each trigger output.
+    STARTER_TRIGGER_BIAS "starter_trigger_bias" -1.0 -3.0 3.0;
 }
 
 #[derive(Clone)]

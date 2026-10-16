@@ -76,7 +76,7 @@ fn bump(lens: [f32; 2]) -> [(f32, f32, f32); 2] {
 }
 
 fn drive(w: &mut World, thrust: f32, turn: f32, ticks: u32) {
-    w.input(true, thrust, turn, false);
+    w.input(true, thrust, turn, false, 0);
     w.run(ticks);
 }
 

@@ -523,6 +523,23 @@ test('after a death, a possess that fails leaves the world paused and `speed` re
   expect(r.of('died').length).toBe(1);
 });
 
+test('the three causes of M4 post their names', () => {
+  for (const [code, name] of [
+    [3, 'eaten'],
+    [4, 'poisoned'],
+    [5, 'spiked'],
+  ] as const) {
+    const m = mortal();
+    const r = rig({ recycle: true, wrap: m.wrap });
+    r.host.handle({ type: 'init', seed: 1 });
+    r.host.handle({ type: 'possess', uid: 7 });
+    m.die(code);
+    r.advance(100);
+    expect(r.of('error')).toEqual([]);
+    expect(r.of('died')[0]?.cause).toBe(name);
+  }
+});
+
 test('a death cause that this build does not know is an error, not a silent pause', () => {
   const m = mortal();
   const r = rig({ recycle: true, wrap: m.wrap });

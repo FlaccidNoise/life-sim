@@ -31,6 +31,11 @@ pub struct Motor {
     pub mass: Vec<f32>,
     /// `creature::heft` of each live slot, so that a tick works it out once per body.
     pub heft: Vec<f32>,
+    /// Of each live slot with a jaw cone: the slot of the nearest overlapping body inside a cone,
+    /// or `NO_TOUCH`, and the sum of the sizes of the cones that hold it. Filled from Task 3 of the
+    /// M4 plan (rule J1). `bite::step` reads them in the same tick.
+    pub bite_target: Vec<u32>,
+    pub bite_jaws: Vec<f32>,
 }
 
 impl Default for Motor {
@@ -43,6 +48,8 @@ impl Default for Motor {
             radius: vec![0.0; n],
             mass: vec![0.0; n],
             heft: vec![0.0; n],
+            bite_target: vec![NO_TOUCH; n],
+            bite_jaws: vec![0.0; n],
         }
     }
 }
@@ -67,6 +74,7 @@ pub fn step(world: &mut World) {
         radius,
         mass,
         heft,
+        ..
     } = motor;
     let repel = params.get(id::REPEL);
     let (part_mass, eye_cost) = (params.get(id::PART_MASS), params.get(id::EYE_COST));

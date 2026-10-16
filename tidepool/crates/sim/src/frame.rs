@@ -1,16 +1,23 @@
 //! The frame that the page draws: a header, then one record for each creature in view, then one
-//! for each plant in view. Words are `u32`. Floats are stored by bit pattern. `src/protocol.ts`
-//! mirrors this layout.
+//! for each plant in view, then one for each piece of debris and each cloud in view. Words are
+//! `u32`. Floats are stored by bit pattern. `src/protocol.ts` mirrors this layout.
 
 use crate::creature::{MARK_LINEAGE, MAX_EYES};
-use crate::genome::{PartGene, MAX_PART_GENES};
+use crate::genome::{PartGene, MAX_PART_GENES, REF_AREA};
 use crate::params::id;
 use crate::plant;
 use crate::world::World;
 
-pub const HEADER_WORDS: u32 = 34;
+pub const HEADER_WORDS: u32 = 50;
 pub const CREATURE_STRIDE: u32 = 25;
 pub const PLANT_STRIDE: u32 = 4;
+pub const DEBRIS_STRIDE: u32 = 3;
+pub const CLOUD_STRIDE: u32 = 4;
+/// The kills in view that the header has room for, and the words of each.
+pub const MAX_FRAME_KILLS: usize = 4;
+pub const KILL_WORDS: u32 = 3;
+/// The most kills that `World::kills` holds between two frames. More are not drawn.
+pub const KILL_LOG: usize = 64;
 /// Part words in a creature record: one for each part gene that a genome can hold.
 pub const PART_WORDS: u32 = MAX_PART_GENES as u32;
 /// Words for one eye cone in the header.
@@ -26,14 +33,43 @@ pub const FLAG_MIXED: u32 = 16;
 pub const FLAG_WILLING: u32 = 32;
 /// The body holds the genes of a partner for its next bud.
 pub const FLAG_DONOR: u32 = 64;
+/// A bite of the body took energy in the last `BIT_FLASH` ticks.
+pub const FLAG_BIT: u32 = 128;
+/// The body lost energy to a hit in the last `HURT_FLASH` ticks.
+pub const FLAG_HURT: u32 = 256;
+/// The body dashed or lunged in the last `DASH_FLASH` ticks.
+pub const FLAG_DASH: u32 = 512;
 /// A body this far outside the view is still in the frame, so a body on the edge is drawn whole.
 const MARGIN: f32 = 32.0;
 /// Ticks that `FLAG_BUDDED` stays set after a bud.
 const BUD_FLASH: u32 = 40;
+/// Ticks that `FLAG_BIT`, `FLAG_HURT`, and `FLAG_DASH` stay set.
+const BIT_FLASH: u32 = 20;
+const HURT_FLASH: u32 = 20;
+const DASH_FLASH: u32 = 10;
 /// The header word that counts the cones of the possessed body, and the first word of the cones.
 const CONE_COUNT_AT: usize = 9;
 const CONES_AT: usize = CONE_COUNT_AT + 1;
-const _: () = assert!(HEADER_WORDS as usize == CONES_AT + MAX_EYES * CONE_WORDS as usize);
+/// The header words after the cones: the debris and cloud records, the `hurt_side` of the
+/// possessed body, and the kills in view, their count and then their places.
+const DEBRIS_COUNT_AT: usize = CONES_AT + MAX_EYES * CONE_WORDS as usize;
+const CLOUD_COUNT_AT: usize = DEBRIS_COUNT_AT + 1;
+const HURT_SIDE_AT: usize = CLOUD_COUNT_AT + 1;
+const KILL_COUNT_AT: usize = HURT_SIDE_AT + 1;
+const KILLS_AT: usize = KILL_COUNT_AT + 1;
+const _: () = assert!(HEADER_WORDS as usize == KILLS_AT + MAX_FRAME_KILLS * KILL_WORDS as usize);
+
+/// True when `stamp` is a tick count after an event, and the count `now` is less than `ticks`
+/// past it. A stamp of 0 is no event.
+fn flashing(stamp: u32, now: u32, ticks: u32) -> bool {
+    stamp != 0 && now.wrapping_sub(stamp) < ticks
+}
+
+/// True for the `DASH_FLASH` ticks after an ability set its cooldown to `cooldown`. The cooldown
+/// falls by 1 on each tick.
+fn just_fired(left: u32, cooldown: u32) -> bool {
+    left > 0 && left.saturating_add(DASH_FLASH) > cooldown
+}
 
 /// A part gene as one word: `kind | q(anchor) << 8 | q(size) << 16 | q(extra) << 24`, where `q`
 /// holds a value in 0 to 1 and scales it to a byte. NaN packs as 0.
@@ -42,15 +78,17 @@ fn pack(part: &PartGene) -> u32 {
     part.kind as u32 | q(part.anchor) << 8 | q(part.size) << 16 | q(part.extra) << 24
 }
 
-/// Writes `world.frame` for the view `[x0, x1] x [y0, y1]` grown by `MARGIN`. Returns the words
-/// written. Records are in grid order.
+/// Writes `world.frame` for the view `[x0, x1] x [y0, y1]` grown by `MARGIN`, and empties
+/// `world.kills`. Returns the words written. Records are in grid order, and clouds in slot order.
 ///
 /// Header: tick, creature records, plant records, creatures alive, plants alive, the possessed
 /// slot or `NO_SLOT`, 1 when a creature is possessed and its brain is driving, living creatures
 /// with the lineage mark, the buds of the possessed body, and the eye cones of the possessed body:
 /// their count, then `MAX_EYES` places of `CONE_WORDS` floats each. A cone is its direction in
 /// world radians, the cosine of its half angle, and its range in world units. A place past the
-/// count holds zeros.
+/// count holds zeros. Then debris records, cloud records, the `hurt_side` of the possessed body as
+/// a float (0 with none), and the kills in view since the last frame: their count, then
+/// `MAX_FRAME_KILLS` places of x and y as floats and the slot of the killer, as it was at the kill.
 /// Creature record: x, y, heading, length, width, hue, energy01, then uid, slot, flags, and
 /// `hidden | conns << 16` for the hidden neurons and the connections that its brain expresses, then
 /// `PART_WORDS` part words in gene order. A place with no part holds 0. The next word is the growth,
@@ -59,11 +97,15 @@ fn pack(part: &PartGene) -> u32 {
 /// float: the share of its life that the body has lived, `age / old`, as the age input of its brain
 /// reads it.
 /// Plant record: x, y, radius, reserve01.
+/// Debris record: x, y, and its energy as a share of the capacity of the reference body, held at 1.
+/// Cloud record: x, y, radius, and its ticks left as a share of `toxin_ticks`, held at 1.
 pub fn write(world: &mut World, x0: f32, y0: f32, x1: f32, y1: f32) -> u32 {
     let per_mass = world.params.get(id::ENERGY_PER_MASS);
     let plant_cap = world.params.get(id::PLANT_CAP);
     let eye_range = world.params.get(id::EYE_RANGE);
     let cooldown = world.params.get(id::BUD_COOLDOWN) as u32;
+    let ability_cooldown = world.params.get(id::ABILITY_COOLDOWN) as u32;
+    let toxin_ticks = world.params.get(id::TOXIN_TICKS);
     let World {
         tick,
         creatures: c,
@@ -71,9 +113,12 @@ pub fn write(world: &mut World, x0: f32, y0: f32, x1: f32, y1: f32) -> u32 {
         donors,
         brains,
         plants,
+        debris,
+        clouds,
         control,
         grid,
         frame,
+        kills,
         ..
     } = world;
     let (x0, y0, x1, y1) = (x0 - MARGIN, y0 - MARGIN, x1 + MARGIN, y1 + MARGIN);
@@ -117,7 +162,18 @@ pub fn write(world: &mut World, x0: f32, y0: f32, x1: f32, y1: f32) -> u32 {
             ];
             frame[at..at + cone.len()].copy_from_slice(&cone.map(f32::to_bits));
         }
+        frame[HURT_SIDE_AT] = c.hurt_side[s].to_bits();
     }
+    let mut shown = 0;
+    for &[x, y, killer] in kills.iter() {
+        if shown < MAX_FRAME_KILLS && in_view(f32::from_bits(x), f32::from_bits(y)) {
+            let at = KILLS_AT + shown * KILL_WORDS as usize;
+            frame[at..at + KILL_WORDS as usize].copy_from_slice(&[x, y, killer]);
+            shown += 1;
+        }
+    }
+    frame[KILL_COUNT_AT] = shown as u32;
+    kills.clear();
 
     let mut records = 0;
     grid.for_each_in_box(x0, y0, x1, y1, |slot| {
@@ -158,6 +214,16 @@ pub fn write(world: &mut World, x0: f32, y0: f32, x1: f32, y1: f32) -> u32 {
         if donors[s].is_some() {
             flags |= FLAG_DONOR;
         }
+        if flashing(c.bit_tick[s], *tick, BIT_FLASH) {
+            flags |= FLAG_BIT;
+        }
+        if flashing(c.hurt_tick[s], *tick, HURT_FLASH) {
+            flags |= FLAG_HURT;
+        }
+        if just_fired(c.cd_dash[s], ability_cooldown) || just_fired(c.cd_lunge[s], ability_cooldown)
+        {
+            flags |= FLAG_DASH;
+        }
         let hidden = brains.n_neur[s] - brains.n_in[s] - brains.n_out[s];
         let brain = hidden as u32 | (brains.n_conn[s] as u32) << 16;
         frame.extend(floats.map(f32::to_bits));
@@ -190,6 +256,32 @@ pub fn write(world: &mut World, x0: f32, y0: f32, x1: f32, y1: f32) -> u32 {
         records += 1;
     });
     frame[2] = records;
+
+    debris.refresh_grid();
+    let full = per_mass * REF_AREA;
+    let mut records = 0;
+    debris.grid.for_each_in_box(x0, y0, x1, y1, |slot| {
+        let s = slot as usize;
+        if !in_view(debris.x[s], debris.y[s]) {
+            return;
+        }
+        let floats = [debris.x[s], debris.y[s], (debris.energy[s] / full).min(1.0)];
+        frame.extend(floats.map(f32::to_bits));
+        records += 1;
+    });
+    frame[DEBRIS_COUNT_AT] = records;
+
+    let mut records = 0;
+    for s in 0..clouds.slots.high_water() as usize {
+        if !clouds.slots.is_alive(s as u32) || !in_view(clouds.x[s], clouds.y[s]) {
+            continue;
+        }
+        let left = (clouds.left[s] as f32 / toxin_ticks).min(1.0);
+        let floats = [clouds.x[s], clouds.y[s], clouds.radius[s], left];
+        frame.extend(floats.map(f32::to_bits));
+        records += 1;
+    }
+    frame[CLOUD_COUNT_AT] = records;
     frame.len() as u32
 }
 
@@ -282,7 +374,7 @@ mod tests {
         assert_eq!(record(&w, 11)[9], FLAG_JUVENILE);
         assert_eq!(record(&w, 0)[9], 0);
 
-        w.input(true, 0.0, 0.0, false);
+        w.input(true, 0.0, 0.0, false, 0);
         view(&mut w);
         assert_eq!(w.frame[5..7], [9, 0]);
 
@@ -403,7 +495,7 @@ mod tests {
         w.control.buds = 3;
         view(&mut w);
         assert_eq!(w.frame[7..10], [2, 3, 2]);
-        let cones = w.frame[10..HEADER].as_chunks::<3>().0;
+        let cones = w.frame[CONES_AT..DEBRIS_COUNT_AT].as_chunks::<3>().0;
         let (heading, turn) = (w.creatures.heading[9], 0.2 * crate::math::PI);
         // The eye of a founder: a half angle of 0.2 + 0.5, and a range of 16 * 0.2 lengths.
         #[allow(clippy::disallowed_methods)]
@@ -494,6 +586,97 @@ mod tests {
         assert_eq!((w.frame[2], w.frame[4]), (1, 2));
         let near = &w.frame[w.frame.len() - PLANT_STRIDE as usize..];
         assert_eq!(near, [100.0f32, 500.0, 8.0, 1.0].map(f32::to_bits));
+    }
+
+    #[test]
+    fn debris_and_cloud_records_follow_the_plants_and_are_culled_by_the_view() {
+        let mut w = World::new(5, 1536.0, 1024.0);
+        w.seed_founders(20, 0);
+        let full = w.params.get(id::ENERGY_PER_MASS) * REF_AREA;
+        for (x, energy) in [(100.0, 0.25 * full), (1400.0, 2.0 * full)] {
+            let s = w.debris.slots.alloc().expect("debris slot") as usize;
+            (w.debris.x[s], w.debris.y[s], w.debris.energy[s]) = (x, 500.0, energy);
+            w.debris.dirty = true;
+        }
+        let ticks = w.params.get(id::TOXIN_TICKS);
+        let k = w.clouds.slots.alloc().expect("cloud slot") as usize;
+        let c = &mut w.clouds;
+        (c.x[k], c.y[k], c.radius[k], c.left[k]) = (120.0, 300.0, 24.0, (ticks / 4.0) as u32);
+        let words = write(&mut w, 0.0, 0.0, 1536.0, 1024.0) as usize;
+        assert_eq!(w.frame[DEBRIS_COUNT_AT..CLOUD_COUNT_AT + 1], [2, 1]);
+        let records = HEADER + 20 * CREATURE;
+        let debris = DEBRIS_STRIDE as usize;
+        assert_eq!(words, records + 2 * debris + CLOUD_STRIDE as usize);
+        let cloud = &w.frame[records + 2 * debris..];
+        assert_eq!(cloud, [120.0f32, 300.0, 24.0, 0.25].map(f32::to_bits));
+        // A piece's energy is a share of the capacity of the reference body, held at 1.
+        let mut shares: Vec<u32> = w.frame[records..records + 2 * debris]
+            .chunks(debris)
+            .map(|r| r[2])
+            .collect();
+        shares.sort_unstable();
+        assert_eq!(shares, [0.25f32.to_bits(), 1.0f32.to_bits()]);
+
+        write(&mut w, 0.0, 0.0, 200.0, 200.0);
+        assert_eq!(w.frame[DEBRIS_COUNT_AT..CLOUD_COUNT_AT + 1], [0, 0]);
+    }
+
+    #[test]
+    fn the_header_holds_the_kills_in_view_once_and_the_hurt_side_of_the_possessed_body() {
+        let mut w = World::new(5, 1536.0, 1024.0);
+        w.seed_founders(50, 0);
+        let view = |w: &mut World| write(w, 0.0, 0.0, 1536.0, 1024.0);
+        assert!(w.possess(w.creatures.uid[2]));
+        w.creatures.hurt_side[2] = -0.5;
+        let places: Vec<(f32, f32)> = (10..16)
+            .map(|s| (w.creatures.x[s], w.creatures.y[s]))
+            .collect();
+        for s in 10..16 {
+            w.kill(s, crate::control::CAUSE_EATEN, Some(30));
+        }
+        // A killer that is not alive is none: no place in the header.
+        w.kill(16, crate::control::CAUSE_EATEN, Some(10));
+        view(&mut w);
+        assert_eq!(w.frame[HURT_SIDE_AT], (-0.5f32).to_bits());
+        assert_eq!(w.frame[KILL_COUNT_AT], MAX_FRAME_KILLS as u32);
+        for (k, &(x, y)) in places.iter().take(MAX_FRAME_KILLS).enumerate() {
+            let at = KILLS_AT + k * KILL_WORDS as usize;
+            assert_eq!(w.frame[at..at + 3], [x.to_bits(), y.to_bits(), 30]);
+        }
+        // A kill is drawn by one frame.
+        view(&mut w);
+        assert_eq!(w.frame[KILL_COUNT_AT], 0);
+        w.release();
+        view(&mut w);
+        assert_eq!(w.frame[HURT_SIDE_AT], 0);
+    }
+
+    #[test]
+    fn the_bite_hurt_and_dash_flags_last_their_ticks() {
+        let mut w = World::new(5, 1536.0, 1024.0);
+        w.seed_founders(50, 0);
+        let flags = |w: &mut World, s: u32| {
+            write(w, 0.0, 0.0, 1536.0, 1024.0);
+            record(w, s)[9] & (FLAG_BIT | FLAG_HURT | FLAG_DASH)
+        };
+        assert_eq!(flags(&mut w, 4), 0);
+        w.tick = 100;
+        (w.creatures.bit_tick[4], w.creatures.hurt_tick[5]) = (100, 100 - HURT_FLASH + 1);
+        w.creatures.hurt_tick[6] = 100 - HURT_FLASH;
+        assert_eq!(flags(&mut w, 4), FLAG_BIT);
+        assert_eq!(flags(&mut w, 5), FLAG_HURT);
+        assert_eq!(flags(&mut w, 6), 0);
+        let cooldown = w.params.get(id::ABILITY_COOLDOWN) as u32;
+        for (left, flag) in [
+            (cooldown, FLAG_DASH),
+            (cooldown - DASH_FLASH + 1, FLAG_DASH),
+            (cooldown - DASH_FLASH, 0),
+            (0, 0),
+        ] {
+            (w.creatures.cd_dash[7], w.creatures.cd_lunge[8]) = (left, left);
+            assert_eq!(flags(&mut w, 7), flag, "{left} ticks left");
+            assert_eq!(flags(&mut w, 8), flag, "{left} ticks left");
+        }
     }
 
     #[test]

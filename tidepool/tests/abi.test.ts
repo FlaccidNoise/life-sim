@@ -17,6 +17,9 @@ test('frame layout constants match the module', () => {
   expect(n('tp_frame_header_words')).toBe(P.FRAME_HEADER_WORDS);
   expect(n('tp_frame_creature_stride')).toBe(P.CREATURE_STRIDE);
   expect(n('tp_frame_plant_stride')).toBe(P.PLANT_STRIDE);
+  expect(n('tp_frame_debris_stride')).toBe(P.DEBRIS_STRIDE);
+  expect(n('tp_frame_cloud_stride')).toBe(P.CLOUD_STRIDE);
+  expect(n('tp_frame_max_kills')).toBe(P.MAX_FRAME_KILLS);
   expect(n('tp_frame_part_words')).toBe(P.PART_WORDS);
   expect(n('tp_frame_max_eyes')).toBe(P.MAX_EYES);
   expect(n('tp_heir_stride')).toBe(P.HEIR_STRIDE);
@@ -103,6 +106,10 @@ test('the frame header holds the lineage count, the buds, and the cones of the p
   sim.writeFrame(0, 0, 1536, 1024, buf);
   let f = P.viewFrame(buf);
   expect([f.lineageAlive, f.buds, f.cones]).toEqual([0, 0, []]);
+  // The default world has no debris, no cloud, no hit, and no kill.
+  expect([f.debrisCount, f.cloudCount, f.hurtSide, f.kills]).toEqual([0, 0, 0, []]);
+  expect(f.debrisBase).toBe(f.plantBase + f.plantCount * P.PLANT_STRIDE);
+  expect(f.cloudBase).toBe(f.debrisBase);
 
   for (const uid of [10, 20]) expect(sim.possess(uid)).toBe(true);
   sim.writeFrame(0, 0, 1536, 1024, buf);
@@ -126,6 +133,29 @@ test('the frame header holds the lineage count, the buds, and the cones of the p
     expect(cone.cosHalf).toBeCloseTo(Math.cos(0.7), 3);
     expect(cone.range).toBeCloseTo(3.2 * length, 3);
   }
+});
+
+test('a frame reads its debris, cloud, hurt side, and kills from the words after the cones', () => {
+  const words = P.FRAME_HEADER_WORDS + P.PLANT_STRIDE + 2 * P.DEBRIS_STRIDE + P.CLOUD_STRIDE;
+  const buf = new ArrayBuffer(4 * words);
+  const u32 = new Uint32Array(buf);
+  const f32 = new Float32Array(buf);
+  u32.set([0, 0, 1], 0); // no creature record and one plant record
+  u32.set([2, 1], 34); // two debris records and one cloud record
+  f32[36] = -0.5;
+  // Five kills are counted. The header has places for four.
+  u32[37] = 5;
+  for (let k = 0; k < P.MAX_FRAME_KILLS; k++) {
+    f32[38 + 3 * k] = 10 * k;
+    f32[39 + 3 * k] = 20 * k;
+    u32[40 + 3 * k] = k + 1;
+  }
+  const f = P.viewFrame(buf);
+  expect([f.debrisCount, f.cloudCount, f.hurtSide]).toEqual([2, 1, -0.5]);
+  expect(f.kills).toEqual([0, 1, 2, 3].map((k) => ({ x: 10 * k, y: 20 * k, killerSlot: k + 1 })));
+  expect(f.debrisBase).toBe(P.FRAME_HEADER_WORDS + P.PLANT_STRIDE);
+  expect(f.cloudBase).toBe(f.debrisBase + 2 * P.DEBRIS_STRIDE);
+  expect(f.cloudBase + P.CLOUD_STRIDE).toBe(words);
 });
 
 test('a frame of the whole world holds every creature', () => {
@@ -302,7 +332,7 @@ test('pick, possess, input, and release go through the ABI', () => {
   expect(sim.possessed()).toBe(uid);
   expect(sim.deathCause()).toBe(0);
 
-  sim.input(true, 1, -1, false);
+  sim.input(true, 1, -1, false, 0);
   sim.tick(1);
   sim.writeFrame(0, 0, 1536, 1024, buf);
   f = P.viewFrame(buf);
@@ -351,7 +381,7 @@ test('a call after free does nothing', () => {
   sim.free();
   sim.seedFounders(10, 0);
   sim.setParam(0, 1);
-  sim.input(true, 1, 1, true);
+  sim.input(true, 1, 1, true, 7);
   sim.release();
   expect(sim.possess(1)).toBe(false);
   expect([sim.pick(0, 0, 9999), sim.possessed(), sim.deathCause()]).toEqual([0, 0, 0]);

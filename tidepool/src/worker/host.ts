@@ -33,7 +33,13 @@ const BENCH_SEED = 1;
 const STAT_CREATURES = 0;
 const STAT_PLANTS = 1;
 // The `CAUSE_` constants in crates/sim/src/control.rs. 0 is no death.
-const CAUSES: Record<number, DeathCause> = { 1: 'starved', 2: 'old age' };
+const CAUSES: Record<number, DeathCause> = {
+  1: 'starved',
+  2: 'old age',
+  3: 'eaten',
+  4: 'poisoned',
+  5: 'spiked',
+};
 const NO_INPUT = { manual: false, thrust: 0, turn: 0, accept: false };
 
 export function createHost(deps: HostDeps): Host {
@@ -111,7 +117,8 @@ export function createHost(deps: HostDeps): Host {
     for (; owed >= period && ran < MAX_TICKS_PER_STEP; ran++) {
       owed -= period;
       const wasPossessed = sim.possessed() !== 0;
-      sim.input(input.manual, input.thrust, input.turn, input.accept);
+      // No ability is held: the page sends no mask before Task 13 of the M4 plan.
+      sim.input(input.manual, input.thrust, input.turn, input.accept, 0);
       const start = deps.now();
       sim.tick(1);
       tickMillis += deps.now() - start;
@@ -121,7 +128,7 @@ export function createHost(deps: HostDeps): Host {
         const cause = CAUSES[died];
         if (!cause) {
           throw new Error(
-            `the core reported death cause ${died}, and this build knows only 1 and 2. Fix: add it to CAUSES in src/worker/host.ts and to DeathCause in src/protocol.ts.`,
+            `the core reported death cause ${died}, and this build knows only ${Object.keys(CAUSES).join(', ')}. Fix: add it to CAUSES in src/worker/host.ts and to DeathCause in src/protocol.ts.`,
           );
         }
         // The world waits for the player to pick an heir.

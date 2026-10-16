@@ -241,7 +241,7 @@ fn thrust_costs_energy() {
         let mut w = empty();
         let c = add(&mut w, 500.0, 1.0, 0.9, |_| {});
         assert!(w.possess(w.creatures.uid[c]));
-        w.input(true, thrust, 0.0, false);
+        w.input(true, thrust, 0.0, false, 0);
         w.run(TICKS);
         (w.creatures.energy[c], w.creatures.x[c])
     };
@@ -708,7 +708,7 @@ fn thrust_costs_the_same_per_unit_of_mass() {
         }
         let c = add(&mut w, 500.0, 1.0, 0.9, |g| g.len = len);
         assert!(w.possess(w.creatures.uid[c]));
-        w.input(true, 1.0, 0.0, false);
+        w.input(true, 1.0, 0.0, false, 0);
         let before = w.creatures.energy[c];
         w.run(50);
         (before - w.creatures.energy[c]) / w.creatures.area(c)

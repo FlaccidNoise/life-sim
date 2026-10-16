@@ -2,8 +2,8 @@
 
 use crate::eye::{EYE_HALF_MIN, EYE_HALF_SPAN, EYE_REACH};
 use crate::genome::{
-    Genome, KIND_CHEMO, KIND_CILIA, KIND_EYE, KIND_FILTER, KIND_FIN, KIND_FLAGELLUM, LEN_RANGE,
-    REF_PARTS, WID_RANGE,
+    Genome, KIND_CHEMO, KIND_CILIA, KIND_EYE, KIND_FILTER, KIND_FIN, KIND_FLAGELLUM, KIND_JAW,
+    KIND_SHELL, KIND_SPIKE, KIND_TOXIN, LEN_RANGE, REF_PARTS, WID_RANGE,
 };
 use crate::math::{sin_cos, PI};
 use crate::pool::Slots;
@@ -17,6 +17,11 @@ pub const MAX_RADIUS: f32 = LEN_RANGE.1 * (1.0 + WID_RANGE.1) / 4.0;
 pub const MARK_LINEAGE: u8 = 1;
 /// The most eye cones on one body. Eye genes past it still cost their size.
 pub const MAX_EYES: usize = 8;
+/// The most jaw cones on one body. Jaw genes past it still cost their size and count in `jaw_sum`.
+pub const MAX_JAWS: usize = 4;
+/// The most guards (spikes and shell plates) on one body. Genes past it still cost their size and
+/// count in `shell_sum`.
+pub const MAX_GUARDS: usize = 8;
 
 pub struct Creatures {
     pub slots: Slots,
@@ -50,6 +55,25 @@ pub struct Creatures {
     pub mixed_with: Vec<u32>,
     pub mark: Vec<u8>,
     pub bud_cooldown: Vec<u32>,
+    /// Above 0: the body fires that ability. Written by the brain or by control. Read by
+    /// `ability::step`.
+    pub cmd_dash: Vec<f32>,
+    pub cmd_lunge: Vec<f32>,
+    pub cmd_toxin: Vec<f32>,
+    /// Ticks until the ability can fire again.
+    pub cd_dash: Vec<u32>,
+    pub cd_lunge: Vec<u32>,
+    pub cd_toxin: Vec<u32>,
+    /// Ticks that the bite of the last lunge stays raised.
+    pub lunge_left: Vec<u32>,
+    /// Energy lost to bites, spikes, and toxin since the last think. `sense::step` zeroes it.
+    pub hurt: Vec<f32>,
+    /// The side of the last hit: negative on the side of negative angles from the heading.
+    pub hurt_side: Vec<f32>,
+    /// Scratch for the frame, not saved: `World::tick` after the last bite of the body that took
+    /// energy, and after the last hit on it. 0 for none. A reload drops a flash and nothing else.
+    pub bit_tick: Vec<u32>,
+    pub hurt_tick: Vec<u32>,
     // From here on: what `express` makes of the genome, at spawn and at load. Not saved.
     pub len: Vec<f32>,
     pub wid: Vec<f32>,
@@ -77,6 +101,26 @@ pub struct Creatures {
     /// The cosine of the half angle.
     pub eye_cos: Vec<f32>,
     pub eye_size: Vec<f32>,
+    /// The sum of the sizes of the jaw genes. A pair counts once.
+    pub jaw_sum: Vec<f32>,
+    /// Jaw cones, at most `MAX_JAWS`. The three arrays below hold `MAX_JAWS` values per slot: the
+    /// cosine and the sine of the direction of the cone from the heading, and the size of its gene.
+    pub n_jaws: Vec<u8>,
+    pub jaw_ax: Vec<f32>,
+    pub jaw_ay: Vec<f32>,
+    pub jaw_size: Vec<f32>,
+    /// The sum of the sizes of the shell genes. A pair counts once.
+    pub shell_sum: Vec<f32>,
+    /// Guards, at most `MAX_GUARDS`, in gene order. The four arrays below hold `MAX_GUARDS` values
+    /// per slot: the cosine and the sine of the direction, the kind (`KIND_SPIKE` or `KIND_SHELL`),
+    /// and the size of its gene.
+    pub n_guards: Vec<u8>,
+    pub guard_ax: Vec<f32>,
+    pub guard_ay: Vec<f32>,
+    pub guard_kind: Vec<u8>,
+    pub guard_size: Vec<f32>,
+    /// The sum of the sizes of the toxin glands.
+    pub gland_sum: Vec<f32>,
 }
 
 impl Default for Creatures {
@@ -107,6 +151,17 @@ impl Default for Creatures {
             mixed_with: vec![0; n],
             mark: vec![0; n],
             bud_cooldown: vec![0; n],
+            cmd_dash: floats(),
+            cmd_lunge: floats(),
+            cmd_toxin: floats(),
+            cd_dash: vec![0; n],
+            cd_lunge: vec![0; n],
+            cd_toxin: vec![0; n],
+            lunge_left: vec![0; n],
+            hurt: floats(),
+            hurt_side: floats(),
+            bit_tick: vec![0; n],
+            hurt_tick: vec![0; n],
             len: floats(),
             wid: floats(),
             hue: floats(),
@@ -126,6 +181,18 @@ impl Default for Creatures {
             eye_ay: vec![0.0; n * MAX_EYES],
             eye_cos: vec![0.0; n * MAX_EYES],
             eye_size: vec![0.0; n * MAX_EYES],
+            jaw_sum: floats(),
+            n_jaws: vec![0; n],
+            jaw_ax: vec![0.0; n * MAX_JAWS],
+            jaw_ay: vec![0.0; n * MAX_JAWS],
+            jaw_size: vec![0.0; n * MAX_JAWS],
+            shell_sum: floats(),
+            n_guards: vec![0; n],
+            guard_ax: vec![0.0; n * MAX_GUARDS],
+            guard_ay: vec![0.0; n * MAX_GUARDS],
+            guard_kind: vec![0; n * MAX_GUARDS],
+            guard_size: vec![0.0; n * MAX_GUARDS],
+            gland_sum: floats(),
         }
     }
 }
@@ -153,6 +220,17 @@ pub fn radius(length: f32, width: f32) -> f32 {
     (length + width) / 4.0
 }
 
+/// The sine and the cosine of each direction of a part at `anchor`, which is held in 0 to 1: one on
+/// the midline, at 0 or 1, and a pair at plus and minus `anchor * PI` elsewhere.
+fn directions(anchor: f32) -> impl Iterator<Item = (f32, f32)> {
+    let midline = anchor == 0.0 || anchor == 1.0;
+    let dir = anchor * PI;
+    [dir, -dir]
+        .into_iter()
+        .take(if midline { 1 } else { 2 })
+        .map(sin_cos)
+}
+
 /// The values of `a` at the live slots, in slot order.
 fn gather<T: Copy>(live: &[u32], a: &[T]) -> Vec<T> {
     live.iter().map(|&s| a[s as usize]).collect()
@@ -171,7 +249,9 @@ fn scatter<T>(live: &[u32], values: Vec<T>, a: &mut [T]) -> Result<(), LoadError
 
 impl Creatures {
     /// Sets every expressed array of the slot from the genome. Never panics, for any genome. Eye
-    /// cones past `MAX_EYES` are not made, and their genes still count in `eye_sum`.
+    /// cones past `MAX_EYES` are not made, and their genes still count in `eye_sum`. Jaw cones and
+    /// guards are made as eye cones are, at `anchor * PI` from the heading, one on the midline and a
+    /// pair elsewhere, to `MAX_JAWS` and `MAX_GUARDS`. Their genes still count in the sums.
     ///
     /// A loaded genome can hold any float. A part value that is not finite counts as 0, and each
     /// one is held in 0 to 1, so every sum here is finite. `Genome::part_sum` counts a size the
@@ -189,6 +269,8 @@ impl Creatures {
         let (mut flag_push, mut flag_side) = (0.0, 0.0);
         let (mut cilia, mut fin, mut filter, mut chemo) = (0.0, 0.0, 0.0, 0.0);
         let (mut plain_sum, mut eye_sum, mut cones) = (0.0, 0.0, 0);
+        let (mut jaw_sum, mut shell_sum, mut gland_sum) = (0.0, 0.0, 0.0);
+        let (mut jaws, mut guards) = (0, 0);
         for part in &g.parts {
             let (anchor, size, extra) = (unit(part.anchor), unit(part.size), unit(part.extra));
             if part.kind != KIND_EYE {
@@ -203,6 +285,31 @@ impl Creatures {
                 KIND_FIN => fin += size,
                 KIND_FILTER => filter += size,
                 KIND_CHEMO => chemo += size,
+                KIND_TOXIN => gland_sum += size,
+                KIND_JAW => {
+                    jaw_sum += size;
+                    for (sin, cos) in directions(anchor) {
+                        if jaws < MAX_JAWS {
+                            let k = s * MAX_JAWS + jaws;
+                            (self.jaw_ax[k], self.jaw_ay[k]) = (cos, sin);
+                            self.jaw_size[k] = size;
+                            jaws += 1;
+                        }
+                    }
+                }
+                KIND_SPIKE | KIND_SHELL => {
+                    if part.kind == KIND_SHELL {
+                        shell_sum += size;
+                    }
+                    for (sin, cos) in directions(anchor) {
+                        if guards < MAX_GUARDS {
+                            let k = s * MAX_GUARDS + guards;
+                            (self.guard_ax[k], self.guard_ay[k]) = (cos, sin);
+                            (self.guard_kind[k], self.guard_size[k]) = (part.kind, size);
+                            guards += 1;
+                        }
+                    }
+                }
                 KIND_EYE => {
                     eye_sum += size;
                     let (dir, half) = (anchor * PI, EYE_HALF_MIN + EYE_HALF_SPAN * extra);
@@ -227,6 +334,9 @@ impl Creatures {
         (self.filter[s], self.chemo[s]) = (filter, chemo);
         (self.plain_sum[s], self.eye_sum[s]) = (plain_sum, eye_sum);
         self.n_eyes[s] = cones as u8;
+        (self.jaw_sum[s], self.n_jaws[s]) = (jaw_sum, jaws as u8);
+        (self.shell_sum[s], self.n_guards[s]) = (shell_sum, guards as u8);
+        self.gland_sum[s] = gland_sum;
     }
 
     pub fn length(&self, s: usize) -> f32 {
@@ -268,7 +378,8 @@ impl Creatures {
     }
 
     /// The live slot indices in ascending order, then each field for those slots in the same order.
-    /// The fields are in the order of the struct. `hc`, `hs`, and what `express` makes are left out.
+    /// The fields are in the order of the struct. `hc`, `hs`, `bit_tick`, `hurt_tick`, and what
+    /// `express` makes are left out.
     pub fn save(&self, w: &mut Writer) {
         let live: Vec<u32> = (0..self.slots.high_water())
             .filter(|&s| self.slots.is_alive(s))
@@ -294,6 +405,15 @@ impl Creatures {
         w.u32s(&gather(&live, &self.mixed_with));
         w.u8s(&gather(&live, &self.mark));
         w.u32s(&gather(&live, &self.bud_cooldown));
+        w.f32s(&gather(&live, &self.cmd_dash));
+        w.f32s(&gather(&live, &self.cmd_lunge));
+        w.f32s(&gather(&live, &self.cmd_toxin));
+        w.u32s(&gather(&live, &self.cd_dash));
+        w.u32s(&gather(&live, &self.cd_lunge));
+        w.u32s(&gather(&live, &self.cd_toxin));
+        w.u32s(&gather(&live, &self.lunge_left));
+        w.f32s(&gather(&live, &self.hurt));
+        w.f32s(&gather(&live, &self.hurt_side));
     }
 
     /// Reads what `save` wrote. The slot list must be strictly ascending and below capacity, every
@@ -340,6 +460,15 @@ impl Creatures {
         scatter(&live, r.u32s()?, &mut c.mixed_with)?;
         scatter(&live, r.u8s()?, &mut c.mark)?;
         scatter(&live, r.u32s()?, &mut c.bud_cooldown)?;
+        scatter(&live, r.f32s()?, &mut c.cmd_dash)?;
+        scatter(&live, r.f32s()?, &mut c.cmd_lunge)?;
+        scatter(&live, r.f32s()?, &mut c.cmd_toxin)?;
+        scatter(&live, r.u32s()?, &mut c.cd_dash)?;
+        scatter(&live, r.u32s()?, &mut c.cd_lunge)?;
+        scatter(&live, r.u32s()?, &mut c.cd_toxin)?;
+        scatter(&live, r.u32s()?, &mut c.lunge_left)?;
+        scatter(&live, r.f32s()?, &mut c.hurt)?;
+        scatter(&live, r.f32s()?, &mut c.hurt_side)?;
         for &s in &live {
             let s = s as usize;
             // A uid is given out in birth order, so a parent has a lower uid than its child.

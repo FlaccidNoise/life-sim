@@ -203,7 +203,7 @@ pub fn crowd(argv: &[String]) {
         };
         let (uid, near, alone) = (c.uid[s], neighbours(s), top_speed(&world, s));
         world.possess(uid);
-        world.input(true, 1.0, 0.0, false);
+        world.input(true, 1.0, 0.0, false, 0);
         // The body can die while it is held. The mean is over the ticks that it lived.
         let (mut speed_sum, mut held) = (0.0, 0u32);
         while held < CROWD_HOLD {
@@ -882,7 +882,7 @@ mod tests {
         // read.
         world.donors[2] = Some((9, Genome::default()));
         assert_eq!(mixed(&world, &before, uid_before), (1, 0));
-        world.kill(2, 0);
+        world.kill(2, 0, None);
         assert_eq!(mixed(&world, &before, uid_before), (0, 0));
         assert_eq!(holders(&world)[2], (0, 0));
     }

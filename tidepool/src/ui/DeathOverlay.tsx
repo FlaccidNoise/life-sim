@@ -10,6 +10,9 @@ import { FIRST_DEATH } from './words/lines';
 const CAUSE_TEXT: Record<DeathCause, string> = {
   starved: 'You starved.',
   'old age': 'You died of old age.',
+  eaten: 'Eaten.',
+  poisoned: 'Poisoned.',
+  spiked: 'Spiked a spiked body.',
 };
 
 // The body shader colours a creature in HSV: saturation 0.2 to 0.7 and value 0.5 to 1 with energy.
