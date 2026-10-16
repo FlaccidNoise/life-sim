@@ -18,7 +18,6 @@ import {
   type ParamInfo,
   type ToWorker,
 } from '../protocol';
-import { lookOf } from '../render/parts';
 import { createRenderer, type Renderer } from '../render/renderer';
 import { App } from '../ui/App';
 import { BUD, MATE, REFUSE } from '../ui/words/lines';
@@ -364,8 +363,7 @@ function start(): void {
 
   let renderer: Renderer;
   try {
-    // `?look=1`, `2`, `3`, or `4` draws the bodies one of four other ways, for the owner to pick from.
-    renderer = createRenderer(canvas, lookOf(query.get('look')));
+    renderer = createRenderer(canvas);
   } catch (e) {
     fail(e instanceof Error ? e.message : String(e));
     return;

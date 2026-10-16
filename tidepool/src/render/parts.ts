@@ -1,6 +1,6 @@
 // The instances of the part program: one for each drawn part of each body of a frame. Cilia are not
-// here. The creature shader draws them round the membrane. Also the outline of a body in the looks
-// of `?look`: its taper and its swells, from the parts it carries.
+// here. The creature shader draws them round the membrane. Also the outline of a body: its taper and
+// its swells, from the parts it carries.
 
 import {
   C_ENERGY,
@@ -25,18 +25,6 @@ import {
   type FrameView,
   type Part,
 } from '../protocol';
-
-/**
- * How the page draws a body. 0 is the draw of M2. The owner picks from the others
- * (docs/findings/m3-shapes.md): 1 tapers the outline, 2 also draws each part kind as its own
- * silhouette at twice the size, and 3 also swells the outline at each mouth. 4 is look 3 with each
- * part at the size of today, and with each part that is inside a swell on its edge.
- */
-export type Look = 0 | 1 | 2 | 3 | 4;
-
-/** The look that `?look=` names. Anything but 1, 2, 3, or 4 is the draw of M2. */
-export const lookOf = (text: string | null): Look =>
-  text === '1' ? 1 : text === '2' ? 2 : text === '3' ? 3 : text === '4' ? 4 : 0;
 
 // x, y, angle, size, kind, hue, energy01, phase, and the x and y of the centre of the body
 export const PART_INSTANCE_FLOATS = 10;
@@ -66,21 +54,18 @@ export const hasMixedMark = (flags: number): boolean =>
 const MIDLINE = [1] as const;
 const PAIR = [1, -1] as const;
 
-// The numbers of the looks.
+// The numbers of the outline.
 const TAPER_FULL = 1 / 4; // one end this share ahead of the other narrows the other all the way
 const NARROWEST = 0.35; // the width of the narrow end of a full taper, as a share of the width
-const LOOK_2_SIZE = 2; // in looks 2 and 3, a part is this many times its size of today
 const MOUTH_SWELL = 0.5; // the outline is wider at a mouth by this share for each unit of its size
-// The creature shader takes this many swells. A body with more mouths swells at its first ones.
-export const MAX_SWELLS = 4;
-// In look 4 it takes this many, as one vector. A body with mouths at more places swells at its
-// first ones.
-const LOOK_4_SWELLS = 2;
-// The outline of a body of look 4: the uid, the length, and the width that it was made for, its
-// taper, then the x and the radius of each swell. A radius of 0 is no swell.
+// The creature shader takes this many swells, as one vector. A body with mouths at more places
+// swells at its first ones.
+export const MAX_SWELLS = 2;
+// The outline of a body: the uid, the length, and the width that it was made for, its taper, then
+// the x and the radius of each swell. A radius of 0 is no swell.
 export const OUTLINE_TAPER = 3;
 export const OUTLINE_SWELLS = 4;
-export const OUTLINE_FLOATS = OUTLINE_SWELLS + 2 * LOOK_4_SWELLS;
+export const OUTLINE_FLOATS = OUTLINE_SWELLS + 2 * MAX_SWELLS;
 
 // The founder of crates/sim/src/genome.rs: FOUNDER_PARTS, then its eye at the default `founder_eye`.
 const FOUNDER = [
@@ -104,7 +89,6 @@ function carried(parts: readonly Pick<Part, 'anchor' | 'size'>[]): { nose: numbe
   return { nose, tail };
 }
 const FOUNDER_CARRIES = carried(FOUNDER);
-const NO_OUTLINES = new Float64Array(0);
 
 // Each slot's swim: where `buildParts` last placed it, and the phase of its flagella. The phase
 // moves with the distance swum, so a flagellum waves faster as its body moves faster.
@@ -144,8 +128,8 @@ export function endsOf(taper: number): [nose: number, tail: number] {
 }
 
 /**
- * The swell of the outline at a mouth of look 3, in the body frame: a circle on the axis, wider
- * than the outline is there. A larger mouth swells more.
+ * The swell of the outline at a mouth, in the body frame: a circle on the axis, wider than the
+ * outline is there. A larger mouth swells more.
  */
 export function swellAt(
   mouth: Part,
@@ -163,12 +147,12 @@ export function swellAt(
 }
 
 /**
- * Writes the outline of look 4 of the body `uid`, which carries `parts`, into `out` at `o`, as
- * OUTLINE_FLOATS numbers. Mouths at one place on the axis share a swell, that of the largest.
+ * Writes the outline of the body `uid`, which carries `parts`, into `out` at `o`, as OUTLINE_FLOATS
+ * numbers. Mouths at one place on the axis share a swell, that of the largest.
  *
  * The parts of a body are those of its genome for all its life. So an outline that was made for
  * this body at this length and width is not made again. Made in each draw, the outlines of 389
- * bodies took 0.05 ms, beside the 0.17 ms of all the page's code in a draw of look 0.
+ * bodies took 0.05 ms, beside the 0.17 ms of all the page's code in a draw of M2.
  */
 export function outlineOf(
   parts: readonly Part[],
@@ -200,7 +184,7 @@ export function outlineOf(
 
 /**
  * Where a part sits in the body frame: +x is forward. `side` is 1 or -1. `taper` is that of
- * `taperOf`: 0 is the outline of today.
+ * `taperOf`: 0 is an outline with no taper.
  */
 export function anchorPoint(
   anchor: number,
@@ -232,18 +216,16 @@ export function anchorPoint(
  * Its kind is negative for the left part of a pair: the shader mirrors that one. It carries the
  * centre of its body: a part is in sight when its body is.
  *
- * From look 1 a part sits on the tapered outline. In looks 2 and 3 it is larger. In look 3 a mouth
- * sits on its swell. Look 4 takes the outline of each body that is not small on screen from
- * `outlines`, as `outlineOf` writes it, at OUTLINE_FLOATS times the slot of the body. Every part
- * inside a swell sits on its edge.
+ * A part sits on the tapered outline of its body. The outline of each body that is not small on
+ * screen is taken from `outlines`, as `outlineOf` writes it, at OUTLINE_FLOATS times the slot of
+ * the body. Every part inside a swell sits on its edge.
  */
 export function buildParts(
   cur: FrameView,
   pxPerUnit: number,
   timeSeconds: number,
   out: Float32Array,
-  look: Look = 0,
-  outlines: Float64Array = NO_OUTLINES,
+  outlines: Float64Array,
 ): number {
   const { f32, u32 } = cur;
   const ripple = (RIPPLE * timeSeconds) % TAU;
@@ -271,15 +253,10 @@ export function buildParts(
 
     const cos = Math.cos(heading);
     const sin = Math.sin(heading);
-    const scale = Math.sqrt(length * width) * (look === 2 || look === 3 ? LOOK_2_SIZE : 1);
-    // A body too small on screen for its parts keeps the outline of today.
-    const shaped = look === 4 && near;
+    const scale = Math.sqrt(length * width);
+    // A body too small on screen for its parts has an outline with no taper and no swell.
     const outline = slot * OUTLINE_FLOATS;
-    const taper = shaped
-      ? (outlines[outline + OUTLINE_TAPER] ?? 0)
-      : look >= 1 && look < 4 && near
-        ? taperOf(partsOf(u32, r))
-        : 0;
+    const taper = near ? (outlines[outline + OUTLINE_TAPER] ?? 0) : 0;
     for (let k = 0; k < PART_WORDS; k++) {
       const word = u32[r + C_PARTS + k] ?? 0;
       // The kind is the low byte of a part word. A word that draws nothing is not unpacked.
@@ -289,12 +266,7 @@ export function buildParts(
       if (!part || !reach) continue;
       for (const side of part.anchor > 0 && part.anchor < 1 ? PAIR : MIDLINE) {
         const at = anchorPoint(part.anchor, length, width, side, taper);
-        if (look === 3 && part.kind === KIND_FILTER) {
-          const swell = swellAt(part, length, width, taper);
-          at.x = swell.x + swell.r * Math.cos(at.angle);
-          at.y = swell.r * Math.sin(at.angle);
-        }
-        for (let swell = OUTLINE_SWELLS; shaped && swell < OUTLINE_FLOATS; swell += 2) {
+        for (let swell = OUTLINE_SWELLS; near && swell < OUTLINE_FLOATS; swell += 2) {
           // A part inside a swell sits on its edge, and its way out is from the centre of the swell.
           const centre = outlines[outline + swell] ?? 0;
           const radius = outlines[outline + swell + 1] ?? 0;
