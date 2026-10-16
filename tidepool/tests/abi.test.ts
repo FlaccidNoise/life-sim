@@ -164,6 +164,10 @@ test('a frame of the whole world holds every creature', () => {
   const mix = sim.params().find((p) => p.name === 'mix_rate');
   if (!mix) throw new Error('no parameter mix_rate');
   sim.setParam(mix.index, 0);
+  // No founder is armed: the brain pin below is an unarmed founder's 65 connections.
+  const jaw = sim.params().find((p) => p.name === 'founder_jaw');
+  if (!jaw) throw new Error('no parameter founder_jaw');
+  sim.setParam(jaw.index, 0);
   sim.seedFounders(300, 0);
   sim.tick(10);
   const buf = new ArrayBuffer(4 * (P.FRAME_HEADER_WORDS + 300 * P.CREATURE_STRIDE));
@@ -341,8 +345,10 @@ test('pick, possess, input, and release go through the ABI', () => {
   let flagged = 0;
   for (let i = 0; i < f.creatureCount; i++) {
     const r = f.creatureBase + i * P.CREATURE_STRIDE;
-    // A founder accepts a mate from its first thought, and half of them have thought by now.
-    const flags = (f.u32[r + P.C_FLAGS] ?? 0) & ~P.FLAG_WILLING;
+    // A founder accepts a mate from its first thought, and half of them have thought by now. A
+    // dash or a bite can fire in the default world: those flags are not what this test reads.
+    const flags =
+      (f.u32[r + P.C_FLAGS] ?? 0) & ~(P.FLAG_WILLING | P.FLAG_DASH | P.FLAG_BIT | P.FLAG_HURT);
     if (f.u32[r + P.C_UID] === uid) {
       expect(flags).toBe(P.FLAG_LINEAGE | P.FLAG_POSSESSED);
       flagged++;

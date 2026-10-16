@@ -154,6 +154,9 @@ fn the_add_part_mutation_draws_every_kind() {
 /// new counters, the ability mask, and the possessed body killed by a named killer.
 fn teeth_world() -> World {
     let mut w = World::new(4, 1536.0, 1024.0);
+    // The counts below are set by hand: no bite and no corpse in the 20 ticks.
+    w.params.set(id::BITE_RATE, 0.0);
+    w.params.set(id::CORPSE_SHARE, 0.0);
     w.seed_founders(200, 300);
     w.run(20);
     let d = w.debris.slots.alloc().expect("debris slot") as usize;

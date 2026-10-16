@@ -91,7 +91,7 @@ fn share_of(w: &World, s: usize) -> f32 {
 #[test]
 fn with_corpse_share_0_no_piece_is_made() {
     let mut w = World::new(3, 1536.0, 1024.0);
-    assert_eq!(w.params.get(id::CORPSE_SHARE), 0.0);
+    w.params.set(id::CORPSE_SHARE, 0.0);
     w.seed_founders(300, 900);
     w.run(2000);
     assert!(w.stats.deaths > 0, "the run must have deaths");
