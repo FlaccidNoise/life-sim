@@ -119,6 +119,43 @@ export interface Kin {
   parts: Part[]; // in gene order
 }
 
+/** The body that killed the possessed one, as a frame of the tick of the kill held it. */
+export interface Killer {
+  uid: number;
+  generation: number;
+  x: number;
+  y: number;
+  length: number;
+  width: number;
+  hue: number;
+  parts: Part[]; // in gene order
+}
+
+/** The record of the body `uid` in a frame, or null when the frame does not hold it. */
+export function killerIn(frame: FrameView, uid: number, generation: number): Killer | null {
+  const { f32, u32 } = frame;
+  for (let i = 0; i < frame.creatureCount; i++) {
+    const r = frame.creatureBase + i * CREATURE_STRIDE;
+    if (u32[r + C_UID] !== uid) continue;
+    const parts: Part[] = [];
+    for (let k = 0; k < PART_WORDS; k++) {
+      const part = unpackPart(u32[r + C_PARTS + k] ?? 0);
+      if (part) parts.push(part);
+    }
+    return {
+      uid,
+      generation,
+      x: f32[r + C_X] ?? 0,
+      y: f32[r + C_Y] ?? 0,
+      length: f32[r + C_LENGTH] ?? 0,
+      width: f32[r + C_WIDTH] ?? 0,
+      hue: f32[r + C_HUE] ?? 0,
+      parts,
+    };
+  }
+  return null;
+}
+
 /** A death with a killer, in view, since the last frame. */
 export interface Kill {
   x: number;
@@ -366,7 +403,15 @@ export type FromWorker =
   | { type: 'ready'; abi: number; worldW: number; worldH: number; params: ParamInfo[] }
   | { type: 'frame'; buffer: ArrayBuffer }
   | { type: 'possessed'; uid: number } // 0: nothing there, or released
-  | { type: 'died'; cause: DeathCause; heirs: Heir[] }
+  // `killer` is null for a death with no killer. `killerBrain` is the readout of its brain at the
+  // kill (see `readBrain`), 0 words with no killer or no readout.
+  | {
+      type: 'died';
+      cause: DeathCause;
+      heirs: Heir[];
+      killer: Killer | null;
+      killerBrain: Uint32Array;
+    }
   // The readout of the possessed body: see `readBrain`. 0 words when no body is possessed, sent once.
   | { type: 'brain'; words: Uint32Array }
   // The readout of the body `uid`: see `readBrain`. 0 words when no living body has the uid.

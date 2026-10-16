@@ -11,6 +11,10 @@ import {
   KIND_FILTER,
   KIND_FIN,
   KIND_FLAGELLUM,
+  KIND_JAW,
+  KIND_SHELL,
+  KIND_SPIKE,
+  KIND_TOXIN,
   type Kin,
   type Part,
 } from '../protocol';
@@ -49,6 +53,26 @@ function shapeOf(part: Part): ComponentChild {
           <circle r={0.8 + 1.2 * s} fill={WATER} stroke="none" />
         </>
       );
+    case KIND_JAW: {
+      // Two mandibles that close toward the axis.
+      const l = 3 + 5 * s;
+      return <path d={`M0 -2.5Q${l * 0.7} -3.5 ${l} -0.8M0 2.5Q${l * 0.7} 3.5 ${l} 0.8`} />;
+    }
+    case KIND_SPIKE:
+      return <path d={`M0 -1L${4 + 9 * s} 0L0 1Z`} fill="currentColor" stroke-width="0.6" />;
+    case KIND_SHELL: {
+      const h = 3 + 4 * s;
+      return <path d={`M0.5 ${-h}Q2.5 0 0.5 ${h}`} stroke-width={1.5 + 2 * s} />;
+    }
+    case KIND_TOXIN: {
+      const r = 1.4 + 1.6 * s;
+      return (
+        <>
+          <circle cx={r + 0.5} r={r} fill={WATER} />
+          <circle cx={r + 0.5} r="0.7" fill="currentColor" stroke="none" />
+        </>
+      );
+    }
     default:
       return <circle r="1.5" fill="currentColor" />;
   }

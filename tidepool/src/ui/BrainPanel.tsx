@@ -1,11 +1,11 @@
 // The brain panel: a live graph of the brain of the body the player is in. Inputs on the left under
 // the part that owns them, hidden neurons between, outputs on the right. The error state and the
-// two empty states come before the graph.
+// two empty states come before the graph. `BrainStill` draws one readout in the same layout, still.
 
 import { useEffect, useRef } from 'preact/hooks';
 import { KIND_CHEMO, KIND_EYE, type BrainView } from '../protocol';
 import { KIND_MATE, layout, type Group, type Placed } from './brain/layout';
-import { inputLabel, pickPath } from './brain/words';
+import { inputLabel, pickPath, strongestPath } from './brain/words';
 import { Note, NoteMark } from './Note';
 import { brain, brainError, brainOpen, changesShown, pulse, steer, wiringChanged } from './state';
 import { NO_CHANGE } from './words/lines';
@@ -36,6 +36,9 @@ const OUTPUT: Record<number, Output> = {
   128: { name: 'thrust', low: 'rest', high: 'full', fromZero: true },
   129: { name: 'turn', low: 'left', high: 'right', fromZero: false },
   130: { name: 'accept', low: 'no', high: 'yes', fromZero: false },
+  131: { name: 'dash', low: 'rest', high: 'fire', fromZero: false },
+  132: { name: 'lunge', low: 'rest', high: 'fire', fromZero: false },
+  133: { name: 'toxin', low: 'rest', high: 'fire', fromZero: false },
 };
 const outputOf = (port: number): Output =>
   OUTPUT[port] ?? { name: `output ${port}`, low: '', high: '', fromZero: false };
@@ -251,6 +254,47 @@ function draw(
     }
   }
   ctx.globalAlpha = 1;
+}
+
+// The page's style sheet sizes the canvas of the panel only.
+const STILL_CANVAS = {
+  display: 'block',
+  width: '100%',
+  height: 'clamp(110px, 100vh - 560px, 240px)',
+};
+const NO_HANDS = { thrust: 0, turn: 0 };
+
+/**
+ * One readout of a brain, drawn as the panel draws it, still: each neuron is as bright as it was in
+ * the readout, and the strongest path is bold, with its words under the graph.
+ */
+export function BrainStill(props: { brain: BrainView }) {
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const b = props.brain;
+  const placed = layout(b);
+  const path = strongestPath(b);
+  useEffect(() => {
+    if (!canvas.current) return;
+    const peak = b.neurons.map((n) => Math.abs(n.activation));
+    draw(canvas.current, b, placed, peak, path?.nodes ?? [], NO_HANDS);
+  });
+  return (
+    <>
+      <canvas
+        ref={canvas}
+        role="img"
+        aria-label={describe(b, placed.groups)}
+        style={STILL_CANVAS}
+      />
+      <p class="brain-path">
+        {b.connections.length === 0
+          ? 'This brain has no connections.'
+          : path
+            ? path.text
+            : 'Nothing drove this body strongly.'}
+      </p>
+    </>
+  );
 }
 
 /** The button that opens and closes the panel. The key B does the same. */
