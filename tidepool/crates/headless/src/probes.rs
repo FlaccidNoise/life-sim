@@ -6,18 +6,21 @@ use std::collections::{HashMap, HashSet};
 use std::io::Write;
 
 use tidepool_sim::brain::{self, IN_MATE_SIZE};
+use tidepool_sim::control::ABILITY_DASH;
 use tidepool_sim::creature::MAX_EYES;
 use tidepool_sim::creature::MAX_RADIUS;
 use tidepool_sim::eye::{EYE_HALF_MIN, EYE_HALF_SPAN};
-use tidepool_sim::genome::{Genome, Node, BODY, KIND_CHEMO, KIND_EYE};
+use tidepool_sim::genome::{Genome, Node, BODY, KIND_CHEMO, KIND_EYE, KIND_FIN};
 use tidepool_sim::grid::{Grid, CELL};
 use tidepool_sim::math::sin_cos;
 use tidepool_sim::motor::NO_TOUCH;
-use tidepool_sim::world::World;
+use tidepool_sim::params::id;
+use tidepool_sim::rng::Rng;
+use tidepool_sim::world::{SpawnAt, World};
 
 use crate::evolve::{self, mean_sd, of_sense, top_speed, turn_rate, Mind};
 use crate::health::{args, default_world, live, median};
-use crate::{usage, value};
+use crate::{param, usage, value};
 
 /// Ticks between two rows of `probe-plants` and of `probe-mix`.
 const ROW_TICKS: u32 = 4000;
@@ -700,6 +703,147 @@ pub fn encounter_probe(argv: &[String]) {
     }
 }
 
+/// The Start values of `dash_impulse` and `dash_spin` in the M4 plan.
+const DASH_IMPULSE_START: f32 = 2.0;
+const DASH_SPIN_START: f32 = 0.3;
+/// `probe-turn`: the size of the fin, the turn command, the side of the square world, and the
+/// ticks at full thrust before it reads.
+const TURN_FIN: f32 = 0.3;
+const TURN_COMMAND: f32 = 1.0;
+const TURN_WORLD: f32 = 1024.0;
+const TURN_SETTLE: u32 = 300;
+
+/// What `probe-turn` reads of a body at the end of a tick, from its velocity, heading, and spin.
+#[derive(Default)]
+struct Turn {
+    /// Top speed: the velocity along the heading.
+    top: f32,
+    /// The size of the velocity.
+    speed: f32,
+    /// Turn rate: `omega`, in radians per tick.
+    omega: f32,
+    /// Slip: the size of the velocity across the heading over `speed`. A ratio, not the angle that
+    /// `crates/sim/tests/motor.rs` reads.
+    slip: f32,
+    /// The radius of a full turn: `speed` over the size of `omega`.
+    radius: f32,
+}
+
+fn read_turn(world: &World, s: usize) -> Turn {
+    let c = &world.creatures;
+    let (hc, hs) = (c.hc[s], c.hs[s]);
+    let (top, side) = (c.vx[s] * hc + c.vy[s] * hs, -c.vx[s] * hs + c.vy[s] * hc);
+    let speed = (top * top + side * side).sqrt();
+    Turn {
+        top,
+        speed,
+        omega: c.omega[s],
+        slip: side.abs() / speed,
+        radius: speed / c.omega[s].abs(),
+    }
+}
+
+/// One adult of `body` alone at the centre of a square world with no plants and no upkeep,
+/// heading along x and possessed. `body` is `founder`, the reference founder of `founder_sigma`
+/// 0; `fin`, the same with a fin of `TURN_FIN`; or `hunter`, the same after `Genome::arm`. The
+/// probe sets `founder_sigma`, `fin_grip`, `dash_impulse`, and `dash_spin` after `params`.
+fn turn_world(params: &[(usize, f32)], grip: f32, body: &str) -> (World, usize) {
+    let mut world = World::new(1, TURN_WORLD, TURN_WORLD);
+    let p = &mut world.params;
+    for k in [
+        id::BASAL,
+        id::FIXED_UPKEEP,
+        id::NEURON_UPKEEP,
+        id::CONN_UPKEEP,
+        id::MOVE_COST,
+    ] {
+        p.set(k, 0.0);
+    }
+    for &(i, x) in params {
+        p.set(i, x);
+    }
+    p.set(id::FOUNDER_SIGMA, 0.0);
+    p.set(id::FIN_GRIP, grip);
+    p.set(id::DASH_IMPULSE, DASH_IMPULSE_START);
+    p.set(id::DASH_SPIN, DASH_SPIN_START);
+    // A private generator: the world's own draw nothing.
+    let mut genome = Genome::founder(&mut Rng::new(1), p);
+    match body {
+        "fin" => genome.set_size(KIND_FIN, TURN_FIN),
+        "hunter" => genome.arm(p),
+        _ => {}
+    }
+    let at = SpawnAt {
+        x: TURN_WORLD / 2.0,
+        y: TURN_WORLD / 2.0,
+        heading: 0.0,
+        growth: 1.0,
+        energy01: 1.0,
+        parent: 0,
+        generation: 0,
+        mark: 0,
+    };
+    let s = world
+        .spawn(genome, at)
+        .expect("an empty world has a free slot") as usize;
+    world.creatures.bud_cooldown[s] = u32::MAX;
+    assert!(world.possess(world.creatures.uid[s]));
+    (world, s)
+}
+
+/// Full thrust and a turn command of `TURN_COMMAND` for `TURN_SETTLE` ticks from rest, then the
+/// reading; then one tick more with the dash held, and the reading on the tick the dash lands.
+fn measure_turn(world: &mut World, s: usize) -> (Turn, Turn) {
+    let inside = |world: &World| {
+        let (x, y) = (world.creatures.x[s], world.creatures.y[s]);
+        assert!(
+            x > 0.0 && x < world.w && y > 0.0 && y < world.h,
+            "probe-turn: the body reached the edge at tick {}. Fix: raise TURN_WORLD.",
+            world.tick
+        );
+    };
+    world.input(true, 1.0, TURN_COMMAND, false, 0);
+    for _ in 0..TURN_SETTLE {
+        world.tick();
+        inside(world);
+    }
+    let settled = read_turn(world, s);
+    world.input(true, 1.0, TURN_COMMAND, false, ABILITY_DASH);
+    world.tick();
+    inside(world);
+    assert_eq!(
+        world.creatures.cd_dash[s],
+        world.params.get(id::ABILITY_COOLDOWN) as u32,
+        "probe-turn: no dash fired. Fix: give the body a rear flagellum and dash_cost an energy it holds."
+    );
+    (settled, read_turn(world, s))
+}
+
+/// `probe-turn`. For each body of `turn_world`, at `fin_grip` 0.3 and 0.6, one row as settled and
+/// one on the tick a dash lands.
+pub fn turn_probe(argv: &[String]) {
+    let mut params = Vec::new();
+    let mut it = argv.iter().map(String::as_str);
+    while let Some(flag) = it.next() {
+        match flag {
+            "--param" => params.push(param(flag, it.next())),
+            _ => usage(&format!("unknown flag {flag}")),
+        }
+    }
+    for body in ["founder", "fin", "hunter"] {
+        for grip in [0.3, 0.6] {
+            let (mut world, s) = turn_world(&params, grip, body);
+            let (settled, dash) = measure_turn(&mut world, s);
+            for (dashed, t) in [(0, settled), (1, dash)] {
+                println!(
+                    "body={body} fin_grip={grip:.3} dash={dashed} top={:.3} speed={:.3} turn={:.3} slip={:.3} radius={:.3}",
+                    t.top, t.speed, t.omega, t.slip, t.radius
+                );
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use tidepool_sim::genome::{KIND_FILTER, KIND_FIN, KIND_FLAGELLUM};
@@ -993,6 +1137,38 @@ mod tests {
     }
 
     const PROBE_TICKS: u32 = 300;
+
+    /// The probe reads, never writes, and draws no random number: its world after the readings is
+    /// the world after the same commands given by hand.
+    #[test]
+    fn probe_turn_draws_nothing_and_leaves_the_world_of_its_commands() {
+        let (mut world, s) = turn_world(&[], 0.3, "fin");
+        measure_turn(&mut world, s);
+        let (mut plain, _) = turn_world(&[], 0.3, "fin");
+        plain.input(true, 1.0, TURN_COMMAND, false, 0);
+        plain.run(TURN_SETTLE);
+        plain.input(true, 1.0, TURN_COMMAND, false, ABILITY_DASH);
+        plain.run(1);
+        assert_eq!(world.tick, TURN_SETTLE + 1);
+        assert_eq!(world.state_hash(), plain.state_hash());
+    }
+
+    #[test]
+    fn a_fin_at_a_grip_of_0_6_reads_a_lower_slip() {
+        let slip = |body: &str| {
+            let (mut world, s) = turn_world(&[], 0.6, body);
+            measure_turn(&mut world, s).0.slip
+        };
+        let (fin, bare) = (slip("fin"), slip("founder"));
+        assert!(fin < bare, "slip {fin} {bare}");
+    }
+
+    #[test]
+    fn a_dash_raises_top_speed() {
+        let (mut world, s) = turn_world(&[], 0.3, "founder");
+        let (plain, dash) = measure_turn(&mut world, s);
+        assert!(dash.top > plain.top, "top {} {}", dash.top, plain.top);
+    }
 
     const PICK: u32 = 150;
     const CHECKED: usize = 10;
