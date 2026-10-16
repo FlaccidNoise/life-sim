@@ -1,6 +1,10 @@
 //! Abilities: dash, lunge, and the toxin cloud (rules A1 to A3 of the M4 plan), and the pool of
-//! clouds. Task 2 of that plan builds the pool and its snapshot. The rules come in Task 5.
+//! clouds.
 
+use crate::control::CAUSE_POISONED;
+use crate::creature;
+use crate::genome::REF_WIDTH;
+use crate::params::id;
 use crate::pool::Slots;
 use crate::snapshot::{LoadError, Reader, Writer};
 use crate::world::World;
@@ -38,13 +42,141 @@ impl Default for Clouds {
     }
 }
 
-/// Dash, lunge, and toxin, after `control::apply` and before `motor::step`. Nothing yet: the rules
-/// come in Task 5.
-pub fn step(_world: &mut World) {}
+/// Pays `cost` if the energy stays above 0. False, and nothing paid, if it would not.
+fn pay(cost: f32, energy: &mut f32) -> bool {
+    let paid = *energy - cost > 0.0;
+    if paid {
+        *energy -= cost;
+    }
+    paid
+}
 
-/// The clouds drain the bodies inside them, after `bite::step`. Nothing yet: the rule comes in
-/// Task 5.
-pub fn clouds(_world: &mut World) {}
+/// Dash, lunge, and toxin, after `control::apply` and before `motor::step`. Each live slot in
+/// ascending order counts its cooldowns and `lunge_left` down by 1, then tries a dash, a lunge, and
+/// a cloud in that order. An ability fires with its part, its command above 0, its cooldown at 0,
+/// and its cost of `*_cost * area / REF_WIDTH` paid. It sets its cooldown to `ability_cooldown`. A
+/// cloud needs a free place in the pool: a full pool fires nothing and charges nothing. The motor
+/// holds the speed limit after this, so a dash cannot pass it.
+pub fn step(world: &mut World) {
+    let p = &world.params;
+    let cooldown = p.get(id::ABILITY_COOLDOWN) as u32;
+    let (dash_impulse, dash_spin) = (p.get(id::DASH_IMPULSE), p.get(id::DASH_SPIN));
+    let (lunge_impulse, lunge_ticks) = (p.get(id::LUNGE_IMPULSE), p.get(id::LUNGE_TICKS) as u32);
+    let (toxin_drain, toxin_radius) = (p.get(id::TOXIN_DRAIN), p.get(id::TOXIN_RADIUS));
+    let toxin_ticks = p.get(id::TOXIN_TICKS) as u32;
+    let (dash_cost, lunge_cost) = (p.get(id::DASH_COST), p.get(id::LUNGE_COST));
+    let toxin_cost = p.get(id::TOXIN_COST);
+    let (part_mass, eye_cost) = (p.get(id::PART_MASS), p.get(id::EYE_COST));
+    let World {
+        creatures: c,
+        clouds,
+        ..
+    } = world;
+    for s in 0..c.slots.high_water() as usize {
+        if !c.slots.is_alive(s as u32) {
+            continue;
+        }
+        c.cd_dash[s] = c.cd_dash[s].saturating_sub(1);
+        c.cd_lunge[s] = c.cd_lunge[s].saturating_sub(1);
+        c.cd_toxin[s] = c.cd_toxin[s].saturating_sub(1);
+        c.lunge_left[s] = c.lunge_left[s].saturating_sub(1);
+        let flag = c.flag_push[s];
+        if flag > 0.0
+            && c.cmd_dash[s] > 0.0
+            && c.cd_dash[s] == 0
+            && pay(dash_cost * c.area(s) / REF_WIDTH, &mut c.energy[s])
+        {
+            let heft = creature::heft(c.part_sum(s, eye_cost), part_mass);
+            let gain = dash_impulse * flag / heft;
+            c.vx[s] += gain * c.hc[s];
+            c.vy[s] += gain * c.hs[s];
+            c.omega[s] += dash_spin * c.cmd_turn[s] * flag / heft;
+            c.cd_dash[s] = cooldown;
+        }
+        let jaw = c.jaw_sum[s];
+        if jaw > 0.0
+            && c.cmd_lunge[s] > 0.0
+            && c.cd_lunge[s] == 0
+            && pay(lunge_cost * c.area(s) / REF_WIDTH, &mut c.energy[s])
+        {
+            let gain = lunge_impulse * jaw / creature::heft(c.part_sum(s, eye_cost), part_mass);
+            c.vx[s] += gain * c.hc[s];
+            c.vy[s] += gain * c.hs[s];
+            c.cd_lunge[s] = cooldown;
+            c.lunge_left[s] = lunge_ticks;
+        }
+        let gland = c.gland_sum[s];
+        if gland > 0.0
+            && c.cmd_toxin[s] > 0.0
+            && c.cd_toxin[s] == 0
+            && clouds.slots.count() < MAX_CLOUDS
+            && pay(toxin_cost * c.area(s) / REF_WIDTH, &mut c.energy[s])
+        {
+            let k = clouds.slots.alloc().expect("the pool has room") as usize;
+            (clouds.x[k], clouds.y[k]) = (c.x[s], c.y[s]);
+            clouds.radius[k] = toxin_radius * c.length(s);
+            clouds.left[k] = toxin_ticks;
+            clouds.drain[k] = toxin_drain * gland;
+            clouds.maker[k] = c.uid[s];
+            c.cd_toxin[s] = cooldown;
+        }
+    }
+}
+
+/// The clouds drain the bodies inside them, after `bite::step`. Each live cloud in pool order takes
+/// `min(drain, energy)` from each live body whose centre is inside it but its maker, in the order of
+/// the creature grid of the start of the tick. The energy is lost. Bodies have moved since the grid
+/// was made, by at most `v_max`, so the cloud reads the grid that far past its radius. Each cloud
+/// then loses a tick and is freed at 0. After every cloud, in slot order, each body that a cloud
+/// drained to 0 dies with `CAUSE_POISONED`, killed by the maker of that cloud.
+pub fn clouds(world: &mut World) {
+    if world.clouds.slots.count() == 0 {
+        return;
+    }
+    let pad = world.params.get(id::V_MAX);
+    let World {
+        creatures: c,
+        clouds,
+        grid,
+        ..
+    } = world;
+    // The slot of each body drained to 0, and the uid of the maker of the cloud that did it.
+    let mut dead: Vec<(u32, u32)> = Vec::new();
+    for k in 0..clouds.slots.high_water() {
+        if !clouds.slots.is_alive(k) {
+            continue;
+        }
+        let k = k as usize;
+        let (x, y, r) = (clouds.x[k], clouds.y[k], clouds.radius[k]);
+        let (drain, maker, reach) = (clouds.drain[k], clouds.maker[k], r + pad);
+        grid.for_each_in_box(x - reach, y - reach, x + reach, y + reach, |j| {
+            // A body that a bite killed on this tick is still in the grid.
+            let j = j as usize;
+            if !c.slots.is_alive(j as u32) || c.uid[j] == maker {
+                return;
+            }
+            let (dx, dy) = (c.x[j] - x, c.y[j] - y);
+            let take = drain.min(c.energy[j]);
+            if dx * dx + dy * dy > r * r || take <= 0.0 {
+                return;
+            }
+            c.energy[j] -= take;
+            if c.energy[j] <= 0.0 {
+                dead.push((j as u32, maker));
+            }
+        });
+        clouds.left[k] -= 1;
+        if clouds.left[k] == 0 {
+            clouds.slots.free(k as u32);
+        }
+    }
+    // A body drained to 0 takes nothing more, so it is in the list once.
+    dead.sort_unstable();
+    for (slot, maker) in dead {
+        let killer = world.slot_of(maker);
+        world.kill(slot, CAUSE_POISONED, killer);
+    }
+}
 
 /// The live slots, then each field for those slots in the order of the struct.
 pub fn save(world: &World, w: &mut Writer) {
