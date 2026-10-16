@@ -13,6 +13,8 @@ use crate::brain;
 use crate::control::HEIR_STRIDE;
 use crate::creature::MAX_EYES;
 use crate::frame;
+use crate::genome;
+use crate::math::{sin_cos, wrap_angle};
 use crate::params::{ParamDef, DEFS};
 use crate::world::{self, World};
 
@@ -171,6 +173,63 @@ pub unsafe extern "C" fn tp_release(world: *mut World) {
 #[no_mangle]
 pub unsafe extern "C" fn tp_possessed(world: *const World) -> u32 {
     world.as_ref().map_or(0, |w| w.control.possessed)
+}
+
+/// For tests and the debug page: sets the first part of `kind` on the living body `uid` to `size`,
+/// or adds one at the kind's founder anchor, and expresses the body again. The brain is not
+/// re-expressed, so a kind that declares a port gets its port on the next spawn only. 1 if the
+/// body is alive and the kind is 1 to `KINDS`, else 0.
+#[no_mangle]
+pub unsafe extern "C" fn tp_set_part(world: *mut World, uid: u32, kind: u8, size: f32) -> u32 {
+    let Some(w) = world.as_mut() else {
+        return 0;
+    };
+    let Some(s) = w.slot_of(uid) else {
+        return 0;
+    };
+    if kind == 0 || kind > genome::KINDS || !size.is_finite() {
+        return 0;
+    }
+    let s = s as usize;
+    w.genomes[s].set_size(kind, size);
+    w.creatures.express(s, &w.genomes[s]);
+    1
+}
+
+/// For tests and the debug page: puts the living body `uid` at the point, clamped to the world,
+/// with the heading, wrapped. Its velocity is kept. 1 if the body is alive, else 0.
+#[no_mangle]
+pub unsafe extern "C" fn tp_place(
+    world: *mut World,
+    uid: u32,
+    x: f32,
+    y: f32,
+    heading: f32,
+) -> u32 {
+    let Some(w) = world.as_mut() else {
+        return 0;
+    };
+    let Some(s) = w.slot_of(uid) else {
+        return 0;
+    };
+    if !(x.is_finite() && y.is_finite() && heading.is_finite()) {
+        return 0;
+    }
+    let (s, c) = (s as usize, &mut w.creatures);
+    (c.x[s], c.y[s]) = (x.clamp(0.0, w.w), y.clamp(0.0, w.h));
+    c.heading[s] = wrap_angle(heading);
+    (c.hs[s], c.hc[s]) = sin_cos(c.heading[s]);
+    1
+}
+
+/// The generation of the living body `uid`. `u32::MAX` if no living body has that uid. A scan,
+/// for the death card: never per tick.
+#[no_mangle]
+pub unsafe extern "C" fn tp_generation(world: *const World, uid: u32) -> u32 {
+    world.as_ref().map_or(u32::MAX, |w| {
+        w.slot_of(uid)
+            .map_or(u32::MAX, |s| w.creatures.generation[s as usize])
+    })
 }
 
 /// `manual` is 0 for the brain and any other value for the player. `accept` is 0 for a player who
@@ -397,6 +456,29 @@ mod tests {
 
     fn error() -> String {
         ERROR.with_borrow(String::clone)
+    }
+
+    #[test]
+    fn a_test_can_give_a_body_a_jaw_place_it_and_read_its_generation() {
+        unsafe {
+            let a = tp_new(1, 1536.0, 1024.0);
+            tp_seed_founders(a, 10, 0);
+            let w = &*a;
+            let s = w.slot_of(3).expect("uid 3 lives") as usize;
+            assert_eq!(w.creatures.jaw_sum[s], 0.0);
+            assert_eq!(tp_set_part(a, 3, genome::KIND_JAW, 0.5), 1);
+            let w = &*a;
+            assert_eq!((w.creatures.jaw_sum[s], w.creatures.n_jaws[s]), (0.5, 1));
+            assert_eq!(tp_set_part(a, 3, genome::KINDS + 1, 0.5), 0);
+            assert_eq!(tp_set_part(a, 999, genome::KIND_JAW, 0.5), 0);
+            assert_eq!(tp_place(a, 3, 100.0, -5.0, 0.0), 1);
+            let c = &(*a).creatures;
+            assert_eq!((c.x[s], c.y[s], c.heading[s]), (100.0, 0.0, 0.0));
+            assert_eq!(tp_place(a, 999, 1.0, 1.0, 0.0), 0);
+            assert_eq!(tp_generation(a, 3), 0);
+            assert_eq!(tp_generation(a, 999), u32::MAX);
+            tp_free(a);
+        }
     }
 
     #[test]
