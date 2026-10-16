@@ -920,8 +920,17 @@ seed=5 ... hidden=4.00 conns=57.2 shapes=1 shapes_raw=2 variety=1.0 variety_wire
 gate-evolve 0/3 FAIL
 ```
 
-Exit 1. `variety_wired` is the only band that fails on each seed. The good world read 12 to 38 on
-seeds 1, 4, 5, 6, 8 (`findings/m3-exit.md`).
+Exit 1. `variety_wired` is the only band that fails on each seed. The good world, `make gates-long`
+at `91b9619` the same day (load 21 at the start, 5.5 at the end, 17 minutes): 5 of 5, exit 0, every
+other column digit for digit as at the M3 exit.
+
+| Seed | `variety` | `variety_wired` |
+|---|---|---|
+| 1 | 24.9 | 24.9 |
+| 4 | 29.9 | 21.8 |
+| 5 | 23.1 | 19.1 |
+| 6 | 39.1 | 38.5 |
+| 8 | 15.7 | 12.2 |
 
 What the bands do not show:
 - **Use.** `hidden - hidden_null` reads +3.18, -0.65, +1.10 in the good world and +1.45, -0.87, +0.92
