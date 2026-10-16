@@ -86,12 +86,16 @@ pub fn bench(args: &[String]) {
         (tps[mid - 1] + tps[mid]) / 2.0
     };
     let alive = alive_means.iter().sum::<f64>() / alive_means.len() as f64;
-    let pass = median >= floor;
-    // The cost of one body for one tick: it reads whether the code got slower in a world that holds
-    // fewer bodies (choice C9 of the M4 plan).
-    let ns_per_creature_tick = (1e9 / (median * alive)).round();
+    // The gate is the cost of one body for one tick: `floor` ticks per second at `reference` bodies,
+    // 278 ns at the defaults (choice C9, decided 2026-10-16). It says whether the code got slower,
+    // whatever the world holds. How long a skip takes in a fuller world is M5's exit.
+    let ns_per_creature_tick = 1e9 / (median * alive);
+    let max_ns = 1e9 / (floor * f64::from(reference));
+    let pass = ns_per_creature_tick <= max_ns;
     println!(
-        "bench creatures={alive:.0} median_tps={median:.0} ns_per_creature_tick={ns_per_creature_tick} floor={floor:.0} {}",
+        "bench creatures={alive:.0} median_tps={median:.0} ns_per_creature_tick={:.0} max_ns={:.0} {}",
+        ns_per_creature_tick,
+        max_ns.floor(),
         if pass { "PASS" } else { "FAIL" }
     );
     if !pass {

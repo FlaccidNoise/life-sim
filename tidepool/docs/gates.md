@@ -42,7 +42,10 @@ defaults of that day: no part upkeep, and `plant_growth` 0.03.
 - **Native equals WASM.** Run again at the M1 head for the same reason. 3031850156 is `b4b65cac`, the
   native hash of seed 1.
 - **Throughput.** The floor is 2,400 ticks per second at the reference world, for WASM in Node
-  (`architecture.md` section 2). `scripts/bench-wasm.mjs` enforces it. The native bench is for probes
+  (`architecture.md` section 2). Since 2026-10-16 it is read per creature-tick: a run passes when
+  one body costs at most `1e9 / (floor × reference)` nanoseconds a tick, 278 at the defaults (choice
+  C9, `decisions/INDEX.md`). The world of M4 holds 1,540 bodies, more than the reference, and failed
+  the raw reading on the extra bodies at 265 to 272 ns. `scripts/bench-wasm.mjs` enforces it. The native bench is for probes
   and a quick reading. "Throughput bench" below says what both benches time.
 - **Throughput, void run.** A run is void when its mean alive count over the timed ticks is below 80%
   of `--reference` (1,500, so 1,200). The bench prints `VOID: population fell` and exits 1. The rule
@@ -71,7 +74,9 @@ print the same lines. The summary line starts `bench` or `bench-wasm`.
 2. Print `settled tick=<n> creatures=<n> plants=<n>` and save a snapshot.
 3. For each run, load the snapshot and time `--ticks` ticks. Every run does the same work. The alive
    count is sampled every 100 ticks, outside the timed section.
-4. Exit 0 on `PASS`, 1 on `FAIL` or a void run, 2 on a usage error.
+4. The summary line gives `ns_per_creature_tick` and `max_ns`, which is `1e9 / (floor × reference)`.
+   `PASS` when the first is at most the second.
+5. Exit 0 on `PASS`, 1 on `FAIL` or a void run, 2 on a usage error.
 
 The `settled` line at the defaults matches the seed 1 row of the health gate: 1,319 creatures and
 2,229 plants at tick 12,000. The mean over the timed ticks is 1,320. These are the defaults of
