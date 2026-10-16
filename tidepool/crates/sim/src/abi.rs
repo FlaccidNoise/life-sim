@@ -140,7 +140,7 @@ pub unsafe extern "C" fn tp_param_get(world: *const World, i: u32) -> f32 {
     }
 }
 
-/// Clamps to the parameter's range. NaN is ignored.
+/// Clamps to the parameter's range, and moves `diet_k` to its nearest step. NaN is ignored.
 #[no_mangle]
 pub unsafe extern "C" fn tp_param_set(world: *mut World, i: u32, v: f32) {
     if let (Some(w), Some(_)) = (world.as_mut(), param(i)) {
