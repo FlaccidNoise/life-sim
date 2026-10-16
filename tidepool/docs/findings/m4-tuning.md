@@ -100,3 +100,50 @@ one where prey is still there to find it.
 second half (`hunt_hi` fails), prey holds over 150 on at most 2 of 5, the mean shell or spike size
 in `probe-hunt` at 144,000 stays under 0.1 on 3 of 3 seeds, and the M2 and brain bands pass on 4 of
 5 (the scent on seed 8 is the known fragile one).
+
+### The long read of the ratio-3 world (`35a0872`, load 1 to 2, 17 minutes)
+
+`gate-evolve --brain --seeds 1,4,5,6,8 --ticks 144000` with the T2 set: **5 of 5 on every M2 and
+brain band**, seed 8's scent included (`chemo` 0.92 against 0.04). The predation measures, no band
+judged:
+
+| Seed | Bodies | `len` | `hunt_lo` to `hunt_hi` | `prey_lo` | `kills_late` | `flesh_late` |
+|---|---|---|---|---|---|---|
+| 1 | 904 | 16.0 | 0.85 to 1.00 | 0 | 599 | 0.029 |
+| 4 | 774 | 15.6 | 0.88 to 1.00 | 0 | 383 | 0.022 |
+| 5 | 862 | 16.7 | 0.86 to 0.92 | 90 | 687 | 0.037 |
+| 6 | 824 | 14.4 | 0.83 to 1.00 | 0 | 320 | 0.022 |
+| 8 | 486 | 20.8 | 0.78 to 1.00 | 0 | 240 | 0.024 |
+
+`probe-hunt` on seeds 1, 2, 3 every 36,000 ticks (hunters : prey, kills in the window, mean jaw):
+
+| Seed | 36,000 | 72,000 | 108,000 | 144,000 |
+|---|---|---|---|---|
+| 1 | 1,065 : 648, 3,436, 0.24 | 1,239 : 209, 11,366, 0.42 | 894 : 5, 15,717, 0.80 | 903 : 1, 12,675, 1.00 |
+| 2 | 893 : 490, 5,236, 0.26 | 814 : 7, 19,320, 0.54 | 478 : 5, 7,560, 0.30 | 501 : 118, 2,065, 0.17 |
+| 3 | 902 : 571, 3,808, 0.23 | 995 : 271, 10,680, 0.41 | 685 : 238, 13,464, 0.54 | 607 : 183, 11,121, 0.48 |
+
+Against the hypothesis: hunters pass 0.8 on 5 of 5 (said 3 of 5); prey over 150 through the second
+half on 0 of 5 (said at most 2); shell and spike stay under 0.02 on 3 of 3 (said under 0.1); the M2
+and brain bands pass 5 of 5 (said 4). What the rows add:
+
+- **The world is healthy and lively.** 486 to 904 bodies, bigger (`len` 14 to 21, inside the band),
+  with 240 to 690 kills per 2,000 ticks and flesh at 2% to 4% of all energy eaten. Both senses hold
+  on every seed, better than at the M3 exit. It is not the collapse of step 2.
+- **Hunters take over, but not for good everywhere.** Seed 2 booms and busts: hunters 1,239 to 478
+  as prey falls to 5, then prey comes back to 118 while the mean jaw shrinks from 0.54 to 0.17.
+  Seed 3 never loses its prey (183 to 571 through 144,000 ticks). Seed 1 goes to one prey with a
+  jaw of 1.0. That is the frequency dependence the draft named, weak and slow: it shows on 2 of 3
+  seeds in `probe-hunt` and on none of the five in `hunt_hi`.
+- No guard evolved to matter (shell and spike under 0.02). The cost of a jaw at low prey is the
+  only brake, through the mass it adds and the lunges it fires at nothing.
+
+### T5: a dearer lunge, hypothesis before the run
+
+The one lever that charges a hunter more when prey is scarce: `lunge_cost`. A hunter lunges at any
+body in its cone (`lunge_fire_ctx` 0.98), and a miss or a bite on a body over the ratio returns
+nothing. At 0.5 a lunge costs 6 on the reference body; **T5 sets `lunge_cost` 2.0 (24 per lunge,
+two thirds of a half store) on the T2 set.** Hypothesis: at 12,000 the hunter share and the kills
+fall (hunters cannot afford to lunge at everything), prey holds over 150 on 3 of 3, `kills_late`
+stays over 20; at 36,000 hunters are under 50% of the living on at least 2 of 3 against T2's 60%.
+If it reads so, the long run follows.
