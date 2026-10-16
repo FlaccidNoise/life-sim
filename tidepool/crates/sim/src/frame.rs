@@ -100,6 +100,19 @@ fn pack(part: &PartGene) -> u32 {
 /// Plant record: x, y, radius, reserve01.
 /// Debris record: x, y, and its energy as a share of the capacity of the reference body, held at 1.
 /// Cloud record: x, y, radius, and its ticks left as a share of `toxin_ticks`, held at 1.
+/// The body of `slot` for the killer card: see `Control::killer_body`.
+pub fn card_body(world: &World, slot: u32) -> Vec<u32> {
+    let (c, s) = (&world.creatures, slot as usize);
+    let mut words = vec![c.generation[s]];
+    words.extend([c.x[s], c.y[s], c.length(s), c.width(s), c.hue[s]].map(f32::to_bits));
+    let mut parts = [0; PART_WORDS as usize];
+    for (word, part) in parts.iter_mut().zip(&world.genomes[s].parts) {
+        *word = pack(part);
+    }
+    words.extend_from_slice(&parts);
+    words
+}
+
 pub fn write(world: &mut World, x0: f32, y0: f32, x1: f32, y1: f32) -> u32 {
     let per_mass = world.params.get(id::ENERGY_PER_MASS);
     let plant_cap = world.params.get(id::PLANT_CAP);

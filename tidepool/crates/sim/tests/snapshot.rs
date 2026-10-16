@@ -1,7 +1,9 @@
 use tidepool_sim::ability::MAX_CLOUDS;
 use tidepool_sim::brain::READOUT_HEADER_WORDS;
 use tidepool_sim::brain::{self, IN_CONST, IN_ENERGY, MAX_NEURONS, N_OUT_MAX};
-use tidepool_sim::control::{CAUSE_EATEN, CAUSE_OLD_AGE, CAUSE_SPIKED, CAUSE_STARVED};
+use tidepool_sim::control::{
+    CAUSE_EATEN, CAUSE_OLD_AGE, CAUSE_SPIKED, CAUSE_STARVED, KILLER_BODY_WORDS,
+};
 use tidepool_sim::creature::{MAX_CREATURES, MAX_EYES};
 use tidepool_sim::debris::MAX_DEBRIS;
 use tidepool_sim::frame;
@@ -285,6 +287,9 @@ fn every_saved_field_is_in_the_hash_and_survives_a_load() {
         ("buds", |w| w.control.buds += 1),
         ("killer", |w| w.control.killer = 2),
         ("killer_brain", |w| w.control.killer_brain.push(7)),
+        ("killer_body", |w| {
+            w.control.killer_body = vec![7; KILLER_BODY_WORDS as usize]
+        }),
         ("abilities", |w| w.input(true, 0.8, 0.5, false, 2)),
         ("cloud slots", |w| w.clouds.slots.free(0)),
         ("cloud x", |w| w.clouds.x[0] += 1.0),
@@ -387,9 +392,10 @@ struct Crafted {
     control: (u32, u32, f32, f32, u32),
     /// The accept flag of the control block.
     accept: u32,
-    /// The killer uid, the killer's brain, and the ability mask of the control block.
+    /// The killer uid, the killer's brain and body, and the ability mask of the control block.
     killer: u32,
     killer_brain: Vec<u32>,
+    killer_body: Vec<u32>,
     abilities: u32,
     /// The cloud pool. `cloud_field` is the x, the y, the radius, and the drain of every cloud.
     cloud_slots: Vec<u32>,
@@ -437,6 +443,7 @@ impl Crafted {
             accept: 0,
             killer: 0,
             killer_brain: vec![],
+            killer_body: vec![],
             abilities: 0,
             cloud_slots: vec![],
             cloud_field: vec![],
@@ -552,6 +559,7 @@ impl Crafted {
         p.u32(0); // buds
         p.u32(self.killer);
         p.u32s(&self.killer_brain);
+        p.u32s(&self.killer_body);
         p.u32(self.abilities);
         p.u32s(&self.cloud_slots);
         p.f32s(&self.cloud_field); // x
@@ -913,6 +921,7 @@ fn a_bad_control_block_is_invalid() {
         control: (0, 0, 0.0, 0.0, CAUSE_EATEN),
         killer: 5,
         killer_brain: vec![5, 0, 0, 0, 0, 0],
+        killer_body: vec![0; KILLER_BODY_WORDS as usize],
         abilities: 7,
         ..Crafted::uids(0, 9, &[3, 5])
     };
@@ -920,6 +929,7 @@ fn a_bad_control_block_is_invalid() {
     let c = &w.control;
     assert_eq!((c.death_cause, c.killer, c.abilities), (CAUSE_EATEN, 5, 7));
     assert_eq!(c.killer_brain.len(), READOUT_HEADER_WORDS as usize);
+    assert_eq!(c.killer_body.len(), KILLER_BODY_WORDS as usize);
     for (bad, reason) in [
         (
             Crafted {
@@ -927,6 +937,13 @@ fn a_bad_control_block_is_invalid() {
                 ..Crafted::uids(0, 9, &[3, 5])
             },
             "killer uid not below next uid",
+        ),
+        (
+            Crafted {
+                killer_body: vec![0; KILLER_BODY_WORDS as usize - 1],
+                ..Crafted::uids(0, 9, &[3, 5])
+            },
+            "killer body length",
         ),
         (
             Crafted {
@@ -1200,6 +1217,7 @@ fn every_cut_of_a_payload_is_an_error() {
         control: (2, 1, 0.5, 0.5, 0),
         killer: 1,
         killer_brain: vec![1, 0, 0, 0, 0, 0],
+        killer_body: vec![0; KILLER_BODY_WORDS as usize],
         abilities: 3,
         cloud_slots: vec![0],
         cloud_field: vec![5.0],

@@ -183,6 +183,8 @@ fn a_victim_whose_killer_dies_earlier_in_the_same_kill_list_keeps_its_killer_on_
     let mut w = World::new(5, 1536.0, 1024.0);
     w.seed_founders(50, 0);
     let (hunter, prey) = (w.creatures.uid[5], w.creatures.uid[9]);
+    let c = &w.creatures;
+    let (generation, x, y) = (c.generation[5], c.x[5], c.y[5]);
     assert!(w.possess(prey));
     // Body 5 bit body 9 to 0 and a spike of body 9 took body 5 to 0, as `bite::step` lists them.
     w.kill_all(&[(5, CAUSE_SPIKED, Some(9)), (9, CAUSE_EATEN, Some(5))]);
@@ -192,6 +194,11 @@ fn a_victim_whose_killer_dies_earlier_in_the_same_kill_list_keeps_its_killer_on_
     );
     assert_eq!(w.control.killer_brain[0], hunter);
     assert!(w.control.killer_brain.len() > READOUT_HEADER_WORDS as usize);
+    // The card's body is the killer's as it was at the kill, though its slot is free now.
+    assert_eq!(
+        w.control.killer_body[..3],
+        [generation, x.to_bits(), y.to_bits()]
+    );
     assert!(!w.creatures.slots.is_alive(5) && !w.creatures.slots.is_alive(9));
     assert_eq!((w.slot_of(hunter), w.slot_of(prey)), (None, None));
     assert_eq!(w.stats.kills, 1);
@@ -214,6 +221,7 @@ fn a_world_with_debris_a_cloud_and_a_killer_is_the_same_in_a_reload() {
     assert_eq!(b.state_hash(), a.state_hash());
     assert_eq!(b.control.killer_brain, a.control.killer_brain);
     assert_eq!((b.control.killer, b.control.abilities), (killer, 5));
+    assert_eq!(b.control.killer_body, a.control.killer_body);
     assert_eq!(b.debris.slots.count(), 1);
     assert_eq!(
         (b.debris.x[0], b.debris.y[0], b.debris.energy[0]),

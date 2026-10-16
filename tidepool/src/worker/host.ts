@@ -7,8 +7,7 @@ import {
   FRAME_POOL,
   MAX_FRAME_BYTES,
   TICK_HZ,
-  killerIn,
-  viewFrame,
+  killerFrom,
   type DeathCause,
   type FromWorker,
   type Killer,
@@ -66,7 +65,6 @@ export function createHost(deps: HostDeps): Host {
   let tickMillis = 0;
   let timedTicks = 0;
   const pool: ArrayBuffer[] = [];
-  let whole: ArrayBuffer | undefined; // a frame of the whole world, to find a killer out of view
 
   // Every `error` message is final: the loop does not run after one.
   const fail = (e: unknown): void => {
@@ -108,19 +106,10 @@ export function createHost(deps: HostDeps): Host {
     return true;
   };
 
-  // The body of the killer of the possessed body, from `seen`, the frame of the view of the tick of
-  // the death, or else from a frame of the whole world. A write empties the core's list of kills, so
-  // the frame of the view is written first: it carries them. With no frame of the view, the frame
-  // that is due loses them. Null with no killer, or when the killer died in the same tick.
-  const killerOf = (sim: Sim, seen: ArrayBuffer | undefined): Killer | null => {
+  // The killer of the possessed body, as the core recorded it at the kill. Null with no killer.
+  const killerOf = (sim: Sim): Killer | null => {
     const uid = sim.killer();
-    const generation = uid === 0 ? null : sim.generation(uid);
-    if (generation === null) return null;
-    const inView = seen && killerIn(viewFrame(seen), uid, generation);
-    if (inView) return inView;
-    whole ??= new ArrayBuffer(MAX_FRAME_BYTES);
-    write(sim, { x0: 0, y0: 0, x1: sim.worldW, y1: sim.worldH }, whole);
-    return killerIn(viewFrame(whole), uid, generation);
+    return uid === 0 ? null : killerFrom(uid, sim.killerBody());
   };
 
   // `step` posts no frame while the world is paused, so `view` and `recycle` post the frame that is
@@ -182,7 +171,7 @@ export function createHost(deps: HostDeps): Host {
     const buffer = pool.pop();
     if (buffer) write(sim, view, buffer);
     if (died) {
-      const killer = killerOf(sim, buffer);
+      const killer = killerOf(sim);
       const killerBrain = killer ? sim.killerBrain() : new Uint32Array(0);
       deps.post({ type: 'died', cause: died, heirs: sim.heirs(), killer, killerBrain });
     }

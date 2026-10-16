@@ -8,7 +8,7 @@ use crate::creature::{Creatures, MAX_CREATURES};
 use crate::debris::{self, Debris};
 use crate::energy;
 use crate::field::{self, Field};
-use crate::frame::KILL_LOG;
+use crate::frame::{self, KILL_LOG};
 use crate::genome::{Genome, FOUNDER_HISTORIES};
 use crate::grid::Grid;
 use crate::mate;
@@ -196,7 +196,7 @@ impl World {
     /// frame. The slot stays alive until `free_body`.
     ///
     /// If the creature was possessed, records the cause, the uid of the killer or 0, and the
-    /// readout of the killer's brain as it is now, and ends the possession.
+    /// readout of the killer's brain and its body as they are now, and ends the possession.
     fn die(&mut self, slot: u32, cause: u32, killer: Option<u32>) {
         let s = slot as usize;
         let killer = killer.filter(|&k| self.creatures.slots.is_alive(k));
@@ -218,6 +218,7 @@ impl World {
         let control = &self.control;
         if control.possessed != 0 && control.possessed_slot == slot {
             let uid = killer.map_or(0, |k| self.creatures.uid[k as usize]);
+            let body = killer.map_or(Vec::new(), |k| frame::card_body(self, k));
             let mut brain = Vec::new();
             if uid != 0 {
                 // `readout` writes the scratch of `tp_brain_write`. The page's copy of it stays.
@@ -227,6 +228,7 @@ impl World {
             }
             let c = &mut self.control;
             (c.death_cause, c.killer, c.killer_brain) = (cause, uid, brain);
+            c.killer_body = body;
             c.possessed = 0;
             c.manual = false;
         }

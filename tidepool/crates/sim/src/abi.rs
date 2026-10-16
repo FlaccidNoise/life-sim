@@ -224,16 +224,6 @@ pub unsafe extern "C" fn tp_place(
     1
 }
 
-/// The generation of the living body `uid`. `u32::MAX` if no living body has that uid. A scan,
-/// for the death card: never per tick.
-#[no_mangle]
-pub unsafe extern "C" fn tp_generation(world: *const World, uid: u32) -> u32 {
-    world.as_ref().map_or(u32::MAX, |w| {
-        w.slot_of(uid)
-            .map_or(u32::MAX, |s| w.creatures.generation[s as usize])
-    })
-}
-
 /// `manual` is 0 for the brain and any other value for the player. `accept` is 0 for a player who
 /// does not court and any other value for one who does. `abilities` is a mask of the `ABILITY_`
 /// bits in `control.rs`: 1 dash, 2 lunge, 4 toxin. Other bits are dropped.
@@ -280,6 +270,23 @@ pub unsafe extern "C" fn tp_killer_brain_ptr(world: *const World) -> *const u32 
     world
         .as_ref()
         .map_or(ptr::null(), |w| w.control.killer_brain.as_ptr())
+}
+
+/// The words of the killer's body at the kill, as `Control::killer_body` lays them out. 0 with no
+/// killer.
+#[no_mangle]
+pub unsafe extern "C" fn tp_killer_body_len(world: *const World) -> u32 {
+    world
+        .as_ref()
+        .map_or(0, |w| w.control.killer_body.len() as u32)
+}
+
+/// Valid until the next tick, possess, `tp_load` of this world, or `tp_free`.
+#[no_mangle]
+pub unsafe extern "C" fn tp_killer_body_ptr(world: *const World) -> *const u32 {
+    world
+        .as_ref()
+        .map_or(ptr::null(), |w| w.control.killer_body.as_ptr())
 }
 
 #[no_mangle]
@@ -477,8 +484,6 @@ mod tests {
             let c = &(*a).creatures;
             assert_eq!((c.x[s], c.y[s], c.heading[s]), (100.0, 0.0, 0.0));
             assert_eq!(tp_place(a, 999, 1.0, 1.0, 0.0), 0);
-            assert_eq!(tp_generation(a, 3), 0);
-            assert_eq!(tp_generation(a, 999), u32::MAX);
             tp_free(a);
         }
     }
@@ -560,6 +565,8 @@ mod tests {
             tp_input(null, 1, 1.0, 1.0, 1, 1);
             assert_eq!((tp_killer(null), tp_killer_brain_len(null)), (0, 0));
             assert!(tp_killer_brain_ptr(null).is_null());
+            assert_eq!(tp_killer_body_len(null), 0);
+            assert!(tp_killer_body_ptr(null).is_null());
             assert_eq!(tp_brain_write(null, 1), 0);
             assert!(tp_brain_ptr(null).is_null());
             assert_eq!((tp_pick(null, 0.0, 0.0, 9.0), tp_possess(null, 1)), (0, 0));
@@ -648,8 +655,13 @@ mod tests {
             assert_eq!(tp_killer_brain_len(w), words);
             let header = std::slice::from_raw_parts(tp_killer_brain_ptr(w), 6);
             assert_eq!(header, [9, 17, 4, 4, 65, 0]);
+            assert_eq!(tp_killer_body_len(w), crate::control::KILLER_BODY_WORDS);
+            let body = std::slice::from_raw_parts(tp_killer_body_ptr(w), 2);
+            let c = &(*w).creatures;
+            assert_eq!(body, [c.generation[8], c.x[8].to_bits()]);
             assert_eq!(tp_possess(w, 9), 1);
             assert_eq!((tp_killer(w), tp_killer_brain_len(w)), (0, 0));
+            assert_eq!(tp_killer_body_len(w), 0);
             tp_free(w);
         }
     }

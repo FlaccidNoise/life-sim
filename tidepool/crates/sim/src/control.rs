@@ -2,6 +2,7 @@
 
 use crate::brain::READOUT_MAX_WORDS;
 use crate::creature::MARK_LINEAGE;
+use crate::frame::PART_WORDS;
 use crate::params::id;
 use crate::snapshot::{LoadError, Reader, Writer};
 use crate::world::World;
@@ -15,6 +16,8 @@ pub const CAUSE_EATEN: u32 = 3;
 pub const CAUSE_POISONED: u32 = 4;
 /// A biter that the spike of its prey hurt to 0 (rule J1).
 pub const CAUSE_SPIKED: u32 = 5;
+/// The words of `Control::killer_body`.
+pub const KILLER_BODY_WORDS: u32 = 6 + PART_WORDS;
 /// The bits of the player's ability mask (rule X2).
 pub const ABILITY_DASH: u32 = 1;
 pub const ABILITY_LUNGE: u32 = 2;
@@ -42,6 +45,10 @@ pub struct Control {
     pub killer: u32,
     /// The readout of the killer's brain at the kill (`brain::readout`). Empty with no killer.
     pub killer_brain: Vec<u32>,
+    /// The killer's body at the kill (`frame::card_body`), `KILLER_BODY_WORDS` words: its
+    /// generation, then x, y, length, width, and hue as floats by bit pattern, then its packed parts
+    /// in gene order. Empty with no killer. The card needs it: a killer can die in the same tick.
+    pub killer_body: Vec<u32>,
     /// The abilities that the player holds: `ABILITY_` bits. Read while the input is manual.
     pub abilities: u32,
     /// Scratch, not saved. The last list that `write_heirs` made.
@@ -105,6 +112,7 @@ impl World {
         self.control.death_cause = CAUSE_NONE;
         self.control.killer = 0;
         self.control.killer_brain.clear();
+        self.control.killer_body.clear();
         self.control.buds = 0;
         self.input(false, 0.0, 0.0, false, 0);
         true
@@ -183,11 +191,13 @@ pub fn save(world: &World, w: &mut Writer) {
     w.u32(c.buds);
     w.u32(c.killer);
     w.u32s(&c.killer_brain);
+    w.u32s(&c.killer_body);
     w.u32(c.abilities);
 }
 
 /// A possessed uid must be alive. The input must be what `World::input` could have stored. A killer
-/// must be a uid that the world has given out, and its readout no longer than a full brain's.
+/// must be a uid that the world has given out, its readout no longer than a full brain's, and its
+/// body of 0 or `KILLER_BODY_WORDS` words.
 pub fn load(world: &mut World, r: &mut Reader) -> Result<(), LoadError> {
     let possessed = r.u32()?;
     let possessed_slot = match possessed {
@@ -220,6 +230,10 @@ pub fn load(world: &mut World, r: &mut Reader) -> Result<(), LoadError> {
     if killer_brain.len() > READOUT_MAX_WORDS as usize {
         return Err(LoadError::Invalid("killer brain length"));
     }
+    let killer_body = r.u32s()?;
+    if !matches!(killer_body.len() as u32, 0 | KILLER_BODY_WORDS) {
+        return Err(LoadError::Invalid("killer body length"));
+    }
     let abilities = r.u32()?;
     if abilities & !ABILITY_BITS != 0 {
         return Err(LoadError::Invalid("control ability mask"));
@@ -235,6 +249,7 @@ pub fn load(world: &mut World, r: &mut Reader) -> Result<(), LoadError> {
         buds,
         killer,
         killer_brain,
+        killer_body,
         abilities,
         heirs: Vec::new(),
     };

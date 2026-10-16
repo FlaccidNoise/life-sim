@@ -51,10 +51,10 @@ export interface Sim {
   killer(): number;
   /** The readout of the killer's brain at the kill, as `readBrain` reads it. A copy. 0 words with no killer. */
   killerBrain(): Uint32Array;
+  /** The killer's body at the kill, as `killerFrom` reads it. A copy. 0 words with no killer. */
+  killerBody(): Uint32Array;
   /** At most 5, highest `energy01` first. */
   heirs(): Heir[];
-  /** The generation of the living body `uid`, or null when no living body has it. A scan. */
-  generation(uid: number): number | null;
   /** For tests and the debug page: sets the first part of `kind` on the body, or adds one. False if the body is not alive or the kind is not a kind. */
   setPart(uid: number, kind: number, size: number): boolean;
   /** For tests and the debug page: puts the body at the point with the heading. False if it is not alive. */
@@ -65,9 +65,6 @@ export interface Sim {
 }
 
 export class SimError extends Error {}
-
-// `tp_generation` with no living body: u32::MAX.
-const NO_GENERATION = 0xffffffff;
 
 /** A world pointer or a byte pointer. 0 is null. */
 type Ptr = number;
@@ -117,7 +114,8 @@ interface Exports {
   tp_killer(world: Ptr): number;
   tp_killer_brain_len(world: Ptr): number;
   tp_killer_brain_ptr(world: Ptr): Ptr;
-  tp_generation(world: Ptr, uid: number): number;
+  tp_killer_body_len(world: Ptr): number;
+  tp_killer_body_ptr(world: Ptr): Ptr;
   tp_set_part(world: Ptr, uid: number, kind: number, size: number): number;
   tp_place(world: Ptr, uid: number, x: number, y: number, heading: number): number;
   tp_heir_stride(): number;
@@ -210,9 +208,10 @@ export function createSim(
       if (words === 0) return new Uint32Array(0);
       return new Uint32Array(x.memory.buffer, x.tp_killer_brain_ptr(world) >>> 0, words).slice();
     },
-    generation(uid) {
-      const g = x.tp_generation(world, uid) >>> 0;
-      return g === NO_GENERATION ? null : g;
+    killerBody() {
+      const words = x.tp_killer_body_len(world) >>> 0;
+      if (words === 0) return new Uint32Array(0);
+      return new Uint32Array(x.memory.buffer, x.tp_killer_body_ptr(world) >>> 0, words).slice();
     },
     setPart: (uid, kind, size) => x.tp_set_part(world, uid, kind, size) !== 0,
     place: (uid, px, py, heading) => x.tp_place(world, uid, px, py, heading) !== 0,

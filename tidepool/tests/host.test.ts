@@ -449,15 +449,36 @@ test('a snapshot with a possessed creature keeps the player in the body', () => 
   expect(f.possessedSlot).toBe(6);
 });
 
+// The words of the living body `uid` as the core records a killer's body (`P.killerFrom`), from a
+// frame of the whole world, with generation 3. 0 words when no living body has the uid.
+function bodyOf(sim: Sim, uid: number): Uint32Array {
+  const buffer = new ArrayBuffer(P.MAX_FRAME_BYTES);
+  sim.writeFrame(0, 0, sim.worldW, sim.worldH, buffer);
+  const f = P.viewFrame(buffer);
+  for (let i = 0; i < f.creatureCount; i++) {
+    const r = f.creatureBase + i * P.CREATURE_STRIDE;
+    if (f.u32[r + P.C_UID] !== uid) continue;
+    const at = (c: number): number => f.u32[r + c] ?? 0;
+    const parts = f.u32.subarray(r + P.C_PARTS, r + P.C_PARTS + P.PART_WORDS);
+    return Uint32Array.from([
+      3,
+      ...[P.C_X, P.C_Y, P.C_LENGTH, P.C_WIDTH, P.C_HUE].map(at),
+      ...parts,
+    ]);
+  }
+  return new Uint32Array(0);
+}
+
 // A wrapper that reports a death, so that a test picks the tick and the cause: on the tick after
 // `die(cause)` the host sees no possessed creature and that cause, as it does when the core kills
-// the creature during a tick. `killer` is the uid of a living body. Its brain at the kill is its
-// readout after that tick, or 0 words with `brainless`.
+// the creature during a tick. `killer` is a uid. Its brain at the kill is its readout after that
+// tick, or 0 words with `brainless`, and its body is `bodyOf` after that tick.
 function mortal() {
   let cause = 0;
   let pending = 0;
   let killer = 0;
   let killerBrain: Uint32Array = new Uint32Array(0);
+  let killerBody: Uint32Array = new Uint32Array(0);
   let next = { killer: 0, brainless: false };
   const wrap = (sim: Sim): Sim => ({
     ...sim,
@@ -466,6 +487,7 @@ function mortal() {
       if (pending !== 0 && cause === 0) {
         killer = next.killer;
         killerBrain = killer === 0 || next.brainless ? new Uint32Array(0) : sim.brain(next.killer);
+        killerBody = bodyOf(sim, killer);
       }
       cause ||= pending;
       pending = 0;
@@ -474,9 +496,11 @@ function mortal() {
     deathCause: () => cause,
     killer: () => killer,
     killerBrain: () => killerBrain,
+    killerBody: () => killerBody,
     possess: (uid) => {
       const ok = sim.possess(uid);
-      if (ok) [cause, killer, killerBrain] = [0, 0, new Uint32Array(0)];
+      if (ok)
+        [cause, killer, killerBrain, killerBody] = [0, 0, new Uint32Array(0), new Uint32Array(0)];
       return ok;
     },
   });
@@ -842,7 +866,7 @@ test('a death with no killer posts no killer and a brain of 0 words', () => {
   expect(died?.killerBrain.length).toBe(0);
 });
 
-test('a death by a bite posts the killer, its body as the frame of the kill holds it, and its brain', () => {
+test('a death by a bite posts the killer, its body at the kill, and its brain', () => {
   const m = mortal();
   const r = rig({ recycle: true, wrap: m.wrap });
   r.host.handle({ type: 'init', seed: 1 });
@@ -855,6 +879,7 @@ test('a death by a bite posts the killer, its body as the frame of the kill hold
   expect(died[0]?.cause).toBe('eaten');
   expect(died[0]?.killer?.uid).toBe(12);
   // The body is the record of uid 12 in the frame of the tick of the death.
+  expect(died[0]?.killer?.generation).toBe(3);
   const f = frameOf(r);
   const slot = bodiesOf(f).findIndex((b) => b.uid === 12);
   const o = f.creatureBase + slot * P.CREATURE_STRIDE;
@@ -874,7 +899,7 @@ test('a death by a bite posts the killer, its body as the frame of the kill hold
   expect(r.lastTick()).toBe(tick);
 });
 
-test('a killer outside the view is found in the world', () => {
+test('a killer outside the view posts its body', () => {
   const m = mortal();
   const r = rig({ recycle: true, wrap: m.wrap });
   r.host.handle({ type: 'init', seed: 1 });
@@ -906,7 +931,7 @@ test('a killer with no readout posts its body and 0 words', () => {
   expect(died?.killerBrain.length).toBe(0);
 });
 
-test('a killer that is no longer alive is no killer', () => {
+test('a killer with no body is no killer', () => {
   const m = mortal();
   const r = rig({ recycle: true, wrap: m.wrap });
   r.host.handle({ type: 'init', seed: 1 });

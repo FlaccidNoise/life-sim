@@ -119,7 +119,7 @@ export interface Kin {
   parts: Part[]; // in gene order
 }
 
-/** The body that killed the possessed one, as a frame of the tick of the kill held it. */
+/** The body that killed the possessed one, as the core recorded it at the kill. */
 export interface Killer {
   uid: number;
   generation: number;
@@ -131,29 +131,29 @@ export interface Killer {
   parts: Part[]; // in gene order
 }
 
-/** The record of the body `uid` in a frame, or null when the frame does not hold it. */
-export function killerIn(frame: FrameView, uid: number, generation: number): Killer | null {
-  const { f32, u32 } = frame;
-  for (let i = 0; i < frame.creatureCount; i++) {
-    const r = frame.creatureBase + i * CREATURE_STRIDE;
-    if (u32[r + C_UID] !== uid) continue;
-    const parts: Part[] = [];
-    for (let k = 0; k < PART_WORDS; k++) {
-      const part = unpackPart(u32[r + C_PARTS + k] ?? 0);
-      if (part) parts.push(part);
-    }
-    return {
-      uid,
-      generation,
-      x: f32[r + C_X] ?? 0,
-      y: f32[r + C_Y] ?? 0,
-      length: f32[r + C_LENGTH] ?? 0,
-      width: f32[r + C_WIDTH] ?? 0,
-      hue: f32[r + C_HUE] ?? 0,
-      parts,
-    };
+// The words of the killer's body (`Control::killer_body` in crates/sim/src/control.rs): its
+// generation, then x, y, length, width, and hue as floats, then PART_WORDS part words.
+export const KILLER_BODY_WORDS = 6 + PART_WORDS;
+
+/** The killer `uid` from the words of its body. Null when the words are not a body. */
+export function killerFrom(uid: number, words: Uint32Array): Killer | null {
+  if (words.length !== KILLER_BODY_WORDS) return null;
+  const f32 = new Float32Array(words.buffer, words.byteOffset, 6);
+  const parts: Part[] = [];
+  for (const word of words.subarray(6)) {
+    const part = unpackPart(word);
+    if (part) parts.push(part);
   }
-  return null;
+  return {
+    uid,
+    generation: words[0] ?? 0,
+    x: f32[1] ?? 0,
+    y: f32[2] ?? 0,
+    length: f32[3] ?? 0,
+    width: f32[4] ?? 0,
+    hue: f32[5] ?? 0,
+    parts,
+  };
 }
 
 /** A death with a killer, in view, since the last frame. */
