@@ -251,3 +251,27 @@ Expected: the founder guild holds through 12,000 on seeds 1 to 3 (omnivores 0.05
 ladder forms on 5 of 5 seeds, seed 4 included. The shape stays T5's (the middle large), so target 1
 may still miss on the ends. If the founders still fade, the founding is not the gate and the
 remaining trials go to the shape (`diet_k` 1.75, then the gap).
+
+### T7 rows (`cb97df3`)
+
+| Seed | 144,000: creatures | herb | omni | carn | diet_sd | kills | second half: herb_min, carn_min, sd_min |
+|---|---|---|---|---|---|---|---|
+| 1 | 1,338 | 0.121 | 0.854 | 0.025 | 0.13 | 9,732 | 0.121, 0.000, 0.13 |
+| 4 | 1,325 | 0.992 | 0.008 | 0.000 | 0.07 | 22 | 0.983, 0.000, 0.07 |
+| 5 | 1,126 | 0.147 | 0.739 | 0.115 | 0.20 | 7,418 | **0.132, 0.100, 0.20: pass** |
+| 6 | 1,298 | 0.584 | 0.411 | 0.005 | 0.19 | 3,789 | 0.584, 0.000, 0.12 |
+| 8 | 728 | 0.161 | 0.720 | 0.120 | 0.22 | 1,489 | 0.021, 0.040, 0.11 |
+
+At 12,000 on seeds 1 to 3: herbivores 0.994 to 0.999, the founders gone as in T5 (601 to 654
+kills by 3,000). **Falsified: the founding is not the gate.** Seed 4 never climbs. Target 1: 1 of 5
+(seed 5, the first seed to pass).
+
+## T8: `diet_sigma` 0.1 — hypothesis before the run
+
+The research (`../research/diet-coexistence.md` (b)): gradual evolution rarely reaches a mixed
+community without mutations of large effect (Egas et al. 2004). Change from T5: `--param
+diet_sigma=0.1` (`diet_k` 1.5, `founder_hunter_diet` 0.6, ratio 1.15, gap 0.25).
+
+Expected: a larger step lets a herbivore lineage jump the valley near 0, so the ladder forms on 5
+of 5 seeds and earlier, and the spread rises (more bodies at the ends). Target 1 on 2 or more
+seeds. The middle may stay large: if so, T9 is `diet_k` 1.75 on this base.
