@@ -123,3 +123,32 @@ tests the cause above. Expected: the founder hunters hold past 3,000 and at 12,0
 carnivores 0.05 or more on seeds 1 to 3). If they do, gene flow is the cause, and the fix is a rule:
 bodies of far-apart diets do not mix, as species do not. If they still vanish, the cause is the
 hunt's economy, and the next lever is the payoff (rule 2: `bite_rate`, then `bite_mass_ratio`).
+
+### T3 rows (`6425c36`)
+
+| Seed | tick | herb | omni | carn | hunt | kills since last row |
+|---|---|---|---|---|---|---|
+| 1, 2, 3 | 3,000 | 0.999 to 1.000 | 0.000 to 0.001 | 0.000 | 0.003, 0.002, 0.027 | 8, 9, 5 |
+| 1, 2, 3 | 12,000 | 0.997 to 1.000 | 0.000 to 0.003 | 0.000 | 0.030, 0.001, 0.010 | 0 |
+| 1, 4, 5, 6, 8 | 144,000 | 0.980 to 0.998 | 0.002 to 0.020 | 0.000 | 0.08 to 0.53 | 9 to 896 |
+
+**Falsified: gene flow is not the cause.** With no mixing the founder hunters still vanish before
+tick 3,000. A reading of the T2 world every 250 ticks (seed 1, not a trial): hunters are 0.120 of
+the living at tick 250, 0.029 at 500, 0.012 at 1,000, with 3 kills in the first 500 ticks. They
+starve in a few hundred ticks. At `bite_mass_ratio` 3.0 a founder hunter, about 1.15 times a
+founder's mass, can bite juveniles only, and on a Filter of 25% that does not feed it.
+
+The ratio of 3.0 was the M4 retune's brake on a free jaw (`m4-tuning.md` T1 to T4). Rule D1 now
+charges a jaw its Filter, so the brake's reason is gone, and it shuts carnivores out of most prey.
+
+## T4: `bite_mass_ratio` 1.15 — hypothesis before the run
+
+Rule 2's payoff, read as access: no payoff matters if a hunter cannot bite. Change from T2:
+`--param bite_mass_ratio=1.15` (the M4 plan's Start value, the draft's). With `diet_k` 1.5 and
+`founder_hunter_diet` 0.6, mixing on.
+
+Expected: a founder hunter can bite any body up to its own mass over 1.15, so it eats from the
+first ticks and the guild holds: omnivores plus carnivores 0.05 to 0.3 at 12,000. The takeover does
+not return, because a carnivore gives up its Filter and prey that fall in number starve it. At
+144,000 carnivores 0.10 or more and herbivores 0.10 or more on 3 of 5 seeds. If carnivores take over
+(herbivores under 0.10), rule 3: `diet_k` 2.0. If they still die out, the payoff (`bite_rate`).
