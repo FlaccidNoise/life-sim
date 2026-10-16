@@ -25,8 +25,18 @@ const PARKED_SPEED: f32 = 0.05;
 
 // The predation bands, read over a run of 12,000 ticks (choice C6 of the M4 plan). `None` is a
 // band that is not set: the gate prints the measure and does not judge it. A band that is set is
-// judged only under `--predation`. `docs/gates.md` holds the proofs.
-const PREDATION: Bands = Bands::OFF;
+// judged only under `--predation`. `docs/gates.md` holds the proofs. Set on 2026-10-16 from the
+// three bad worlds of `docs/findings/m4-gates.md`, provisional: `kills_late` and `flesh_late`
+// reject a world with no predation (0 and 0.000), `prey_lo` and `hunt_hi` a world where every body
+// hunts and any body can be bitten (0 and 1.000). `hunt_lo` is not a gate at 12,000 ticks: a world
+// with no founder hunter reads 0.03 to 0.16 by mutation, and one with dead jaws 0.08 to 0.23.
+const PREDATION: Bands = Bands {
+    hunt_lo: None,
+    hunt_hi: Some(0.8),
+    prey_lo: Some(150),
+    kills_late: Some(20),
+    flesh_late: Some(0.01),
+};
 /// The hunter share and the prey count are sampled on each multiple of this many ticks in the second
 /// half of the run.
 const HUNT_SAMPLE_TICKS: u32 = 500;
