@@ -1,6 +1,7 @@
 // WebGL2 renderer: the depth gradient, then one instanced draw of every plant in a frame, then one of
-// every creature, placed between the last two frames, then one of their parts. In Play each program
-// dims what the possessed body does not see. It owns the GL context of its canvas.
+// every piece of debris, then one of every creature, placed between the last two frames, then one of
+// their parts, then one of every toxin cloud. In Play each program dims what the possessed body does
+// not see. It owns the GL context of its canvas.
 
 import {
   C_ENERGY,
@@ -13,7 +14,9 @@ import {
   C_WIDTH,
   C_X,
   C_Y,
+  CLOUD_STRIDE,
   CREATURE_STRIDE,
+  DEBRIS_STRIDE,
   FLAG_BUDDED,
   FRAME_HEADER_WORDS,
   KIND_CILIA,
@@ -41,8 +44,12 @@ import { sightOf } from './sight';
 import {
   BACKGROUND_FRAG,
   BACKGROUND_VERT,
+  CLOUD_FRAG,
+  CLOUD_VERT,
   CREATURE_FRAG,
   CREATURE_VERT,
+  DEBRIS_FRAG,
+  DEBRIS_VERT,
   PART_FRAG,
   PART_VERT,
   PLANT_FRAG,
@@ -78,6 +85,8 @@ export interface Renderer {
 
 const MAX_CREATURES = 4096; // the creature pool of the core
 const MAX_PLANTS = 8192; // the plant pool of the core
+const MAX_DEBRIS = 4096; // the debris pool of the core
+const MAX_CLOUDS = 256; // the cloud pool of the core
 const MAX_PARTS = MAX_CREATURES * PART_WORDS * 2; // a part gene makes a pair at most
 const CREATURE_ATTRIBUTES = [4, 4, 3, 2, 4]; // a_pose, a_body, a_life, a_ends, a_swells
 const I_ENDS = 11; // the float of an instance at which a_ends starts
@@ -172,9 +181,12 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
   const backdrop = layer(BACKGROUND_VERT, BACKGROUND_FRAG, [], 0);
   const uHeight = gl.getUniformLocation(backdrop.program, 'u_height');
   const plants = layer(PLANT_VERT, PLANT_FRAG, [PLANT_STRIDE], MAX_PLANTS);
+  const debris = layer(DEBRIS_VERT, DEBRIS_FRAG, [DEBRIS_STRIDE], MAX_DEBRIS);
+  const clouds = layer(CLOUD_VERT, CLOUD_FRAG, [CLOUD_STRIDE], MAX_CLOUDS);
   const creatures = layer(CREATURE_VERT, CREATURE_FRAG, CREATURE_ATTRIBUTES, MAX_CREATURES);
   const uBeat = gl.getUniformLocation(creatures.program, 'u_beat');
   const uBudAt = gl.getUniformLocation(creatures.program, 'u_bud_at');
+  const uHurtSide = gl.getUniformLocation(creatures.program, 'u_hurt_side');
   const instances = new Float32Array(MAX_CREATURES * INSTANCE_FLOATS);
   const parts = layer(PART_VERT, PART_FRAG, PART_ATTRIBUTES, MAX_PARTS);
   const partInstances = new Float32Array(MAX_PARTS * PART_INSTANCE_FLOATS);
@@ -348,10 +360,15 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
 
       const plantCount = Math.min(cur.plantCount, MAX_PLANTS);
       drawLayer(plants, cam, f32, cur.plantBase, PLANT_STRIDE, plantCount);
+      const debrisCount = Math.min(cur.debrisCount, MAX_DEBRIS);
+      drawLayer(debris, cam, f32, cur.debrisBase, DEBRIS_STRIDE, debrisCount);
       gl.useProgram(creatures.program);
       gl.uniform1f(uBeat, (CILIA_BEAT * timeSeconds) % TAU);
+      gl.uniform1f(uHurtSide, cur.hurtSide);
       drawLayer(creatures, cam, instances, 0, INSTANCE_FLOATS, count);
       drawLayer(parts, cam, partInstances, 0, PART_INSTANCE_FLOATS, partCount);
+      const cloudCount = Math.min(cur.cloudCount, MAX_CLOUDS);
+      drawLayer(clouds, cam, f32, cur.cloudBase, CLOUD_STRIDE, cloudCount);
     },
 
     setBudAt(share) {
@@ -360,7 +377,7 @@ export function createRenderer(canvas: HTMLCanvasElement): Renderer {
     },
 
     dispose() {
-      for (const { vao, buffer, program } of [backdrop, plants, creatures, parts]) {
+      for (const { vao, buffer, program } of [backdrop, plants, debris, creatures, parts, clouds]) {
         gl.deleteVertexArray(vao);
         gl.deleteBuffer(buffer);
         gl.deleteProgram(program);

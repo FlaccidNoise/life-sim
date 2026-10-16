@@ -1,15 +1,21 @@
 import { readFileSync } from 'node:fs';
 import { expect, test } from 'vitest';
 import {
+  C_FLAGS,
   C_HEADING,
   C_LENGTH,
   C_PARTS,
   C_WIDTH,
   C_X,
   C_Y,
+  CLOUD_STRIDE,
   CREATURE_STRIDE,
+  DEBRIS_STRIDE,
+  FLAG_BIT,
   FLAG_BUDDED,
+  FLAG_DASH,
   FLAG_DONOR,
+  FLAG_HURT,
   FLAG_JUVENILE,
   FLAG_LINEAGE,
   FLAG_MIXED,
@@ -22,6 +28,10 @@ import {
   KIND_FILTER,
   KIND_FIN,
   KIND_FLAGELLUM,
+  KIND_JAW,
+  KIND_SHELL,
+  KIND_SPIKE,
+  KIND_TOXIN,
   viewFrame,
   type FrameView,
   type Part,
@@ -41,6 +51,7 @@ import {
   swellAt,
   taperOf,
 } from '../src/render/parts';
+import { DEBRIS_RADIUS } from '../src/render/shaders';
 
 const BODY = { x: 100, y: 50, length: 12, width: 6 };
 
@@ -48,9 +59,13 @@ const BODY = { x: 100, y: 50, length: 12, width: 6 };
 const word = (kind: number, anchor: number, size: number): number =>
   kind | (Math.round(anchor * 255) << 8) | (Math.round(size * 255) << 16);
 
-/** A frame that holds one body, with the given part words. */
-function frameOf(heading: number, words: number[]): FrameView {
-  const buffer = new ArrayBuffer(4 * (FRAME_HEADER_WORDS + CREATURE_STRIDE));
+/**
+ * A frame that holds one body, with the given part words and flags, then `debris` debris records
+ * and `clouds` cloud records.
+ */
+function frameOf(heading: number, words: number[], flags = 0, debris = 0, clouds = 0): FrameView {
+  const records = CREATURE_STRIDE + debris * DEBRIS_STRIDE + clouds * CLOUD_STRIDE;
+  const buffer = new ArrayBuffer(4 * (FRAME_HEADER_WORDS + records));
   const u32 = new Uint32Array(buffer);
   const f32 = new Float32Array(buffer);
   u32[1] = 1; // the creature count
@@ -59,8 +74,19 @@ function frameOf(heading: number, words: number[]): FrameView {
   f32[FRAME_HEADER_WORDS + C_HEADING] = heading;
   f32[FRAME_HEADER_WORDS + C_LENGTH] = BODY.length;
   f32[FRAME_HEADER_WORDS + C_WIDTH] = BODY.width;
+  u32[FRAME_HEADER_WORDS + C_FLAGS] = flags;
   u32.set(words, FRAME_HEADER_WORDS + C_PARTS);
-  return viewFrame(buffer);
+  // The header words of the debris and cloud counts, as `viewFrame` reads them.
+  const counts = 10 + 3 * 8;
+  u32[counts] = debris;
+  u32[counts + 1] = clouds;
+  const view = viewFrame(buffer);
+  if (view.debrisCount !== debris || view.cloudCount !== clouds) {
+    throw new Error('frameOf wrote the debris and cloud counts at the wrong header words');
+  }
+  for (let k = 0; k < debris; k++) f32.set([BODY.x + 1, BODY.y, 0.5], view.debrisBase + 3 * k);
+  for (let k = 0; k < clouds; k++) f32.set([BODY.x, BODY.y, 9, 0.5], view.cloudBase + 4 * k);
+  return view;
 }
 
 /** The instances of a frame at 10 pixels per world unit, as rows of PART_INSTANCE_FLOATS. */
@@ -448,4 +474,79 @@ test('only a body that is both mixed and young draws the mark of a cross', () =>
   expect(hasMixedMark(others)).toBe(false);
   expect(hasMixedMark(others | FLAG_MIXED)).toBe(false);
   expect(hasMixedMark(others | FLAG_JUVENILE)).toBe(false);
+});
+
+// The kinds of M4, and the draw of M3 kept as it was.
+
+// A founder with a side fin, as the head before M4 drew it: buildParts at 189b352.
+const M3_WORDS = [
+  word(KIND_FLAGELLUM, 1, 0.6),
+  word(KIND_CILIA, 0.5, 0.4),
+  word(KIND_FILTER, 0, 0.6),
+  word(KIND_CHEMO, 0.15, 0.5),
+  word(KIND_EYE, 0.2, 0.2),
+  word(KIND_FIN, 0.7, 0.3),
+];
+// prettier-ignore
+const M3_ROWS = [
+  [95.41094970703125, 46.13469314575195, 3.84159255027771, 9.67322063446045, 1, 0, 0, 0, 100, 50],
+  [105.04411315917969, 54.24859619140625, 0.699999988079071, 1.6970562934875488, 3, 0, 0, 0, 100, 50],
+  [103.7562026977539, 55.073486328125, 1.3022775650024414, 2.126311779022217, 4, 0, 0, 0, 100, 50],
+  [105.63809204101562, 52.83921813964844, 0.0977223739027977, 2.126311779022217, -4, 0, 0, 0, 100, 50],
+  [102.81591796875, 55.153106689453125, 1.6703602075576782, 0.6279107928276062, 6, 0, 0, 0, 100, 50],
+  [105.5567398071289, 51.89908981323242, -0.2703602910041809, 0.6279107928276062, -6, 0, 0, 0, 100, 50],
+  [95.83070373535156, 49.42924499511719, 2.5385689735412598, 1.8734170198440552, 5, 0, 0, 0, 100, 50],
+  [98.7289047241211, 45.988372802734375, -1.1385689973831177, 1.8734170198440552, -5, 0, 0, 0, 100, 50],
+];
+
+test('a body of the kinds of M3 draws as before, with debris, clouds, and the new flags or not', () => {
+  // A failure of the first check means the draw of look 4 changed. Fix: undo the change in parts.ts.
+  expect(instancesOf(frameOf(0.7, M3_WORDS))).toEqual(M3_ROWS);
+  expect(instancesOf(frameOf(0.7, M3_WORDS, 0, 3, 2))).toEqual(M3_ROWS);
+  expect(instancesOf(frameOf(0.7, M3_WORDS, FLAG_BIT | FLAG_HURT | FLAG_DASH, 1, 1))).toEqual(
+    M3_ROWS,
+  );
+});
+
+test('each kind of M4 makes its instances, and a pair makes two', () => {
+  for (const kind of [KIND_JAW, KIND_SPIKE, KIND_SHELL, KIND_TOXIN]) {
+    const one = instancesOf(frameOf(0, [word(kind, 0, 0.5)]));
+    expect(one.map((row) => row[4])).toEqual([kind]);
+    expect(one[0]?.[3]).toBeGreaterThan(0);
+    const pair = instancesOf(frameOf(0, [word(kind, 0.3, 0.5)]));
+    expect(pair.map((row) => row[4])).toEqual([kind, -kind]);
+    const [a, b] = pair.map(offset);
+    expect(b?.dx).toBeCloseTo(a?.dx ?? NaN, 4);
+    expect(b?.dy).toBeCloseTo(-(a?.dy ?? NaN), 4);
+    // A larger part draws larger.
+    expect(instancesOf(frameOf(0, [word(kind, 0, 1)]))[0]?.[3]).toBeGreaterThan(one[0]?.[3] ?? 0);
+    // A body too small on screen for its parts draws none of these.
+    expect(
+      instancesOf(frameOf(0, [word(kind, 0.3, 0.5)]), (PART_LOD_PX - 1) / BODY.length),
+    ).toEqual([]);
+  }
+});
+
+test('a jaw closes for 6 frames when FLAG_BIT rises', () => {
+  const jaws = [word(KIND_JAW, 0.1, 0.5)];
+  // The float of a jaw instance that holds 1 while it is closed and 0 while it is open.
+  const closed = (flags: number): number[] =>
+    instancesOf(frameOf(0, jaws, flags)).map((row) => row[7] ?? NaN);
+  expect(closed(0)).toEqual([0, 0]);
+  for (let frame = 0; frame < 6; frame++) expect(closed(FLAG_BIT)).toEqual([1, 1]);
+  // The flag holds for 20 ticks, and the jaw opens after its 6 frames.
+  expect(closed(FLAG_BIT)).toEqual([0, 0]);
+  expect(closed(FLAG_BIT)).toEqual([0, 0]);
+  // It rises again.
+  expect(closed(0)).toEqual([0, 0]);
+  expect(closed(FLAG_BIT)).toEqual([1, 1]);
+  // Another flag does not close it.
+  for (let frame = 0; frame < 6; frame++) closed(0);
+  expect(closed(FLAG_HURT | FLAG_DASH)).toEqual([0, 0]);
+});
+
+test('the draw of debris has the radius of the core', () => {
+  const source = readFileSync(new URL('../crates/sim/src/debris.rs', import.meta.url), 'utf8');
+  // Fix for a failure here: copy DEBRIS_RADIUS of crates/sim/src/debris.rs to src/render/shaders.ts.
+  expect(Number(/DEBRIS_RADIUS: f32 = ([\d.]+);/.exec(source)?.[1])).toBe(DEBRIS_RADIUS);
 });

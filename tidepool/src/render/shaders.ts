@@ -1,7 +1,22 @@
-// GLSL sources. Four programs: the depth gradient, the plants, the creatures, and their parts. Each
-// entity is one instanced quad, and its fragment shader draws the shape. Colours are premultiplied.
+// GLSL sources. Six programs: the depth gradient, the plants, the debris, the creatures, their parts,
+// and the toxin clouds. Each entity is one instanced quad, and its fragment shader draws the shape.
+// Colours are premultiplied.
 
-import { KIND_CHEMO, KIND_EYE, KIND_FILTER, KIND_FIN, KIND_FLAGELLUM, MAX_EYES } from '../protocol';
+import {
+  KIND_CHEMO,
+  KIND_EYE,
+  KIND_FILTER,
+  KIND_FIN,
+  KIND_FLAGELLUM,
+  KIND_JAW,
+  KIND_SHELL,
+  KIND_SPIKE,
+  KIND_TOXIN,
+  MAX_EYES,
+} from '../protocol';
+
+/** The radius of a piece of debris: `DEBRIS_RADIUS` in crates/sim/src/debris.rs. */
+export const DEBRIS_RADIUS = 2;
 
 // What the possessed body sees. The same test as `seen` in sight.ts: 1 in sight, 0.25 out of it.
 const SIGHT = `
@@ -99,6 +114,43 @@ void main() {
 }
 `;
 
+export const DEBRIS_VERT = `#version 300 es
+layout(location = 0) in vec2 a_corner;
+layout(location = 1) in vec3 a_debris; // x, y, energy01
+uniform vec4 u_view;
+uniform float u_px;
+out vec2 v_uv;
+flat out float v_energy;
+flat out float v_turn; // the fleck of each piece lies at its own angle
+flat out float v_seen;
+${SIGHT}
+void main() {
+  v_uv = a_corner;
+  v_energy = a_debris.z;
+  v_turn = 6.2831853 * fract(dot(a_debris.xy, vec2(0.1031, 0.1173)));
+  v_seen = seen(a_debris.xy);
+  // A far piece stays a visible speck.
+  vec2 world = a_debris.xy + a_corner * max(${DEBRIS_RADIUS}.0, 1.0 * u_px);
+  gl_Position = vec4((world - u_view.xy) * u_view.zw, 0.0, 1.0);
+}
+`;
+
+export const DEBRIS_FRAG = `#version 300 es
+precision highp float;
+in vec2 v_uv;
+flat in float v_energy;
+flat in float v_turn;
+out vec4 o_color;
+${DIM}
+void main() {
+  // A small dull fleck, longer than it is wide. It fades as it decays.
+  vec2 axis = vec2(cos(v_turn), sin(v_turn));
+  vec2 q = vec2(dot(v_uv, axis), v_uv.x * axis.y - v_uv.y * axis.x) / vec2(0.8, 0.45);
+  float a = (1.0 - smoothstep(0.5, 1.0, length(q))) * mix(0.1, 0.6, v_energy);
+  o_color = dim(vec4(vec3(0.5, 0.44, 0.34) * a, a));
+}
+`;
+
 // The colour of a body and of its parts, for the two vertex shaders.
 const TINT = `
 vec3 tint(float hue, float energy) {
@@ -146,6 +198,9 @@ const float OUT_OF_REACH = 1.2;
 const float MIXED_BAND_AT = 0.42; // the middle of the band, in half widths inside the edge
 const float MIXED_BAND_HALF = 0.13; // its half thickness, in half widths
 const float MIXED_BAND_ALPHA = 0.75;
+const vec3 TOXIN_RGB = vec3(0.7, 0.42, 0.95); // a toxin gland and its cloud
+const vec3 HURT_RGB = vec3(1.0, 0.3, 0.22); // the membrane of a hurt body, and the ring on the side hit
+const float WAKE_LONG = 1.1; // the wake of a dash runs this many half widths behind the tail
 `;
 
 export const CREATURE_VERT = `#version 300 es
@@ -165,6 +220,7 @@ flat out vec3 v_rgb;
 flat out vec4 v_body; // half length, half width, energy01, cilia size
 flat out vec4 v_marks; // 1 for the player's lineage, 1 for the possessed creature, the bud pulse, 1 for a young cross
 flat out vec3 v_rgb2; // the colour of the other side of the rim of a young cross
+flat out vec2 v_hits; // 1 for a body hurt a short time ago, 1 for one that dashed or lunged
 flat out float v_seen;
 ${TINT}${SIGHT}
 void main() {
@@ -180,6 +236,7 @@ void main() {
   v_body = vec4(0.5 * len, 0.5 * wid, a_body.z, a_life.x);
   int flags = int(a_body.w);
   v_marks = vec4(flags & 1, (flags >> 1) & 1, a_life.y, a_life.z);
+  v_hits = vec2((flags >> 8) & 1, (flags >> 9) & 1); // FLAG_HURT and FLAG_DASH
   v_rgb2 = a_life.z > 0.0 ? tint(fract(a_pose.w + 0.5), a_body.z) : vec3(0.0);
   v_seen = seen(a_pose.xy);
   v_ends = a_ends * 0.5 * wid;
@@ -196,8 +253,10 @@ flat in vec4 v_marks;
 flat in vec3 v_rgb2;
 flat in vec2 v_ends;
 flat in vec4 v_swells;
+flat in vec2 v_hits;
 uniform float u_beat; // the phase of the cilia beat, radians
 uniform float u_bud_at; // the share of a full store at which a body buds
+uniform float u_hurt_side; // of the last hit on the possessed body, -1 to 1: the sign is the side of v_p.y
 out vec4 o_color;
 ${SHAPES}${NUMBERS}
 // The distance \`d\` to an outline, with a swell joined to it smoothly: a circle on the axis, as its
@@ -246,6 +305,13 @@ void main() {
   hair *= bend > 0.0 ? 1.0 + d / bend : 1.0;
   float fringe = line(hair, (0.03 + 0.07 * cilia) * hw) * fill(-d) * fill(d - reach);
   vec4 c = vec4(pale, 1.0) * 0.7 * fringe * step(0.001, cilia);
+  // A body that just dashed or lunged: two lines that open out behind its tail, and fade.
+  if (v_hits.y > 0.0) {
+    float back = -v_p.x - hl + 0.5 * v_ends.y; // behind a point near the tail
+    float wake = line(abs(v_p.y) - 0.4 * v_ends.y - 0.6 * back, 0.05 * hw);
+    float fade = 1.0 - smoothstep(0.0, WAKE_LONG * hw, back);
+    c = over(c, pale, 0.6 * wake * fade * step(0.0, back) * fill(-d));
+  }
 
   c = over(c, v_rgb, 0.35 * fill(d));
   // The nucleus, toward the front.
@@ -257,7 +323,7 @@ void main() {
   }
   // The membrane, just inside the edge.
   float membrane = 0.12 * hw;
-  c = over(c, pale, 0.9 * line(d + membrane, membrane));
+  c = over(c, v_hits.x > 0.0 ? HURT_RGB : pale, 0.9 * line(d + membrane, membrane));
   // A body that just budded: one bright pulse, in the body and round it.
   float glow = 0.45 * fill(d) + 0.35 * (1.0 - smoothstep(0.0, 1.2 * hw, max(d, 0.0)));
   c = over(c, vec3(1.0), v_marks.z * glow);
@@ -266,7 +332,14 @@ void main() {
   // The possessed creature: the energy ring. The arc starts at the nose and sweeps clockwise.
   float turn = fract(atan(v_p.y, v_p.x) / 6.2831853);
   float lit = mix(0.15, 0.95, step(turn, v_body.z));
-  c = over(c, vec3(1.0, 0.95, 0.7), lit * v_marks.y * line(d - 0.7 * hw, 0.1 * hw));
+  vec3 ring = vec3(1.0, 0.95, 0.7);
+  // A hurt possessed body: the ring flashes on the side that was hit. A hit with no side, dead
+  // ahead or behind, flashes all of it.
+  if (v_hits.x > 0.0 && v_p.y * u_hurt_side >= 0.0) {
+    ring = HURT_RGB;
+    lit = 0.95;
+  }
+  c = over(c, ring, lit * v_marks.y * line(d - 0.7 * hw, 0.1 * hw));
   // The notch: a tick across the ring at the place the arc must reach for a bud.
   vec2 at = vec2(cos(6.2831853 * u_bud_at), sin(6.2831853 * u_bud_at));
   float tick = line(at.x * v_p.y - at.y * v_p.x, 0.07 * hw) * step(0.0, dot(at, v_p));
@@ -380,7 +453,63 @@ void main() {
     // A dark disc in a pale ring.
     c = over(c, vec3(0.9, 0.95, 1.0), 0.95 * fill((r - 1.0) * size));
     c = over(c, vec3(0.02, 0.04, 0.07), 0.95 * fill((r - 0.62) * size));
+  } else if (kind == ${KIND_JAW}) {
+    // Two mandibles that curve in. Closed, their tips meet on the axis.
+    vec2 q = vec2(p.x, abs(p.y));
+    vec2 mid = mix(vec2(0.5, 0.62), vec2(0.5, 0.42), phase);
+    vec2 tip = mix(vec2(1.0, 0.32), vec2(0.88, 0.03), phase);
+    float d = min(segment(q, vec2(-0.1, 0.32), mid), segment(q, mid, tip));
+    c = over(c, mix(pale, vec3(1.0, 0.97, 0.9), 0.5), 0.95 * fill((d - mix(0.13, 0.05, clamp(q.x, 0.0, 1.0))) * size));
+  } else if (kind == ${KIND_SPIKE}) {
+    // One thin spine out of the outline.
+    float d = triangle(p, vec2(-0.1, -0.09), vec2(-0.1, 0.09), vec2(1.0, 0.0)) * size;
+    c = over(c, mix(pale, vec3(1.0), 0.3), 0.95 * fill(d));
+  } else if (kind == ${KIND_SHELL}) {
+    // A plate over the membrane: a thick bright arc along the outline.
+    float bend = 1.6;
+    vec2 q = p + vec2(bend + 0.1, 0.0);
+    float edge = abs(atan(q.y, q.x)) * bend - 1.0;
+    float band = fill((abs(length(q) - bend) - 0.15) * size) * fill(edge * size);
+    c = over(c, mix(pale, vec3(1.0), 0.5), 0.95 * band);
+  } else if (kind == ${KIND_TOXIN}) {
+    // A bulb, with dark dots in it.
+    vec2 q = p - vec2(0.15, 0.0);
+    c = over(c, TOXIN_RGB, 0.9 * fill((length(q) - 0.85) * size));
+    float dots = min(length(q - vec2(0.3, 0.25)), length(q - vec2(-0.15, -0.3)));
+    dots = min(dots, length(q - vec2(0.25, -0.3)));
+    c = over(c, vec3(0.08, 0.02, 0.12), 0.9 * fill((dots - 0.15) * size));
   }
   o_color = dim(c);
+}
+`;
+
+export const CLOUD_VERT = `#version 300 es
+layout(location = 0) in vec2 a_corner;
+layout(location = 1) in vec4 a_cloud; // x, y, radius, left01
+uniform vec4 u_view;
+out vec2 v_uv;
+flat out vec2 v_cloud; // radius, left01
+flat out float v_seen;
+${SIGHT}
+void main() {
+  v_uv = a_corner;
+  v_cloud = a_cloud.zw;
+  v_seen = seen(a_cloud.xy);
+  vec2 world = a_cloud.xy + a_corner * a_cloud.z;
+  gl_Position = vec4((world - u_view.xy) * u_view.zw, 0.0, 1.0);
+}
+`;
+
+export const CLOUD_FRAG = `#version 300 es
+precision highp float;
+in vec2 v_uv;
+flat in vec2 v_cloud;
+out vec4 o_color;
+${SHAPES}${NUMBERS}
+void main() {
+  // A translucent disc with a soft rim. It fades as its time runs out.
+  float d = (length(v_uv) - 1.0) * v_cloud.x;
+  float a = v_cloud.y * (0.16 * fill(d) + 0.2 * line(d + 0.6, 0.4));
+  o_color = dim(vec4(TOXIN_RGB * a, a));
 }
 `;
