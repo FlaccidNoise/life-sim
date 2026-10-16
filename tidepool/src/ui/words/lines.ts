@@ -123,6 +123,10 @@ export const KIND: Record<number, string> = {
   4: 'chemoreceptor',
   5: 'fin',
   6: 'eye',
+  7: 'jaw',
+  8: 'spike',
+  9: 'shell plate',
+  10: 'toxin gland',
 };
 
 /** Which one of its kind a part is. A body holds 12 parts at most. */

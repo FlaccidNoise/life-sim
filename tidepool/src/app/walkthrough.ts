@@ -1,7 +1,19 @@
 // The beats of the walkthrough: docs/plans/2026-10-13-walkthrough.md. A beat names what the player
 // just did, in one line, and never blocks play. Pure: no DOM, no storage, no clock of its own.
 
-import type { BrainConn, BrainView } from '../protocol';
+import {
+  C_FLAGS,
+  C_PARTS,
+  C_SLOT,
+  CREATURE_STRIDE,
+  FLAG_HURT,
+  KIND_JAW,
+  PART_WORDS,
+  type BrainConn,
+  type BrainView,
+  type FrameView,
+  type Kill,
+} from '../protocol';
 import { LINE } from '../ui/words/lines';
 
 /** In the order of the plan's table. Of two beats armed on one frame, the first shows. */
@@ -39,6 +51,10 @@ export interface Facts {
   busy: boolean; // a passing line of the page is up: a toast, or "Nothing there."
   card: boolean; // the mate card is up
   courted: boolean; // a body that the player courted accepted or refused a moment ago
+  // Beat 11, from `huntFacts`.
+  huntersInView: number; // bodies with a jaw in the frame, the player's own apart
+  killInView: number; // kills in the frame by a body other than the player's
+  bitten: boolean; // the body of the player lost energy to a hit a moment ago: FLAG_HURT
 }
 
 export interface Walk {
@@ -54,6 +70,10 @@ export interface Walk {
   panel: number; // seconds of the open panel, in a body
   apart: number; // seconds for which the two marks have been `APART` apart
   wasFirst: boolean; // the death overlay was up on the last frame, and led with the line of beat 12
+  life: number; // the body whose life had its first kill in view marked. 0: none
+  hunted: number; // seconds of this visit with a hunter in view, before the first bite
+  bite: number | null; // `hunted` at the first bite on the player in this visit
+  lived: boolean; // a frame of this visit held the body of the player
 }
 
 export const begin = (done: BeatId[] = [], shown: Walk['shown'] = {}): Walk => ({
@@ -69,6 +89,10 @@ export const begin = (done: BeatId[] = [], shown: Walk['shown'] = {}): Walk => (
   panel: 0,
   apart: 0,
   wasFirst: false,
+  life: 0,
+  hunted: 0,
+  bite: null,
+  lived: false,
 });
 
 const LINE_S = 6; // a line leaves after this
@@ -106,7 +130,7 @@ export function step(
   walk: Walk,
   f: Facts,
   dt: number,
-): { walk: Walk; line: string | null; pulse: 'brain' | 'score' | null } {
+): { walk: Walk; line: string | null; pulse: 'brain' | 'score' | null; mark: boolean } {
   const w = { ...walk };
   const play = f.mode === 'play';
   const seen = play && f.uid !== 0; // the frame holds the body
@@ -122,6 +146,13 @@ export function step(
   w.clock += dt;
   w.wasFirst = f.dead && f.first;
   if (w.now) w.now = { beat: w.now.beat, t: w.now.t + dt };
+  // Beat 11. A hunter on the frame of a bite was not seen before it. Under the death overlay the
+  // camera is on the killer.
+  if (seen) w.lived = true;
+  if (seen && f.bitten && w.bite === null) w.bite = w.hunted;
+  if (!f.dead && f.huntersInView > 0 && w.bite === null) w.hunted += dt;
+  const mark = seen && !f.dead && f.killInView > 0 && w.life !== f.uid;
+  if (mark) w.life = f.uid;
   const on = w.now?.beat;
   const t = w.now?.t ?? 0;
 
@@ -203,7 +234,45 @@ export function step(
     walk: w,
     line: (beat && FOOT[beat]) ?? null,
     pulse: beat === 'openBrain' ? 'brain' : beat === 'score' ? 'score' : null,
+    mark,
   };
+}
+
+/** Beat 11: the kills of `frame` by a body other than the player's. The page marks the first. */
+export const killsSeen = (frame: FrameView): Kill[] =>
+  frame.kills.filter((kill) => kill.killerSlot !== frame.possessedSlot);
+
+/** The facts of beat 11 that a frame holds. */
+export function huntFacts(
+  frame: FrameView,
+): Pick<Facts, 'huntersInView' | 'killInView' | 'bitten'> {
+  const { u32 } = frame;
+  let hunters = 0;
+  let bitten = false;
+  for (let i = 0; i < frame.creatureCount; i++) {
+    const r = frame.creatureBase + i * CREATURE_STRIDE;
+    if (u32[r + C_SLOT] === frame.possessedSlot) {
+      bitten = ((u32[r + C_FLAGS] ?? 0) & FLAG_HURT) !== 0;
+      continue;
+    }
+    for (let k = 0; k < PART_WORDS; k++) {
+      if (((u32[r + C_PARTS + k] ?? 0) & 0xff) === KIND_JAW) {
+        hunters++;
+        break;
+      }
+    }
+  }
+  return { huntersInView: hunters, killInView: killsSeen(frame).length, bitten };
+}
+
+/**
+ * Beat 11 in the playtest log: the seconds that a hunter was in view before the first bite on the
+ * player, or "bitten first", or "no hunter seen" in a visit with a life and no hunter in view yet.
+ * Undefined: nothing to say yet, with no life in this visit, or with a hunter seen and no bite.
+ */
+export function firstBite(walk: Walk): number | 'bitten first' | 'no hunter seen' | undefined {
+  if (walk.bite !== null) return walk.bite > 0 ? Math.round(walk.bite * 10) / 10 : 'bitten first';
+  return walk.lived && walk.hunted === 0 ? 'no hunter seen' : undefined;
 }
 
 // The ports of the two outputs that the player's hands hold: crates/sim/src/brain.rs.

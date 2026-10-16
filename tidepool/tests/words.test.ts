@@ -108,6 +108,15 @@ test('the lint rejects each phrase of rule 5, in any case', () => {
   expect(broken('A kneeds b. Betterment.', false)).toEqual([]);
 });
 
+test('a hunter bites what it faces, and no string gives a hunt a purpose', () => {
+  const all = Object.values(modules).flatMap(stringsOf);
+  expect(all.some((text) => text.includes('bites what it faces'))).toBe(true);
+  // "Hunts to eat" is a purpose too, and the lint does not hold "to" in general.
+  for (const text of all) expect(text, text).not.toMatch(/\bhunt(s|ing)? (to|for)\b/i);
+  expect(broken('A hunter hunts in order to eat.', false)).toHaveLength(1);
+  expect(broken('It wants the body ahead.', false)).toHaveLength(1);
+});
+
 test('"learn" passes only in a sentence that is allowed by name', () => {
   expect(broken('It does not learn.', false)).toEqual([]);
   expect(broken('Born with this wiring. It does not learn.', false)).toEqual([]);

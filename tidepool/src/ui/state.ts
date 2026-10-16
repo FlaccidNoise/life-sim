@@ -39,8 +39,8 @@ export const pulse = signal<'brain' | 'score' | null>(null); // the control that
 export const changesShown = signal(false); // beat 7 is done: the brain panel has its changes line
 // Connections of the brain on show that differ from the first readout the page got of that body.
 export const wiringChanged = signal(0);
-// The playtest log: by beat, the seconds since the page loaded at its first showing and when done.
-export const walkLog = signal<Record<string, { shown?: number; done?: number }>>({});
+// The playtest log, `Log` of src/app/walkstore.ts, for the button that copies it.
+export const walkLog = signal<Readonly<Record<string, unknown>>>({});
 
 /** One line of the bud card. `part` is the place of a part in the part list of the body of `side`. */
 export interface Difference {
@@ -123,6 +123,7 @@ effect(() => {
     mate: play && !dead && mateShown(),
     score: play,
     death: dead,
+    hunter: dead,
   };
   const open = noteOpen.value;
   if (open !== null && !up[open]) noteOpen.value = null;

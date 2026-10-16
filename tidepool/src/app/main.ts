@@ -102,6 +102,8 @@ import { bodyIn, childOf, differences, showsCard } from './kin';
 import { loadWalk, note, saveWalk } from './walkstore';
 import {
   begin,
+  huntFacts,
+  killsSeen,
   leadsDeath,
   split,
   step,
@@ -286,10 +288,10 @@ function start(): void {
   // The walkthrough. `?walk=reset` starts it from nothing, for a test.
   const stored = loadWalk(query.get('walk') === 'reset');
   let walk: Walk = begin(stored.done, stored.shown);
-  walkLog.value = stored.log;
+  let log = stored.log; // the playtest log. `walkLog` shows it
+  walkLog.value = log;
   let budCount = stored.buds; // buds of the bodies that the player was in, in every visit
-  const store = (): void =>
-    saveWalk({ done: walk.done, shown: walk.shown, log: walkLog.peek(), buds: budCount });
+  const store = (): void => saveWalk({ done: walk.done, shown: walk.shown, log, buds: budCount });
   let possessedTick = 0; // the tick of the frame on show when the player took the body
   // Where the body was on the last frame, and the body lengths it has moved in this possession:
   // `hands` under the player's input, `alone` since the brain last took over.
@@ -857,12 +859,17 @@ function start(): void {
       busy: pageBusy() || budding !== null,
       card: mateShown(),
       courted: now - courtedAt < COURTED_MS,
+      ...huntFacts(frame),
     };
     const out = step(walk, facts, Math.min(dt, WALK_DT_MAX));
     const before = walk;
     walk = out.walk;
-    if (walk.done !== before.done || walk.shown !== before.shown) {
-      walkLog.value = note(walkLog.peek(), before, walk, Math.round(now / 100) / 10);
+    const kill = out.mark ? killsSeen(frame)[0] : undefined;
+    if (kill) renderer.markKill(kill, frame, now / 1000);
+    const noted = note(log, before, walk, Math.round(now / 100) / 10);
+    if (noted !== log || walk.done !== before.done || walk.shown !== before.shown) {
+      log = noted;
+      walkLog.value = log;
       store();
     }
     walkLine.value = out.line;

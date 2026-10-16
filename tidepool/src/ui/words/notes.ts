@@ -4,7 +4,7 @@
 
 import type { ChapterId } from './guide';
 
-export type NoteId = 'brain' | 'wiring' | 'bud' | 'mate' | 'score' | 'death';
+export type NoteId = 'brain' | 'wiring' | 'bud' | 'mate' | 'score' | 'death' | 'hunter';
 
 /** `about` ends the label of the mark: what the note is on. `more` is the chapter of the guide. */
 export const NOTE: Record<NoteId, { about: string; text: string; more: ChapterId }> = {
@@ -40,6 +40,12 @@ export const NOTE: Record<NoteId, { about: string; text: string; more: ChapterId
     about: 'death and your line',
     text: 'You were one body of a line. Each body you play is marked, and every child inherits the mark of its parent. The line goes on while one marked body is alive.',
     more: 'line',
+  },
+  // On the killer card of a death by a bite. A brain changes only at a birth: crates/sim/src/repro.rs.
+  hunter: {
+    about: 'the body that killed you',
+    text: 'A hunter is a body with a Jaw. Its brain was born with its wiring. Nothing in it changed during its life.',
+    more: 'brain',
   },
 };
 
