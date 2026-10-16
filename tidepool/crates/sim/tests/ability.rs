@@ -205,6 +205,22 @@ fn drain(w: &mut World) {
     ability::clouds(w);
 }
 
+/// Rule P1: a drain is a hit. A body with the cloud's centre on its right reads a negative side.
+#[test]
+fn a_cloud_hit_counts_as_hurt_from_the_side_of_the_cloud() {
+    let mut w = cloud_world();
+    w.spawn(genome(0.0, 0.0), at(200.0, 210.0, 0.0))
+        .expect("slot");
+    ability::step(&mut w);
+    drain(&mut w);
+    let c = &w.creatures;
+    assert!((c.hurt[1] - 0.15).abs() < 1e-5);
+    assert_eq!((c.hurt_side[1], c.hurt_tick[1]), (0.0, w.tick + 1)); // the cloud is behind it
+    assert!((c.hurt[3] - 0.15).abs() < 1e-5);
+    assert_eq!(c.hurt_side[3], -1.0);
+    assert_eq!((c.hurt[0], c.hurt[2], c.hurt_tick[2]), (0.0, 0.0, 0));
+}
+
 #[test]
 fn a_cloud_drains_others_but_not_its_maker_and_the_energy_is_gone() {
     let mut w = cloud_world();
