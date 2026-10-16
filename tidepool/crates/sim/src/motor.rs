@@ -4,14 +4,15 @@
 //! while it pushes, and one on the side turns a body at rest. So do cilia. A fin turns a body only
 //! at speed. Drag is stronger across the heading than along it, so turn radius grows with speed.
 
-use crate::creature::{self, MAX_CREATURES, MAX_RADIUS};
+use crate::creature::{self, MAX_CREATURES, MAX_JAWS, MAX_RADIUS};
 use crate::genome::REF_WIDTH;
 use crate::math::{sin_cos, wrap_angle};
 use crate::params::id;
 use crate::snapshot::{LoadError, Reader, Writer};
 use crate::world::World;
 
-/// The most velocity across the heading that a tick can take, whatever the fins.
+/// The most velocity along or across the heading that the drag of a tick can take, whatever the
+/// fins and shells.
 const SIDE_DRAG_MAX: f32 = 0.95;
 /// In `Motor::touch`: the body overlaps no other.
 pub const NO_TOUCH: u32 = u32::MAX;
@@ -32,8 +33,8 @@ pub struct Motor {
     /// `creature::heft` of each live slot, so that a tick works it out once per body.
     pub heft: Vec<f32>,
     /// Of each live slot with a jaw cone: the slot of the nearest overlapping body inside a cone,
-    /// or `NO_TOUCH`, and the sum of the sizes of the cones that hold it. Filled from Task 3 of the
-    /// M4 plan (rule J1). `bite::step` reads them in the same tick.
+    /// or `NO_TOUCH`, and the sum of the sizes of the cones that hold it (rule J1 of the M4 plan).
+    /// Of two at one distance, the lower slot. `bite::step` reads them in the same tick.
     pub bite_target: Vec<u32>,
     pub bite_jaws: Vec<f32>,
 }
@@ -56,7 +57,9 @@ impl Default for Motor {
 
 /// The push on every slot is worked out before any creature moves, so the result does not depend
 /// on slot order. Two bodies push each other when their centres are closer than the sum of their
-/// radii and are not on one point. The nearest of the bodies that push a slot is kept in `touch`.
+/// radii and are not on one point. The nearest of the bodies that push a slot is kept in `touch`,
+/// and the nearest inside a jaw cone in `bite_target`. A body is in a cone when the offset to it
+/// is at most `jaw_arc` from the axis.
 pub fn step(world: &mut World) {
     let World {
         creatures: c,
@@ -74,9 +77,12 @@ pub fn step(world: &mut World) {
         radius,
         mass,
         heft,
-        ..
+        bite_target,
+        bite_jaws,
     } = motor;
     let repel = params.get(id::REPEL);
+    let jaw_cos = sin_cos(params.get(id::JAW_ARC)).1;
+    let jaw_cos2 = jaw_cos * jaw_cos;
     let (part_mass, eye_cost) = (params.get(id::PART_MASS), params.get(id::EYE_COST));
     for s in 0..c.slots.high_water() as usize {
         if c.slots.is_alive(s as u32) {
@@ -93,6 +99,17 @@ pub fn step(world: &mut World) {
         let (px, py, ri, mi) = (c.x[s], c.y[s], radius[s], mass[s]);
         let (mut fx, mut fy) = (0.0f32, 0.0f32);
         let (mut near, mut near_d2) = (NO_TOUCH, f32::INFINITY);
+        // The axis of each jaw cone in the world, and the size of its gene. `express` holds the
+        // axis for a heading of 0, as it does for an eye.
+        let n_jaws = (c.n_jaws[s] as usize).min(MAX_JAWS);
+        let mut jaws = [[0.0f32; 3]; MAX_JAWS];
+        let (hc, hs) = (c.hc[s], c.hs[s]);
+        for (k, jaw) in jaws.iter_mut().take(n_jaws).enumerate() {
+            let i = s * MAX_JAWS + k;
+            let (ax, ay) = (c.jaw_ax[i], c.jaw_ay[i]);
+            *jaw = [hc * ax - hs * ay, hs * ax + hc * ay, c.jaw_size[i]];
+        }
+        let (mut prey, mut prey_d2, mut prey_jaws) = (NO_TOUCH, f32::INFINITY, 0.0f32);
         // A body farther away than this cannot touch this one.
         let reach = ri + MAX_RADIUS;
         grid.for_each_in_box(px - reach, py - reach, px + reach, py + reach, |j| {
@@ -113,9 +130,23 @@ pub fn step(world: &mut World) {
                 if d2 < near_d2 || (d2 == near_d2 && (j as u32) < near) {
                     (near, near_d2) = (j as u32, d2);
                 }
+                if n_jaws > 0 {
+                    // `dx, dy` points from `j` to this body, so the offset to `j` is its negative.
+                    let (mut inside, mut held) = (false, 0.0f32);
+                    for &[ax, ay, size] in &jaws[..n_jaws] {
+                        let along = -(dx * ax + dy * ay);
+                        if along > 0.0 && along * along >= jaw_cos2 * d2 {
+                            (inside, held) = (true, held + size);
+                        }
+                    }
+                    if inside && (d2 < prey_d2 || (d2 == prey_d2 && (j as u32) < prey)) {
+                        (prey, prey_d2, prey_jaws) = (j as u32, d2, held);
+                    }
+                }
             }
         });
         (push_x[s], push_y[s], touch[s]) = (fx, fy, near);
+        (bite_target[s], bite_jaws[s]) = (prey, prey_jaws);
     }
     let (flag_force, cilia_force) = (params.get(id::FLAG_FORCE), params.get(id::CILIA_FORCE));
     let (flag_torque, cilia_torque) = (params.get(id::FLAG_TORQUE), params.get(id::CILIA_TORQUE));
@@ -124,7 +155,7 @@ pub fn step(world: &mut World) {
     // The part of the turn rule that is the same for every body, worked out once per tick.
     let ref_inertia = 2.0 * inertia_k * REF_WIDTH;
     let fin_turn = fin_torque / v_max;
-    let keep_fwd = 1.0 - params.get(id::DRAG_FWD);
+    let (drag_fwd, shell_drag) = (params.get(id::DRAG_FWD), params.get(id::SHELL_DRAG));
     let drag_side = params.get(id::DRAG_SIDE);
     let keep_ang = 1.0 - params.get(id::DRAG_ANG);
     for s in 0..c.slots.high_water() as usize {
@@ -156,7 +187,10 @@ pub fn step(world: &mut World) {
         let mut vx = c.vx[s] + hc * accel + push_x[s];
         let mut vy = c.vy[s] + hs * accel + push_y[s];
         // Drag acts on the velocity along the heading and across it at different rates. A fin
-        // grips the water: it adds to the drag across the heading.
+        // grips the water: it adds to the drag across the heading. A shell adds to the drag along
+        // it. At `shell_drag` 0 the sum is `drag_fwd` to the bit, since a shell sum is finite and
+        // `drag_fwd` is under the limit.
+        let keep_fwd = 1.0 - (drag_fwd + shell_drag * c.shell_sum[s]).min(SIDE_DRAG_MAX);
         let keep_side = 1.0 - (drag_side + fin_grip * c.fin[s]).min(SIDE_DRAG_MAX);
         let fwd = (vx * hc + vy * hs) * keep_fwd;
         let side = (-vx * hs + vy * hc) * keep_side;
