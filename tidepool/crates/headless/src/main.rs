@@ -102,10 +102,12 @@ fn run(args: &[String]) {
     world.seed_founders(creatures, plants);
     world.run(ticks);
     println!(
-        "tick={} creatures={} plants={} hash={:08x}",
+        "tick={} creatures={} plants={} debris={} clouds={} hash={:08x}",
         world.tick,
         world.creatures.slots.count(),
         world.plants.slots.count(),
+        world.debris.slots.count(),
+        world.clouds.slots.count(),
         world.state_hash()
     );
     if let Some(path) = out {
