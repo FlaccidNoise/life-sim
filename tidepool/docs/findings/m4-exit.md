@@ -12,16 +12,23 @@ deterministic, drawn, and playable: jaws, spikes, shell plates, toxin glands; da
 cloud; corpses that become debris that Filter mouths eat; the death freeze with a death card that
 shows the killer's body, its generation, and its brain at the kill; ability buttons from the body's
 parts; the first hunter marked when it kills in view. The gates read coexistence and the throughput
-per creature-tick. The long gate passes every M2 and brain band on 5 of 5 seeds with the rules on.
+per creature-tick. The long gate passes every M2 and brain band on 5 of 5 seeds with the bite on and
+the gland off, and on 3 of 5 with the gland on too (the eye gap at 0.080 and 0.082 on seeds 6 and 8,
+against 0.10; the runs are deterministic, so the final proof below reads the same).
 
-The roadmap's exit sentence is not met and is the owner's finding: **predators and prey do not
-coexist at 12,000 ticks on 3 seeds** at any value the rules allow. With the bite on, every lineage
-becomes a hunter, because rule J1 pays a jaw from the first contact with anyone's young, rule K1
-charges it mass and nothing else, and a hunter keeps its Filter. The mass ratio sets the pace of
-the takeover (at 3.0, the shipped default, hunters are a fifth of the living at 12,000 and most of
-it by 144,000, with prey persisting on one seed in three and a boom and bust on another); the guards,
-a weaker bite, and a dearer lunge change nothing. The draft measured the same and named negative
-frequency dependence as the need. That is a rule, and a rule change is the owner's.
+The roadmap's exit sentence, "predators and prey coexist at 12,000 ticks on 3 seeds", reads so: at
+the shipped mass ratio of 3.0, three of the four 12,000-tick bands pass on 3 of 3 (`hunt_hi` 0.19
+to 0.29, `prey_lo` 925 to 1,224, `kills_late` 43 to 83) and `flesh_late` fails at 0.001 to 0.002
+against a band of 0.01 that was set before any good world was read (any value down to 0.001 still
+rejects the bad world: the value is the owner's). At 144,000, the plan's own stricter reading
+(choice C6), coexistence is not met: hunters pass 80% of the living on every seed, with prey
+persisting on one seed in three and a boom and bust on another. Five trials on three levers: the
+mass ratio moves the pace of the takeover and ran out of its range at 3.0; stronger guards and a
+weaker bite were read at ratio 1.15, where prey is gone by 12,000; a dearer lunge slowed one seed.
+Untried: the guards at ratio 3 or at their top of 4.0, `founder_jaw`, `corpse_share`, and a wider
+range for the ratio. The trials stopped under rule 5 with 7 of 12 unspent, and the finding goes to
+the owner with the levers it names; the draft measured the same shape and named negative frequency
+dependence as the need, which is a rule.
 
 "Being hunted by something that learned to dash is frightening and its cause is always shown": the
 cause is shown (the card, the hurt flash on the side of the hit, the kill mark), the dash fires in
@@ -72,12 +79,17 @@ density would not be the limit, and it was not: the first contact kills.
 
 **The owner:**
 
-1. The takeover: a rule (negative frequency dependence, an obligate hunter, a jaw that costs more
-   than its mass, or a Filter that a jaw weakens). Rule 5 of the retune stopped the trials; 7 of 12
-   are unspent.
+1. The takeover at 144,000: more trials on the untried levers (the guards at ratio 3 or 4.0,
+   `founder_jaw`, `corpse_share`, a wider range for `bite_mass_ratio`), or a rule (negative
+   frequency dependence, an obligate hunter, a jaw that costs more than its mass, a Filter that a
+   jaw weakens). Rule 5 stopped the trials with 7 of 12 unspent.
 2. The bench at the floor and under the target (C9).
-3. The predation bands: `flesh_late` 0.01 at 12,000 fails the shipped world (0.001 to 0.002);
-   `hunt_hi` and `prey_lo` at 144,000 are unset; `hunt_lo` is not a gate.
+3. The predation bands: `flesh_late` 0.01 at 12,000 fails the shipped world (0.001 to 0.002) and
+   any value down to 0.001 still rejects the bad world; `hunt_hi` and `prey_lo` at 144,000 are unset;
+   `hunt_lo` is not a gate.
+3a. The long gate with the gland on: 3 of 5 (the eye gap on seeds 6 and 8 at 0.080 and 0.082). Target
+   5 of the retune is met with the gland off and not with it on. The gland's three trials are
+   available for it; the owner's instruction was that it ships on.
 4. The provisional entries of 2026-10-16 in `decisions/INDEX.md`: `fin_grip` 0.6, the 12,000-tick
    bands, the 144,000-tick bands, a mutant trigger resting closed, and the shipped set itself.
 5. The budgets the plan named: the debris pool of 4,096 (13% used at 36,000), `MAX_NEURONS` 96

@@ -154,18 +154,25 @@ If it reads so, the long run follows.
 |---|---|---|---|---|---|---|
 | T5 `lunge_cost` 2.0 | 0/3 (`flesh_late` 0.000 to 0.001; seed 2 `kills_late` 2) | 3/3 | 0.01 to 0.19 | 1,087 to 1,293 | 2, 43, 48 | 460 : 1,138; 910 : 564; 923 : 620 |
 
-A dearer lunge delays the hunters on one seed (seed 2: 55 hunters and 20 kills at 12,000, then 910
-hunters by 36,000) and changes nothing on the others against T2 (893 to 1,065 hunters at 36,000). The
+A dearer lunge delays the hunters on seed 2 (55 hunters and 20 kills at 12,000, then 910 by
+36,000), halves them on seed 1 at 36,000 (460 against T2's 1,065) and leaves seed 3 as T2 (923
+against 902). It was not run to 144,000. The
 reason is in rule J1: a jaw bites on contact with no lunge; the lunge only raises the bite. The cost
 of hunting at low prey is not reached by any lunge parameter.
 
 ### The stop of rule 5, and what ships
 
-Five trials at the boom: the mass ratio sets the pace of the takeover, and no other lever moves it.
-Hunters take over because rule J1 gives a jaw a payoff from the first contact with anyone's young
-and rule K1 gives it no cost but mass, and a hunter keeps its Filter. The draft measured the same
-(C11, C15, C16) and named negative frequency dependence as the need. **That is a rule, and a rule is
-the owner's.** The trials for the takeover stop here, with 7 of 12 unspent.
+Five trials on three levers: the mass ratio moves the pace of the takeover and ran out of its range
+at 3.0 (the top of `bite_mass_ratio`); the guards doubled and a weaker bite were read at ratio 1.15,
+where prey is gone by 12,000 and a guard has no prey to spread in; a dearer lunge halved the hunters
+of one seed at 36,000 (1,065 to 460) and not the others. At ratio 3 a founder hunter cannot bite a
+founder's newborn (88 against 3 times 38, the plan's reference numbers), so the takeover there runs
+through size: the mean body grows to `len` 14 to 21, and a bigger body bites more and is bitten by
+fewer. Untried within the rules: the guards at ratio 3 or at their top of 4.0, `founder_jaw`,
+`corpse_share`, and a wider range for the ratio. The draft measured the same shape (C11, C15, C16)
+and named negative frequency dependence as the need, which is a rule. **The trials for the takeover
+stop here under rule 5, with 7 of 12 unspent, and the finding goes to the owner with the levers
+above.**
 
 What ships, on the owner's instruction that every rule is on: **the ratio-3 set.** It is the world
 the rows like best: 1,340 to 1,520 bodies at 12,000 with hunters at a fifth and prey everywhere,
@@ -254,9 +261,10 @@ random, not after a hit.
 - **"Evolution keeps it": not shown.** The gland share at 144,000 against the run without the gland
   (the long read): 0.000 against 0.000, 0.001 against 0.001, 0.198 against 0.059. One seed in three
   grows glands, and it is the seed where they fire.
-- **It feeds the hurt input and nothing else moves.** The two `eye_gap` misses at 0.08 are the band's
-  noise (the same seeds read 0.11 to 0.18 without the gland, and arms of the jaw gap missed a scent
-  gap by the same hair): the final `make gates-long` below reads them again.
+- **It feeds the hurt input and nothing else moves, except the long gate's verdict.** The two
+  `eye_gap` misses at 0.080 and 0.082 are deterministic: the same seeds read 0.11 to 0.18 without
+  the gland, and the gland's clouds set those two worlds on another path. Target 5 (5 of 5 at
+  144,000) is met with the gland off and not with it on. The final `make gates-long` reads the same.
 - No trial is spent: the targets the gland can reach (3 and 5) hold or sit at the band's noise, and
   the two it cannot (1 and 4) are the takeover's. Its defaults are written: `toxin_drain` 0.3,
   `toxin_cost` 2.0. The owner's instruction is that it ships on.
@@ -286,8 +294,9 @@ Each line says which of the three claims it makes: the mechanism fires, evolutio
    (`toxin_fire_ctx` 0.01). The mechanism fires; evolution keeps it on one seed; it does not help.
 6. **The dash and the lunge fire in context** (`dash_fire_ctx` 0.9 to 1.0, `lunge_fire_ctx` 0.8 to
    1.0 at 12,000): the starter wires work. Whether a dash saves a body is not measured.
-7. **The eye gap sits at its band at 144,000** on 2 of 5 seeds with the gland on (0.080, 0.082)
-   and clears it without (0.11 to 0.18). Chance-level; read again in the final proof.
+7. **The long gate reads 3 of 5 with the gland on**: the eye gap on seeds 6 and 8 at 0.080 and
+   0.082, against 0.11 to 0.18 without the gland. Deterministic. Target 5 is not met with every
+   rule on.
 8. **Two long bands are unset** (`hunt_hi`, `prey_lo` at 144,000) and `flesh_late` at 12,000 fails the
    shipped world. `--predation` judges the set ones in `make gates-long` only.
 9. **A victim whose killer died earlier in the same kill list gets no killer** (audit item 2): the

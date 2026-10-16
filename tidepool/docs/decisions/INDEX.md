@@ -273,9 +273,12 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
   dependence as the need. That is a rule, and the owner's. The shipped defaults: `bite_mass_ratio`
   3.0 with the other Start values, under which the world holds 486 to 904 bodies at 144,000 with
   every M2 and brain band on 5 of 5, a boom and bust on one seed in three, and persistent prey on
-  another. Targets 1 and 4 of the retune (the coexistence bands) are not met; target 2 is met at
-  the floor (WASM 2,440 against 2,400, under the target of 2,600); targets 3 and 5 are met.
-  → `../findings/m4-tuning.md`
+  another. Target 1 (the 12,000-tick bands) is met by three bands and failed by `flesh_late` 0.01,
+  a band set before any good world was read; target 4 (the share bands at 144,000) is not met;
+  target 2 is met at the floor (WASM 2,440 against 2,400, under the target of 2,600); target 3 is
+  met; target 5 is met with the gland off (5 of 5) and not with it on (3 of 5, the eye gap on seeds
+  6 and 8 at 0.08). Untried levers: the guards at ratio 3 or 4.0, `founder_jaw`, `corpse_share`, a
+  wider range for the ratio. → `../findings/m4-tuning.md`
 
 ## Architecture
 
