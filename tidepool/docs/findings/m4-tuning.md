@@ -228,15 +228,16 @@ The jaw gap at 144,000, `gate-evolve --brain` on seeds 1, 4, 5, 6, 8 and `probe-
   tenth of a part's mass and nothing else. So `hunt_lo` separates nothing at 144,000 either: it is
   not a gate, at either length.
 - **The jaw gap is in the size of the jaw, not the share.** With the bite on, the mean jaw over
-  the living grows to 0.17 to 1.00 at 144,000; dead, 0.08 to 0.18. Evolution grows a jaw that bites
-  and does not grow one that cannot. That is "evolution uses it", read with no band.
+  the living grows to 1.00 and 0.48 on seeds 1 and 3 at 144,000 against 0.10 and 0.08 dead; on seed
+  2 it reads 0.17 against 0.18. Evolution grows a jaw that bites on 2 of 3 seeds. That is "evolution
+  uses it", read with no band, on two seeds of three.
 - **The long bands that the dead arm proves:** `kills_late` 20 or more and `flesh_late` 0.01 or
   more at 144,000 reject the dead arm on 5 of 5 (0 and 0.000) and pass the defaults on 5 of 5 (240
   to 690, 0.022 to 0.037). Set in `evolve.rs` `PREDATION`, judged under `--brain --predation`.
   `hunt_hi` and `prey_lo` stay unset at 144,000 with the finding above.
 - Both arms lose one seed's scent gap at 144,000 by a hair (0.069, 0.043 against 0.10), as the
-  Task 10 arm did on seed 8. The default world holds every seed's scent (0.42 to 0.88): the bite
-  is good for the nose.
+  Task 10 arm did on seed 8. The default world holds every seed's scent (0.42 to 0.88) on this
+  reading; one run per arm says nothing about why.
 
 ### Part 4 rows (`38baab1`, flags `toxin_drain=0.3 toxin_cost=2.0` on the defaults)
 
@@ -292,8 +293,11 @@ Each line says which of the three claims it makes: the mechanism fires, evolutio
    use it; it does not help. They stay on at `spike_hurt` 1.0 and `shell_block` 1.0.
 5. **The gland fires at random.** Clouds come on 1 seed in 3 and fire out of context
    (`toxin_fire_ctx` 0.01). The mechanism fires; evolution keeps it on one seed; it does not help.
-6. **The dash and the lunge fire in context** (`dash_fire_ctx` 0.9 to 1.0, `lunge_fire_ctx` 0.8 to
-   1.0 at 12,000): the starter wires work. Whether a dash saves a body is not measured.
+6. **The dash and the lunge fire in context**: at 12,000 `dash_fire_ctx` reads 0.99 to 1.00 against
+   `dash_think_ctx` 0.09 to 0.15 (a dash fires with a hit or teeth in view ten times as often as
+   those are present), and `lunge_fire_ctx` 0.98 to 0.99 against `lunge_think_ctx` 0.58 to 0.78.
+   The starter wires are hand-made, so this is "the mechanism fires", not "evolution uses it".
+   Whether a dash saves a body is not measured, and no dash-dead arm was run.
 7. **The long gate reads 3 of 5 with the gland on**: the eye gap on seeds 6 and 8 at 0.080 and
    0.082, against 0.11 to 0.18 without the gland. Deterministic. Target 5 is not met with every
    rule on.

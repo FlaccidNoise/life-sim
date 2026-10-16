@@ -55,7 +55,8 @@ const VARIETY: f64 = 2.0;
 /// work as `PREDATION` of `health.rs` does: unset until a proof sets one, and judged only under
 /// `--predation`. Set on 2026-10-16 from the long dead-jaw world (`bite_rate=0`, seeds 1, 4, 5, 6,
 /// 8: `kills_late` 0 and `flesh_late` 0.000 on 5 of 5) against the default world (240 to 690 and
-/// 0.022 to 0.037). `hunt_lo` is not a gate at 144,000 either: dead jaws drift to 0.04 to 0.71.
+/// 0.022 to 0.037). `hunt_lo` is not a gate at 144,000 either: a dead jaw's share reads 0.04 to
+/// 0.96 across seeds and samples.
 /// `hunt_hi` and `prey_lo` are not set: the default world fails them (`findings/m4-tuning.md`).
 const PREDATION: Bands = Bands {
     hunt_lo: None,
