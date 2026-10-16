@@ -195,8 +195,8 @@ Not done by an agent. Run `make dev` in `tidepool/` and open the page it prints.
 3. Is the sentence about the strongest path true to what the body does?
 4. Court a creature (key C, with a body in touch). Do you know what the card compares, and why it
    said yes or no?
-5. Open `/?world=/m2-world-long.tdpl`. Can you tell bodies apart by their shape now? Try
-   `&look=1` to `&look=4` (`m3-shapes.md`). (M2 check 1)
+5. Open `/?world=/m2-world-long.tdpl`. Can you tell bodies apart by their shape now? Since
+   2026-10-15 the page draws look 4 and `?look` is gone (`m3-shapes.md`). (M2 check 1)
 6. Possess a body with no eyes. Is the dimmed world fair, or only annoying? (M2 check 3)
 7. `/?bench` on a phone and on a slower laptop. (M2 check 4)
 8. The four felt judgments of `m1-feel.md`. (M2 check 5)
