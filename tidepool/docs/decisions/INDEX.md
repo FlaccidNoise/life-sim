@@ -304,6 +304,19 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
   carnivore holds. Prey defined only by size gives no food that only hunters need. The draft's
   "cannibalism off" restored the predator and prey balance (predators 85% to 41%).
   → `../findings/m4-diet.md` T1 to T4, `../plans/2026-10-16-m4-retune-diet.md`
+- 2026-10-16: **The diet rules ship on with T8's set, owner to confirm: `diet_k` 1.5, `diet_sigma`
+  0.1, `founder_hunter_diet` 0.6, `bite_mass_ratio` 1.15, `bite_diet_gap` 0.25.** Of ten trials it is
+  the only set with a ladder from plants to flesh on 5 of 5 seeds at 144,000. Target 1 (herbivores
+  and carnivores 0.10 or more through the second half on 5 of 5) is not met by any trial: the middle
+  is the largest guild. Target 2 (coexistence at 12,000) is not met: the founder hunters fade before
+  12,000 at every value tried. Built features ship on by the owner's instruction; both targets go
+  to the owner with the rows. Supersedes "the shipped defaults: `bite_mass_ratio` 3.0" above.
+  → `../findings/m4-diet.md` "The stop of rule 7"
+- 2026-10-16: **Rule 6 of the diet plan was not followed, owner to confirm: predator interference
+  (I1) was not built after six trials.** D2 had given the stability I1 was held for; what failed was
+  the shape and the founding, which I1 does not act on. The four trials left went to the founding
+  (T7), the mutation step (T8), `diet_k` (T9), and the gap (T10). I1 stays in reserve.
+  → `../findings/m4-diet.md` T6
 - 2026-10-16: **The eye's jaw input is scaled by `eye_gain` (rule E1), by the owner's delegation.**
   A blind eye must not see teeth, or the eye gap of the long gate does not measure blindness
   (item 5 of `../findings/m4-audit-2.md`). → `../plans/2026-10-16-m4-retune-diet.md` Task 1

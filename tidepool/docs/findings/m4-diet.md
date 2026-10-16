@@ -8,7 +8,8 @@ with its rows.
 
 - Task 1, rule E1 (`e20fa9f`): the eye's jaw input is times `eye_gain`.
 - Task 5 (`c83a428`): the benches gate on nanoseconds per creature-tick, at most 278.
-- Task 2, rule D1 (`fcb7b4d`, `5e3db1a`): the `diet` gene, `diet_k` 0 by default. Format 11, ABI 9.
+- Task 2, rule D1 (`fcb7b4d`, `5e3db1a`): the `diet` gene, `diet_k` 0 by default until `cc2738d`
+  shipped 1.5. Format 11, ABI 9.
 - Task 3 (`b4ffc91`): `probe-diet`. Task 4 (`f6987c8`, `c5a3c67`): the page names the diet.
 
 ## Baseline: the head with every task built, `diet_k` 0 (`c5a3c67`, load 8 to 86)
@@ -364,3 +365,31 @@ guild and the carnivores dip under 0.10 in the second half on every seed. The ow
 whether that is the spectrum they want or a target to keep. The levers measured: `diet_k` 1.5 is
 the only value that climbs; the gap 0.25 is better than 0.35; the founders do not hold at 12,000
 at any value tried, so target 2 (coexistence at 12,000) is not met either.
+
+## Rows behind the claims above
+
+The fresh-context audit (2026-10-16) found claims in this file that the tables did not quote. They
+come from the same runs, `--every 24000` unless stated:
+
+- Baseline, 144,000, seeds 1, 4, 5, 6, 8: creatures 711, 768, 780, 886, 758; kills in the last
+  24,000 ticks 7,381, 7,601, 8,144, 2,026, 7,206.
+- T1, 144,000: creatures 1,664, 1,352, 1,742, 1,403, 1,460. T2: 1,494, 1,295, 1,330, 1,426, 1,268.
+  T3: 1,671, 1,314, 1,592, 1,363, 1,496.
+- The T2 world read every 250 ticks on seed 1 (`probe-diet --seeds 1 --ticks 3000 --every 250
+  --param diet_k=1.5 --param founder_hunter_diet=0.6`, not a trial): `hunt` 0.120 at 250 (683
+  bodies), 0.029 at 500, 0.012 at 750 and 1,000, 0.008 from 1,500; omnivores 0.123, 0.029, 0.008,
+  0.004; kills 3, 3, 1, 0 per 250 ticks.
+- T5's climb, seeds 1, 5, 8 (herb, omni, carn, `herb_jaw`):
+
+| Seed | 24,000 | 48,000 | 72,000 | 120,000 |
+|---|---|---|---|---|
+| 1 | 0.871, 0.129, 0.000, 0.475 | 0.368, 0.583, 0.050, 0.739 | 0.077, 0.886, 0.037, 0.989 | 0.021, 0.873, 0.106, 1.000 |
+| 5 | 0.654, 0.346, 0.001, 0.607 | 0.441, 0.531, 0.029, 0.743 | 0.162, 0.774, 0.064, 0.592 | 0.120, 0.821, 0.059, 0.786 |
+| 8 | 0.298, 0.697, 0.005, 0.453 | 0.181, 0.752, 0.067, 0.559 | 0.111, 0.778, 0.112, 0.248 | 0.107, 0.764, 0.130, 0.009 |
+
+  The climb starts before 24,000, not by 48,000 as written above.
+- T8 at 144,000, `herb_jaw` on seeds 1, 4, 5, 6, 8: 0.457, 0.854, 0.980, 1.000, 0.988. Herbivores
+  keep jaws on most seeds. The jaw also gives the lunge, a second dash, whatever its bite takes
+  (`ability.rs`): a likely cause, not measured.
+- Not checked: that a founder hunter is about 1.15 times a founder's mass (from the M4 plan's
+  arithmetic, not recomputed here).

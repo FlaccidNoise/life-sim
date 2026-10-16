@@ -54,8 +54,9 @@ where `n` is the number of other bodies with a jaw within `interference_radius` 
 only if D1 fails its targets after its trials (Part 3, rule 6). The evidence: predator-dependent
 feeding fits 18 of 19 data sets better than the standard curve (Skalski & Gilliam 2001).
 
-New parameters: `diet_k`, `diet_sigma`, `founder_diet`, `founder_hunter_diet`. Off: `diet_k` 0, which
-makes both factors 1 and gives the M4 world back.
+New parameters: `diet_k`, `diet_sigma`, `founder_diet`, `founder_hunter_diet`, and `bite_diet_gap`
+(D2). `diet_k` 0 makes both of D1's factors 1. The M4 world needs `diet_k` 0, `bite_diet_gap` −1,
+and `bite_mass_ratio` 3.0.
 
 ## Tasks
 
