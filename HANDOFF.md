@@ -8,42 +8,40 @@ The previous handoff (M3 closed, waiting for the owner) is at `git show cac3ded:
 ## State
 
 - Branch `main`. Pushed to `020f351` on 2026-10-15 after the M3 close, with the owner's yes. Every
-  later commit is local. **No push until the M4 exit or the owner asks** (the plan's rule; the one
-  mid-plan push at `020f351` was a deviation, noted).
-- The owner answered the M3 close on 2026-10-15 with "yes to all": the six provisional entries are
-  confirmed, the long gate's `variety` band reads `variety_wired` (proven: frozen world 0/3, long gate
-  5/5), look 4 is the only draw, the M4 plan is approved at the recommended option of every choice
-  with C9 at B. Owner checks 1 to 9 of `m3-exit.md` stay open: an agent never closes them.
-- M4 is built from `tidepool/docs/plans/2026-10-14-m4-teeth.md`, one task per agent in its own
-  worktree, the orchestrator merging one at a time and checking each claim. Done and verified on
-  main: Tasks 1, 2, 3, 4, 5, 6, 7, 8, 13. The gate rows stayed identical to the M3 exit, digit for
-  digit, through every merge (the switch-on rule). The checkboxes in the plan say what was measured
-  at each.
-- Task 8 found Task 5 cost 8% of a tick at Off (four stores per body per tick); fixed at `7b8c74f`,
-  A/B'd to within 1.5%. **The "before" of every throughput reading from Task 9 on is `7b8c74f`:
-  WASM about 2,830 at 1,394 bodies.** A single bench reading swings 10% with load on this machine:
-  read a task's cost by an interleaved A/B in one sitting.
-- In flight when this was written: Task 9 (ports, starter wiring, hunter founders; ends the switch-on
-  rule) in `../life-sim-wt-m4-t9`, and Task 14 (walkthrough beat 11, the guide) in
-  `../life-sim-wt-m4-t14`. If a worktree is there with an unmerged commit, read its branch before
-  redoing anything.
-- The saved worlds `tidepool/public/m2-world.tdpl` and `m2-world-long.tdpl` (gitignored) were rebaked
-  at snapshot format 9 on 2026-10-15: seed 1, 400 founders, 1,200 plants, 36,000 and 144,000 ticks.
+  later commit is local. **No push until the M4 exit or the owner asks.**
+- The owner answered the M3 close on 2026-10-15 with "yes to all" (six provisional entries
+  confirmed, `variety_wired`, look 4, the M4 plan at its recommended options with C9 at B). On
+  2026-10-16 the owner added: **every M4 rule ships on in the default world**, and the build runs
+  on through the night; a feature that fails its measurement stays on and goes to the owner.
+- M4 Tasks 1 to 11, 13 and 14 are built, merged one at a time, and verified (`docs/plans/...m4-teeth.md`
+  checkboxes; findings `m4-encounter`, `m4-rules`, `m4-ports`, `m4-motor`, `m4-gates`, `m4-audit-1`,
+  `m4-tuning`). The gate rows stayed identical to M3 through Task 8; Task 9 set the new baseline
+  (senses 10/10 at 36k). A mid-build audit found nothing blocking; its fixes are on main.
+- **Task 12 (switch on and retune) is in progress, run by the orchestrator.** Part 1 read: the moment
+  the bite is on, every lineage is a hunter by 12k and prey is gone (`m4-tuning.md`). Part 3 trials
+  T1 to T4: only `bite_mass_ratio` moves the world, and it moves the speed of the takeover, not its
+  end (2.0: prey gone by 24k; 3.0: hunters 17% to 60% over 36k with prey left and a healthy world).
+  The long read of the ratio-3 world at 144k is the decisive reading in flight when this was
+  written: whether guards that arrive by mutation give prey a foothold in time.
+- The defaults in `params.rs` are still Off. The Start set plus `fin_grip` 0.6 is passed as flags in
+  the readings. **Before the exit: write the chosen set as defaults, rebake both saved worlds, add
+  `--predation` to the Makefile's gates lines only once a band is `Some`.**
+- Provisional, owner to confirm (all in `docs/decisions/INDEX.md`): `fin_grip` 0.6, the 12k
+  predation bands, a mutant trigger resting at `starter_trigger_bias`.
+- The saved worlds (gitignored) are at format 9 but baked with every rule Off (seed 1, 36k and 144k).
 
-## What comes next, in the plan's order
+## What comes next
 
-1. Merge Task 9; run its baseline rows (`gate-health`, `gate-evolve`), the 10-seed sense reading
-   (`gate-evolve --seeds 1,2,3,4,5,6,7,8,9,10`; fewer than 9 of 10 stops and reports), and an A/B
-   bench against `7b8c74f`. Write `docs/findings/m4-ports.md`.
-2. Task 10, the motor stop (fin and dash). Its proposal is provisional, owner to confirm.
-3. Task 11 gates and probes, Task 12 switch-on and retune (stage 1, then the toxin stage 2).
-4. Redo after Task 9, with a real hunter: Task 6's screenshots and draw timing (`m4-look.md`),
-   Task 7's browser check of a real death by a bite, Task 14's first-death check.
-5. Task 15, the M4 exit: a fresh-context audit, then the owner.
-
-Hard stops stay the owner's: a change to a band, a rule, the floor, or the reference population;
-deleting a feature; a target unmet after its trial cap; `kills_late` 0 on any seed at switch-on; a
-void bench; any push.
+1. Read the long run. If hunters take over by 144k on most seeds whatever the ratio, that is the
+   plan's rule-5 stop (frequency dependence is a rule, the owner's). Ship the best set on anyway,
+   per the owner, with the finding.
+2. Remaining trial budget: 8 of 12 for predation, 3 for the toxin gland (part 4).
+3. Part 2 readings at the chosen set (`make gates`, `gates-long`, `probe-hunt`, the jaw gap), the
+   144k proofs of B1 to B3 for the long predation bands.
+4. Write the defaults, `make check && make gates`, rebake, the deferred browser checks (Task 6
+   screenshots and draw timing, Task 7 a real death by a bite, Task 14 the first-death beat).
+5. Task 15: the exit record, a fresh-context audit, `make gates-long`, the play route for the owner,
+   then push.
 
 ## Warnings
 
