@@ -2,10 +2,14 @@
 
 import { h, render } from 'preact';
 import {
+  ABILITY_DASH,
+  ABILITY_LUNGE,
+  ABILITY_TOXIN,
   BENCH_SETTLE_TICKS,
   C_ENERGY,
   C_SLOT,
   CREATURE_STRIDE,
+  FLAG_DASH,
   FLAG_DONOR,
   TICK_HZ,
   readBrain,
@@ -53,6 +57,8 @@ import {
   stats,
   steer,
   toast,
+  abilityButtons,
+  abilityView,
   buds,
   walkLine,
   walkLog,
@@ -76,16 +82,19 @@ import {
 import { courtship, lingering, type Refusal } from './court';
 import {
   STARVING_BELOW,
+  abilitiesOf,
   clickOn,
   emptyAnswer,
   inputToSend,
   keyOf,
   manualNow,
   possessedBody,
+  pressCooldowns,
   steerFromKeys,
   steerToward,
   type Body,
   type Keys,
+  type ReadyAt,
   type Steer,
 } from './input';
 import { bodyIn, childOf, differences, showsCard } from './kin';
@@ -392,7 +401,15 @@ function start(): void {
 
   // Watch: the player moves the camera. Play: the camera follows the body, and the keys and a held
   // pointer steer it.
-  const keys: Keys = { up: false, left: false, right: false, court: false };
+  const keys: Keys = {
+    up: false,
+    left: false,
+    right: false,
+    court: false,
+    dash: false,
+    lunge: false,
+    toxin: false,
+  };
   let held: { x: number; y: number } | null = null; // the pointer that is down, in CSS pixels
   let playScale = PLAY_SCALE; // the scale the camera goes to in Play. The wheel moves it.
   // Where the camera goes in Play while no frame holds the body: the point of the pick, then the
@@ -405,6 +422,22 @@ function start(): void {
   let pressedAt: number | null = null; // a press that took over from the brain, not yet drawn
   // Beat 10: when a body that the player courted last accepted or refused, in this possession.
   let courtedAt = -Infinity;
+  // The abilities of the body, from its parts, and the tick at which the page's count of each
+  // ends. The ticks of `ability_cooldown` are the page's own count: the frame does not carry them.
+  let carries = 0;
+  let readyAt: ReadyAt = { dash: 0, lunge: 0, toxin: 0 };
+  let abilityCooldown = 0;
+  let firing = false; // the body dashed or lunged a short time ago: the brain fires it, or the player
+  const showAbilities = (): void => {
+    const tick = cur?.tick ?? 0;
+    const left = (at: number): number => Math.max(at - tick, 0);
+    const next = {
+      has: carries,
+      left: { dash: left(readyAt.dash), lunge: left(readyAt.lunge), toxin: left(readyAt.toxin) },
+      fired: firing,
+    };
+    if (JSON.stringify(next) !== JSON.stringify(abilityView.peek())) abilityView.value = next;
+  };
   let donor = { uid: 0, holds: false }; // the body of the last frame, and whether it held a donor
   let refusal: Refusal = { uid: 0, at: -Infinity };
 
@@ -414,6 +447,11 @@ function start(): void {
     lastActive = -Infinity;
     pressedAt = null;
     courtedAt = -Infinity;
+    carries = 0;
+    readyAt = { dash: 0, lunge: 0, toxin: 0 };
+    firing = false;
+    abilityButtons.value = 0;
+    showAbilities();
   };
   const watch = (): void => {
     mode.value = 'watch';
@@ -491,7 +529,9 @@ function start(): void {
   };
   const dropKeys = (): void => {
     keys.up = keys.left = keys.right = keys.court = false;
+    keys.dash = keys.lunge = keys.toxin = false;
     courtHeld.value = false;
+    abilityButtons.value = 0;
   };
 
   bindPointer(canvas, {
@@ -539,12 +579,15 @@ function start(): void {
     if (e.key.toLowerCase() === 'b' && !e.repeat) toggleBrain();
     const key = keyOf(e.code);
     if (!key || (key === 'court' && !mixing)) return;
+    // Space would press the button that has the focus.
+    if (key === 'dash') e.preventDefault();
     pressed();
     keys[key] = true;
   });
   window.addEventListener('keyup', (e) => {
     const key = keyOf(e.code);
     if (key) keys[key] = false;
+    if (key === 'dash' && mode.peek() === 'play' && guideAt.peek() === null) e.preventDefault();
   });
   window.addEventListener('blur', dropKeys);
   // The guide opened, or turned a page. The page behind a modal dialog gets no `keyup` and no
@@ -570,6 +613,7 @@ function start(): void {
         mixing = params.some((p) => p.name === 'mix_rate' && p.value > 0);
         // The energy ring shows where a bud happens.
         for (const p of params) if (p.name === 'bud_at') renderer.setBudAt(p.value);
+        abilityCooldown = params.find((p) => p.name === 'ability_cooldown')?.value ?? 0;
         cam = fitWorld(world.w, world.h, cssW, cssH);
         ready.value = true;
         if (query.has('bench')) {
@@ -619,6 +663,9 @@ function start(): void {
             if (courting) courtedAt = performance.now();
           }
           if (you) donor = { uid: you.uid, holds };
+          carries = you ? abilitiesOf(you.parts) : 0;
+          firing = you !== null && (you.flags & FLAG_DASH) !== 0;
+          showAbilities();
           // In a world where mixing is off a court can do nothing, and the card does not show.
           const found = mixing ? courtship(cur, cur.possessedSlot) : null;
           if (courting && found?.state === 'refused') courtedAt = performance.now();
@@ -840,7 +887,17 @@ function start(): void {
       }
       cam = inWorld(follow(cam, seenAt.x, seenAt.y, cam.scale, dt));
       // Keys win over a held pointer.
-      const hands = steerFromKeys({ ...keys, court: keys.court || courtHeld.peek() });
+      const buttons = abilityButtons.peek();
+      const hands = steerFromKeys(
+        {
+          ...keys,
+          court: keys.court || courtHeld.peek(),
+          dash: keys.dash || (buttons & ABILITY_DASH) !== 0,
+          lunge: keys.lunge || (buttons & ABILITY_LUNGE) !== 0,
+          toxin: keys.toxin || (buttons & ABILITY_TOXIN) !== 0,
+        },
+        carries,
+      );
       let { thrust, turn, active } = hands;
       if (!hands.steers && held && body) {
         const at = screenToWorld(cam, cssW, cssH, held.x, held.y);
@@ -853,12 +910,15 @@ function start(): void {
         thrust,
         turn,
         accept: hands.accept,
+        abilities: hands.abilities,
       });
       if (out) {
         posted = out;
         steer.value = { thrust: out.thrust, turn: out.turn };
         send({ type: 'input', ...out });
       }
+      if (cur) readyAt = pressCooldowns(readyAt, hands.abilities, cur.tick, abilityCooldown);
+      showAbilities();
       // The first frame drawn in which the player's input moved the body.
       if (pressedAt !== null && cur && alpha > 0 && body && !cur.brainDriving) {
         latencies.push(performance.now() - pressedAt);

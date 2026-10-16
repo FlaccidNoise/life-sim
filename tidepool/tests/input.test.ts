@@ -9,16 +9,28 @@ import {
   keyOf,
   manualNow,
   possessedBody,
+  abilitiesOf,
+  pressCooldowns,
   steerFromKeys,
   steerToward,
 } from '../src/app/input';
 import * as P from '../src/protocol';
+import { ABILITY_DASH, ABILITY_LUNGE, ABILITY_TOXIN } from '../src/protocol';
 import { REFUSE } from '../src/ui/words/lines';
 
-const NO_KEYS = { up: false, left: false, right: false, court: false };
+const NO_KEYS = {
+  up: false,
+  left: false,
+  right: false,
+  court: false,
+  dash: false,
+  lunge: false,
+  toxin: false,
+};
+const ALL = ABILITY_DASH | ABILITY_LUNGE | ABILITY_TOXIN;
 
 test('keys map to thrust and turn', () => {
-  const moving = { accept: false, steers: true, active: true };
+  const moving = { accept: false, abilities: 0, steers: true, active: true };
   expect(steerFromKeys({ ...NO_KEYS, up: true })).toEqual({ thrust: 1, turn: 0, ...moving });
   expect(steerFromKeys({ ...NO_KEYS, left: true })).toEqual({ thrust: 0, turn: -1, ...moving });
   expect(steerFromKeys({ ...NO_KEYS, up: true, right: true })).toEqual({
@@ -41,6 +53,7 @@ test('holding C sets accept and counts as manual input, and releasing clears it'
     thrust: 0,
     turn: 0,
     accept: true,
+    abilities: 0,
     steers: false,
     active: true,
   });
@@ -53,17 +66,81 @@ test('holding C sets accept and counts as manual input, and releasing clears it'
   expect(steerFromKeys(NO_KEYS)).toMatchObject({ accept: false, active: false });
 
   // The court goes to the worker when it starts and when it ends, with the steer as it is.
-  const swim = { manual: true, thrust: 1, turn: 0, accept: false };
+  const swim = { manual: true, thrust: 1, turn: 0, accept: false, abilities: 0 };
   const court = { ...swim, accept: true };
   expect(inputToSend(swim, court)).toEqual(court);
   expect(inputToSend(court, court)).toBeNull();
   expect(inputToSend(court, swim)).toEqual(swim);
   // The hand-back to the brain carries no court: the brain decides.
-  expect(inputToSend(court, { manual: false, thrust: 0, turn: 0, accept: true })).toEqual({
+  expect(
+    inputToSend(court, { manual: false, thrust: 0, turn: 0, accept: true, abilities: 0 }),
+  ).toEqual({
     manual: false,
     thrust: 0,
     turn: 0,
     accept: false,
+    abilities: 0,
+  });
+});
+
+test('Space, F, and Q set and clear the dash, lunge, and toxin bits, and count as manual input', () => {
+  expect([keyOf('Space'), keyOf('KeyF'), keyOf('KeyQ')]).toEqual(['dash', 'lunge', 'toxin']);
+  const bits = (k: Partial<typeof NO_KEYS>, has = ALL) => steerFromKeys({ ...NO_KEYS, ...k }, has);
+  expect(bits({ dash: true })).toMatchObject({ abilities: ABILITY_DASH, active: true });
+  expect(bits({ lunge: true })).toMatchObject({ abilities: ABILITY_LUNGE, active: true });
+  expect(bits({ toxin: true })).toMatchObject({ abilities: ABILITY_TOXIN, active: true });
+  expect(bits({ dash: true, toxin: true }).abilities).toBe(ABILITY_DASH | ABILITY_TOXIN);
+  // A key alone moves nothing, and leaves a held pointer to steer.
+  expect(bits({ dash: true }).steers).toBe(false);
+  expect(bits({})).toMatchObject({ abilities: 0, active: false });
+
+  // The mask goes to the worker when a key goes down and when it comes up.
+  const swim = { manual: true, thrust: 1, turn: 0, accept: false, abilities: 0 };
+  const dash = { ...swim, abilities: ABILITY_DASH };
+  expect(inputToSend(swim, dash)).toEqual(dash);
+  expect(inputToSend(dash, dash)).toBeNull();
+  expect(inputToSend(dash, swim)).toEqual(swim);
+  // Handed back to the brain, the mask is empty.
+  expect(inputToSend(dash, { ...dash, manual: false })).toMatchObject({ abilities: 0 });
+});
+
+test('a key for an ability that the body lacks does nothing', () => {
+  const lunge = { ...NO_KEYS, lunge: true };
+  expect(steerFromKeys(lunge, ABILITY_DASH | ABILITY_TOXIN)).toMatchObject({
+    abilities: 0,
+    active: false,
+  });
+  // The default is a body with no ability.
+  expect(steerFromKeys({ ...NO_KEYS, dash: true })).toMatchObject({ abilities: 0, active: false });
+  // Of two keys, the one for the part it has still counts.
+  expect(steerFromKeys({ ...lunge, dash: true }, ABILITY_DASH).abilities).toBe(ABILITY_DASH);
+});
+
+test('the parts of a body give its abilities', () => {
+  const part = (kind: number) => ({ kind, anchor: 0, size: 1, extra: 0 });
+  expect(abilitiesOf([])).toBe(0);
+  expect(abilitiesOf([part(P.KIND_FLAGELLUM), part(P.KIND_FILTER), part(P.KIND_EYE)])).toBe(
+    ABILITY_DASH,
+  );
+  expect(abilitiesOf([part(P.KIND_JAW)])).toBe(ABILITY_LUNGE);
+  expect(abilitiesOf([part(P.KIND_TOXIN), part(P.KIND_FLAGELLUM), part(P.KIND_JAW)])).toBe(ALL);
+});
+
+test('the page counts the cooldown from its own press, and only from a press that it posts', () => {
+  const ready = { dash: 0, lunge: 0, toxin: 0 };
+  // No ability is held: no count starts.
+  expect(pressCooldowns(ready, 0, 50, 100)).toEqual(ready);
+  // A press at tick 50 starts the count of that ability only.
+  const pressed = pressCooldowns(ready, ABILITY_DASH, 50, 100);
+  expect(pressed).toEqual({ dash: 150, lunge: 0, toxin: 0 });
+  // The same press held, or pressed again, before the end does not start it over.
+  expect(pressCooldowns(pressed, ABILITY_DASH, 149, 100)).toEqual(pressed);
+  // A hold that outlasts the count fires again in the core: the count starts again.
+  expect(pressCooldowns(pressed, ABILITY_DASH, 150, 100).dash).toBe(250);
+  expect(pressCooldowns(pressed, ABILITY_LUNGE | ABILITY_TOXIN, 60, 100)).toEqual({
+    dash: 150,
+    lunge: 160,
+    toxin: 160,
   });
 });
 
@@ -110,8 +187,8 @@ test('a point on the body turns less, and a point at the centre does not turn', 
 });
 
 test('a manual steer is posted when it changes, and the hand-back is posted once', () => {
-  const held = { manual: true, thrust: 1, turn: 0, accept: false };
-  const idle = { manual: false, thrust: 0, turn: 0, accept: false };
+  const held = { manual: true, thrust: 1, turn: 0, accept: false, abilities: 0 };
+  const idle = { manual: false, thrust: 0, turn: 0, accept: false, abilities: 0 };
   expect(inputToSend(null, idle)).toBeNull();
   expect(inputToSend(null, held)).toEqual(held);
   expect(inputToSend(held, held)).toBeNull();
@@ -121,7 +198,7 @@ test('a manual steer is posted when it changes, and the hand-back is posted once
 });
 
 test('a key held across a possess is posted again, because the worker dropped it', () => {
-  const held = { manual: true, thrust: 1, turn: 0, accept: false };
+  const held = { manual: true, thrust: 1, turn: 0, accept: false, abilities: 0 };
   expect(inputToSend(held, held)).toBeNull();
   // The page forgets what it sent on `possessed` and on `died`.
   expect(inputToSend(null, held)).toEqual(held);

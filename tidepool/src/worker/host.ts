@@ -40,7 +40,7 @@ const CAUSES: Record<number, DeathCause> = {
   4: 'poisoned',
   5: 'spiked',
 };
-const NO_INPUT = { manual: false, thrust: 0, turn: 0, accept: false };
+const NO_INPUT = { manual: false, thrust: 0, turn: 0, accept: false, abilities: 0 };
 
 export function createHost(deps: HostDeps): Host {
   let sim: Sim | undefined;
@@ -117,8 +117,7 @@ export function createHost(deps: HostDeps): Host {
     for (; owed >= period && ran < MAX_TICKS_PER_STEP; ran++) {
       owed -= period;
       const wasPossessed = sim.possessed() !== 0;
-      // No ability is held: the page sends no mask before Task 13 of the M4 plan.
-      sim.input(input.manual, input.thrust, input.turn, input.accept, 0);
+      sim.input(input.manual, input.thrust, input.turn, input.accept, input.abilities);
       const start = deps.now();
       sim.tick(1);
       tickMillis += deps.now() - start;
@@ -267,6 +266,7 @@ export function createHost(deps: HostDeps): Host {
               thrust: msg.thrust,
               turn: msg.turn,
               accept: msg.accept,
+              abilities: msg.abilities ?? 0,
             };
             break;
           case 'param':
