@@ -152,3 +152,34 @@ first ticks and the guild holds: omnivores plus carnivores 0.05 to 0.3 at 12,000
 not return, because a carnivore gives up its Filter and prey that fall in number starve it. At
 144,000 carnivores 0.10 or more and herbivores 0.10 or more on 3 of 5 seeds. If carnivores take over
 (herbivores under 0.10), rule 3: `diet_k` 2.0. If they still die out, the payoff (`bite_rate`).
+
+### T4 rows (`152f34f`)
+
+| Seed | tick | creatures | herb | omni | carn | diet_mean | hunt | kills since last row |
+|---|---|---|---|---|---|---|---|---|
+| 1, 2, 3 | 3,000 | 1,174 to 1,309 | 0.96 to 0.98 | 0.02 to 0.04 | 0.000 to 0.001 | 0.04 to 0.06 | 0.06 to 0.07 | 822, 997, 896 |
+| 1, 2, 3 | 12,000 | 1,285 to 1,493 | 0.998 to 1.000 | 0.000 to 0.002 | 0.000 | 0.05 | 0.15 to 0.19 | 40 to 70 |
+| 1 | 144,000 | 192 | 0.214 | 0.786 | 0.000 | 0.38 | 1.000 | 6,167 |
+| 4 | 144,000 | 211 | 0.384 | 0.616 | 0.000 | 0.33 | 1.000 | 6,300 |
+| 5 | 144,000 | 248 | 0.383 | 0.613 | 0.004 | 0.35 | 1.000 | 7,873 |
+| 6 | 144,000 | 299 | 0.562 | 0.438 | 0.000 | 0.26 | 0.953 | 5,810 |
+| 8 | 144,000 | 318 | 0.465 | 0.528 | 0.006 | 0.28 | 0.673 | 5,934 |
+
+**Falsified, the other way.** The hunters eat now (800 to 1,000 kills by tick 3,000), but every body
+can bite every body of about its own size: by 48,000 every lineage has a jaw at a middling diet and
+the world falls to 190 to 320 bodies by 144,000, a cannibal cloud. No carnivore holds. Size alone
+gives no food that only hunters need. This led to rule D2 (`d7d63de`), an amendment logged in
+`../decisions/INDEX.md`.
+
+## T5: rule D2 at `bite_diet_gap` 0.25 — hypothesis before the run
+
+Change from T4: `--param bite_diet_gap=0.25`. With `diet_k` 1.5, `founder_hunter_diet` 0.6,
+`bite_mass_ratio` 1.15, mixing on. A founder hunter at 0.6 bites bodies at 0.35 or under: the
+herbivores. A herbivore's jaw now has nothing to bite, and two hunters of close diets cannot eat
+each other.
+
+Expected: the founders hold through ticks 250 to 1,000 (they eat, as in T4), and the cloud does
+not form: `herb_jaw` falls, the population stays over 1,200, herbivores stay the base and hunters
+are bounded by them. Expect cycles. At 144,000: herbivores 0.10 or more, carnivores 0.10 or more,
+`diet_sd` 0.20 or more on 3 of 5 seeds. If the guild holds as omnivores (0.3 to 0.7) and not as
+carnivores, the next lever is the gap, then the ratio, in that order.
