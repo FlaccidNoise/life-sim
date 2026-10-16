@@ -93,3 +93,33 @@ Expected: the founder hunters survive the founding on most seeds, as an omnivore
 0.15 at 12,000. By 144,000 one of two things: the guild is pulled to flesh (carn 0.10 or more on 3
 of 5 seeds) or back to plants (carn under 0.02). I expect the second on most seeds, by the same
 missing gradient as T1, but slower. If so, T3 is `founder_jaw` up (rule 2's next lever).
+
+### T2 rows (`92ad002`)
+
+| Seed | tick | herb | omni | carn | diet_mean | hunt | kills since last row |
+|---|---|---|---|---|---|---|---|
+| 1, 2, 3 | 3,000 | 1.000 | 0.000 | 0.000 | 0.03 | 0.011, 0.056, 0.092 | 7, 17, 6 |
+| 1, 2, 3 | 12,000 | 0.998 to 1.000 | 0.000 to 0.002 | 0.000 | 0.05 | 0.167, 0.277, 0.323 | 1, 7, 2 |
+| 1 | 144,000 | 0.929 | 0.071 | 0.000 | 0.10 | 0.841 | 3,838 |
+| 4 | 144,000 | 0.997 | 0.003 | 0.000 | 0.07 | 0.199 | 8 |
+| 5 | 144,000 | 0.941 | 0.059 | 0.000 | 0.12 | 0.914 | 5,118 |
+| 6 | 144,000 | 0.993 | 0.007 | 0.000 | 0.06 | 0.309 | 12 |
+| 8 | 144,000 | 0.998 | 0.002 | 0.000 | 0.06 | 0.688 | 122 |
+
+**Falsified.** The founder hunters at 0.6 are gone before tick 3,000 too. New: on seeds 1 and 5 an
+omnivore minority climbs out of the herbivores late (0.06 to 0.07, kills 3,838 and 5,118 in the
+last 24,000 ticks). A climb exists, slowly, where the founding fails.
+
+**Why the founders vanish, from the code:** `mix::cross` takes the donor's `diet` with chance
+`mix_swap` (0.5) and a part only the donor holds with chance `mix_foreign` (0.25). Founder brains
+accept every mate. With herbivores four in five, a hunter's brood mostly takes a herbivore's diet
+and keeps a useless jaw, or a herbivore's brood takes a hunter's diet without its jaw. Gene flow
+from the majority dissolves the hunter type before selection can act on it.
+
+## T3: `mix_rate` 0, a diagnostic — hypothesis before the run
+
+Change from T2: `--param mix_rate=0`. Not a shippable value: mixing is the owner's M3 feature. It
+tests the cause above. Expected: the founder hunters hold past 3,000 and at 12,000 (omnivores plus
+carnivores 0.05 or more on seeds 1 to 3). If they do, gene flow is the cause, and the fix is a rule:
+bodies of far-apart diets do not mix, as species do not. If they still vanish, the cause is the
+hunt's economy, and the next lever is the payoff (rule 2: `bite_rate`, then `bite_mass_ratio`).
