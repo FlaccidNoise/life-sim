@@ -42,7 +42,7 @@ export interface Sim {
   possessed(): number;
   /**
    * `accept`: the player courts. `abilities`: the abilities held, a mask of 1 dash, 2 lunge, and 4
-   * toxin. The core stores it, and no rule reads it yet.
+   * toxin. While the input is manual, each bit sets the ability's command on the possessed body (rule X2).
    */
   input(manual: boolean, thrust: number, turn: number, accept: boolean, abilities: number): void;
   /** 0 for none. Set when the possessed creature dies. Cleared by the next possess. */
