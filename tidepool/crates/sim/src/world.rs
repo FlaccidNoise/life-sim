@@ -209,6 +209,20 @@ impl World {
             c.possessed = 0;
             c.manual = false;
         }
+        // Rule F1: a share of the body's store and of what it cost to build stays as debris. A full
+        // pool loses it.
+        let p = &self.params;
+        let corpse_share = p.get(id::CORPSE_SHARE);
+        if corpse_share > 0.0 {
+            if let Some(d) = self.debris.slots.alloc() {
+                let c = &self.creatures;
+                let mass = c.mass(s, p.get(id::PART_MASS), p.get(id::EYE_COST));
+                let energy = corpse_share * (c.energy[s].max(0.0) + p.get(id::BUILD_COST) * mass);
+                let (d, debris) = (d as usize, &mut self.debris);
+                (debris.x[d], debris.y[d], debris.energy[d]) = (c.x[s], c.y[s], energy);
+                debris.dirty = true;
+            }
+        }
         self.creatures.slots.free(slot);
         self.creatures.uid[s] = 0;
     }
