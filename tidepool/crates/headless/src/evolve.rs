@@ -58,16 +58,19 @@ const VARIETY: f64 = 2.0;
 /// 0.022 to 0.037). `hunt_lo` is not a gate at 144,000 either: a dead jaw's share reads 0.04 to
 /// 0.96 across seeds and samples.
 /// `hunt_hi` and `prey_lo` are not set: the default world fails them (`findings/m4-tuning.md`).
-/// `carn_hi` and `diet_sd_lo` are printed, not judged yet: set from the shipped world's rows (Task 7
-/// of the diet retune).
+/// `carn_hi` and `diet_sd_lo` set by Task 7 of the diet retune (2026-10-16) from the shipped world
+/// (seeds 1, 4, 5, 6, 8: `carn_hi` 0.056 to 0.236, `diet_sd_lo` 0.12 to 0.21) against a world where
+/// no carnivore can arise (`founder_jaw=0 diet_sigma=0`: 0.000 and 0.00) and a world with no bite
+/// (`bite_rate=0`: 0.000 and 0.09). They do not reject `diet_k=0`: there the gene is neutral and
+/// drifts, and `crates/sim/tests/diet.rs` pins rule D1 instead.
 const PREDATION: Bands = Bands {
     hunt_lo: None,
     hunt_hi: None,
     prey_lo: None,
     kills_late: Some(20),
     flesh_late: Some(0.01),
-    carn_hi: None,
-    diet_sd_lo: None,
+    carn_hi: Some(0.03),
+    diet_sd_lo: Some(0.10),
 };
 
 /// The mean and the standard deviation. Both are 0 for no values.

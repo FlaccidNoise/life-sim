@@ -1155,3 +1155,32 @@ the cone, is not scaled by `eye_gain`, so the blind arm (`eye_gain=0`) still see
 wires still work. `eye_gap` now reads what the eye's food and body inputs add over an eye that sees
 teeth only. Scaling the jaw input by `eye_gain` would restore the M3 meaning and is a rule change,
 the owner's (`findings/m4-audit-2.md` item 5).
+
+### The diet bands and the reset predation bands (diet retune, Task 7, 2026-10-16)
+
+The long gate (`gate-evolve --brain --predation`, 144,000 ticks) gets two diet columns, sampled every
+500 ticks in the second half as `hunt_hi` is: `carn_hi`, the most of the share of the living with
+`diet` over 0.7, and `diet_sd_lo`, the least of the spread of `diet`. Both are a least.
+
+| World (144,000) | `carn_hi` | `diet_sd_lo` | `kills_late` | `flesh_late` |
+|---|---|---|---|---|
+| Shipped set, seeds 1, 4, 5, 6, 8 (`63315e9`) | 0.172, 0.056, 0.151, 0.081, 0.236 | 0.12, 0.15, 0.21, 0.17, 0.16 | 263 to 716 | 0.025 to 0.057 |
+| `founder_jaw=0 diet_sigma=0`, seed 1: no carnivore can arise | 0.000 | 0.00 | 0 | 0.000 |
+| `bite_rate=0`, seed 1: no bite | 0.000 | 0.09 | 0 | 0.000 |
+
+Bands: `carn_hi` 0.03 or more, `diet_sd_lo` 0.10 or more (`crates/headless/src/evolve.rs`). With
+them set, both bad worlds exit 1 with `FAIL(kills_late=0 < 20, flesh_late=0.000 < 0.01,
+carn_hi=0.000 < 0.03, diet_sd_lo=0.00 < 0.1)` and `(... diet_sd_lo=0.09 < 0.1)`. The narrowest margin
+of the shipped world is seed 1's spread, 0.12 against 0.10.
+
+They do not reject `diet_k=0`: there the gene is neutral and drifts (baseline spread 0.19 to 0.29),
+so no share of it can tell. Rule D1 is pinned by `crates/sim/tests/diet.rs` instead.
+
+The 12,000-tick bands of `gate-health --predation`: `kills_late` and `flesh_late` are unset. The
+shipped world's founder hunters fade before 12,000 and the ladder has not formed (seed 3: 3 kills,
+0.000), which is the plan's target 2, not met and the owner's. `hunt_hi` 0.8 and `prey_lo` 150
+stay: the shipped world reads 0.100 to 0.165 and 1,113 to 1,193.
+
+The per-creature-tick floor of Task 5 has no bad-input proof yet: every bench reading of this
+retune was taken at a load of 96 to 138. To prove on a quiet machine with a build that spins in
+`World::tick`.

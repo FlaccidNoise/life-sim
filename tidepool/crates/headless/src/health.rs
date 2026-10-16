@@ -28,18 +28,19 @@ const PARKED_SPEED: f32 = 0.05;
 // The predation bands, read over a run of 12,000 ticks (choice C6 of the M4 plan). `None` is a
 // band that is not set: the gate prints the measure and does not judge it. A band that is set is
 // judged only under `--predation`. `docs/gates.md` holds the proofs. Set on 2026-10-16 from the
-// three bad worlds of `docs/findings/m4-gates.md`, provisional: `kills_late` and `flesh_late`
-// reject a world with no predation (0 and 0.000), `prey_lo` and `hunt_hi` a world where every body
-// hunts and any body can be bitten (0 and 1.000). `hunt_lo` is not a gate at 12,000 ticks: a world
-// with no founder hunter reads 0.03 to 0.16 by mutation, and one with dead jaws 0.08 to 0.23.
-// `carn_hi` and `diet_sd_lo` are printed, not judged yet: set from the shipped world's rows (Task 7
-// of the diet retune).
+// three bad worlds of `docs/findings/m4-gates.md`: `prey_lo` and `hunt_hi` reject a world where
+// every body hunts and any body can be bitten (0 and 1.000). `hunt_lo` is not a gate at 12,000
+// ticks: a world with no founder hunter reads 0.03 to 0.16 by mutation, and one with dead jaws 0.08
+// to 0.23. Reset by Task 7 of the diet retune (2026-10-16): `kills_late` and `flesh_late` are not
+// set, nor `carn_hi` and `diet_sd_lo`. At 12,000 ticks the shipped world's founder hunters have
+// faded and the diet ladder has not formed (seed 3 reads 3 kills and 0.000), which is target 2 of
+// the diet plan, not met and the owner's. The long gate judges predation and diet.
 const PREDATION: Bands = Bands {
     hunt_lo: None,
     hunt_hi: Some(0.8),
     prey_lo: Some(150),
-    kills_late: Some(20),
-    flesh_late: Some(0.01),
+    kills_late: None,
+    flesh_late: None,
     carn_hi: None,
     diet_sd_lo: None,
 };

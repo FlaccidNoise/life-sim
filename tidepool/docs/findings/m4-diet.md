@@ -393,3 +393,27 @@ come from the same runs, `--every 24000` unless stated:
   (`ability.rs`): a likely cause, not measured.
 - Not checked: that a founder hunter is about 1.15 times a founder's mass (from the M4 plan's
   arithmetic, not recomputed here).
+
+## The proof at the shipped set (`cc2738d`, load 96 to 138)
+
+The machine carried three `llama-server` processes and another project's tests (about 700% CPU)
+through every reading below. The seeded rows are deterministic and stand. The bench readings do not.
+
+- Saved worlds rebaked: `m2-world.tdpl` tick 36,000, 1,443 bodies, 621 pieces of debris, hash
+  `656e38a9`; `m2-world-long.tdpl` tick 144,000, 934 bodies, 290 pieces, hash `19f72d0b`.
+- `make check` 0.
+- `gate-health` (12,000, seeds 1 to 3): **3 of 3**. Hunters 0.069 to 0.165 of the living, kills in
+  the last 2,000 ticks 136, 200, 3.
+- `gate-evolve` (36,000, seeds 1 to 3): **0 of 3**, every miss on the eye gap (0.063, −0.020, 0.026).
+- Long gate (144,000, seeds 1, 4, 5, 6, 8, `--brain --predation`): **0 of 5**, every miss on the eye
+  gap (0.015, 0.070, 0.058, 0.058, 0.086). Its predation columns pass: `kills_late` 263 to 716,
+  `flesh_late` 0.025 to 0.057.
+- `probe-diet` at 144,000: the T8 rows, digit for digit.
+- Bench: native 2,037 ticks per second at 1,438 bodies, 341 ns per creature-tick, FAIL against 277.8
+  at load 105. The interleaved WASM A/B (A = `cfd5386`, before the diet gene; B = `cc2738d`), load
+  124 to 138: A 610, 629, 637 ns; B 638, 648, 659 ns; medians 629 and 648, 3% apart. At this load
+  neither the floor nor the 3% can be read. To read again on a quiet machine.
+
+The eye gap: since E1, a blind eye no longer sees teeth, and the blind arm sits at the level an eye
+drifts to when it carries nothing (the baseline section). The sighted arm is 0.015 to 0.086 over it.
+The band of 0.1 is the owner's; the finding is that sight is weakly selected in this world.
