@@ -235,6 +235,12 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
   stage 1, and a lower reference population comes back to the owner. C10 the first kill in view is
   drawn, no shield. C11 no cysts. The build runs through its first three stops as M3's did.
   → `../plans/2026-10-14-m4-teeth.md`
+- 2026-10-16: **Every M4 rule ships on in the default world, and the build runs through the end of
+  stage 2 without waiting.** The owner, at the close of batch E: "I want it all to be on." The
+  shipped game shows the newest rules every time. Task 12 switches each group on and retunes; a
+  feature that fails its measurement stays on and goes to the owner as a finding, since deleting
+  it is the owner's call. The hard stops of the plan are unchanged. → `../plans/2026-10-14-m4-teeth.md`
+  "How the build runs without the owner"
 
 ## Architecture
 
