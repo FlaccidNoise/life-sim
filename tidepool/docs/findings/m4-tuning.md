@@ -332,3 +332,19 @@ under part 4's on seed 3, and the 12,000 and 36,000 rows are unchanged (no gland
 If it reads 5 of 5, 4.0 ships; if not, 2.0 stays and target 5 goes to the owner as read.
 
 The rejection proofs with the bands set (audit item 6) run first; their exit codes go to `gates.md`.
+
+### T6 rows (`d3aead1`, load 2)
+
+`gate-evolve --brain --predation --seeds 1,4,5,6,8 --ticks 144000 --param toxin_cost=4.0`: **2 of 5**,
+the eye gap on seeds 1, 5, and 6 at 0.052, 0.039, 0.061 (seeds 4 and 8 pass; seed 4's row is digit
+for digit the part 4 row, so no cloud fired there). `probe-hunt` on seed 3: glands from 72,000 as
+before (0.10 to 0.04), 2,490 to 9,796 clouds per 36,000 ticks against 228 to 1,532 at cost 2.0 (a
+dearer cloud did not fire less: the gland's carriers were richer on this path), 3 to 5 poisoned per
+window, `toxin_fire_ctx` 0.000 to 0.009.
+
+The hypothesis is falsified: a dearer cloud leaves the long gate worse, not better. **`toxin_cost`
+stays 2.0.** Target 5 with every rule on reads 3 of 5 and goes to the owner as read. One of the
+gland's three trials is spent. The eye gap at 144,000 is fragile whenever the world's path changes
+with the rules on (0.04 to 0.08 against 0.11 to 0.18 on the gland-off path): with `eye_gain=0` the
+blind arm still sees teeth (`m4-audit-2.md` item 5), so the gap reads only what the food and body
+inputs add, and that is small in a world of hunters. A rule for the owner, beside the takeover.

@@ -117,8 +117,10 @@ density would not be the limit, and it was not: the first contact kills.
    any value down to 0.001 still rejects the bad world; `hunt_hi` and `prey_lo` at 144,000 are unset;
    `hunt_lo` is not a gate.
 3a. The long gate with the gland on: 3 of 5 (the eye gap on seeds 6 and 8 at 0.080 and 0.082). Target
-   5 of the retune is met with the gland off and not with it on. The gland's three trials are
-   available for it; the owner's instruction was that it ships on.
+   5 of the retune is met with the gland off and not with it on. One gland trial was spent on it
+   (`toxin_cost` 4.0 read 2 of 5, worse); 2.0 stays, and the gland ships on by the owner's
+   instruction. The eye gap is fragile at 144,000 whenever the world's path changes with the rules
+   on, and its blind arm still sees teeth (item 5 of `m4-audit-2.md`): a rule for the owner.
 4. The provisional entries of 2026-10-16 in `decisions/INDEX.md`: `fin_grip` 0.6, the 12,000-tick
    bands, the 144,000-tick bands, a mutant trigger resting closed, and the shipped set itself.
 5. The budgets the plan named: the debris pool of 4,096 (13% used at 36,000), `MAX_NEURONS` 96
