@@ -176,8 +176,7 @@ pub unsafe extern "C" fn tp_possessed(world: *const World) -> u32 {
 }
 
 /// For tests and the debug page: sets the first part of `kind` on the living body `uid` to `size`,
-/// or adds one at the kind's founder anchor, and expresses the body again. The brain is not
-/// re-expressed, so a kind that declares a port gets its port on the next spawn only. 1 if the
+/// or adds one at the kind's founder anchor, and expresses the body and its brain again. 1 if the
 /// body is alive and the kind is 1 to `KINDS`, else 0.
 #[no_mangle]
 pub unsafe extern "C" fn tp_set_part(world: *mut World, uid: u32, kind: u8, size: f32) -> u32 {
@@ -193,6 +192,9 @@ pub unsafe extern "C" fn tp_set_part(world: *mut World, uid: u32, kind: u8, size
     let s = s as usize;
     w.genomes[s].set_size(kind, size);
     w.creatures.express(s, &w.genomes[s]);
+    // A kind that declares a port changes the block: without this a save of the world did not
+    // load (the activation count did not fit the block).
+    w.brains.express(s, &w.genomes[s], &w.params);
     1
 }
 

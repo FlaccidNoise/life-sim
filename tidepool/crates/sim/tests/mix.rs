@@ -184,7 +184,7 @@ fn a_donor_only_part_brings_its_ports_and_a_connection_from_them_can_follow() {
     // The body of the child declares the port, so the connection lives.
     assert!(brain::ports(&child).inputs.contains(&wire.src));
     let mut pruned = child;
-    pruned.prune();
+    pruned.prune(-1.0);
     assert!(pruned.brain.conns.contains(&wire));
 }
 
@@ -207,7 +207,7 @@ fn a_donor_only_connection_with_a_missing_end_does_not_survive_prune() {
         let has_neuron = child.brain.hidden.contains(&neuron);
         let has_wire = child.brain.conns.contains(&wire);
         dangling += (has_wire && !has_neuron) as u32;
-        child.prune();
+        child.prune(-1.0);
         assert_eq!(
             child.brain.conns.contains(&wire),
             has_wire && has_neuron,

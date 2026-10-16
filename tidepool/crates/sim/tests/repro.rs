@@ -429,7 +429,7 @@ fn the_brood_of_a_donor_holder_is_crossed_marked_and_clears_the_donor() {
         let crossed = cross(&home, &donor, &mut mate, &params);
         assert_ne!(saved(&crossed), saved(&home), "the cross took nothing");
         let mut child = crossed.mutated(&mut mutate, &params, &mut next_history);
-        child.prune();
+        child.prune(-1.0);
         mutate.gauss();
         assert_eq!(saved(&w.genomes[s]), saved(&child), "child in slot {s}");
         assert_eq!(w.creatures.mixed_with[s], uid);
@@ -463,7 +463,7 @@ fn a_bud_with_no_donor_is_the_m2_bud() {
     assert_eq!(brood.len(), 2);
     for &s in &brood {
         let mut child = home.mutated(&mut mutate, &params, &mut next_history);
-        child.prune();
+        child.prune(-1.0);
         mutate.gauss();
         assert_eq!(saved(&w.genomes[s]), saved(&child), "child in slot {s}");
         assert_eq!(w.creatures.mixed_with[s], 0);

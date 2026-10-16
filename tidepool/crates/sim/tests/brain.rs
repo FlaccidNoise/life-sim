@@ -328,7 +328,7 @@ fn a_body_with_no_chemoreceptor_has_no_scent_input() {
     assert_eq!((b.n_conn[0], b.n_conn[1]), (65, 51));
     // `prune` takes them out of the genome.
     let mut pruned = zero.clone();
-    pruned.prune();
+    pruned.prune(-1.0);
     assert_eq!(pruned.brain.conns.len(), 51);
     assert!(!pruned.brain.conns.iter().any(|c| is_scent(&c.src)));
 

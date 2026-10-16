@@ -170,7 +170,7 @@ fn a_connection_to_a_missing_name_is_not_expressed_and_costs_nothing() {
 fn prune_removes_a_dangling_connection_and_the_second_of_a_pair() {
     let start = founder(7);
     let mut same = start.clone();
-    same.prune();
+    same.prune(-1.0);
     assert_eq!(
         saved(&same),
         saved(&start),
@@ -191,7 +191,7 @@ fn prune_removes_a_dangling_connection_and_the_second_of_a_pair() {
         conn(energy, thrust, 0.3, 350),
         conn(energy, thrust, 0.5, 450),
     ]);
-    g.prune();
+    g.prune(-1.0);
     let histories: Vec<u32> = g.brain.conns.iter().map(|c| c.history).collect();
     let want: Vec<u32> = (1..=60).chain(71..=75).chain([350]).collect();
     assert_eq!(histories, want);
@@ -212,7 +212,7 @@ fn prune_adds_an_out_gene_for_a_declared_output() {
         bias: 0.7,
         alpha: 0.5,
     };
-    g.prune();
+    g.prune(-1.0);
     let thrust = OutGene {
         node: Node::body(OUT_THRUST),
         bias: 0.0,
@@ -228,7 +228,7 @@ fn prune_adds_an_out_gene_for_a_declared_output() {
         },
         ..Genome::default()
     };
-    none.prune();
+    none.prune(-1.0);
     let nodes: Vec<Node> = none.brain.outs.iter().map(|o| o.node).collect();
     assert_eq!(nodes, brain::ports(&none).outputs);
 }
@@ -546,7 +546,7 @@ fn a_child_that_loses_its_eye_gene_loses_those_connections() {
     let mut blind = 0;
     for seed in 0..64 {
         let mut child = parent.mutated(&mut Rng::new(seed), &p, &mut next_history);
-        child.prune();
+        child.prune(-1.0);
         assert_eq!(child.parts.len(), 4, "seed {seed}");
         if child.parts.iter().any(|part| part.kind == KIND_EYE) {
             continue;

@@ -223,11 +223,17 @@ fn founder_parts() -> Vec<PartGene> {
         .collect()
 }
 
-/// The gene that `prune` gives a declared output that has none.
-fn resting(node: Node) -> OutGene {
+/// The gene that `prune` gives a declared output that has none. A trigger rests closed at
+/// `trigger_bias` (`starter_trigger_bias`), as a founder's does under rule P2 of the M4 plan: at
+/// bias 0 a new Jaw or gland fired on every cooldown from one wire above 0 and paid for it. The
+/// three body outputs rest at 0, as in M3.
+fn resting(node: Node, trigger_bias: f32) -> OutGene {
+    let trigger = brain::TRIGGERS
+        .iter()
+        .any(|&(port, _)| node == Node::body(port));
     OutGene {
         node,
-        bias: 0.0,
+        bias: if trigger { trigger_bias } else { 0.0 },
         alpha: 1.0,
     }
 }
@@ -238,7 +244,7 @@ impl Default for BrainGenome {
         BrainGenome {
             hidden: Vec::new(),
             outs: brain::BODY_OUTPUTS
-                .map(|port| resting(Node::body(port)))
+                .map(|port| resting(Node::body(port), 0.0))
                 .into(),
             conns: Vec::new(),
         }
@@ -652,7 +658,7 @@ impl Genome {
     /// input. Of the connections between one pair of ends, only the one with the lowest history
     /// stays. Removes the `OutGene` of an output that is not declared, and adds one with bias 0 and
     /// alpha 1 for a declared output that has none. The genes that stay keep their order.
-    pub fn prune(&mut self) {
+    pub fn prune(&mut self, trigger_bias: f32) {
         let ports = brain::ports(self);
         let BrainGenome {
             hidden,
@@ -676,7 +682,7 @@ impl Genome {
         outs.retain(|gene| ports.outputs.contains(&gene.node));
         for node in ports.outputs {
             if !outs.iter().any(|gene| gene.node == node) {
-                outs.push(resting(node));
+                outs.push(resting(node, trigger_bias));
             }
         }
     }

@@ -78,7 +78,7 @@ pub fn step(world: &mut World) {
                 None => home.mutated(&mut world.rng_mutate, p, &mut world.next_history),
             };
             // The brain genes of a newborn hold what its body expresses.
-            child.prune();
+            child.prune(p.get(id::STARTER_TRIGGER_BIAS));
             let (length, width) = (child.len * egg, child.len * child.wid * egg);
             let area = length * width;
             let mass = area * heft(child.part_sum(eye_cost), part_mass);

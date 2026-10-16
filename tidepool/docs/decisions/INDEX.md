@@ -241,6 +241,11 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
   feature that fails its measurement stays on and goes to the owner as a finding, since deleting
   it is the owner's call. The hard stops of the plan are unchanged. → `../plans/2026-10-14-m4-teeth.md`
   "How the build runs without the owner"
+- 2026-10-16: **Provisional, owner to confirm: a trigger output that arrives by mutation or a cross
+  rests closed at `starter_trigger_bias`, as a founder's does.** Found by the mid-build audit: `prune`
+  gave it bias 0, so one wire above 0 fired it on every cooldown and a new Jaw or gland paid for it, a
+  selection against mutant hunters before any trial. Rule P2 named founders only; this reads it as
+  the rule for every trigger. The three body outputs still rest at 0. → `../findings/m4-audit-1.md`
 
 ## Architecture
 
