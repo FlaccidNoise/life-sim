@@ -20,7 +20,8 @@ const N_IN: usize = 9;
 const N_OUT: usize = 3;
 
 /// Founders, plants, a changed parameter, a possessed creature, held manual input, and a piece of
-/// debris and a cloud set by hand. At the defaults no rule reads or changes the two.
+/// debris and a cloud set by hand. At the defaults the piece decays by `debris_decay` each tick and
+/// no filter reaches it, and the cloud is read by no rule yet.
 fn world_at(ticks: u32) -> World {
     let mut w = World::new(9, 1536.0, 1024.0);
     w.params.set(id::REPEL, 0.5);
