@@ -140,7 +140,7 @@ density would not be the limit, and it was not: the first contact kills.
   freed, and the card carries the killer's body from the kill. Snapshot format 10.
 - A frame written while the page holds every buffer loses that tick's kill marks.
 - The guards do not spread; the gland fires out of context; the fin is not kept.
-- The eye gap at 144,000 sits at its band on some seeds with every rule on.
+- The eye gap at 144,000 sits at its band on some seeds with every rule on. Since rule E1 of the diet retune (a blind eye sees no teeth) it fails on every seed: `m4-diet.md`.
 - `OUT_DASH` is declared by the flagellum sum but fires on `flag_push`: a side flagellum carries a
   dead output.
 
