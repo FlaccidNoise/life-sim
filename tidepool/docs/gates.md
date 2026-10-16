@@ -492,7 +492,7 @@ finding M1). Five proofs have a new input, and "The proofs" says which.
 | `chemo` less `chemo_blind` | Mean chemoreceptor sum, less the same in the run with `chemo_gain=0` | 0.10 or more. **The plan said 0.02** |
 | `eye` less `eye_blind` | Mean eye sum, less the same in the run with `eye_gain=0` | 0.10 or more. **The plan said 0.02** |
 | `plans` | Body plans held by 5% or more of the living. A plan is the sorted list of part kinds | Reported, no band |
-| `speed_cv` | Standard deviation over mean of the top speed of adults, by rule S3 of the plan | 0.10 or more, from 2026-10-14. **Provisional** ("The `speed_cv` band" below) |
+| `speed_cv` | Standard deviation over mean of the top speed of adults, by rule S3 of the plan | 0.10 or more, from 2026-10-14. Confirmed by the owner 2026-10-15 ("The `speed_cv` band" below) |
 | `speed` | Mean top speed of the living, by the same rule. The `speed` of `probe-census` | Reported, no band |
 | `area` | Mean of length squared times the width gene, over the living. The `area` of `probe-census` | Reported, no band |
 
