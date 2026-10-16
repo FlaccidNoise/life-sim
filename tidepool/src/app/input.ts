@@ -2,6 +2,9 @@
 // held keys, the pointer, and the frames, and posts what they return.
 
 import {
+  ABILITY_DASH,
+  ABILITY_LUNGE,
+  ABILITY_TOXIN,
   C_AGE,
   C_ENERGY,
   C_HEADING,
@@ -11,8 +14,12 @@ import {
   C_X,
   C_Y,
   CREATURE_STRIDE,
+  KIND_FLAGELLUM,
+  KIND_JAW,
+  KIND_TOXIN,
   NO_SLOT,
   type FrameView,
+  type Part,
 } from '../protocol';
 
 export interface Steer {
@@ -20,12 +27,16 @@ export interface Steer {
   thrust: number;
   turn: number;
   accept: boolean; // the player courts
+  abilities: number; // the `ABILITY_` bits held
 }
 export interface Keys {
   up: boolean;
   left: boolean;
   right: boolean;
   court: boolean;
+  dash: boolean;
+  lunge: boolean;
+  toxin: boolean;
 }
 export const GRACE_MS = 500;
 export const STARVING_BELOW = 0.25; // of a full energy store
@@ -45,6 +56,9 @@ const KEY_OF: Record<string, keyof Keys> = {
   KeyD: 'right',
   ArrowRight: 'right',
   KeyC: 'court',
+  Space: 'dash',
+  KeyF: 'lunge',
+  KeyQ: 'toxin',
 };
 
 /** The key of a `KeyboardEvent.code` that the body takes: the place of the key, not its letter. */
@@ -54,23 +68,72 @@ export function keyOf(code: string): keyof Keys | undefined {
 
 /**
  * W or ArrowUp thrusts. A or ArrowLeft turns -1. D or ArrowRight turns +1. Both turn keys cancel. C
- * courts: the body accepts a mate. `steers`: a key that moves the body is down, and it wins over a
- * held pointer. `active`: any of the four is down, and the input is manual.
+ * courts: the body accepts a mate. Space, F, and Q hold the dash, lunge, and toxin bits, but only
+ * those in `has`, the abilities that the body carries (the default is none). `steers`: a key that
+ * moves the body is down, and it wins over a held pointer. `active`: any key that the body takes is
+ * down, and the input is manual.
  */
-export function steerFromKeys(k: Keys): {
+export function steerFromKeys(
+  k: Keys,
+  has = 0,
+): {
   thrust: number;
   turn: number;
   accept: boolean;
+  abilities: number;
   steers: boolean;
   active: boolean;
 } {
   const steers = k.up || k.left || k.right;
+  const abilities =
+    ((k.dash ? ABILITY_DASH : 0) | (k.lunge ? ABILITY_LUNGE : 0) | (k.toxin ? ABILITY_TOXIN : 0)) &
+    has;
   return {
     thrust: k.up ? 1 : 0,
     turn: (k.right ? 1 : 0) - (k.left ? 1 : 0),
     accept: k.court,
+    abilities,
     steers,
-    active: steers || k.court,
+    active: steers || k.court || abilities !== 0,
+  };
+}
+
+/** The abilities that parts give: a Flagellum a dash, a Jaw a lunge, a Toxin gland a cloud. */
+export function abilitiesOf(parts: Part[]): number {
+  let mask = 0;
+  for (const { kind } of parts) {
+    if (kind === KIND_FLAGELLUM) mask |= ABILITY_DASH;
+    else if (kind === KIND_JAW) mask |= ABILITY_LUNGE;
+    else if (kind === KIND_TOXIN) mask |= ABILITY_TOXIN;
+  }
+  return mask;
+}
+
+/** The tick at which each ability is ready again, by the count of the page. */
+export interface ReadyAt {
+  dash: number;
+  lunge: number;
+  toxin: number;
+}
+
+/**
+ * The counts after a frame at `tick`. The frame does not carry the cooldowns, so the page counts
+ * `cooldown` ticks from its own press: each ability in `held`, the mask that the page posts, whose
+ * count has ended starts a new one. A hold that outlasts a count fires again in the core. A press by
+ * the brain is never in `held`: the page posts no mask while the brain drives.
+ */
+export function pressCooldowns(
+  ready: ReadyAt,
+  held: number,
+  tick: number,
+  cooldown: number,
+): ReadyAt {
+  const next = (bit: number, at: number): number =>
+    held & bit && tick >= at ? tick + cooldown : at;
+  return {
+    dash: next(ABILITY_DASH, ready.dash),
+    lunge: next(ABILITY_LUNGE, ready.lunge),
+    toxin: next(ABILITY_TOXIN, ready.toxin),
   };
 }
 
@@ -112,13 +175,14 @@ export function manualNow(lastActiveMs: number, nowMs: number): boolean {
  */
 export function inputToSend(sent: Steer | null, next: Steer): Steer | null {
   if (!next.manual) {
-    return sent?.manual ? { manual: false, thrust: 0, turn: 0, accept: false } : null;
+    return sent?.manual ? { manual: false, thrust: 0, turn: 0, accept: false, abilities: 0 } : null;
   }
   const same =
     sent?.manual &&
     sent.thrust === next.thrust &&
     sent.turn === next.turn &&
-    sent.accept === next.accept;
+    sent.accept === next.accept &&
+    sent.abilities === next.abilities;
   return same ? null : next;
 }
 

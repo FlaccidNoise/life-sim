@@ -75,6 +75,12 @@ export const KIND_FLAGELLUM = 1,
   KIND_SHELL = 9,
   KIND_TOXIN = 10;
 
+// The bits of the abilities mask of the `input` message. They mirror `ABILITY_` in
+// crates/sim/src/control.rs.
+export const ABILITY_DASH = 1,
+  ABILITY_LUNGE = 2,
+  ABILITY_TOXIN = 4;
+
 /** One part of a body. `anchor`, `size`, and `extra` are 0 to 1 each, in steps of 1/255. */
 export interface Part {
   kind: number;
@@ -340,8 +346,16 @@ export type ToWorker =
   | { type: 'possessAt'; x: number; y: number; radius: number }
   | { type: 'possess'; uid: number }
   | { type: 'release' }
-  // `accept`: the player courts. The core reads it while `manual` is set.
-  | { type: 'input'; manual: boolean; thrust: number; turn: number; accept: boolean }
+  // `accept`: the player courts. `abilities`: the abilities held, 1 dash, 2 lunge, 4 toxin; absent
+  // for none. The core reads both while `manual` is set.
+  | {
+      type: 'input';
+      manual: boolean;
+      thrust: number;
+      turn: number;
+      accept: boolean;
+      abilities?: number;
+    }
   | { type: 'param'; index: number; value: number }
   // With `on`, a `brain` message follows each frame while a body is possessed.
   | { type: 'watchBrain'; on: boolean }

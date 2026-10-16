@@ -760,3 +760,50 @@ test('brainOf answers with the brain of a living uid, and with 0 words for a dea
     [999_999, 0],
   ]);
 });
+
+// Rule X2 of the M4 plan: the mask of the page reaches `tp_input` while the input is manual, and a
+// new body starts without it. A dash sets `FLAG_DASH` on the body that fires it.
+test('the abilities mask reaches the core, and a dash shows on the possessed body', () => {
+  const masks: number[] = [];
+  const r = rig({
+    recycle: true,
+    wrap: (sim) => ({
+      ...sim,
+      input: (manual, thrust, turn, accept, abilities) => {
+        masks.push(abilities);
+        sim.input(manual, thrust, turn, accept, abilities);
+      },
+    }),
+  });
+  r.host.handle({ type: 'init', seed: 1 });
+  r.host.handle({ type: 'possess', uid: 7 });
+  const dashing = (): boolean => {
+    const f = frameOf(r);
+    for (let i = 0; i < f.creatureCount; i++) {
+      const o = f.creatureBase + i * P.CREATURE_STRIDE;
+      if (f.u32[o + P.C_SLOT] === f.possessedSlot) {
+        return ((f.u32[o + P.C_FLAGS] ?? 0) & P.FLAG_DASH) !== 0;
+      }
+    }
+    throw new Error('the frame does not hold the possessed body');
+  };
+  r.advance(100);
+  expect(new Set(masks)).toEqual(new Set([0]));
+  expect(dashing()).toBe(false);
+
+  r.host.handle({ type: 'input', manual: true, thrust: 0, turn: 0, accept: false, abilities: 1 });
+  r.advance(100);
+  expect(masks.at(-1)).toBe(1);
+  expect(dashing()).toBe(true);
+
+  // The mask stops with the key.
+  r.host.handle({ type: 'input', manual: true, thrust: 0, turn: 0, accept: false, abilities: 0 });
+  r.advance(100);
+  expect(masks.at(-1)).toBe(0);
+
+  // A new body does not inherit the mask.
+  r.host.handle({ type: 'input', manual: true, thrust: 0, turn: 0, accept: false, abilities: 7 });
+  r.host.handle({ type: 'possess', uid: 8 });
+  r.advance(100);
+  expect(masks.at(-1)).toBe(0);
+});

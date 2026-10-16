@@ -2,6 +2,7 @@
 
 import { useState } from 'preact/hooks';
 import type { Heir } from '../protocol';
+import { Abilities } from './Abilities';
 import { BrainPanel, BrainToggle } from './BrainPanel';
 import { BudCard } from './BudCard';
 import { DeathOverlay } from './DeathOverlay';
@@ -131,6 +132,7 @@ export function App(props: {
       {mode.value === 'play' && <Line debug={props.debug} />}
       {mode.value === 'play' && !dead && <BudCard />}
       {mode.value === 'play' && !dead && <MateCard />}
+      <Abilities />
       <div class="corner">
         {props.debug && <WalkLog />}
         {!dead && <BrainToggle onToggle={props.onBrain} />}
