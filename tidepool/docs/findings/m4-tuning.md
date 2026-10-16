@@ -175,3 +175,25 @@ written below. The predation bands stay in the code as provisional and are not j
 gates`: this world fails `flesh_late` at 12,000 (0.001 to 0.002 against 0.01) and `hunt_hi` and
 `prey_lo` at 144,000 (every seed), so target 1 and target 4 are not met, and they go to the owner
 with these rows. Targets 2, 3, and 5 are read in part 2 below.
+
+## Part 2: measure before tuning, at the defaults (`8435888`)
+
+Rows follow the run: `make gates` (the bench with everything on), `probe-hunt` at 36,000, the jaw
+gap (`gate-evolve --brain` at 144,000 on seeds 1, 4, 5, 6, 8 with `bite_rate=0`, which is also the
+long proof of bad world B1, and the chance arm `bite_rate=0.0001`). The good world's long row is the
+long read above (5 of 5). Hypotheses: the bench is not void (1,340 to 1,520 bodies at 12,000 in the
+T2 rows) and reads under the ratio-off world by the per-creature cost of the bite and the debris
+pass; with `bite_rate=0` the jaw is dead weight and its share at 144,000 falls under the chance
+arm's on at least 4 of 5 seeds, and `hunt_lo` reads under 0.05 there (the long `hunt_lo` band's
+proof); the chance arm reads as the dead arm within noise.
+
+## Part 4: the toxin gland, stage 2
+
+Hypotheses before the run. The Start values `toxin_drain` 0.3 and `toxin_cost` 2.0 go on as flags on
+the defaults, then as defaults if the readings hold. A gland arrives only by mutation (no founder
+has one), so at 12,000 and 36,000 the mechanism's claim is "clouds are made and drain": `poisoned`
+above 0 on at least 1 of 3 seeds by 36,000, `gland` mean under 0.05, and `toxin_fire_ctx` above
+`toxin_think_ctx` where any cloud fires (a cloud fires with a hit in the last 10 ticks). Targets 1
+to 5 read as at stage 1: no seed under 150 bodies, the M2 and brain bands held. "Evolution keeps it":
+the gland share at 144,000 against `toxin_drain=0`, no band, read in the long run below. At most 3
+trials, for the targets only.
