@@ -252,13 +252,13 @@ table! {
     /// Energy per unit of mouth for one lunge.
     LUNGE_COST "lunge_cost" 0.5 0.0 5.0;
     /// Energy per tick per unit of gland, from each body in the cloud.
-    TOXIN_DRAIN "toxin_drain" 0.0 0.0 4.0;
+    TOXIN_DRAIN "toxin_drain" 0.3 0.0 4.0;
     /// Cloud radius in the maker's lengths.
     TOXIN_RADIUS "toxin_radius" 2.0 0.5 8.0;
     /// Ticks a cloud lasts.
     TOXIN_TICKS "toxin_ticks" 60.0 1.0 600.0;
     /// Energy per unit of mouth for one cloud.
-    TOXIN_COST "toxin_cost" 0.0 0.0 10.0;
+    TOXIN_COST "toxin_cost" 2.0 0.0 10.0;
     /// Scale of the hurt input: a loss of a tenth of capacity reads 1.
     HURT_GAIN "hurt_gain" 10.0 0.0 100.0;
     /// Share of founders with a Jaw.

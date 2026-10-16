@@ -230,3 +230,70 @@ The jaw gap at 144,000, `gate-evolve --brain` on seeds 1, 4, 5, 6, 8 and `probe-
 - Both arms lose one seed's scent gap at 144,000 by a hair (0.069, 0.043 against 0.10), as the
   Task 10 arm did on seed 8. The default world holds every seed's scent (0.42 to 0.88): the bite
   is good for the nose.
+
+### Part 4 rows (`38baab1`, flags `toxin_drain=0.3 toxin_cost=2.0` on the defaults)
+
+At 12,000 and 36,000 every row is identical to the defaults without the gland: no body has a gland
+yet (`gland` 0.000 to 0.010, `toxin_fires` 0, `poisoned` 0), the bench reads 2,439 at 1,540 bodies
+(266 ns, the same). At 144,000 (`gate-evolve --brain --predation`, seeds 1, 4, 5, 6, 8):
+
+| Seed | Bodies | M2 and brain bands | `kills_late` | `flesh_late` |
+|---|---|---|---|---|
+| 1 | 631 | pass | 380 | 0.026 |
+| 4 | 774 | pass | 383 | 0.022 |
+| 5 | 925 | pass | 1,040 | 0.041 |
+| 6 | 939 | **`eye_gap` 0.080** | 374 | 0.014 |
+| 8 | 813 | **`eye_gap` 0.082** | 226 | 0.012 |
+
+`probe-hunt` on seeds 1, 2, 3: glands arrive by mutation on seed 3 from 72,000 (`gland` 0.11 to 0.20,
+228 to 1,532 clouds per 36,000 ticks, 1 to 6 bodies poisoned per window) and briefly on seed 1
+(650 clouds, nobody poisoned); seed 2 has none. `toxin_fire_ctx` 0.000 to 0.014: a cloud fires at
+random, not after a hit.
+
+- **"The mechanism fires": shown.** Clouds are made, drawn, and drain; on seed 3 they kill.
+- **"Evolution keeps it": not shown.** The gland share at 144,000 against the run without the gland
+  (the long read): 0.000 against 0.000, 0.001 against 0.001, 0.198 against 0.059. One seed in three
+  grows glands, and it is the seed where they fire.
+- **It feeds the hurt input and nothing else moves.** The two `eye_gap` misses at 0.08 are the band's
+  noise (the same seeds read 0.11 to 0.18 without the gland, and arms of the jaw gap missed a scent
+  gap by the same hair): the final `make gates-long` below reads them again.
+- No trial is spent: the targets the gland can reach (3 and 5) hold or sit at the band's noise, and
+  the two it cannot (1 and 4) are the takeover's. Its defaults are written: `toxin_drain` 0.3,
+  `toxin_cost` 2.0. The owner's instruction is that it ships on.
+
+## Part 5: close
+
+### What is still wrong or fragile
+
+Each line says which of the three claims it makes: the mechanism fires, evolution uses it, it helps.
+
+1. **Hunters take over.** The mechanism fires (bites, kills, flesh on every seed). Evolution uses it:
+   the mean jaw grows to 0.2 to 1.0 where a jaw bites and stays at 0.1 to 0.2 where it cannot. It does
+   not help the world coexist: with the bite on, hunters pass 80% of the living on every seed by
+   144,000, prey holds on 1 seed in 3 and comes back after a bust on another. The cause is a rule
+   (J1 pays a jaw from the first contact, K1 charges it mass only, a hunter keeps its Filter), the
+   fix is a rule, and the owner has it.
+2. **The world is thinner and bigger with the bite on.** 486 to 939 bodies at 144,000 against
+   1,246 to 1,689 at the M3 exit; `len` 14 to 21 against 10. Inside every band. The mechanism fires
+   (adults eat the young, size is a shield). Whether it helps the game is the owner's playtest.
+3. **The bench reads at the floor.** 2,440 against 2,400, under the target of 2,600, with 1,540
+   bodies at 266 ns per creature-tick. The per-creature cost is the same as before the switch-on;
+   the bodies are more. Choice C9: the reference population and the floor are the owner's.
+4. **The guards do nothing yet.** A spike or a shell arrives by mutation and does not spread (mean
+   size under 0.02 at 144,000 on 8 of 8 seeds read). The mechanism fires in tests; evolution does not
+   use it; it does not help. They stay on at `spike_hurt` 1.0 and `shell_block` 1.0.
+5. **The gland fires at random.** Clouds come on 1 seed in 3 and fire out of context
+   (`toxin_fire_ctx` 0.01). The mechanism fires; evolution keeps it on one seed; it does not help.
+6. **The dash and the lunge fire in context** (`dash_fire_ctx` 0.9 to 1.0, `lunge_fire_ctx` 0.8 to
+   1.0 at 12,000): the starter wires work. Whether a dash saves a body is not measured.
+7. **The eye gap sits at its band at 144,000** on 2 of 5 seeds with the gland on (0.080, 0.082)
+   and clears it without (0.11 to 0.18). Chance-level; read again in the final proof.
+8. **Two long bands are unset** (`hunt_hi`, `prey_lo` at 144,000) and `flesh_late` at 12,000 fails the
+   shipped world. `--predation` judges the set ones in `make gates-long` only.
+9. **A victim whose killer died earlier in the same kill list gets no killer** (audit item 2): the
+   death card then reads "Eaten." with no body. Open for Task 15 or M5.
+
+### The final proof
+
+`make check && make gates && make gates-long`, run after the defaults of parts 3 and 4 and the
+`--predation` flag on the `gates-long` line. The rows follow the run.
