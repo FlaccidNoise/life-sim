@@ -35,10 +35,11 @@ The previous handoff (mid-M4) is at `git show 9a0b25a:HANDOFF.md`.
 1. The owner plays (`make dev`, `/?world=/m2-world.tdpl`) and answers the open problems of
    `m4-exit.md`: the takeover rule, the bench's reference population (C9), the bands, the provisional
    entries, the budgets.
-2. M5 (Deep time) has no plan yet. It carries from M4: the killer missing from the card when the
-   killer died in the same kill list, the kill marks lost when the page holds every buffer, the still
-   brain's overlapping output labels, the eye gap's changed meaning (the jaw input is not scaled by
-   `eye_gain`), and the guards and gland that evolution does not use.
+2. M5 (Deep time) has no plan yet. It carries from M4: the kill marks lost when the page holds
+   every buffer, the eye gap's changed meaning (the jaw input is not scaled by `eye_gain`), and the
+   guards and gland that evolution does not use. Fixed after the exit, unpushed: the still brain's
+   overlapping output labels (`9258483`) and the killer missing from the card when it died in the
+   same kill list (`5c81aea`, `3010972`, snapshot format 10, both saved worlds rebaked).
 
 ## Warnings
 

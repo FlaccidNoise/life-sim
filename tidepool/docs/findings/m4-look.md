@@ -34,5 +34,7 @@ the switch-on, so these are the first sightings.
   this machine with 1,713 bodies and 515 pieces of debris.
 - **A defect:** on the death card the still brain's five output labels (thrust, turn, accept, dash,
   lunge) overlap each other and their rest/full ticks when a body declares more than three
-  outputs. The live brain panel was not checked for the same. Open for the owner's look or M5.
+  outputs. The live brain panel was not checked for the same. Fixed after the exit (`9258483`):
+  rows closer than 40 pixels put each name on its gauge line, in the still brain and the live
+  panel; seen on a real "Eaten." card at 1272 by 745.
 - A phone.

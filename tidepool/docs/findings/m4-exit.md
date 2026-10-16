@@ -86,7 +86,14 @@ gate-evolve 3/5 FAIL
 
 The same rows as part 4's gland-on run, digit for digit. Both saved worlds are rebaked at these
 defaults: `m2-world.tdpl` at tick 36,000 (1,713 bodies, 515 pieces of debris, hash `5ec2fb48`) and
-`m2-world-long.tdpl` at 144,000 (631 bodies, 136 pieces, hash `7583a4bd`).
+`m2-world-long.tdpl` at 144,000 (631 bodies, 136 pieces, hash `7583a4bd`). Rebaked at snapshot
+format 10 after the exit (`3010972`), same counts, new hashes from the added field: `1e9963a1` and
+`3052964a`. `make gates` at `3010972`: native 2,436, WASM 2,385 (FAIL, floor 2,400), so the
+health and evolution gates were run by hand: 3 of 3 and 3 of 3, seed 1 at 1,713 bodies as before.
+An interleaved WASM A/B in one sitting (load 2.5 to 3.2), A = `5344ada`, B = `3010972`: A 2,449,
+2,451, 2,432; B 2,437, 2,448, 2,391; medians 2,449 and 2,437, 1,540 bodies each. The fixes cost
+nothing that the bench can see; the floor sits 1% to 2% under both arms and one reading in three
+falls under it. The floor is the owner's.
 
 ## Throughput
 
@@ -128,7 +135,9 @@ density would not be the limit, and it was not: the first contact kills.
 
 **Carried to M5 or later:**
 
-- A victim whose killer died earlier in the same kill list gets no killer on the card.
+- ~~A victim whose killer died earlier in the same kill list gets no killer on the card.~~ Fixed
+  after the exit (`5c81aea`, `3010972`): every death of a kill list is counted before any slot is
+  freed, and the card carries the killer's body from the kill. Snapshot format 10.
 - A frame written while the page holds every buffer loses that tick's kill marks.
 - The guards do not spread; the gland fires out of context; the fin is not kept.
 - The eye gap at 144,000 sits at its band on some seeds with every rule on.
@@ -146,7 +155,8 @@ pictures, under `img/`):
   and `bite_mass_ratio=0`, through the page's own `died` path: "Eaten.", the killer with its jaw,
   generation 3, its brain with `dash` and `lunge`, "Sees another body on the right. Lunges.", the
   heirs first. The no-killer state was seen too ("You starved."). Defect: the still brain's five
-  output labels overlap.
+  output labels overlap. Fixed after the exit (`9258483`): rows closer than 40 pixels put each
+  name on its gauge line, in the still brain and the live panel.
 - **Task 14, beat 11:** the kill mark rings a killer in view in the 36,000-tick world within the
   first seconds of a possession. The playtest log's `firstBite` entry was not read.
 - **Task 13, the buttons:** a possessed hunter shows Dash and Lunge from its parts; a lunge fires on
