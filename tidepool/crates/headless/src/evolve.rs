@@ -58,12 +58,16 @@ const VARIETY: f64 = 2.0;
 /// 0.022 to 0.037). `hunt_lo` is not a gate at 144,000 either: a dead jaw's share reads 0.04 to
 /// 0.96 across seeds and samples.
 /// `hunt_hi` and `prey_lo` are not set: the default world fails them (`findings/m4-tuning.md`).
+/// `carn_hi` and `diet_sd_lo` are printed, not judged yet: set from the shipped world's rows (Task 7
+/// of the diet retune).
 const PREDATION: Bands = Bands {
     hunt_lo: None,
     hunt_hi: None,
     prey_lo: None,
     kills_late: Some(20),
     flesh_late: Some(0.01),
+    carn_hi: None,
+    diet_sd_lo: None,
 };
 
 /// The mean and the standard deviation. Both are 0 for no values.

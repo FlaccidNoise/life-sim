@@ -865,7 +865,7 @@ pub fn hunt_probe(argv: &[String]) {
 /// `docs/plans/2026-10-16-m4-retune-diet.md`: a herbivore has a diet below `HERB_BELOW`, a
 /// carnivore one above `CARN_ABOVE`, and an omnivore one between the two, both included.
 const HERB_BELOW: f32 = 0.3;
-const CARN_ABOVE: f32 = 0.7;
+pub(crate) const CARN_ABOVE: f32 = 0.7;
 
 /// What `probe-diet` reads of the living at one tick. Every share is 0 for nobody alive.
 #[derive(Default)]

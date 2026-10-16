@@ -7,6 +7,8 @@ use tidepool_sim::params::id;
 use tidepool_sim::stats::STAT_MAX_GENERATION;
 use tidepool_sim::world::World;
 
+use crate::evolve::mean_sd;
+use crate::probes::CARN_ABOVE;
 use crate::{param, usage, value, FOUNDERS, WORLD};
 
 // The bands of the gate. `docs/gates.md` holds the table.
@@ -30,12 +32,16 @@ const PARKED_SPEED: f32 = 0.05;
 // reject a world with no predation (0 and 0.000), `prey_lo` and `hunt_hi` a world where every body
 // hunts and any body can be bitten (0 and 1.000). `hunt_lo` is not a gate at 12,000 ticks: a world
 // with no founder hunter reads 0.03 to 0.16 by mutation, and one with dead jaws 0.08 to 0.23.
+// `carn_hi` and `diet_sd_lo` are printed, not judged yet: set from the shipped world's rows (Task 7
+// of the diet retune).
 const PREDATION: Bands = Bands {
     hunt_lo: None,
     hunt_hi: Some(0.8),
     prey_lo: Some(150),
     kills_late: Some(20),
     flesh_late: Some(0.01),
+    carn_hi: None,
+    diet_sd_lo: None,
 };
 /// The hunter share and the prey count are sampled on each multiple of this many ticks in the second
 /// half of the run.
@@ -134,13 +140,16 @@ impl FirstBuds {
 }
 
 /// The least and the most of each predation measure that the gate accepts. Each is `None` until
-/// its proof sets it. `hunt_hi` is a most. The others are a least.
+/// its proof sets it. `hunt_hi` is a most. The others are a least, `carn_hi` and `diet_sd_lo`
+/// among them: `carn_hi` is the least of the most carnivore share.
 pub struct Bands {
     pub hunt_lo: Option<f64>,
     pub hunt_hi: Option<f64>,
     pub prey_lo: Option<u32>,
     pub kills_late: Option<u64>,
     pub flesh_late: Option<f64>,
+    pub carn_hi: Option<f64>,
+    pub diet_sd_lo: Option<f64>,
 }
 
 impl Bands {
@@ -150,6 +159,8 @@ impl Bands {
             || self.prey_lo.is_some()
             || self.kills_late.is_some()
             || self.flesh_late.is_some()
+            || self.carn_hi.is_some()
+            || self.diet_sd_lo.is_some()
     }
 }
 
@@ -166,14 +177,18 @@ pub fn predation_flag(argv: &[String], bands: &Bands, name: &str) -> (bool, Vec<
     (on, others.cloned().collect())
 }
 
-/// The five measures of "How the gate reads 'predators and prey coexist'" in the M4 plan. A hunter
-/// is a living body with a `jaw_sum` above 0, and prey is one with none.
+/// The five measures of "How the gate reads 'predators and prey coexist'" in the M4 plan, and the
+/// two diet measures of Task 7 of the diet retune. A hunter is a living body with a `jaw_sum`
+/// above 0, and prey is one with none. A carnivore has a `diet` above `CARN_ABOVE`.
 #[derive(Default)]
 pub struct Coexist {
     /// The least and the most hunter share, and the least prey count, over the samples.
     hunt_lo: f64,
     hunt_hi: f64,
     prey_lo: u32,
+    /// The most carnivore share, and the least standard deviation of `diet`, over the samples.
+    carn_hi: f64,
+    diet_sd_lo: f64,
     samples: u32,
     /// The kills, the flesh, and every energy eaten (plants, debris, flesh) when the late window
     /// opens. Zero for a run shorter than the window: the window is then the whole run.
@@ -195,9 +210,15 @@ impl Coexist {
             let hunters = live(world).filter(|&s| c.jaw_sum[s] > 0.0).count() as u32;
             // A world with nobody alive has no hunter.
             let share = f64::from(hunters) / f64::from(living.max(1));
+            let carns = live(world).filter(|&s| c.diet[s] > CARN_ABOVE).count();
+            let carn = carns as f64 / f64::from(living.max(1));
+            let (_, diet_sd) = mean_sd(live(world).map(|s| c.diet[s]));
             if self.samples == 0 {
                 (self.hunt_lo, self.hunt_hi, self.prey_lo) = (share, share, u32::MAX);
+                (self.carn_hi, self.diet_sd_lo) = (carn, diet_sd);
             }
+            self.carn_hi = self.carn_hi.max(carn);
+            self.diet_sd_lo = self.diet_sd_lo.min(diet_sd);
             self.hunt_lo = self.hunt_lo.min(share);
             self.hunt_hi = self.hunt_hi.max(share);
             self.prey_lo = self.prey_lo.min(living - hunters);
@@ -208,8 +229,8 @@ impl Coexist {
         }
     }
 
-    /// The five columns of a row, and the bands of `bands` that the run left when `judged`. A run
-    /// with no sample prints `none` for the three sampled measures, and fails each of their bands.
+    /// The seven columns of a row, and the bands of `bands` that the run left when `judged`. A run
+    /// with no sample prints `none` for the five sampled measures, and fails each of their bands.
     /// `flesh_late` is 0 when nothing was eaten in the window.
     pub fn read(&self, world: &World, bands: &Bands, judged: bool) -> (String, Vec<String>) {
         let (kills, flesh, eaten) = hunt_stats(world);
@@ -236,8 +257,12 @@ impl Coexist {
             sampled(hi_s),
             sampled(self.prey_lo.to_string()),
         );
+        let (carn_s, sd_s) = (
+            sampled(format!("{:.3}", self.carn_hi)),
+            sampled(format!("{:.2}", self.diet_sd_lo)),
+        );
         let row = format!(
-            "hunt_lo={lo_s} hunt_hi={hi_s} prey_lo={prey_s} kills_late={kills_late} flesh_late={flesh_late:.3}"
+            "hunt_lo={lo_s} hunt_hi={hi_s} prey_lo={prey_s} kills_late={kills_late} flesh_late={flesh_late:.3} carn_hi={carn_s} diet_sd_lo={sd_s}"
         );
         let mut failures = Vec::new();
         if !judged {
@@ -268,6 +293,18 @@ impl Coexist {
             band(
                 flesh_late >= lo,
                 format!("flesh_late={flesh_late:.3} < {lo}"),
+            );
+        }
+        if let Some(lo) = bands.carn_hi {
+            band(
+                some && self.carn_hi >= lo,
+                format!("carn_hi={carn_s} < {lo}"),
+            );
+        }
+        if let Some(lo) = bands.diet_sd_lo {
+            band(
+                some && self.diet_sd_lo >= lo,
+                format!("diet_sd_lo={sd_s} < {lo}"),
             );
         }
         (row, failures)
@@ -594,7 +631,7 @@ mod tests {
         // 1 hunter of 4, then 2 of 5. Flesh 3 of 3 + 2 + 3 eaten.
         assert_eq!(
             row,
-            "hunt_lo=0.250 hunt_hi=0.400 prey_lo=3 kills_late=3 flesh_late=0.375"
+            "hunt_lo=0.250 hunt_hi=0.400 prey_lo=3 kills_late=3 flesh_late=0.375 carn_hi=0.000 diet_sd_lo=0.00"
         );
         assert!(failures.is_empty());
 
@@ -604,6 +641,8 @@ mod tests {
             prey_lo: Some(4),
             kills_late: Some(4),
             flesh_late: Some(0.4),
+            carn_hi: None,
+            diet_sd_lo: None,
         };
         assert_eq!(coexist.read(&world, &bands, false).1.len(), 0);
         assert_eq!(coexist.read(&world, &bands, true).1.len(), 5);
@@ -611,5 +650,53 @@ mod tests {
             .read(&world, &bands, true)
             .0
             .starts_with("hunt_lo=none hunt_hi=none prey_lo=none"));
+    }
+
+    /// A sample of a world of 3 bodies at one diet, or of nobody.
+    fn diet_row(diet: Option<f32>, bands: &Bands) -> (String, Vec<String>) {
+        let mut world = World::new(1, 256.0, 256.0);
+        if let Some(d) = diet {
+            for _ in 0..3 {
+                spawn(&mut world, false);
+            }
+            for s in live(&world).collect::<Vec<_>>() {
+                world.genomes[s].diet = d;
+                world.creatures.diet[s] = d;
+            }
+        }
+        let mut coexist = Coexist::default();
+        world.tick = 1000;
+        coexist.record(&world, 1000);
+        coexist.read(&world, bands, true)
+    }
+
+    #[test]
+    fn the_diet_columns_read_the_share_above_the_cut_and_the_spread() {
+        let none = Bands {
+            hunt_lo: None,
+            hunt_hi: None,
+            prey_lo: None,
+            kills_late: None,
+            flesh_late: None,
+            carn_hi: None,
+            diet_sd_lo: None,
+        };
+        let row = |diet| diet_row(diet, &none).0;
+        assert!(row(Some(0.9)).ends_with(" carn_hi=1.000 diet_sd_lo=0.00"));
+        assert!(row(Some(0.0)).ends_with(" carn_hi=0.000 diet_sd_lo=0.00"));
+        // Nobody alive: a sample, not a NaN.
+        assert!(row(None).ends_with(" carn_hi=0.000 diet_sd_lo=0.00"));
+
+        let set = Bands {
+            carn_hi: Some(0.03),
+            diet_sd_lo: Some(0.05),
+            ..none
+        };
+        assert_eq!(diet_row(Some(0.0), &set).1.len(), 2);
+        assert_eq!(diet_row(Some(0.9), &set).1, ["diet_sd_lo=0.00 < 0.05"]);
+        assert!(Coexist::default()
+            .read(&World::new(1, 256.0, 256.0), &set, true)
+            .0
+            .ends_with(" carn_hi=none diet_sd_lo=none"));
     }
 }
