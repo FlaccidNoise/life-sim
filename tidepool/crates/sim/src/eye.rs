@@ -23,7 +23,8 @@ const BOX_MARGIN: f32 = 0.25;
 /// Writes the eye inputs of the body in `slot`, from `Brains::in_eye`: three for each cone, in the
 /// order of the cones. The first is the nearness of the nearest plant in the cone and the second
 /// that of the nearest body: 1 at the eye, 0 at the range of the cone and with nothing in it. The
-/// third is the `jaw_sum` of that nearest body, 0 with none. Nothing is summed over cones.
+/// third is the `jaw_sum` of that nearest body, 0 with none. All three are times `eye_gain` (rule E1
+/// of the diet retune), so a blind eye sees no teeth. Nothing is summed over cones.
 /// `brain::ports` declares the three inputs of each cone in the same order. A body whose brain has
 /// no eye input is not scanned.
 ///
@@ -120,7 +121,7 @@ pub fn see(world: &mut World, slot: usize) {
         input[1] = (gain * near(body[k])).clamp(0.0, 1.0);
         input[2] = match who[k] {
             NO_BODY => 0.0,
-            j => c.jaw_sum[j as usize],
+            j => gain * c.jaw_sum[j as usize],
         };
     }
 }

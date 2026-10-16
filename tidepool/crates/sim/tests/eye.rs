@@ -560,4 +560,13 @@ fn an_eye_cone_reads_the_jaw_of_the_nearest_body() {
     let s = body(&mut w, founder_eyed(), AT);
     w.tick();
     assert_eq!(jaw_inputs(&mut w, s), [0.0, 0.0]);
+    // A blind eye sees no teeth, and half an eye sees half of them (rule E1).
+    for (gain, seen) in [(0.0, 0.0), (0.5, 0.2)] {
+        let mut w = world(1);
+        w.params.set(id::EYE_GAIN, gain);
+        let s = body(&mut w, founder_eyed(), AT);
+        body(&mut w, jawed(0.4), off(15.0, SIDE));
+        w.tick();
+        assert_eq!(jaw_inputs(&mut w, s), [seen, 0.0]);
+    }
 }
