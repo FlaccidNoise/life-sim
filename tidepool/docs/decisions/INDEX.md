@@ -258,6 +258,24 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
   mutation in a world with no founder hunter (0.03 to 0.16) and dead jaws are not yet selected
   out (0.08 to 0.23). The Start world fails `hunt_hi` and `prey_lo` on 3 of 3: every body hunts
   by the second half. The retune starts from that. → `../findings/m4-gates.md`
+- 2026-10-16: **Provisional, owner to confirm: the predation bands of the long gate at 144,000 ticks
+  are `kills_late` 20 or more and `flesh_late` 0.01 or more, judged under `--brain --predation`.**
+  A world with a dead jaw (`bite_rate=0`) reads 0 and 0.000 on 5 of 5 seeds; the default world
+  240 to 690 and 0.022 to 0.037. `hunt_lo` is not a gate at either length: a dead jaw costs a tenth
+  of a part's mass and drifts to 4% to 96% of the living by 144,000. `hunt_hi` and `prey_lo` are not
+  set at 144,000: the default world fails them. → `../findings/m4-tuning.md` Part 2
+- 2026-10-16: **The M4 rules ship on with the ratio-3 set, and the takeover of the hunters is a
+  finding for the owner, not a default.** Five trials at the boom (`bite_mass_ratio` 2.0 and 3.0,
+  the guards doubled, `bite_rate` 0.2, `lunge_cost` 2.0): the mass ratio sets the pace of the
+  takeover and nothing stops it. Rule J1 gives a jaw a payoff from the first contact with anyone's
+  young, rule K1 gives it no cost but mass, and a hunter keeps its Filter, so a jawless lineage is
+  strictly worse; the draft measured the same (C11, C15, C16) and named negative frequency
+  dependence as the need. That is a rule, and the owner's. The shipped defaults: `bite_mass_ratio`
+  3.0 with the other Start values, under which the world holds 486 to 904 bodies at 144,000 with
+  every M2 and brain band on 5 of 5, a boom and bust on one seed in three, and persistent prey on
+  another. Targets 1 and 4 of the retune (the coexistence bands) are not met; target 2 is met at
+  the floor (WASM 2,440 against 2,400, under the target of 2,600); targets 3 and 5 are met.
+  → `../findings/m4-tuning.md`
 
 ## Architecture
 

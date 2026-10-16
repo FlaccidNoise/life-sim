@@ -1090,3 +1090,26 @@ The M0 row: four more loads on the same day read 16,207 to 17,212. The same modu
 
 The settled-world row: a second load read 4,004 ticks per second and 6.0 s. The WASM bench in Node read
 3,757 on the same world, so the page is not slower than Node. The skip budget is 10 s on this machine.
+
+### The predation bands (M4, provisional)
+
+`gate-health` and `gate-evolve --brain` print `hunt_lo`, `hunt_hi`, `prey_lo`, `kills_late`,
+`flesh_late` on every row ("How the gate reads" in the M4 plan). A band is judged only under
+`--predation`, which is a usage error while every band is unset, so the flag can never pass a world
+that nothing judged. **Not in `make gates` or `make gates-long` yet:** the default world fails the
+share bands (the owner's finding, `findings/m4-tuning.md`). The proofs, at `832527f` and `8435888`:
+
+| Band | Where | Fails | Bad input | It read | Good world |
+|---|---|---|---|---|---|
+| `kills_late` | 12,000 | under 20 | the Start set with `bite_rate=0` | 0, 0, 0 | 43 to 83 (ratio 3), 2,005 to 2,562 (ratio 1.15) |
+| `flesh_late` | 12,000 | under 0.01 | the same | 0.000 ×3 | 0.001 to 0.002 (ratio 3): **fails**, 0.17 to 0.21 (ratio 1.15) |
+| `hunt_hi` | 12,000 | over 0.8 | `founder_jaw=1 bite_mass_ratio=0` | 1.000 ×3 | 0.19 to 0.29 (ratio 3), 1.000 (ratio 1.15) |
+| `prey_lo` | 12,000 | under 150 | the same | 0 ×3 | 925 to 1,224 (ratio 3), 0 (ratio 1.15) |
+| `hunt_lo` | 12,000 and 144,000 | not a gate | `founder_jaw=0`; `bite_rate=0` at 144,000 | 0.03 to 0.16; 0.04 to 0.96 | a jaw drifts whether or not it bites |
+| `kills_late` | 144,000 | under 20 | `bite_rate=0`, seeds 1, 4, 5, 6, 8 | 0 ×5 | 240 to 690 |
+| `flesh_late` | 144,000 | under 0.01 | the same | 0.000 ×5 | 0.022 to 0.037 |
+| `hunt_hi`, `prey_lo` | 144,000 | not set | | | the default world reads 0.92 to 1.00 and 0 to 90 |
+
+The commands and every row: `findings/m4-gates.md` (12,000) and `findings/m4-tuning.md` Part 2
+(144,000). The `flesh_late` band at 12,000 was set at 0.01 before the good world was read, and the
+shipped world reads 0.001 to 0.002 there: it is left as set, with the rows, for the owner.
