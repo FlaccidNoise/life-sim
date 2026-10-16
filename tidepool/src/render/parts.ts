@@ -4,6 +4,7 @@
 
 import {
   C_ENERGY,
+  C_FLAGS,
   C_HEADING,
   C_HUE,
   C_LENGTH,
@@ -13,6 +14,7 @@ import {
   C_X,
   C_Y,
   CREATURE_STRIDE,
+  FLAG_BIT,
   FLAG_JUVENILE,
   FLAG_MIXED,
   KIND_CHEMO,
@@ -20,13 +22,18 @@ import {
   KIND_FILTER,
   KIND_FIN,
   KIND_FLAGELLUM,
+  KIND_JAW,
+  KIND_SHELL,
+  KIND_SPIKE,
+  KIND_TOXIN,
   PART_WORDS,
   unpackPart,
   type FrameView,
   type Part,
 } from '../protocol';
 
-// x, y, angle, size, kind, hue, energy01, phase, and the x and y of the centre of the body
+// x, y, angle, size, kind, hue, energy01, phase, and the x and y of the centre of the body. The
+// phase of a jaw is 1 while it is closed and 0 while it is open.
 export const PART_INSTANCE_FLOATS = 10;
 export const PART_LOD_PX = 14; // a body shorter than this on screen draws only its flagella
 
@@ -34,6 +41,7 @@ const TAU = 2 * Math.PI;
 const MAX_CREATURES = 4096; // the creature pool of the core
 const WAVE_PER_LENGTH = 4; // a flagellum's wave moves this many radians for each body length swum
 const RIPPLE = 5; // radians per second of the parts that move while the body is still
+const JAW_SHUT_FRAMES = 6; // a jaw is drawn closed for this many draws when FLAG_BIT rises
 
 // How far each drawn kind reaches from its anchor, in body scales: at size 0, and the gain for each
 // unit of size. A body scale is the square root of the body's area.
@@ -43,6 +51,10 @@ const REACH: Partial<Record<number, readonly [number, number]>> = {
   [KIND_CHEMO]: [0.1, 0.3],
   [KIND_FIN]: [0.1, 0.4],
   [KIND_EYE]: [0.05, 0.12],
+  [KIND_JAW]: [0.08, 0.2],
+  [KIND_SPIKE]: [0.1, 0.4],
+  [KIND_SHELL]: [0.12, 0.3],
+  [KIND_TOXIN]: [0.05, 0.12],
 };
 /** The flags that give the mark of a young body born of a cross: both must be set. */
 export const MIXED_MARK_FLAGS = FLAG_MIXED | FLAG_JUVENILE;
@@ -95,6 +107,11 @@ const FOUNDER_CARRIES = carried(FOUNDER);
 const seenX = new Float32Array(MAX_CREATURES);
 const seenY = new Float32Array(MAX_CREATURES);
 const swum = new Float32Array(MAX_CREATURES);
+// The jaws of each slot: the draw at which FLAG_BIT was last seen set, and the draw at which it
+// last rose. A body that was not drawn in the draw before is seen with the flag clear.
+let draws = 0;
+const bitSeen = new Float64Array(MAX_CREATURES).fill(-1);
+const shutFrom = new Float64Array(MAX_CREATURES).fill(-JAW_SHUT_FRAMES);
 
 /** The parts of the creature record at word `r`. */
 export function partsOf(u32: Uint32Array, r: number): Part[] {
@@ -229,6 +246,7 @@ export function buildParts(
 ): number {
   const { f32, u32 } = cur;
   const ripple = (RIPPLE * timeSeconds) % TAU;
+  draws++;
   let n = 0;
   for (let i = 0; i < cur.creatureCount; i++) {
     const r = cur.creatureBase + i * CREATURE_STRIDE;
@@ -264,6 +282,14 @@ export function buildParts(
       const reach = near || kind === KIND_FLAGELLUM ? REACH[kind] : undefined;
       const part = reach && unpackPart(word);
       if (!part || !reach) continue;
+      let phase = part.kind === KIND_FLAGELLUM ? (swum[slot] ?? 0) : ripple;
+      if (part.kind === KIND_JAW) {
+        if (((u32[r + C_FLAGS] ?? 0) & FLAG_BIT) !== 0) {
+          if (bitSeen[slot] !== draws - 1 && bitSeen[slot] !== draws) shutFrom[slot] = draws;
+          bitSeen[slot] = draws;
+        }
+        phase = draws - (shutFrom[slot] ?? -JAW_SHUT_FRAMES) < JAW_SHUT_FRAMES ? 1 : 0;
+      }
       for (const side of part.anchor > 0 && part.anchor < 1 ? PAIR : MIDLINE) {
         const at = anchorPoint(part.anchor, length, width, side, taper);
         for (let swell = OUTLINE_SWELLS; near && swell < OUTLINE_FLOATS; swell += 2) {
@@ -286,7 +312,7 @@ export function buildParts(
         out[o + 4] = side * part.kind;
         out[o + 5] = hue;
         out[o + 6] = energy;
-        out[o + 7] = part.kind === KIND_FLAGELLUM ? (swum[slot] ?? 0) : ripple;
+        out[o + 7] = phase;
         out[o + 8] = x;
         out[o + 9] = y;
       }
