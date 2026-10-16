@@ -1,7 +1,7 @@
 // Constants and layouts shared by the page and the worker. The frame layout mirrors
 // crates/sim/src/frame.rs. tests/abi.test.ts fails if the two disagree.
 
-export const ABI_VERSION = 7;
+export const ABI_VERSION = 8;
 export const TICK_HZ = 20;
 export const FRAME_HEADER_WORDS = 50;
 export const CREATURE_STRIDE = 25;
@@ -19,7 +19,7 @@ export const NO_SLOT = 0xffffffff;
 // cosine of its half angle, and its range in world units. After the cones: the debris and cloud
 // records, the `hurt_side` of the possessed body as a float, and the kills in view since the last
 // frame, their count and then MAX_FRAME_KILLS places of KILL_WORDS: x and y as floats and the slot
-// of the killer.
+// of the killer, or NO_SLOT when it is no longer alive.
 const F_LINEAGE_ALIVE = 7,
   F_BUDS = 8,
   F_CONE_COUNT = 9,
