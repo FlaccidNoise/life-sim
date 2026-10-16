@@ -2,6 +2,7 @@
 // just did, in one line, and never blocks play. Pure: no DOM, no storage, no clock of its own.
 
 import {
+  C_DIET,
   C_FLAGS,
   C_PARTS,
   C_SLOT,
@@ -14,7 +15,7 @@ import {
   type FrameView,
   type Kill,
 } from '../protocol';
-import { LINE } from '../ui/words/lines';
+import { DIET_PLANTS_BELOW, LINE } from '../ui/words/lines';
 
 /** In the order of the plan's table. Of two beats armed on one frame, the first shows. */
 export const BEATS = [
@@ -246,7 +247,7 @@ export const killsSeen = (frame: FrameView): Kill[] =>
 export function huntFacts(
   frame: FrameView,
 ): Pick<Facts, 'huntersInView' | 'killInView' | 'bitten'> {
-  const { u32 } = frame;
+  const { u32, f32 } = frame;
   let hunters = 0;
   let bitten = false;
   for (let i = 0; i < frame.creatureCount; i++) {
@@ -255,6 +256,8 @@ export function huntFacts(
       bitten = ((u32[r + C_FLAGS] ?? 0) & FLAG_HURT) !== 0;
       continue;
     }
+    // A jaw on a plant-eater bites nothing (rule D1 of the diet retune): it is not a hunter.
+    if ((f32[r + C_DIET] ?? 0) < DIET_PLANTS_BELOW) continue;
     for (let k = 0; k < PART_WORDS; k++) {
       if (((u32[r + C_PARTS + k] ?? 0) & 0xff) === KIND_JAW) {
         hunters++;

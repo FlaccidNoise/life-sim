@@ -647,7 +647,8 @@ mod tests {
             let w = tp_new(1, 1536.0, 1024.0);
             tp_seed_founders(w, 20, 0);
             assert_eq!(tp_possess(w, 4), 1);
-            // Slot 3 holds uid 4, and slot 8 holds uid 9.
+            // Slot 3 holds uid 4, and slot 8 holds uid 9, a killer of diet 0.75.
+            (&mut (*w).creatures.diet)[8] = 0.75;
             (&mut *w).kill(3, crate::control::CAUSE_EATEN, Some(8));
             assert_eq!((tp_death_cause(w), tp_killer(w)), (3, 9));
             let words =
@@ -661,7 +662,7 @@ mod tests {
             assert_eq!(body, [c.generation[8], c.x[8].to_bits()]);
             let n = crate::control::KILLER_BODY_WORDS as usize;
             let all = std::slice::from_raw_parts(tp_killer_body_ptr(w), n);
-            assert_eq!(all[n - 1], c.diet[8].to_bits());
+            assert_eq!(all[n - 1], 0.75f32.to_bits());
             assert_eq!(tp_possess(w, 9), 1);
             assert_eq!((tp_killer(w), tp_killer_brain_len(w)), (0, 0));
             assert_eq!(tp_killer_body_len(w), 0);

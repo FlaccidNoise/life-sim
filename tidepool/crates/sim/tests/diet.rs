@@ -178,3 +178,48 @@ fn a_body_bites_only_down_the_food_chain_by_the_gap() {
     // Off (−1): any body, even one higher on the chain, is bitten.
     assert!(bite_across(-1.0, 0.2, 0.9) > 0.0);
 }
+
+#[test]
+fn a_spike_hurts_a_biter_in_step_with_its_bite() {
+    // The spike hurt is the bite times `spike_hurt`, so a biter of diet 0.5 at `diet_k` 1.5 is hurt
+    // 0.5^1.5 times what a biter of diet 1 is hurt.
+    let hurt = |diet: f32| {
+        let mut w = still_water();
+        w.params.set(id::DIET_K, 1.5);
+        w.params.set(id::SPIKE_HURT, 1.0);
+        let s = adult(&mut w, 100.0, diet, true);
+        let mut g = Genome::founder(&mut Rng::new(1), &w.params);
+        // At the tail, which faces the biter behind it.
+        g.parts.push(tidepool_sim::genome::PartGene {
+            kind: tidepool_sim::genome::KIND_SPIKE,
+            anchor: 1.0,
+            size: 0.5,
+            extra: 0.0,
+            history: 900,
+        });
+        (g.len, g.wid, g.diet, g.brain) = (12.0, 0.5, 0.0, BrainGenome::default());
+        let prey = w.spawn(
+            g,
+            SpawnAt {
+                x: 108.0,
+                y: 256.0,
+                heading: 0.0,
+                growth: 1.0,
+                energy01: 0.5,
+                parent: 0,
+                generation: 0,
+                mark: 0,
+            },
+        );
+        w.creatures.bud_cooldown[prey.expect("slot") as usize] = 1_000_000;
+        let before = w.creatures.energy[s];
+        w.tick();
+        before + w.stats.flesh as f32 - w.creatures.energy[s]
+    };
+    let (full, half) = (hurt(1.0), hurt(0.5));
+    assert!(full > 0.0);
+    assert!(
+        (half / full - pow_quarters(0.5, 1.5)).abs() < 1e-4,
+        "{half} / {full}"
+    );
+}

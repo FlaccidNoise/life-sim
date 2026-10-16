@@ -524,7 +524,7 @@ fn a_body_hit_on_the_left_reads_a_negative_side() {
     // right. Each biter faces its prey from 7 units away.
     let mut w = still_world();
     w.params.set(id::BITE_RATE, 0.5);
-    w.params.set(id::BITE_MASS_RATIO, 0.0); // the biter is not three times its prey
+    w.params.set(id::BITE_MASS_RATIO, 0.0); // the mass ratio is off: the two bodies are alike
     let mut jawed = Genome::default();
     jawed.set_size(KIND_JAW, 0.5);
     jawed.diet = 1.0; // a carnivore, so its jaw takes a full bite (rules D1 and D2)

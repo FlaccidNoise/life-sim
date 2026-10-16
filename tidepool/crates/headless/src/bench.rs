@@ -93,9 +93,9 @@ pub fn bench(args: &[String]) {
     let max_ns = 1e9 / (floor * f64::from(reference));
     let pass = ns_per_creature_tick <= max_ns;
     println!(
-        "bench creatures={alive:.0} median_tps={median:.0} ns_per_creature_tick={:.0} max_ns={:.0} {}",
+        "bench creatures={alive:.0} median_tps={median:.0} ns_per_creature_tick={:.1} max_ns={:.1} {}",
         ns_per_creature_tick,
-        max_ns.floor(),
+        max_ns,
         if pass { "PASS" } else { "FAIL" }
     );
     if !pass {

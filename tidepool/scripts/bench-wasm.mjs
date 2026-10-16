@@ -159,6 +159,6 @@ const nsPerCreatureTick = 1e9 / (median * alive);
 const maxNs = 1e9 / (floor * reference);
 const pass = nsPerCreatureTick <= maxNs;
 console.log(
-  `bench-wasm creatures=${alive.toFixed(0)} median_tps=${median.toFixed(0)} ns_per_creature_tick=${Math.round(nsPerCreatureTick)} max_ns=${Math.floor(maxNs)} ${pass ? 'PASS' : 'FAIL'}`,
+  `bench-wasm creatures=${alive.toFixed(0)} median_tps=${median.toFixed(0)} ns_per_creature_tick=${nsPerCreatureTick.toFixed(1)} max_ns=${maxNs.toFixed(1)} ${pass ? 'PASS' : 'FAIL'}`,
 );
 process.exit(pass ? 0 : 1);

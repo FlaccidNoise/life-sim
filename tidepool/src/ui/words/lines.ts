@@ -118,7 +118,10 @@ export const MATE = {
   exchanged: 'Genes exchanged. Your next brood is mixed.',
 };
 
-/** The cut points of the diet words: the targets of rule D1 in docs/plans/2026-10-16-m4-retune-diet.md. */
+/**
+ * The cut points of the diet words: the targets of rule D1 in docs/plans/2026-10-16-m4-retune-diet.md.
+ * The same numbers are `HERB_BELOW` and `CARN_ABOVE` in crates/headless/src/probes.rs.
+ */
 export const DIET_PLANTS_BELOW = 0.3;
 export const DIET_FLESH_ABOVE = 0.7;
 

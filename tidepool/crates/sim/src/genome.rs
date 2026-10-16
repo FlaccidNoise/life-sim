@@ -530,7 +530,13 @@ impl Genome {
         // A hue just below 0 rounds up to exactly 1. The `%` sends that to 0.
         g.hue = (hue - hue.floor()) % 1.0;
         let (lo, hi) = DIET_RANGE;
-        g.diet = (g.diet + rng.gauss() * p.get(id::DIET_SIGMA)).clamp(lo, hi);
+        let diet = g.diet + rng.gauss() * p.get(id::DIET_SIGMA);
+        // A loaded genome can hold a diet that is not finite, and `clamp` keeps NaN.
+        g.diet = if diet.is_finite() {
+            diet.clamp(lo, hi)
+        } else {
+            lo
+        };
         let (rate, sigma) = (p.get(id::MUT_WEIGHT_RATE), p.get(id::MUT_WEIGHT_SIGMA));
         let limit = (-WEIGHT_LIMIT, WEIGHT_LIMIT);
         for conn in &mut g.brain.conns {

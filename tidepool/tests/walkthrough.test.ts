@@ -14,6 +14,7 @@ import {
 } from '../src/app/walkthrough';
 import { loadWalk, note, saveWalk } from '../src/app/walkstore';
 import {
+  C_DIET,
   C_FLAGS,
   C_PARTS,
   C_SLOT,
@@ -376,15 +377,17 @@ const MOUTH = KIND_FILTER | (128 << 16);
 
 /** A frame of `bodies`, with the body in slot `possessed` the player's, and `kills` in view. */
 function frameOf(
-  bodies: { slot: number; flags?: number; parts?: number[] }[],
+  bodies: { slot: number; flags?: number; parts?: number[]; diet?: number }[],
   possessed: number,
   kills: Kill[] = [],
 ): FrameView {
   const u32 = new Uint32Array(FRAME_HEADER_WORDS + bodies.length * CREATURE_STRIDE);
+  const f32 = new Float32Array(u32.buffer);
   [u32[1], u32[5]] = [bodies.length, possessed];
   bodies.forEach((body, i) => {
     const r = FRAME_HEADER_WORDS + i * CREATURE_STRIDE;
     [u32[r + C_SLOT], u32[r + C_FLAGS]] = [body.slot, body.flags ?? 0];
+    f32[r + C_DIET] = body.diet ?? 0;
     (body.parts ?? []).forEach((word, k) => (u32[r + C_PARTS + k] = word));
   });
   return { ...viewFrame(u32.buffer), kills };
@@ -399,11 +402,13 @@ test('beat 11: the frame gives the hunters in view, the kills by others, and a h
     1,
   );
   expect(huntFacts(none)).toEqual({ huntersInView: 0, killInView: 0, bitten: false });
+  // Slot 5 has a jaw and eats plants: its jaw bites nothing, so it is no hunter (rule D1).
   const bodies = [
-    { slot: 1, parts: [MOUTH, JAW], flags: FLAG_POSSESSED },
+    { slot: 1, parts: [MOUTH, JAW], flags: FLAG_POSSESSED, diet: 0.8 },
     { slot: 2, parts: [MOUTH] },
-    { slot: 3, parts: [MOUTH, 0, JAW, JAW] },
-    { slot: 4, parts: [JAW], flags: FLAG_HURT },
+    { slot: 3, parts: [MOUTH, 0, JAW, JAW], diet: 0.5 },
+    { slot: 4, parts: [JAW], flags: FLAG_HURT, diet: 0.9 },
+    { slot: 5, parts: [MOUTH, JAW], diet: 0.1 },
   ];
   const kills = [
     { x: 1, y: 2, killerSlot: 3 },
@@ -416,7 +421,8 @@ test('beat 11: the frame gives the hunters in view, the kills by others, and a h
     killInView: 1,
     bitten: false,
   });
-  // In Watch every body with a jaw is a hunter in view, and every kill is by another.
+  // In Watch every body with a jaw that does not eat plants is a hunter in view, and every kill is
+  // by another.
   expect(huntFacts(frameOf(bodies, NO_SLOT, kills))).toEqual({
     huntersInView: 3,
     killInView: 2,
