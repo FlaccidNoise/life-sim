@@ -1,6 +1,7 @@
 //! Abilities: dash, lunge, and the toxin cloud (rules A1 to A3 of the M4 plan), and the pool of
 //! clouds.
 
+use crate::bite::side;
 use crate::control::CAUSE_POISONED;
 use crate::creature;
 use crate::genome::REF_WIDTH;
@@ -146,6 +147,8 @@ pub fn clouds(world: &mut World) {
         return;
     }
     let pad = world.params.get(id::V_MAX);
+    // `World::tick` after this tick, as the frame reads a stamp.
+    let stamp = world.tick.wrapping_add(1);
     let World {
         creatures: c,
         clouds,
@@ -173,6 +176,11 @@ pub fn clouds(world: &mut World) {
                 return;
             }
             c.energy[j] -= take;
+            // The hit counts for the hurt input (rule P1), from the side where the cloud's centre
+            // lies in the frame of the body: `(dx, dy)` points from the cloud to the body.
+            c.hurt[j] += take;
+            c.hurt_side[j] = side(dx * c.hs[j] - dy * c.hc[j]);
+            c.hurt_tick[j] = stamp;
             if c.energy[j] <= 0.0 {
                 dead.push((j as u32, maker));
             }

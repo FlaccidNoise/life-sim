@@ -18,7 +18,7 @@ fn cos2(half: f32) -> f32 {
 
 /// The side of a point in the frame of a body: 1 on the side of positive angles from the heading,
 /// -1 on the other, 0 on the line of the heading.
-fn side(y: f32) -> f32 {
+pub(crate) fn side(y: f32) -> f32 {
     if y > 0.0 {
         1.0
     } else if y < 0.0 {
