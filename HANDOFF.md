@@ -1,47 +1,44 @@
-# Handoff — Tidepool: M4 (Teeth) is being built
+# Handoff — Tidepool: M4 (Teeth) is built, on, measured, and waits for the owner
 
-**Date:** 2026-10-15, late. **Project:** life-sim, subproject `tidepool/`. The draft in `src/` at the
-repo root is frozen.
+**Date:** 2026-10-16, morning. **Project:** life-sim, subproject `tidepool/`. The draft in `src/` at
+the repo root is frozen.
 
-The previous handoff (M3 closed, waiting for the owner) is at `git show cac3ded:HANDOFF.md`.
+The previous handoff (mid-M4) is at `git show 9a0b25a:HANDOFF.md`.
 
 ## State
 
-- Branch `main`. Pushed to `020f351` on 2026-10-15 after the M3 close, with the owner's yes. Every
-  later commit is local. **No push until the M4 exit or the owner asks.**
-- The owner answered the M3 close on 2026-10-15 with "yes to all" (six provisional entries
-  confirmed, `variety_wired`, look 4, the M4 plan at its recommended options with C9 at B). On
-  2026-10-16 the owner added: **every M4 rule ships on in the default world**, and the build runs
-  on through the night; a feature that fails its measurement stays on and goes to the owner.
-- M4 Tasks 1 to 11, 13 and 14 are built, merged one at a time, and verified (`docs/plans/...m4-teeth.md`
-  checkboxes; findings `m4-encounter`, `m4-rules`, `m4-ports`, `m4-motor`, `m4-gates`, `m4-audit-1`,
-  `m4-tuning`). The gate rows stayed identical to M3 through Task 8; Task 9 set the new baseline
-  (senses 10/10 at 36k). A mid-build audit found nothing blocking; its fixes are on main.
-- **Task 12 (switch on and retune) is in progress, run by the orchestrator.** Part 1 read: the moment
-  the bite is on, every lineage is a hunter by 12k and prey is gone (`m4-tuning.md`). Part 3 trials
-  T1 to T4: only `bite_mass_ratio` moves the world, and it moves the speed of the takeover, not its
-  end (2.0: prey gone by 24k; 3.0: hunters 17% to 60% over 36k with prey left and a healthy world).
-  The long read of the ratio-3 world at 144k is the decisive reading in flight when this was
-  written: whether guards that arrive by mutation give prey a foothold in time.
-- The defaults in `params.rs` are still Off. The Start set plus `fin_grip` 0.6 is passed as flags in
-  the readings. **Before the exit: write the chosen set as defaults, rebake both saved worlds, add
-  `--predation` to the Makefile's gates lines only once a band is `Some`.**
-- Provisional, owner to confirm (all in `docs/decisions/INDEX.md`): `fin_grip` 0.6, the 12k
-  predation bands, a mutant trigger resting at `starter_trigger_bias`.
-- The saved worlds (gitignored) are at format 9 but baked with every rule Off (seed 1, 36k and 144k).
+- Branch `main`, pushed at the M4 exit on the owner's standing yes of 2026-10-15 (see the last line
+  of `git log`). Nothing is pushed between milestones.
+- **M4 is built with every rule on, by the owner's instruction of 2026-10-16.** The exit record is
+  `tidepool/docs/findings/m4-exit.md`: the verdict, the final proof rows, the browser checks with
+  pictures (`m4-look.md`, `img/m4-*.jpeg`), the open problems sorted by who decides, and the owner
+  checks. Two fresh-context audits (`m4-audit-1.md` at Off, `m4-audit-2.md` at the exit) and what was
+  done about each item.
+- **The final proof:** `make check` 0, `make gates` 0 (WASM 2,455 at 1,540 bodies, over the floor of
+  2,400 and under the target of 2,600), `make gates-long` **exit 2, 3 of 5**: the eye gap on seeds 6
+  and 8 at 0.080 and 0.082 with the toxin gland on (5 of 5 with it off). Deterministic. Trial T6
+  (`toxin_cost` 4.0) was run for it: see the last section of `m4-tuning.md` for its outcome and
+  whether 4.0 shipped.
+- **The roadmap's coexistence is not met and is the owner's finding** (`m4-tuning.md`, the rule-5
+  stop): with the bite on, hunters take over by 144,000 at every value tried; the mass ratio sets
+  the pace and ran out of its range at 3.0, the shipped default. Untried levers and the rule the
+  draft named are in `m4-exit.md` "Open problems".
+- The saved worlds (gitignored) are rebaked at the final defaults: `m2-world.tdpl` (36,000 ticks,
+  1,713 bodies, hunters a fifth to a half, prey everywhere: **the one to play**) and
+  `m2-world-long.tdpl` (144,000, 631 large hunters).
+- Provisional, owner to confirm (`docs/decisions/INDEX.md`, 2026-10-16): `fin_grip` 0.6, the
+  12,000-tick and 144,000-tick predation bands, a mutant trigger resting closed, the shipped set.
+- Owner checks: M4's six in `m4-exit.md` and M3's nine in `m3-exit.md`. An agent never closes them.
 
 ## What comes next
 
-1. Read the long run. If hunters take over by 144k on most seeds whatever the ratio, that is the
-   plan's rule-5 stop (frequency dependence is a rule, the owner's). Ship the best set on anyway,
-   per the owner, with the finding.
-2. Remaining trial budget: 8 of 12 for predation, 3 for the toxin gland (part 4).
-3. Part 2 readings at the chosen set (`make gates`, `gates-long`, `probe-hunt`, the jaw gap), the
-   144k proofs of B1 to B3 for the long predation bands.
-4. Write the defaults, `make check && make gates`, rebake, the deferred browser checks (Task 6
-   screenshots and draw timing, Task 7 a real death by a bite, Task 14 the first-death beat).
-5. Task 15: the exit record, a fresh-context audit, `make gates-long`, the play route for the owner,
-   then push.
+1. The owner plays (`make dev`, `/?world=/m2-world.tdpl`) and answers the open problems of
+   `m4-exit.md`: the takeover rule, the bench's reference population (C9), the bands, the provisional
+   entries, the budgets.
+2. M5 (Deep time) has no plan yet. It carries from M4: the killer missing from the card when the
+   killer died in the same kill list, the kill marks lost when the page holds every buffer, the still
+   brain's overlapping output labels, the eye gap's changed meaning (the jaw input is not scaled by
+   `eye_gain`), and the guards and gland that evolution does not use.
 
 ## Warnings
 
