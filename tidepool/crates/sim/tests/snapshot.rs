@@ -21,7 +21,8 @@ const N_OUT: usize = 3;
 
 /// Founders, plants, a changed parameter, a possessed creature, held manual input, and a piece of
 /// debris and a cloud set by hand. At the defaults the piece decays by `debris_decay` each tick and
-/// no filter reaches it, and the cloud is read by no rule yet.
+/// no filter reaches it. The cloud counts down and drains the bodies inside it (rule A3), and
+/// lives longer than any run here.
 fn world_at(ticks: u32) -> World {
     let mut w = World::new(9, 1536.0, 1024.0);
     w.params.set(id::REPEL, 0.5);
@@ -40,7 +41,7 @@ fn world_at(ticks: u32) -> World {
         c.left[k],
         c.drain[k],
         c.maker[k],
-    ) = (300.0, 400.0, 20.0, 30, 0.5, 2);
+    ) = (300.0, 400.0, 20.0, 2000, 0.5, 2);
     w.run(ticks);
     w
 }
