@@ -7,7 +7,7 @@ import { FLAG_WILLING, type Kin } from '../protocol';
 import { Sketch } from './BudCard';
 import { Note, NoteMark } from './Note';
 import { courtHeld, courtable, mate, mateShown } from './state';
-import { BUD, KIND, MATE } from './words/lines';
+import { BUD, dietWord, KIND, MATE } from './words/lines';
 
 // The kinds of part of a body, each once, in gene order.
 function kindsOf(kin: Kin): string {
@@ -26,6 +26,7 @@ function Side(props: { kin: Kin; name: string }) {
       <figcaption>{props.name}</figcaption>
       <p>{MATE.size.replace('{l}', kin.length.toFixed(1)).replace('{w}', kin.width.toFixed(1))}</p>
       <p>{kindsOf(kin)}</p>
+      <p>{MATE.diet.replace('{diet}', dietWord(kin.diet))}</p>
       <p>{MATE.hidden.replace('{n}', String(kin.hidden))}</p>
       <p>{MATE.conns.replace('{n}', String(kin.conns))}</p>
       <p class={willing ? 'willing' : 'unwilling'}>{willing ? MATE.willing : MATE.unwilling}</p>

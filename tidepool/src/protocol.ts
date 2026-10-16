@@ -114,6 +114,7 @@ export interface Kin {
   length: number; // as it is now. A body that is not full-grown is shorter than its genes make it.
   width: number;
   hue: number;
+  diet: number; // 0 (eats only plants) to 1 (eats only flesh)
   growth: number; // the share of its full size that it has grown. 0 when the frame does not give it.
   flags: number;
   hidden: number; // hidden neurons
@@ -130,19 +131,21 @@ export interface Killer {
   length: number;
   width: number;
   hue: number;
+  diet: number;
   parts: Part[]; // in gene order
 }
 
 // The words of the killer's body (`Control::killer_body` in crates/sim/src/control.rs): its
-// generation, then x, y, length, width, and hue as floats, then PART_WORDS part words.
-export const KILLER_BODY_WORDS = 6 + PART_WORDS;
+// generation, then x, y, length, width, and hue as floats, then PART_WORDS part words, then its
+// diet as a float.
+export const KILLER_BODY_WORDS = 7 + PART_WORDS;
 
 /** The killer `uid` from the words of its body. Null when the words are not a body. */
 export function killerFrom(uid: number, words: Uint32Array): Killer | null {
   if (words.length !== KILLER_BODY_WORDS) return null;
-  const f32 = new Float32Array(words.buffer, words.byteOffset, 6);
+  const f32 = new Float32Array(words.buffer, words.byteOffset, KILLER_BODY_WORDS);
   const parts: Part[] = [];
-  for (const word of words.subarray(6)) {
+  for (const word of words.subarray(6, KILLER_BODY_WORDS - 1)) {
     const part = unpackPart(word);
     if (part) parts.push(part);
   }
@@ -154,6 +157,7 @@ export function killerFrom(uid: number, words: Uint32Array): Killer | null {
     length: f32[3] ?? 0,
     width: f32[4] ?? 0,
     hue: f32[5] ?? 0,
+    diet: f32[KILLER_BODY_WORDS - 1] ?? 0,
     parts,
   };
 }

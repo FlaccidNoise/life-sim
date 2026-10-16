@@ -183,6 +183,7 @@ fn a_victim_whose_killer_dies_earlier_in_the_same_kill_list_keeps_its_killer_on_
     let mut w = World::new(5, 1536.0, 1024.0);
     w.seed_founders(50, 0);
     let (hunter, prey) = (w.creatures.uid[5], w.creatures.uid[9]);
+    w.creatures.diet[5] = 0.75;
     let c = &w.creatures;
     let (generation, x, y) = (c.generation[5], c.x[5], c.y[5]);
     assert!(w.possess(prey));
@@ -199,6 +200,8 @@ fn a_victim_whose_killer_dies_earlier_in_the_same_kill_list_keeps_its_killer_on_
         w.control.killer_body[..3],
         [generation, x.to_bits(), y.to_bits()]
     );
+    // The last word of the body is the killer's diet.
+    assert_eq!(w.control.killer_body.last(), Some(&0.75f32.to_bits()));
     assert!(!w.creatures.slots.is_alive(5) && !w.creatures.slots.is_alive(9));
     assert_eq!((w.slot_of(hunter), w.slot_of(prey)), (None, None));
     assert_eq!(w.stats.kills, 1);

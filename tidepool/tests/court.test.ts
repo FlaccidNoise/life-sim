@@ -218,6 +218,7 @@ test('the card shows the two bodies, whether each is willing, and what the pair 
   const r = frame.creatureBase + P.CREATURE_STRIDE;
   frame.u32[r + P.C_BRAIN] = 3 | (41 << 16);
   frame.u32.set([P.KIND_FILTER, eye, eye], r + P.C_PARTS);
+  frame.f32[r + P.C_DIET] = 0.9;
   mate.value = courtship(frame, 0);
   const { lines, button } = card();
   expect(lines).toEqual([
@@ -226,12 +227,14 @@ test('the card shows the two bodies, whether each is willing, and what the pair 
     MATE.you,
     'Length 12.0, width 4.0',
     MATE.noParts,
+    'Diet: eats plants',
     'Hidden neurons: 0',
     'Connections: 0',
     MATE.unwilling,
     MATE.other,
     'Length 12.0, width 4.0',
     'mouth, eye',
+    'Diet: eats flesh',
     'Hidden neurons: 3',
     'Connections: 41',
     MATE.willing,

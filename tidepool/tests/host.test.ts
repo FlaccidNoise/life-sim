@@ -464,6 +464,7 @@ function bodyOf(sim: Sim, uid: number): Uint32Array {
       3,
       ...[P.C_X, P.C_Y, P.C_LENGTH, P.C_WIDTH, P.C_HUE].map(at),
       ...parts,
+      at(P.C_DIET),
     ]);
   }
   return new Uint32Array(0);
@@ -889,6 +890,7 @@ test('a death by a bite posts the killer, its body at the kill, and its brain', 
     hue: f.f32[o + P.C_HUE],
     length: f.f32[o + P.C_LENGTH],
     width: f.f32[o + P.C_WIDTH],
+    diet: f.f32[o + P.C_DIET],
   });
   expect(died[0]?.killer?.parts.length).toBeGreaterThan(0);
   // The header of the readout names the killer.

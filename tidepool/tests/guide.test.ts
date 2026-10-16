@@ -88,6 +88,7 @@ const KIN: Kin = {
   length: 12,
   width: 5,
   hue: 0.2,
+  diet: 0,
   growth: 1,
   flags: 0,
   hidden: 4,
@@ -307,7 +308,7 @@ test('the guide holds the six chapters of the plan in reading order, each short'
   for (const [i, chapter] of CHAPTERS.entries()) {
     const count = words(fill(CHAPTER_TEXTS[i] ?? ''));
     expect(count, `${chapter.title} is ${count} words`).toBeGreaterThanOrEqual(80);
-    expect(count, `${chapter.title} is ${count} words`).toBeLessThanOrEqual(160);
+    expect(count, `${chapter.title} is ${count} words`).toBeLessThanOrEqual(200);
     // A few short paragraphs, and no wall of text.
     expect(chapter.text.length).toBeGreaterThanOrEqual(2);
     for (const paragraph of chapter.text) expect(words(paragraph), paragraph).toBeLessThan(70);

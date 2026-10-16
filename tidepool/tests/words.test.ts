@@ -2,6 +2,7 @@
 
 import { expect, test } from 'vitest';
 import brainWords from '../src/ui/brain/words.ts?raw';
+import { dietWord } from '../src/ui/words/lines';
 
 const MAX_WORDS = 8; // rule 2: of a line on the screen
 // Rule 5: no purpose in a cause. A body or a brain does not change for a reason of its own.
@@ -128,4 +129,10 @@ test('the purpose of a designer passes only in the sentence that is allowed by n
   const founders = 'The first creatures have brains wired by hand so that they can feed.';
   expect(broken(founders, false)).toEqual([]);
   expect(broken('The first creatures grew brains so that they can feed.', false)).toHaveLength(1);
+});
+
+test('dietWord names the three diets, and 0.3 and 0.7 eat both', () => {
+  expect([0.29, 0.5, 0.71].map(dietWord)).toEqual(['eats plants', 'eats both', 'eats flesh']);
+  expect([0.3, 0.7].map(dietWord)).toEqual(['eats both', 'eats both']);
+  expect([0, 1].map(dietWord)).toEqual(['eats plants', 'eats flesh']);
 });

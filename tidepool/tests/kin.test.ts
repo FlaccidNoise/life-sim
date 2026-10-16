@@ -17,6 +17,7 @@ interface Rec {
   x: number;
   y: number;
   flags?: number;
+  diet?: number;
   parts?: number[];
 }
 
@@ -35,6 +36,7 @@ function frameOf(recs: Rec[], possessedSlot = 0): P.FrameView {
     f32[r + P.C_WIDTH] = 6;
     f32[r + P.C_HUE] = 0.25;
     f32[r + P.C_GROWTH] = 0.5;
+    f32[r + P.C_DIET] = rec.diet ?? 0;
     u32[r + P.C_UID] = rec.uid;
     u32[r + P.C_SLOT] = slot;
     u32[r + P.C_FLAGS] = rec.flags ?? 0;
@@ -48,9 +50,10 @@ const MARKED = P.FLAG_LINEAGE | P.FLAG_JUVENILE;
 const PARENT = { uid: 7, x: 100, y: 100, flags: P.FLAG_LINEAGE | P.FLAG_POSSESSED };
 
 test('bodyIn copies a record out of the frame, and gives null for a slot that it does not hold', () => {
-  const frame = frameOf([{ ...PARENT, parts: [word(P.KIND_EYE, 0.2, 0.4, 0.6)] }]);
+  const frame = frameOf([{ ...PARENT, diet: 0.75, parts: [word(P.KIND_EYE, 0.2, 0.4, 0.6)] }]);
   expect(bodyIn(frame, 0)).toMatchObject({
     uid: 7,
+    diet: 0.75,
     x: 100,
     length: 12,
     width: 6,
@@ -110,6 +113,7 @@ const kin = (over: Partial<Kin> = {}): Kin => ({
   length: 12,
   width: 6,
   hue: 0.25,
+  diet: 0.5,
   growth: 1,
   flags: P.FLAG_LINEAGE,
   hidden: 4,
@@ -126,6 +130,14 @@ const texts = (...args: Parameters<typeof differences>): string[] =>
 test('two equal bodies have no difference', () => {
   expect(differences(kin(), kin({ uid: 2 }))).toEqual([]);
   expect(differences(kin(), newborn())).toEqual([]);
+});
+
+test('a child on the other side of a diet cut says what it eats now, and one on the same side says nothing', () => {
+  expect(differences(kin({ diet: 0.28 }), kin({ diet: 0.31 }))).toEqual([
+    { text: 'Diet: now eats both', side: 'child' },
+  ]);
+  expect(texts(kin({ diet: 0.69 }), kin({ diet: 0.72 }))).toEqual(['Diet: now eats flesh']);
+  expect(texts(kin({ diet: 0.31 }), kin({ diet: 0.69 }))).toEqual([]);
 });
 
 test('a longer body and a wider one are listed in percent, on the side of the child', () => {

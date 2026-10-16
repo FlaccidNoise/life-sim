@@ -3,6 +3,7 @@
 
 import {
   C_BRAIN,
+  C_DIET,
   C_FLAGS,
   C_GROWTH,
   C_HUE,
@@ -24,7 +25,7 @@ import {
   type Part,
 } from '../protocol';
 import type { Difference } from '../ui/state';
-import { BUD, KIND, ORDINAL } from '../ui/words/lines';
+import { BUD, dietWord, KIND, ORDINAL } from '../ui/words/lines';
 
 // The body of the creature record at word `r`.
 function kinAt(frame: FrameView, r: number): Kin {
@@ -42,6 +43,7 @@ function kinAt(frame: FrameView, r: number): Kin {
     length: f32[r + C_LENGTH] ?? 0,
     width: f32[r + C_WIDTH] ?? 0,
     hue: f32[r + C_HUE] ?? 0,
+    diet: f32[r + C_DIET] ?? 0,
     growth: f32[r + C_GROWTH] ?? 0,
     flags: u32[r + C_FLAGS] ?? 0,
     hidden: brain & 0xffff,
@@ -209,6 +211,10 @@ export function differences(
       const cone = now.kind === KIND_EYE ? now.extra - was.extra : 0;
       if (Math.abs(cone) >= LEAST_MOVE) ofPart(0, cone > 0 ? BUD.coneWider : BUD.coneNarrower, j);
     }
+  }
+
+  if (dietWord(child.diet) !== dietWord(parent.diet)) {
+    say(FIRST, 'child', fill(BUD.diet, { diet: dietWord(child.diet) }));
   }
 
   count(child.hidden - parent.hidden, 'child', BUD.moreHidden);

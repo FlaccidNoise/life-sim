@@ -17,7 +17,7 @@ pub const CAUSE_POISONED: u32 = 4;
 /// A biter that the spike of its prey hurt to 0 (rule J1).
 pub const CAUSE_SPIKED: u32 = 5;
 /// The words of `Control::killer_body`.
-pub const KILLER_BODY_WORDS: u32 = 6 + PART_WORDS;
+pub const KILLER_BODY_WORDS: u32 = 7 + PART_WORDS;
 /// The bits of the player's ability mask (rule X2).
 pub const ABILITY_DASH: u32 = 1;
 pub const ABILITY_LUNGE: u32 = 2;
@@ -47,7 +47,8 @@ pub struct Control {
     pub killer_brain: Vec<u32>,
     /// The killer's body at the kill (`frame::card_body`), `KILLER_BODY_WORDS` words: its
     /// generation, then x, y, length, width, and hue as floats by bit pattern, then its packed parts
-    /// in gene order. Empty with no killer. The card needs it: a killer can die in the same tick.
+    /// in gene order, then its `diet` as a float. Empty with no killer. The card needs it: a killer
+    /// can die in the same tick.
     pub killer_body: Vec<u32>,
     /// The abilities that the player holds: `ABILITY_` bits. Read while the input is manual.
     pub abilities: u32,

@@ -30,6 +30,7 @@ export const CHAPTERS: { id: ChapterId; title: string; text: string[] }[] = [
     text: [
       'A body is one rounded shape. Its genes set its length, width, and parts: each gene makes one part or a mirrored pair, and a body holds at most {maxParts} such genes.',
       'A mouth eats what it touches, with no order from the brain. Flagella and cilia push, a fin steers, a chemoreceptor smells plants, an eye sees. A jaw bites what it faces and touches, and the biter gains what the bite takes. A body with a jaw is a hunter.',
+      'Each body inherits a diet, from plants to flesh: the nearer flesh, the less its mouth takes and the more its jaw takes, and a body between takes less of each.',
       'A spike hurts what bites from its side. A shell plate blocks part of a bite from its side, and slows its body. A toxin gland releases a cloud that drains every other body inside it.',
       'Energy is the only currency, and the ring around your body shows its store. It pays for upkeep, growth, and children. Every part adds mass, which costs energy to build and upkeep for life. Thrust and the brain cost energy too.',
     ],

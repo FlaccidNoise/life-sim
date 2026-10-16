@@ -9,7 +9,7 @@ import { BrainStill } from './BrainPanel';
 import { Sketch } from './BudCard';
 import { Note, NoteMark } from './Note';
 import { heirGone } from './state';
-import { FIRST_DEATH } from './words/lines';
+import { dietWord, FIRST_DEATH } from './words/lines';
 
 const CAUSE_TEXT: Record<DeathCause, string> = {
   starved: 'You starved.',
@@ -58,7 +58,7 @@ function KillerBody(props: { card: KillerCard }) {
           The body that killed you.
           <span class="heir-top">
             <span class="swatch" style={{ background: swatch(killer.hue, 1) }} />
-            Generation {killer.generation}
+            Generation {killer.generation} · {dietWord(killer.diet)}
           </span>
         </span>
       </div>

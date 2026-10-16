@@ -110,6 +110,7 @@ pub fn card_body(world: &World, slot: u32) -> Vec<u32> {
         *word = pack(part);
     }
     words.extend_from_slice(&parts);
+    words.push(c.diet[s].to_bits());
     words
 }
 

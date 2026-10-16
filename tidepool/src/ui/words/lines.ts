@@ -76,6 +76,8 @@ export const BUD = {
   connsLost: '{n} connection{s} lost',
   // Of a child born of a cross, a weight that differs can be the partner's: not every one is a nudge.
   weights: '{n} of {m} connection weights differ',
+  // The child eats other food than its parent, by `dietWord`.
+  diet: 'Diet: now {diet}',
   part: 'part', // a kind that this build does not know
 };
 
@@ -91,6 +93,7 @@ export const MATE = {
   size: 'Length {l}, width {w}',
   hidden: 'Hidden neurons: {n}',
   conns: 'Connections: {n}',
+  diet: 'Diet: {diet}',
   noParts: 'No parts',
   // `FLAG_WILLING` of the frame: the accept command of the body is above 0.
   willing: 'Willing now',
@@ -114,6 +117,16 @@ export const MATE = {
   // `FLAG_DONOR` rose on the body of the player.
   exchanged: 'Genes exchanged. Your next brood is mixed.',
 };
+
+/** The cut points of the diet words: the targets of rule D1 in docs/plans/2026-10-16-m4-retune-diet.md. */
+export const DIET_PLANTS_BELOW = 0.3;
+export const DIET_FLESH_ABOVE = 0.7;
+
+/** What a body eats, from its `diet` gene: under 0.3 plants, over 0.7 flesh, and both from 0.3 to 0.7. */
+export function dietWord(diet: number): string {
+  if (diet < DIET_PLANTS_BELOW) return 'eats plants';
+  return diet > DIET_FLESH_ABOVE ? 'eats flesh' : 'eats both';
+}
 
 /** The kinds of part, by the `KIND_` constants of src/protocol.ts. */
 export const KIND: Record<number, string> = {
