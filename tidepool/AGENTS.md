@@ -26,8 +26,9 @@ open.
 M3 (Minds) has a plan, `docs/plans/2026-10-13-m3-minds.md`. **The owner approved it on 2026-10-13. It is
 built, audited (`docs/findings/m3-audit.md`), and its exit record is `docs/findings/m3-exit.md`.**
 The owner's checks are open. The walkthrough
-(`docs/plans/2026-10-13-walkthrough.md`) is built. The M4 plan is a draft for the owner
-(`docs/plans/2026-10-14-m4-teeth.md`): build nothing of it before approval. The plan says which owner stops the build runs through and which stops are hard
+(`docs/plans/2026-10-13-walkthrough.md`) is built. **The owner approved the M4 plan on 2026-10-15
+(`docs/plans/2026-10-14-m4-teeth.md`), at the recommended option of every choice and C9 at B. It is
+being built.** The plan says which owner stops the build runs through and which stops are hard
 ("How the build runs without the owner"). A choice logged as "provisional, owner to confirm" in
 `docs/decisions/INDEX.md` is not final.
 

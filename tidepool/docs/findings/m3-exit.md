@@ -149,8 +149,8 @@ connection term of the upkeep fails 3 tests. What was fixed and what is carried 
 
 ## Open problems, sorted by who decides
 
-**The owner, provisional choices of the build** (`decisions/INDEX.md`, each marked "provisional,
-owner to confirm"):
+**The owner, provisional choices of the build** (`decisions/INDEX.md`). **Confirmed by the owner on
+2026-10-15, all six, and the `variety` band reads `variety_wired` from that day:**
 
 | Date | Choice | Where |
 |---|---|---|

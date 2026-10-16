@@ -158,12 +158,12 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
   met (long gate 5/5 with every brain band). Mixing costs about 9%: more bodies and the crosses, not
   larger brains. Evolution drops it by tick 144,000 (accept share 0.01 to 0.24). The floor of 2,400
   is unchanged. → `../findings/m3-tuning.md` Part 4
-- 2026-10-14: **Provisional, owner to confirm: no band on area or on `plans`, the egg range as it is,
+- 2026-10-14: **Confirmed by the owner 2026-10-15. Was provisional: no band on area or on `plans`, the egg range as it is,
   and a band on `speed_cv` that fails under 0.10.** Area follows `len`, whose band bounds it already.
   `plans` read 0 in a passing world. With room above 0.7 the egg did not rise. `speed_cv` reads 0.22 to
   0.28 in good worlds and 0.05 to 0.07 with every body mutation off (0/5). → `../findings/m3-tuning.md`
   Part 5
-- 2026-10-14: **Provisional, owner to confirm: `mix_rate` stays a parameter whatever value the retune
+- 2026-10-14: **Confirmed by the owner 2026-10-15. Was provisional: `mix_rate` stays a parameter whatever value the retune
   leaves it at.** The plan said to delete it if left at exactly 1. It is a chance per tick, as the
   structural rates that the plan keeps are, and three things read it: the mate card shows only when it
   is above 0, the field guide says "with mixing on", and a test pins it in `mate.rs`.
@@ -171,7 +171,7 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
 - 2026-10-14: **Each hypothesis of a trial is committed before its run, not kept in a log folder.** A
   machine restart lost the folder in `/private/tmp`, and with it the hypotheses of Tasks 9 and 10 as
   written. The rows survive in `../findings/`. → `../findings/m3-tuning.md` Part 4
-- 2026-10-14: **Provisional, owner to confirm: stage 1 of the M3 retune closes with `mut_conn_remove`
+- 2026-10-14: **Confirmed by the owner 2026-10-15. Was provisional: stage 1 of the M3 retune closes with `mut_conn_remove`
   at 0.01, and the band on `shapes` is replaced by a band on `variety`.** At the Start values the long
   gate read 3 of 5 (the scent gap on seeds 4 and 8): with brain structure on, the bodies with no
   chemoreceptor took over on 2 of 3 seeds, and with it frozen they did not. At 0.01 the gate reads 5 of
@@ -180,7 +180,7 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
   read (seed 3: `shapes=1`, `variety=27.3`). `variety`, the effective number of brain shapes, fails
   under 2.0 and read 1.0 on 3 of 3 seeds of the frozen world. Throughput is on its target of 2,700, not
   over it. → `../findings/m3-tuning.md` Part 3
-- 2026-10-13: **Provisional, owner to confirm: the three brain bands of the long gate.** `hidden` fails
+- 2026-10-13: **Confirmed by the owner 2026-10-15. Was provisional: the three brain bands of the long gate.** `hidden` fails
   under 1.0, `conns` under 15.0, `shapes` under 2, each read with `gate-evolve --brain` at tick
   144,000. Each rejected a bad world of the head on 3 of 3 seeds: a brain that is the largest cost of
   a body reads 0.03 to 0.04 hidden neurons and 1.4 to 2.7 connections, and a world where no brain can
@@ -196,7 +196,7 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
   measurement: a first version in M3 after the rules are on, more beats with M4 to M6, and the polish
   in M8. Measured by the beats that a new player completes and a short check of what they understood.
   → `../roadmap.md` M3, `../research/onboarding.md`
-- 2026-10-13: **Provisional, owner to confirm: the walkthrough is built from twelve principles of the
+- 2026-10-13: **Confirmed by the owner 2026-10-15. Was provisional: the walkthrough is built from twelve principles of the
   research, and its eight open questions are answered for the build.** No step for steering or
   eating, and no step that blocks play: a randomized study of 45,000 players found that a tutorial
   pays only for unfamiliar mechanics. Each beat is act first, then one true sentence. No line gives a
@@ -205,13 +205,36 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
   choices are selection by a chooser, and that the founders' brains were wired by hand. Every note is
   also in one field guide, which never opens by itself. Not taken: a voice, and a guess before the
   time-skip (M5). → `../plans/2026-10-13-walkthrough.md`, `../research/onboarding.md` section 5
-- 2026-10-13: **Provisional, owner to confirm: the default draw of a body stays as it was, and four
+- 2026-10-13: **Confirmed by the owner 2026-10-15. Was provisional: the default draw of a body stays as it was, and four
   looks wait behind `?look=1|2|3|4`.** Look 1 narrows the lighter end, look 2 also draws parts at twice
   the size with a fan for a mouth and a fork for a chemoreceptor, look 3 also swells the body at each
   mouth. Looks 2 and 3 are 12% to 59% over today's draw time, against a limit of a tenth. The owner saw
   looks 1 to 3 and asked for the scale and thin lines of look 1 with the detail of look 3: that is
   look 4, built the same day, near the limit on a loaded machine. The owner picks one or none, and
   the rest is deleted. → `../findings/m3-shapes.md`
+- 2026-10-15: **The owner confirmed every provisional entry above in one reply ("yes to all"), picked
+  look 4, approved the M4 plan, and authorized a push.** The six entries now read "Confirmed by the
+  owner 2026-10-15". → `../findings/m3-exit.md` "Open problems"
+- 2026-10-15: **The `variety` band of the long gate reads `variety_wired`: the effective number of
+  brain shapes over the hidden neurons with a way in from an input and a way out to an output.** The
+  band stays at 2.0. `variety`, over every hidden neuron, is printed with no band: a cross can leave a
+  donor's hidden genes unwired, and it counts them. `variety_wired` read 12 to 38 on seeds 1, 4, 5,
+  6, 8 at the M3 defaults. The proof is run again for `variety_wired` on the frozen world (the four
+  structural rates at 0). → `../gates.md` "The brain bands", `../../crates/headless/src/evolve.rs`
+- 2026-10-15: **Look 4 is the only draw of a body.** The scale and thin lines of look 1 with the
+  detail of look 3: the outline tapers from the parts and swells at each mouth, drawn from the parts
+  a body carries, with no gene. Looks 0 to 3 and `?look` are deleted. Still open: the draw-time
+  reading on a quiet machine and on a phone (owner check 7). → `../findings/m3-shapes.md`
+- 2026-10-15: **The M4 plan is approved: the recommended option of every choice, C9 at option B, and
+  its eight differences from the roadmap and the design.** C1 a Jaw bites on contact and facing with
+  `lunge` as its trigger. C2 `bite_mass_ratio`, start 1.15. C3 `founder_jaw` hunters with hand-wired
+  starter brains. C4 a jaw-size eye input and two hurt inputs. C5 debris in its own pool of 4,096
+  pieces, a new budget of `architecture.md` §2 that the owner accepted. C6 coexistence read at tick
+  12,000 in CI and at tick 144,000 in `make gates-long`, over the second half of the run. C7 no taper
+  gene. C8 the fin measured at the motor stop. C9 the bench world is decided with data at the end of
+  stage 1, and a lower reference population comes back to the owner. C10 the first kill in view is
+  drawn, no shield. C11 no cysts. The build runs through its first three stops as M3's did.
+  → `../plans/2026-10-14-m4-teeth.md`
 
 ## Architecture
 
