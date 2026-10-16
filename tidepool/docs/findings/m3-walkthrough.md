@@ -91,7 +91,8 @@ No error or warning in the console at any point.
 6. At 390 pixels, at the top edge of the world, the camera cannot move further and the body sits
    under the card and the counter.
 7. A bud's line can cut into another line for 3 seconds.
-8. The sketch on the bud card does not draw the outline of look 4, the one draw since 2026-10-15.
+8. The sketch on the bud card and the mate card (`BudCard.tsx` `Sketch`) draws an ellipse with the
+   parts at their anchors, not the tapered outline of look 4, the one draw since 2026-10-15.
 9. **Not checked at all:** a real phone (touch was emulated), a screen reader, Firefox or Safari,
    blocked storage in a real browser, a wiring count above 0, a brood of more than one child seen in
    play, and the "At the notch" line in the first pass (it showed in the second, at 26.9 seconds).
