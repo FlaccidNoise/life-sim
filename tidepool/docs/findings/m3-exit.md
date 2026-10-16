@@ -92,6 +92,9 @@ input to thrust. One says "Sees a plant on the left. Turns left." This is one lo
 not the owner's check 3.
 
 The world of tick 144,000 is `public/m2-world-long.tdpl` (`tick=144000 creatures=1689 hash=45892934`).
+Both worlds were rebaked on 2026-10-15 at `ae5f9ef` (snapshot format 9, the M4 skeleton): the same
+seed 1 and the same populations, 1,633 and 1,689, hashes `2ff9bde1` and `99638417`. The page loads
+the long world and draws it with no console error.
 Both files load in the page with no console error. They keep the names of M2 because the look
 instructions of `m3-shapes.md` open them by those names. They are not in git.
 
