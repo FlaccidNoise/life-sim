@@ -53,8 +53,17 @@ const CONNS: f64 = 15.0;
 const VARIETY: f64 = 2.0;
 /// The predation bands of `--brain`, for a reading at tick 144,000 (choice C6 of the M4 plan). They
 /// work as `PREDATION` of `health.rs` does: unset until a proof sets one, and judged only under
-/// `--predation`.
-const PREDATION: Bands = Bands::OFF;
+/// `--predation`. Set on 2026-10-16 from the long dead-jaw world (`bite_rate=0`, seeds 1, 4, 5, 6,
+/// 8: `kills_late` 0 and `flesh_late` 0.000 on 5 of 5) against the default world (240 to 690 and
+/// 0.022 to 0.037). `hunt_lo` is not a gate at 144,000 either: dead jaws drift to 0.04 to 0.71.
+/// `hunt_hi` and `prey_lo` are not set: the default world fails them (`findings/m4-tuning.md`).
+const PREDATION: Bands = Bands {
+    hunt_lo: None,
+    hunt_hi: None,
+    prey_lo: None,
+    kills_late: Some(20),
+    flesh_late: Some(0.01),
+};
 
 /// The mean and the standard deviation. Both are 0 for no values.
 pub fn mean_sd(values: impl Iterator<Item = f32>) -> (f64, f64) {
