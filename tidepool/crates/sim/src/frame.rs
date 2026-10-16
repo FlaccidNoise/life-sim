@@ -350,8 +350,8 @@ mod tests {
         assert!((f32::from_bits(r[6]) - 0.75).abs() < 1e-6);
         // A founder accepts a mate from its first thought.
         assert_eq!(r[7..10], [c.uid[4], 4, FLAG_WILLING]);
-        // A founder brain: 4 hidden neurons and 60 connections.
-        assert_eq!(r[10], 4 | 60 << 16);
+        // A founder brain: 4 hidden neurons and 65 connections.
+        assert_eq!(r[10], 4 | 65 << 16);
         assert!(c.heading[4] != 0.0 && c.length(4) > c.width(4));
     }
 

@@ -403,9 +403,13 @@ test('what the guide says of mixing is what the code does', () => {
   // Chapter 6: a world has mixing on or off. With the chance at 0 `mate::step` makes no pair.
   expect(code('mate.rs'), 'chapter 6 says a world can have mixing off').toContain('MIX_RATE');
   expect(rust('params.rs'), 'the chance of a mix can be 0').toMatch(/"mix_rate" [\d.]+ 0\.0 1\.0;/);
-  // Chapter 2: the outputs that it names are the outputs of every body.
+  // Chapter 2: the outputs that it names are the outputs of every body, then the triggers that a
+  // part declares. Task 14 of the M4 plan writes the triggers into the chapter.
   expect(rust('brain.rs')).toContain(
     'pub const BODY_OUTPUTS: [u8; 3] = [OUT_THRUST, OUT_TURN, OUT_ACCEPT];',
+  );
+  expect(rust('brain.rs')).toContain(
+    'pub const TRIGGERS: [(u8, u8); 3] = [\n    (OUT_DASH, KIND_FLAGELLUM),\n    (OUT_LUNGE, KIND_JAW),\n    (OUT_TOXIN, KIND_TOXIN),\n];',
   );
 });
 

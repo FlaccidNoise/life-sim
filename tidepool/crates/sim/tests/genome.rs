@@ -78,9 +78,9 @@ fn founder_eye_adds_a_fifth_part_and_moves_no_other_draw() {
     );
     let weights = |g: &Genome| g.brain.conns.iter().map(|c| c.weight).collect::<Vec<_>>();
     // The eye wires are drawn after every draw of the brain with no eye: `brain::starter`. They
-    // sit between its first 39 connections and its last 3.
+    // sit between its first 39 connections and its 3 accept wires.
     assert_eq!(weights(&eyed)[..39], weights(&plain)[..39]);
-    assert_eq!(weights(&eyed)[57..], weights(&plain)[39..]);
+    assert_eq!(weights(&eyed)[57..60], weights(&plain)[39..42]);
     assert_eq!(biases(&eyed), biases(&plain));
 }
 
@@ -92,11 +92,22 @@ fn a_founder_holds_the_history_ids_that_the_world_keeps_for_it() {
     let conns: Vec<u32> = g.brain.conns.iter().map(|c| c.history).collect();
     let parts: Vec<u32> = g.parts.iter().map(|x| x.history).collect();
     let hidden: Vec<u32> = g.brain.hidden.iter().map(|h| h.id).collect();
-    assert_eq!(conns, (1..=60).collect::<Vec<u32>>());
+    // The wires of the triggers take the ids after the jaw of a hunter.
+    assert_eq!(conns, (1..=60).chain(71..=75).collect::<Vec<u32>>());
     assert_eq!(parts, [61, 62, 63, 64, 65]);
     // The 4 hidden genes of the founder take the 4 ids after its parts.
     assert_eq!(hidden, [66, 67, 68, 69]);
-    assert_eq!(World::new(1, 64.0, 64.0).next_history, 70);
+    // A hunter holds the rest: its jaw and the 4 wires that chase.
+    let mut hunter = g.clone();
+    hunter.arm(&p);
+    assert_eq!(
+        hunter.parts.last().map(|x| x.history),
+        Some(FOUNDER_JAW_HISTORY)
+    );
+    let conns: Vec<u32> = hunter.brain.conns.iter().map(|c| c.history).collect();
+    assert_eq!(conns, (1..=60).chain(71..=79).collect::<Vec<u32>>());
+    assert_eq!((FOUNDER_JAW_HISTORY, FOUNDER_HISTORIES), (70, 79));
+    assert_eq!(World::new(1, 64.0, 64.0).next_history, 80);
 }
 
 #[test]
@@ -446,10 +457,10 @@ fn add_puts_a_small_new_part_on_the_end_with_a_new_id() {
         assert_eq!(ids(&child), ids(&g));
         kinds[new.kind as usize] = true;
     }
-    // Every kind of M3 comes up, and no kind of M4: the mutation draws from `ADDABLE_KINDS`.
+    // Every kind comes up: the mutation draws from `ADDABLE_KINDS`, which is `KINDS`.
     assert_eq!(
         kinds,
-        [false, true, true, true, true, true, true, false, false, false, false]
+        [false, true, true, true, true, true, true, true, true, true, true]
     );
 }
 
@@ -517,10 +528,11 @@ fn duplicate_copies_kind_size_and_extra_under_a_new_id() {
         let child = g.mutated(&mut rng, &p, &mut next_history);
         assert_eq!(child.parts.len(), 6);
         let (old, copy) = (&child.parts[..5], &child.parts[5]);
-        // The copy of the eye takes a copy of each of the 18 connections that name the eye, with
-        // a new id each. No connection names another part.
+        // The copy of the eye takes a copy of each of the 22 connections that name the eye, with
+        // a new id each: the 18 of M3 and the 4 that flee from teeth. No connection names
+        // another part.
         let wires = child.brain.conns.len() - g.brain.conns.len();
-        assert_eq!(wires, if copy.kind == KIND_EYE { 18 } else { 0 });
+        assert_eq!(wires, if copy.kind == KIND_EYE { 22 } else { 0 });
         assert_eq!((copy.history, next_history), (100, 101 + wires as u32));
         // The copy is of the part as this birth left it. This founder has one part of each kind.
         let from = old.iter().find(|x| x.kind == copy.kind).expect("a source");
@@ -972,6 +984,10 @@ fn a_new_eye_arrives_with_part_wires_connections_from_its_own_ports() {
         let new = &child.brain.conns[count..];
         assert_eq!(child.brain.conns[..count], g.brain.conns[..]);
         eyes += (part.kind == KIND_EYE) as u32;
+        if brain::ports(&child).outputs != brain::ports(&g).outputs {
+            // A jaw or a gland declares an output: `a_new_jaw_arrives_with_part_wires_into_lunge`.
+            continue;
+        }
         if ports.is_empty() {
             // A part with no port of its own arrives with no wire and makes no draw.
             assert!(new.is_empty());
@@ -1198,7 +1214,9 @@ fn a_thousand_mutations_at_high_rates_always_load_and_express() {
         let bytes = saved(&g);
         let back = Genome::load(&mut Reader::new(&bytes)).expect("the child loads");
         assert_eq!(saved(&back), bytes, "birth {birth}");
-        // A living genome holds what its body expresses: every gene is in the block.
+        // A living genome holds what its body expresses: every gene is in the block, but for the
+        // hidden genes past its room and their connections. Since M4 the ports of a body can take
+        // that room: 35 inputs and 6 outputs leave 55 of `MAX_HIDDEN` 64.
         brains.express(0, &back, &p);
         let neurons = brains.n_neur[0] as usize;
         assert!(
@@ -1206,11 +1224,11 @@ fn a_thousand_mutations_at_high_rates_always_load_and_express() {
             "birth {birth}"
         );
         let in_out = (brains.n_in[0] + brains.n_out[0]) as usize;
-        assert_eq!(
-            (neurons - in_out, brains.n_conn[0] as usize),
-            (hidden, conns),
-            "birth {birth}"
-        );
+        let room = MAX_NEURONS - in_out;
+        assert_eq!(neurons - in_out, hidden.min(room), "birth {birth}");
+        if hidden <= room {
+            assert_eq!(brains.n_conn[0] as usize, conns, "birth {birth}");
+        }
         for _ in 0..3 {
             brains.inputs_mut(0).fill(0.5);
             brains.step_one(0);
@@ -1220,4 +1238,87 @@ fn a_thousand_mutations_at_high_rates_always_load_and_express() {
     // The line reached both caps, and a brain lost a neuron in some birth.
     assert_eq!((most_hidden, most_conns), (MAX_HIDDEN, MAX_CONN_GENES));
     assert!(shrank, "no birth lost a hidden neuron");
+}
+
+#[test]
+fn a_new_jaw_arrives_with_part_wires_into_lunge() {
+    let mut p = quiet();
+    p.set(id::MUT_PART_ADD, 1.0);
+    let plain_p = p.clone();
+    p.set(id::PART_WIRES, 2.0);
+    let g = Genome::founder(&mut Rng::new(5), &p);
+    let count = g.brain.conns.len();
+    let before = brain::ports(&g).outputs;
+    let (mut jaws, mut glands) = (0, 0);
+    for seed in 0..400 {
+        let (mut rng, mut plain_rng, mut next_history) = (Rng::new(seed), Rng::new(seed), 100);
+        let child = g.mutated(&mut rng, &p, &mut next_history);
+        let plain = g.mutated(&mut plain_rng, &plain_p, &mut 100);
+        assert_eq!(child.parts, plain.parts);
+        let part = child.parts.last().expect("a new part");
+        let ports = brain::ports(&child);
+        let outputs: Vec<Node> = (ports.outputs.iter())
+            .filter(|n| !before.contains(n))
+            .copied()
+            .collect();
+        let new = &child.brain.conns[count..];
+        match part.kind {
+            KIND_JAW => {
+                assert_eq!(outputs, [Node::body(brain::OUT_LUNGE)]);
+                jaws += 1;
+            }
+            KIND_TOXIN => {
+                assert_eq!(outputs, [Node::body(brain::OUT_TOXIN)]);
+                glands += 1;
+            }
+            // The founder has a flagellum, so a new one declares nothing new.
+            _ => assert!(outputs.is_empty(), "{}", part.kind),
+        }
+        if outputs.is_empty() {
+            continue;
+        }
+        // Each wire draws a source and a `gauss`: no target, since the output is the target.
+        // Two wires that join one pair make one connection, so the first always arrives.
+        assert_eq!(rng.0, after(plain_rng, 2 * (1 + 4)));
+        assert!((1..=2).contains(&new.len()));
+        assert_eq!(next_history, 101 + new.len() as u32);
+        let hidden = g.brain.hidden.iter().map(|h| Node::hidden(h.id));
+        let sources: Vec<Node> = ports.inputs.iter().copied().chain(hidden).collect();
+        for (wire, history) in new.iter().zip(101..) {
+            assert_eq!((wire.history, wire.dst), (history, outputs[0]));
+            assert!(sources.contains(&wire.src));
+            assert!(wire.weight.abs() <= new_weight_limit(&p));
+        }
+    }
+    assert!(jaws > 0 && glands > 0, "{jaws} jaws, {glands} glands");
+}
+
+#[test]
+fn with_founder_jaw_0_no_founder_draw_is_added() {
+    // The draws of `seed_founders` as the M3 rule makes them: a genome, 8 places of 3 draws, a
+    // heading, and an age.
+    let p = Params::new();
+    assert_eq!(p.get(id::FOUNDER_JAW), 0.0);
+    let mut w = World::new(3, 1536.0, 1024.0);
+    let mut rng = w.rng_spawn.clone();
+    w.seed_founders(5, 0);
+    let mut genomes = Vec::new();
+    for _ in 0..5 {
+        genomes.push(Genome::founder(&mut rng, &p));
+        for _ in 0..8 * 3 + 2 {
+            rng.next_u64();
+        }
+    }
+    assert_eq!(w.rng_spawn.0, rng.0);
+    for (s, g) in genomes.iter().enumerate() {
+        assert_eq!((w.genomes[s].len, w.genomes[s].hue), (g.len, g.hue));
+        assert_eq!(w.genomes[s].parts, g.parts);
+    }
+    // Above 0, each founder makes one draw more, after its genome. The first genome is the same.
+    let mut jaw = World::new(3, 1536.0, 1024.0);
+    jaw.params.set(id::FOUNDER_JAW, 1e-9);
+    jaw.seed_founders(5, 0);
+    assert_eq!(jaw.rng_spawn.0, after(w.rng_spawn.clone(), 5));
+    assert_eq!(jaw.genomes[0].parts, genomes[0].parts);
+    assert_eq!(jaw.genomes[0].hue, genomes[0].hue);
 }

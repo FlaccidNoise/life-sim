@@ -600,12 +600,12 @@ mod tests {
         unsafe {
             let w = tp_new(1, 1536.0, 1024.0);
             tp_seed_founders(w, 20, 0);
-            // A founder: 20 neurons and 60 connections.
+            // A founder: 25 neurons and 65 connections.
             let words =
-                tp_brain_header_words() + 20 * tp_brain_neuron_words() + 60 * tp_brain_conn_words();
+                tp_brain_header_words() + 25 * tp_brain_neuron_words() + 65 * tp_brain_conn_words();
             assert_eq!(tp_brain_write(w, 9), words);
             let header = std::slice::from_raw_parts(tp_brain_ptr(w), 6);
-            assert_eq!(header, [9, 13, 4, 3, 60, 0]);
+            assert_eq!(header, [9, 17, 4, 4, 65, 0]);
             assert_eq!(tp_brain_write(w, 999), 0);
             tp_free(w);
         }
@@ -642,10 +642,10 @@ mod tests {
             (&mut *w).kill(3, crate::control::CAUSE_EATEN, Some(8));
             assert_eq!((tp_death_cause(w), tp_killer(w)), (3, 9));
             let words =
-                tp_brain_header_words() + 20 * tp_brain_neuron_words() + 60 * tp_brain_conn_words();
+                tp_brain_header_words() + 25 * tp_brain_neuron_words() + 65 * tp_brain_conn_words();
             assert_eq!(tp_killer_brain_len(w), words);
             let header = std::slice::from_raw_parts(tp_killer_brain_ptr(w), 6);
-            assert_eq!(header, [9, 13, 4, 3, 60, 0]);
+            assert_eq!(header, [9, 17, 4, 4, 65, 0]);
             assert_eq!(tp_possess(w, 9), 1);
             assert_eq!((tp_killer(w), tp_killer_brain_len(w)), (0, 0));
             tp_free(w);

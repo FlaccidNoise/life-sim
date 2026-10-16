@@ -231,8 +231,10 @@ impl World {
     /// once, on a new world, after the parameters are set. It replaces the fertility map.
     ///
     /// Founders are adults (growth 1) at `energy01` 0.5, with an age uniform in
-    /// `[0, lifespan / 2)`. Each one draws from `rng_spawn`, in this order: its genome, then
-    /// `FOUNDER_TRIES` places of 3 draws each (x, y, and a chance), then its heading, then its age.
+    /// `[0, lifespan / 2)`. Each one draws from `rng_spawn`, in this order: its genome, then with
+    /// `founder_jaw` above 0 a chance (rule P3 of the M4 plan: below `founder_jaw`, `Genome::arm`
+    /// makes it a hunter), then `FOUNDER_TRIES` places of 3 draws each (x, y, and a chance), then
+    /// its heading, then its age.
     /// It takes the first place whose chance is below the fertility there, or the last place if
     /// none is. Every founder makes the same number of draws, so the fertility map moves founders
     /// but does not change their genomes.
@@ -245,9 +247,13 @@ impl World {
             self.params.get(id::FERT_RADIUS),
         );
         let half_lifespan = (self.params.get(id::LIFESPAN) / 2.0) as u32;
+        let jaw = self.params.get(id::FOUNDER_JAW);
         for _ in 0..creatures {
             let rng = &mut self.rng_spawn;
-            let genome = Genome::founder(rng, &self.params);
+            let mut genome = Genome::founder(rng, &self.params);
+            if jaw > 0.0 && rng.unit() < jaw {
+                genome.arm(&self.params);
+            }
             let (mut place, mut placed) = ((0.0, 0.0), false);
             for _ in 0..FOUNDER_TRIES {
                 let (x, y, chance) = (rng.range(0.0, self.w), rng.range(0.0, self.h), rng.unit());

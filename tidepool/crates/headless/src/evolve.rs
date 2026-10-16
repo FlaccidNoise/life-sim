@@ -380,9 +380,10 @@ mod tests {
         }
         let minds = minds(&world);
         let read = |m: &Mind| (m.hidden, m.wired, m.conns, m.core);
-        assert_eq!(read(&minds[0]), (4, 4, 60, 28));
-        assert_eq!(read(&minds[1]), (4, 4, 28, 28));
-        assert_eq!(brain_measures(&minds), (4.0, 44.0, 1, 2));
+        // The wire from the hurt input to dash is of the body, so it is in the core.
+        assert_eq!(read(&minds[0]), (4, 4, 65, 29));
+        assert_eq!(read(&minds[1]), (4, 4, 29, 29));
+        assert_eq!(brain_measures(&minds), (4.0, 47.0, 1, 2));
     }
 
     /// 40 brains. A shape that one of them holds is under 5% and does not count. A shape that two

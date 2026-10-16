@@ -131,8 +131,9 @@ fn a_genome_with_kind_11_does_not_load_and_kind_10_does() {
 }
 
 #[test]
-fn the_add_part_mutation_never_draws_a_kind_above_6() {
-    assert_eq!(ADDABLE_KINDS, 6);
+fn the_add_part_mutation_draws_every_kind() {
+    // 6 until M4 Task 9 ended the switch-on rule.
+    assert_eq!(ADDABLE_KINDS, KINDS);
     let mut p = Params::new();
     p.set(id::MUT_PART_ADD, 1.0);
     p.set(id::MUT_PART_REMOVE, 0.0);
@@ -143,10 +144,9 @@ fn the_add_part_mutation_never_draws_a_kind_above_6() {
         let child = g.mutated(&mut rng, &p, &mut 1000);
         seen[child.parts.last().expect("a new part").kind as usize] = true;
     }
-    // Every M3 kind comes up, and no kind of M4.
     assert_eq!(
         seen,
-        [false, true, true, true, true, true, true, false, false, false, false]
+        [false, true, true, true, true, true, true, true, true, true, true]
     );
 }
 

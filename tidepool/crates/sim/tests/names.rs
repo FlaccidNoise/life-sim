@@ -2,14 +2,17 @@
 //! the names into the indexes of a brain block.
 
 use tidepool_sim::brain::{
-    self, Brains, EYE_BODY_A, EYE_BODY_B, EYE_FOOD_A, EYE_FOOD_B, IN_CONST, IN_ENERGY, MAX_CONNS,
-    MAX_NEURONS, N_OUT_MAX, OUT_ACCEPT, OUT_THRUST, OUT_TURN, READOUT_CONN_WORDS,
+    self, Brains, EYE_BODY_A, EYE_BODY_B, EYE_FOOD_A, EYE_FOOD_B, EYE_JAW_A, EYE_JAW_B, IN_CONST,
+    IN_ENERGY, IN_HURT, IN_HURT_SIDE, IN_SCENT, MAX_CONNS, MAX_NEURONS, N_BODY_IN, N_OUT_MAX,
+    OUT_ACCEPT, OUT_DASH, OUT_LUNGE, OUT_THRUST, OUT_TOXIN, OUT_TURN, READOUT_CONN_WORDS,
     READOUT_HEADER_WORDS, READOUT_NEURON_WORDS,
 };
 use tidepool_sim::genome::{
     BrainGenome, ConnGene, Genome, HiddenGene, Node, OutGene, PartGene, BODY, FOUNDER_EYE_HISTORY,
-    FOUNDER_HISTORIES, KIND_EYE, KIND_FIN, MAX_CONN_GENES, MAX_HIDDEN, PORT_HIDDEN,
+    FOUNDER_HISTORIES, KIND_EYE, KIND_FIN, KIND_FLAGELLUM, KIND_JAW, KIND_TOXIN, MAX_CONN_GENES,
+    MAX_HIDDEN, PORT_HIDDEN,
 };
+use tidepool_sim::math::act;
 use tidepool_sim::params::{id, Params};
 use tidepool_sim::rng::Rng;
 use tidepool_sim::snapshot::{LoadError, Reader, Writer};
@@ -51,18 +54,23 @@ fn at(x: f32) -> SpawnAt {
     }
 }
 
-/// Where rule B2 puts a neuron of the founder brain: the 6 inputs of the body at 0 to 5, the 3 of
-/// the scent at 6 to 8, the 4 of the eye at 9 to 12, hidden 13 to 16, thrust 17, turn 18, accept 19.
+/// Where rule B2 puts a neuron of the founder brain: the 8 inputs of the body at 0 to 7, the 3 of
+/// the scent at 8 to 10, the 6 of the eye at 11 to 16 (plant, body, and jaw of cone A, then of
+/// cone B), hidden 17 to 20, thrust 21, turn 22, accept 23, dash 24.
 fn founder_index(n: Node) -> u16 {
-    let first_hidden = FOUNDER_HISTORIES - 3;
+    let hidden = FOUNDER_EYE_HISTORY + 1..=FOUNDER_EYE_HISTORY + 4;
+    let eye = [
+        EYE_FOOD_A, EYE_BODY_A, EYE_JAW_A, EYE_FOOD_B, EYE_BODY_B, EYE_JAW_B,
+    ];
     match (n.owner, n.port) {
-        (BODY, port @ 0..=5) => port as u16,
-        (BODY, port @ 16..=18) => port as u16 - 10,
-        (FOUNDER_EYE_HISTORY, port @ 0..=3) => 9 + port as u16,
-        (BODY, port @ 128..=130) => port as u16 - 111,
-        (id, PORT_HIDDEN) if (first_hidden..=FOUNDER_HISTORIES).contains(&id) => {
-            13 + (id - first_hidden) as u16
+        (BODY, port @ 0..=7) => port as u16,
+        (BODY, port @ 16..=18) => port as u16 - 8,
+        (FOUNDER_EYE_HISTORY, port @ 0..=5) => {
+            let at = eye.iter().position(|&p| p == port).expect("an eye port");
+            11 + at as u16
         }
+        (BODY, port @ 128..=131) => port as u16 - 107,
+        (id, PORT_HIDDEN) if hidden.contains(&id) => 17 + (id - hidden.start()) as u16,
         _ => panic!("{n:?} is not a neuron of the founder"),
     }
 }
@@ -73,15 +81,15 @@ fn a_founder_expresses_the_m3_block() {
     let g = founder(7);
     let ids: Vec<u32> = g.brain.hidden.iter().map(|h| h.id).collect();
     assert_eq!(ids, [66, 67, 68, 69]);
-    assert_eq!((FOUNDER_EYE_HISTORY, FOUNDER_HISTORIES), (65, 69));
+    assert_eq!((FOUNDER_EYE_HISTORY, FOUNDER_HISTORIES), (65, 79));
 
     let mut b = Brains::new(2);
     b.express(1, &g, &p);
     assert_eq!(
         (b.n_in[1], b.n_neur[1], b.n_out[1], b.n_conn[1]),
-        (13, 20, 3, 60)
+        (17, 25, 4, 65)
     );
-    assert_eq!((b.in_scent[1], b.in_eye[1]), (6, 9));
+    assert_eq!((b.in_scent[1], b.in_eye[1]), (8, 11));
 
     // Each connection sits where the rule puts it: sorted by (dst, src, history) on those indexes.
     let mut want: Vec<(u16, u16, u32, u32)> = g
@@ -98,20 +106,20 @@ fn a_founder_expresses_the_m3_block() {
         })
         .collect();
     want.sort_unstable();
-    let got: Vec<(u16, u16, u32)> = (MAX_CONNS..MAX_CONNS + 60)
+    let got: Vec<(u16, u16, u32)> = (MAX_CONNS..MAX_CONNS + 65)
         .map(|k| (b.dst[k], b.src[k], b.w[k].to_bits()))
         .collect();
     let want: Vec<(u16, u16, u32)> = want.iter().map(|&(d, s, _, w)| (d, s, w)).collect();
     assert_eq!(got, want);
 
     // The biases of the hidden genes, then those of the outputs. An input has none.
-    let block = MAX_NEURONS..MAX_NEURONS + 20;
+    let block = MAX_NEURONS..MAX_NEURONS + 25;
     let bias: Vec<f32> = (g.brain.hidden.iter().map(|h| h.bias))
         .chain(g.brain.outs.iter().map(|o| o.bias))
         .collect();
-    assert_eq!(b.bias[block.clone()][13..], bias[..]);
-    assert_eq!(b.bias[block.clone()][..13], [0.0; 13]);
-    assert_eq!(b.alpha[block][13..], [1.0; 7]);
+    assert_eq!(b.bias[block.clone()][17..], bias[..]);
+    assert_eq!(b.bias[block.clone()][..17], [0.0; 17]);
+    assert_eq!(b.alpha[block][17..], [1.0; 8]);
 }
 
 #[test]
@@ -139,8 +147,8 @@ fn a_connection_to_a_missing_name_is_not_expressed_and_costs_nothing() {
     let mut b = Brains::new(2);
     b.express(0, &plain, &p);
     b.express(1, &dangling, &p);
-    assert_eq!((b.n_conn[0], b.n_conn[1]), (60, 60));
-    assert_eq!(b.w[..60], b.w[MAX_CONNS..][..60]);
+    assert_eq!((b.n_conn[0], b.n_conn[1]), (65, 65));
+    assert_eq!(b.w[..65], b.w[MAX_CONNS..][..65]);
 
     // Two bodies far apart in a world with no plant, both thinking on every tick. They think,
     // swim, and pay the same.
@@ -185,16 +193,17 @@ fn prune_removes_a_dangling_connection_and_the_second_of_a_pair() {
     ]);
     g.prune();
     let histories: Vec<u32> = g.brain.conns.iter().map(|c| c.history).collect();
-    let want: Vec<u32> = (1..=60).chain([350]).collect();
+    let want: Vec<u32> = (1..=60).chain(71..=75).chain([350]).collect();
     assert_eq!(histories, want);
     assert_eq!(g.brain.conns[10], twin);
-    assert_eq!(g.brain.conns[60].weight, 0.3);
+    assert_eq!(g.brain.conns[65].weight, 0.3);
 }
 
 #[test]
 fn prune_adds_an_out_gene_for_a_declared_output() {
     let mut g = founder(7);
     let (turn, accept) = (g.brain.outs[1].clone(), g.brain.outs[2].clone());
+    let dash = g.brain.outs[3].clone();
     assert_eq!(turn.node, Node::body(OUT_TURN));
     assert_eq!(accept.node, Node::body(OUT_ACCEPT));
     // The thrust gene goes, and a gene for an output that no body declares comes.
@@ -209,7 +218,7 @@ fn prune_adds_an_out_gene_for_a_declared_output() {
         bias: 0.0,
         alpha: 1.0,
     };
-    assert_eq!(g.brain.outs, [turn, accept, thrust]);
+    assert_eq!(g.brain.outs, [turn, accept, dash, thrust]);
 
     let mut none = Genome {
         brain: BrainGenome {
@@ -278,7 +287,7 @@ fn hidden_gain_0_silences_a_hidden_neuron_and_1_changes_no_bit() {
     let mut b = Brains::new(1);
     b.express(0, &g, &on);
     let mut genes: Vec<u32> = g.brain.conns.iter().map(|c| c.weight.to_bits()).collect();
-    let mut block: Vec<u32> = b.w[..60].iter().map(|w| w.to_bits()).collect();
+    let mut block: Vec<u32> = b.w[..65].iter().map(|w| w.to_bits()).collect();
     genes.sort_unstable();
     block.sort_unstable();
     assert_eq!(block, genes);
@@ -371,7 +380,7 @@ fn a_genome_with_65_hidden_genes_does_not_load() {
     w.spawn(back, at(300.0)).expect("slot");
     let mut w = World::load(&w.save()).expect("the world loads");
     w.run(20);
-    assert_eq!(w.brains.n_conn[0], 60);
+    assert_eq!(w.brains.n_conn[0], 65);
 }
 
 #[test]
@@ -387,9 +396,9 @@ fn the_readout_of_a_founder_names_every_neuron() {
     w.run(50);
     let (s, uid) = (7, w.creatures.uid[7]);
     let words = brain::readout(&mut w, uid) as usize;
-    assert_eq!(words, header + 20 * per_neuron + 60 * per_conn);
+    assert_eq!(words, header + 25 * per_neuron + 65 * per_conn);
     assert_eq!(w.readout.len(), words);
-    assert_eq!(w.readout[..header], [uid, 13, 4, 3, 60, 0]);
+    assert_eq!(w.readout[..header], [uid, 17, 4, 4, 65, 0]);
 
     let g = &w.genomes[s];
     let ports = brain::ports(g);
@@ -398,7 +407,7 @@ fn the_readout_of_a_founder_names_every_neuron() {
         .chain(hidden)
         .chain(ports.outputs.iter().copied())
         .collect();
-    assert_eq!(names.len(), 20);
+    assert_eq!(names.len(), 25);
     let neurons = w.readout[header..].as_chunks::<6>().0;
     let block = s * MAX_NEURONS;
     for (i, (neuron, name)) in neurons.iter().zip(&names).enumerate() {
@@ -406,8 +415,8 @@ fn the_readout_of_a_founder_names_every_neuron() {
         // Kind 0 is the body. Kind 255 is a hidden neuron, with the index of its gene. An input
         // of the eye has the kind of the eye, with the index of its gene: the fifth part.
         let kind = match i {
-            9..13 => KIND_EYE as u32 | 4 << 8,
-            13..17 => 255 | (i as u32 - 13) << 8,
+            11..17 => KIND_EYE as u32 | 4 << 8,
+            17..21 => 255 | (i as u32 - 17) << 8,
             _ => 0,
         };
         assert_eq!(neuron[2], kind, "neuron {i}");
@@ -423,11 +432,11 @@ fn the_readout_of_a_founder_names_every_neuron() {
     let mut once = names.clone();
     once.sort_unstable();
     once.dedup();
-    assert_eq!(once.len(), 20);
+    assert_eq!(once.len(), 25);
 
     // The connections in the order of the block, each with the history of its gene.
-    let conns = w.readout[header + 20 * per_neuron..].as_chunks::<3>().0;
-    assert_eq!(conns.len(), 60);
+    let conns = w.readout[header + 25 * per_neuron..].as_chunks::<3>().0;
+    assert_eq!(conns.len(), 65);
     let mut histories = Vec::new();
     for (k, word) in conns.iter().enumerate() {
         let at = s * MAX_CONNS + k;
@@ -445,7 +454,7 @@ fn the_readout_of_a_founder_names_every_neuron() {
         histories.push(word[2]);
     }
     histories.sort_unstable();
-    assert_eq!(histories, (1..=60).collect::<Vec<u32>>());
+    assert_eq!(histories, (1..=60).chain(71..=75).collect::<Vec<u32>>());
 
     // The last header word is 1 while the player steers this body.
     assert!(w.possess(uid));
@@ -487,24 +496,28 @@ fn the_readout_gives_a_port_of_a_part_the_kind_and_the_gene_index_of_its_part() 
     w.spawn(g, at(300.0)).expect("slot");
     let header = READOUT_HEADER_WORDS as usize;
     let words = brain::readout(&mut w, 1) as usize;
-    // 9 inputs of the body, 2 of the midline eye, 4 of the pair, and the 3 outputs.
-    assert_eq!(w.readout[..header], [1, 15, 0, 3, 0, 0]);
-    assert_eq!(words, header + 18 * READOUT_NEURON_WORDS as usize);
+    // 11 inputs of the body and the scent, 3 of the midline eye, 6 of the pair, and the 4
+    // outputs.
+    assert_eq!(w.readout[..header], [1, 20, 0, 4, 0, 0]);
+    assert_eq!(words, header + 24 * READOUT_NEURON_WORDS as usize);
     let neurons = w.readout[header..].as_chunks::<6>().0;
-    let got: Vec<[u32; 3]> = neurons[9..15].iter().map(|n| [n[0], n[1], n[2]]).collect();
+    let got: Vec<[u32; 3]> = neurons[11..20].iter().map(|n| [n[0], n[1], n[2]]).collect();
     let eye = KIND_EYE as u32;
     let want = [
         (900, EYE_FOOD_A, 4),
         (900, EYE_BODY_A, 4),
+        (900, EYE_JAW_A, 4),
         (902, EYE_FOOD_A, 6),
         (902, EYE_BODY_A, 6),
+        (902, EYE_JAW_A, 6),
         (902, EYE_FOOD_B, 6),
         (902, EYE_BODY_B, 6),
+        (902, EYE_JAW_B, 6),
     ]
     .map(|(owner, port, gene)| [owner, port as u32, eye | gene << 8]);
     assert_eq!(got, want);
     // Every other neuron is of the body.
-    let mut of_body = neurons[..9].iter().chain(&neurons[15..]);
+    let mut of_body = neurons[..11].iter().chain(&neurons[20..]);
     assert!(of_body.all(|n| n[0] == BODY && n[2] == 0));
 }
 
@@ -527,7 +540,7 @@ fn a_child_that_loses_its_eye_gene_loses_those_connections() {
     let names_eye = |c: &ConnGene| c.src.owner == FOUNDER_EYE_HISTORY;
     assert_eq!(
         parent.brain.conns.iter().filter(|c| names_eye(c)).count(),
-        18
+        22
     );
     let mut next_history = FOUNDER_HISTORIES + 1;
     let mut blind = 0;
@@ -540,18 +553,21 @@ fn a_child_that_loses_its_eye_gene_loses_those_connections() {
         }
         blind += 1;
         // The body declares no eye input, so its genome holds no connection from one: the 16 to
-        // the hidden neurons and the 2 that turn the body to a plant.
+        // the hidden neurons, the 2 that turn the body to a plant, and the 4 that flee from teeth.
         let ports = brain::ports(&child);
-        assert_eq!(ports.inputs.len(), 9);
+        assert_eq!(ports.inputs.len(), 11);
         assert!(ports.inputs.iter().all(|n| n.owner == BODY));
         let histories: Vec<u32> = child.brain.conns.iter().map(|c| c.history).collect();
-        assert_eq!(histories, (1..=39).chain(58..=60).collect::<Vec<u32>>());
+        assert_eq!(
+            histories,
+            (1..=39).chain(58..=60).chain([71]).collect::<Vec<u32>>()
+        );
         assert!(!child.brain.conns.iter().any(names_eye));
         let mut b = Brains::new(2);
         b.express(0, &parent, &p);
         b.express(1, &child, &p);
-        assert_eq!((b.n_in[0], b.n_conn[0], b.in_eye[0]), (13, 60, 9));
-        assert_eq!((b.n_in[1], b.n_conn[1]), (9, 42));
+        assert_eq!((b.n_in[0], b.n_conn[0], b.in_eye[0]), (17, 65, 11));
+        assert_eq!((b.n_in[1], b.n_conn[1]), (11, 43));
         assert_eq!(b.in_eye[1], brain::NO_INPUT);
     }
     assert!(blind > 0, "no child of 64 lost the eye");
@@ -612,4 +628,82 @@ fn a_world_with_a_donor_is_the_same_in_a_reload() {
     let back = World::load(&moved.save()).expect("load");
     assert_eq!(back.rng_mate.0, moved.rng_mate.0);
     assert_ne!(moved.state_hash(), start(true).state_hash());
+}
+
+#[test]
+fn every_body_declares_the_two_hurt_inputs() {
+    assert_eq!((IN_HURT, IN_HURT_SIDE, N_BODY_IN), (6, 7, 8));
+    let bare = Genome {
+        parts: Vec::new(),
+        ..Genome::default()
+    };
+    for g in [founder(1), Genome::default(), bare] {
+        let inputs = brain::ports(&g).inputs;
+        assert_eq!(inputs[IN_HURT as usize], Node::body(IN_HURT));
+        assert_eq!(inputs[IN_HURT_SIDE as usize], Node::body(IN_HURT_SIDE));
+    }
+    // The scent follows the 8 of the body.
+    assert_eq!(
+        brain::ports(&founder(1)).inputs[N_BODY_IN],
+        Node::body(IN_SCENT)
+    );
+}
+
+#[test]
+fn a_body_with_a_flagellum_declares_dash_and_one_without_does_not() {
+    let every = [OUT_THRUST, OUT_TURN, OUT_ACCEPT].map(Node::body);
+    let with = Genome::default();
+    let mut dash = every.to_vec();
+    dash.push(Node::body(OUT_DASH));
+    assert_eq!(brain::ports(&with).outputs, dash);
+    let mut zero = with.clone();
+    zero.set_size(KIND_FLAGELLUM, 0.0);
+    let mut none = with.clone();
+    none.parts.retain(|part| part.kind != KIND_FLAGELLUM);
+    for g in [&zero, &none] {
+        assert_eq!(brain::ports(g).outputs, every);
+    }
+    let mut b = Brains::new(2);
+    b.express(0, &with, &Params::new());
+    b.express(1, &zero, &Params::new());
+    assert_eq!((b.n_out[0], b.n_out[1]), (4, 3));
+}
+
+#[test]
+fn a_jaw_declares_lunge_and_a_gland_declares_toxin() {
+    // The gland is put on before the jaw: the outputs are in port order, not gene order.
+    let mut g = Genome::default();
+    g.set_size(KIND_TOXIN, 0.3);
+    g.set_size(KIND_JAW, 0.5);
+    let ports = [
+        OUT_THRUST, OUT_TURN, OUT_ACCEPT, OUT_DASH, OUT_LUNGE, OUT_TOXIN,
+    ];
+    assert_eq!(brain::ports(&g).outputs, ports.map(Node::body));
+    // Each output is read by its port. Without the jaw, toxin takes the place in the block that
+    // lunge had, and lunge reads as undeclared.
+    let bias = |port: u8| 0.1 * (port - OUT_THRUST) as f32 - 0.2;
+    g.brain.outs = ports
+        .map(|port| OutGene {
+            node: Node::body(port),
+            bias: bias(port),
+            alpha: 1.0,
+        })
+        .into();
+    let mut jawless = g.clone();
+    jawless.parts.retain(|part| part.kind != KIND_JAW);
+    let mut b = Brains::new(2);
+    b.express(0, &g, &Params::new());
+    b.express(1, &jawless, &Params::new());
+    b.step_one(0);
+    b.step_one(1);
+    assert_eq!((b.n_out[0], b.n_out[1]), (6, 5));
+    for port in ports {
+        assert_eq!(b.output(0, port), act(bias(port)), "{port}");
+        let want = if port == OUT_LUNGE {
+            -1.0
+        } else {
+            act(bias(port))
+        };
+        assert_eq!(b.output(1, port), want, "{port}");
+    }
 }
