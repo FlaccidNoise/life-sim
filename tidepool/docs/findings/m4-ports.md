@@ -103,6 +103,14 @@ against A's 1,394: the world itself changed, so the per-creature-tick column is 
 5. A toxin drain did not count as a hit (the clouds are Task 5 code): fixed at `58805cb`, with the
    side of the cloud's centre in the body's frame and a test.
 
+## The long gate after Task 9, before any rule is on
+
+Read in the Task 10 arms (`m4-motor.md`): `gate-evolve --seeds 1,4,5,6,8 --ticks 144000` at
+`f39f38f` reads **4 of 5**. Seed 8 loses the scent (`chemo` 0.09 against `chemo_blind` 0.09,
+`chemo_gap` 0.00); seeds 1, 4, 5, 6 pass with gaps 0.18 to 0.24. The same seeds with a dead fin pass
+5 of 5 (seed 8: 0.18 against 0.00), so this is seed 8's fragility, not a rule. At the M3 exit seed 8
+read 0.14 against 0.00. The retune's target 5 reads the long gate again with every rule on.
+
 ## Open, for the owner or the retune
 
 - **Neuron budget gap.** 35 inputs + 6 outputs + `MAX_HIDDEN` 64 = 105, over `MAX_NEURONS` 96 (M3's
