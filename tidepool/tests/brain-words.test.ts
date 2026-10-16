@@ -270,3 +270,63 @@ test('the path on show falls away under the floor, and a stale path is dropped',
     THRUST,
   ]);
 });
+
+// The ports of M4 (rule P1 of docs/plans/2026-10-14-m4-teeth.md): the two hurt inputs of the body,
+// a jaw input for each cone of an eye, and the trigger outputs dash, lunge, and toxin.
+// Inputs: 0 always on, 1 to 5 of M3, 6 hurt, 7 hurt side, then an eye with food, body, and jaw for
+// cone A and for cone B. Outputs at 14 to 19: thrust, turn, accept, dash, lunge, toxin.
+const M4_INPUTS = [...body(0, 1, 2, 3, 4, 5, 6, 7), ...eye(7, [0, 1, 4, 2, 3, 5])];
+const [HURT, HURT_SIDE, JAW_R, JAW_L] = [6, 7, 10, 13];
+const [M4_TURN, DASH, LUNGE, TOXIN] = [15, 17, 18, 19];
+function m4BrainOf(active: Record<number, number>, wires: Wire[], inputs = M4_INPUTS): BrainView {
+  return {
+    ...brainOf(active, 0, wires, inputs),
+    outputs: 6,
+    neurons: [
+      ...inputs.map((n, i) => ({ ...n, activation: active[i] ?? 0 })),
+      ...body(128, 129, 130, 131, 132, 133),
+    ],
+  };
+}
+
+test.each([
+  [HURT, 1, DASH, 1, 'Is hit. Dashes.'],
+  [HURT_SIDE, 0.5, M4_TURN, 1, 'Is hit on the right. Turns right.'],
+  [HURT_SIDE, -0.5, M4_TURN, -1, 'Is hit on the left. Turns right.'],
+  [JAW_R, 1, DASH, 1, 'Sees teeth on the right. Dashes.'],
+  [JAW_L, 1, M4_TURN, 1, 'Sees teeth on the left. Turns right.'],
+  [9, 1, LUNGE, 1, 'Sees another body on the right. Lunges.'],
+  [9, 1, LUNGE, -1, 'Sees another body on the right. Holds back a lunge.'],
+  [HURT, 1, TOXIN, 1, 'Is hit. Releases toxin.'],
+  [HURT, 1, DASH, -1, 'Is hit. Holds back a dash.'],
+  [CONST, 1, TOXIN, -1, 'Always holds back its toxin.'],
+])('the M4 phrase of input %i at %f into output %i', (input, activation, out, weight, text) => {
+  expect(strongestPath(m4BrainOf({ [input]: activation }, [[input, out, weight]]))?.text).toBe(
+    text,
+  );
+});
+
+test('a midline eye with a jaw input sees teeth ahead, and a body ahead makes it lunge', () => {
+  // Inputs 0 to 7 of the body, then the one cone of a midline eye: food, body, jaw. Outputs at 11.
+  const inputs = [...body(0, 1, 2, 3, 4, 5, 6, 7), ...eye(7, [0, 1, 4])];
+  const lunge = 11 + 4;
+  const ahead = m4BrainOf({ 9: 1 }, [[9, lunge, 1]], inputs);
+  expect(strongestPath(ahead)?.text).toBe('Sees another body ahead. Lunges.');
+  const teeth = m4BrainOf({ 10: 1 }, [[10, 11 + 3, 1]], inputs);
+  expect(strongestPath(teeth)?.text).toBe('Sees teeth ahead. Dashes.');
+  expect([8, 9, 10].map((i) => inputLabel(teeth, i))).toEqual(['food', 'body', 'teeth']);
+});
+
+test('the short labels of the M4 inputs', () => {
+  const brain = m4BrainOf({}, []);
+  expect([HURT, HURT_SIDE, 8, 9, JAW_R, 11, 12, JAW_L].map((i) => inputLabel(brain, i))).toEqual([
+    'hurt',
+    'hit side',
+    'food R',
+    'body R',
+    'teeth R',
+    'food L',
+    'body L',
+    'teeth L',
+  ]);
+});

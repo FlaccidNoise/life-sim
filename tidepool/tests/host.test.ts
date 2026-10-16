@@ -451,26 +451,40 @@ test('a snapshot with a possessed creature keeps the player in the body', () => 
 
 // A wrapper that reports a death, so that a test picks the tick and the cause: on the tick after
 // `die(cause)` the host sees no possessed creature and that cause, as it does when the core kills
-// the creature during a tick.
+// the creature during a tick. `killer` is the uid of a living body. Its brain at the kill is its
+// readout after that tick, or 0 words with `brainless`.
 function mortal() {
   let cause = 0;
   let pending = 0;
+  let killer = 0;
+  let killerBrain: Uint32Array = new Uint32Array(0);
+  let next = { killer: 0, brainless: false };
   const wrap = (sim: Sim): Sim => ({
     ...sim,
     tick: (n) => {
       sim.tick(n);
+      if (pending !== 0 && cause === 0) {
+        killer = next.killer;
+        killerBrain = killer === 0 || next.brainless ? new Uint32Array(0) : sim.brain(next.killer);
+      }
       cause ||= pending;
       pending = 0;
     },
     possessed: () => (cause === 0 ? sim.possessed() : 0),
     deathCause: () => cause,
+    killer: () => killer,
+    killerBrain: () => killerBrain,
     possess: (uid) => {
       const ok = sim.possess(uid);
-      if (ok) cause = 0;
+      if (ok) [cause, killer, killerBrain] = [0, 0, new Uint32Array(0)];
       return ok;
     },
   });
-  return { wrap, die: (c: number) => void (pending = c) };
+  const die = (c: number, by = { killer: 0, brainless: false }) => {
+    pending = c;
+    next = by;
+  };
+  return { wrap, die };
 }
 
 test('a death pauses the world, posts the cause and the heirs, and possessing an heir resumes', () => {
@@ -806,4 +820,152 @@ test('the abilities mask reaches the core, and a dash shows on the possessed bod
   r.host.handle({ type: 'possess', uid: 8 });
   r.advance(100);
   expect(masks.at(-1)).toBe(0);
+});
+
+/** The creature records of a frame, as uid and place. */
+function bodiesOf(f: P.FrameView) {
+  return Array.from({ length: f.creatureCount }, (_, i) => {
+    const o = f.creatureBase + i * P.CREATURE_STRIDE;
+    return { uid: f.u32[o + P.C_UID] ?? 0, x: f.f32[o + P.C_X] ?? 0, y: f.f32[o + P.C_Y] ?? 0 };
+  });
+}
+
+test('a death with no killer posts no killer and a brain of 0 words', () => {
+  const m = mortal();
+  const r = rig({ recycle: true, wrap: m.wrap });
+  r.host.handle({ type: 'init', seed: 1 });
+  r.host.handle({ type: 'possess', uid: 7 });
+  m.die(1);
+  r.advance(100);
+  const died = r.of('died')[0];
+  expect(died?.killer).toBeNull();
+  expect(died?.killerBrain.length).toBe(0);
+});
+
+test('a death by a bite posts the killer, its body as the frame of the kill holds it, and its brain', () => {
+  const m = mortal();
+  const r = rig({ recycle: true, wrap: m.wrap });
+  r.host.handle({ type: 'init', seed: 1 });
+  r.host.handle({ type: 'possess', uid: 7 });
+  r.advance(100);
+  m.die(3, { killer: 12, brainless: false });
+  r.advance(100);
+  const died = r.of('died');
+  expect(died.length).toBe(1);
+  expect(died[0]?.cause).toBe('eaten');
+  expect(died[0]?.killer?.uid).toBe(12);
+  // The body is the record of uid 12 in the frame of the tick of the death.
+  const f = frameOf(r);
+  const slot = bodiesOf(f).findIndex((b) => b.uid === 12);
+  const o = f.creatureBase + slot * P.CREATURE_STRIDE;
+  expect(died[0]?.killer).toMatchObject({
+    x: f.f32[o + P.C_X],
+    y: f.f32[o + P.C_Y],
+    hue: f.f32[o + P.C_HUE],
+    length: f.f32[o + P.C_LENGTH],
+    width: f.f32[o + P.C_WIDTH],
+  });
+  expect(died[0]?.killer?.parts.length).toBeGreaterThan(0);
+  // The header of the readout names the killer.
+  expect(P.readBrain(died[0]?.killerBrain ?? new Uint32Array(0))?.uid).toBe(12);
+  // The kill does not break the pause: the world waits for the pick of an heir.
+  const tick = r.lastTick();
+  r.advance(1000);
+  expect(r.lastTick()).toBe(tick);
+});
+
+test('a killer outside the view is found in the world', () => {
+  const m = mortal();
+  const r = rig({ recycle: true, wrap: m.wrap });
+  r.host.handle({ type: 'init', seed: 1 });
+  r.advance(100);
+  const far = bodiesOf(frameOf(r)).find((b) => b.x > CORNER.x1 + 50 || b.y > CORNER.y1 + 50);
+  expect(far).toBeDefined();
+  r.host.handle(CORNER);
+  r.host.handle({ type: 'possess', uid: 7 });
+  r.advance(100);
+  m.die(4, { killer: far?.uid ?? 0, brainless: false });
+  r.advance(100);
+  expect(bodiesOf(frameOf(r)).some((b) => b.uid === far?.uid)).toBe(false);
+  const died = r.of('died')[0];
+  expect(died?.cause).toBe('poisoned');
+  expect(died?.killer?.uid).toBe(far?.uid);
+  expect(P.readBrain(died?.killerBrain ?? new Uint32Array(0))?.uid).toBe(far?.uid);
+});
+
+test('a killer with no readout posts its body and 0 words', () => {
+  const m = mortal();
+  const r = rig({ recycle: true, wrap: m.wrap });
+  r.host.handle({ type: 'init', seed: 1 });
+  r.host.handle({ type: 'possess', uid: 7 });
+  m.die(5, { killer: 12, brainless: true });
+  r.advance(100);
+  const died = r.of('died')[0];
+  expect(died?.cause).toBe('spiked');
+  expect(died?.killer?.uid).toBe(12);
+  expect(died?.killerBrain.length).toBe(0);
+});
+
+test('a killer that is no longer alive is no killer', () => {
+  const m = mortal();
+  const r = rig({ recycle: true, wrap: m.wrap });
+  r.host.handle({ type: 'init', seed: 1 });
+  r.host.handle({ type: 'possess', uid: 7 });
+  m.die(3, { killer: 999_999, brainless: false });
+  r.advance(100);
+  const died = r.of('died')[0];
+  expect(died?.cause).toBe('eaten');
+  expect(died?.killer).toBeNull();
+  expect(died?.killerBrain.length).toBe(0);
+});
+
+// A real bite, by the rules of the core. The hunter gets a jaw at its nose, and before each tick
+// both bodies are put back in touch, the hunter behind the prey and facing it: its brain would
+// steer it away. Bites are on, with no bar of mass. A bite stops when the biter is full, so the two
+// founders with the least energy are the pair: the hunter has room for all the prey holds.
+test('a possessed body bitten to death posts cause eaten, the killer, and its brain at the kill', () => {
+  let core: Sim | undefined;
+  let pair = { prey: 0, hunter: 0 };
+  const hold = (sim: Sim): void => {
+    if (pair.prey === 0) return;
+    sim.place(pair.prey, 500, 500, 0);
+    sim.place(pair.hunter, 495, 500, 0);
+  };
+  const r = rig({
+    recycle: true,
+    wrap: (sim) =>
+      (core = {
+        ...sim,
+        tick: (n) => {
+          hold(sim);
+          sim.tick(n);
+        },
+      }),
+  });
+  const params = [
+    { name: 'bite_rate', value: 0.5 },
+    { name: 'bite_mass_ratio', value: 0 },
+  ];
+  r.host.handle({ type: 'init', seed: 1, params });
+  r.advance(100);
+  const f = frameOf(r);
+  const [prey, hunter] = bodiesOf(f)
+    .map((b, i) => ({
+      uid: b.uid,
+      e: f.f32[f.creatureBase + i * P.CREATURE_STRIDE + P.C_ENERGY] ?? 1,
+    }))
+    .sort((a, b) => a.e - b.e)
+    .map((b) => b.uid);
+  pair = { prey: prey ?? 0, hunter: hunter ?? 0 };
+  expect(core?.setPart(pair.hunter, P.KIND_JAW, 0.5)).toBe(true);
+  r.host.handle({ type: 'possess', uid: pair.prey });
+  r.host.handle({ type: 'input', manual: true, thrust: 0, turn: 0, accept: false });
+  r.advance(30_000); // 600 ticks at most: the world pauses at the death
+  const died = r.of('died');
+  expect(died.length).toBe(1);
+  expect(died[0]?.cause).toBe('eaten');
+  expect(died[0]?.killer?.uid).toBe(pair.hunter);
+  expect(died[0]?.killer?.generation).toBe(0); // a founder
+  expect(died[0]?.killer?.parts.some((p) => p.kind === P.KIND_JAW)).toBe(true);
+  expect(P.readBrain(died[0]?.killerBrain ?? new Uint32Array(0))?.uid).toBe(pair.hunter);
 });

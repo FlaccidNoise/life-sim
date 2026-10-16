@@ -1,8 +1,12 @@
 // The death overlay: the cause, then the heirs to continue as, or the end of the line. The first
-// death with a living descendant leads with the descendants, and the cause comes after them.
+// death with a living descendant leads with the descendants, and the cause comes after them. A death
+// with a killer shows the killer's card with the cause: its body and its brain at the kill.
 
+import { signal } from '@preact/signals';
 import { useEffect, useRef } from 'preact/hooks';
-import type { DeathCause, Heir } from '../protocol';
+import type { BrainView, DeathCause, Heir, Killer } from '../protocol';
+import { BrainStill } from './BrainPanel';
+import { Sketch } from './BudCard';
 import { Note, NoteMark } from './Note';
 import { heirGone } from './state';
 import { FIRST_DEATH } from './words/lines';
@@ -14,6 +18,63 @@ const CAUSE_TEXT: Record<DeathCause, string> = {
   poisoned: 'Poisoned.',
   spiked: 'Spiked a spiked body.',
 };
+
+/**
+ * The killer of the last death, as the `died` message carried it. `brain` is null for a readout of 0
+ * words or one that was not read, and `brainError` says why it was not read. main.ts sets it with
+ * `death` and clears it with `death`.
+ */
+export interface KillerCard {
+  killer: Killer;
+  brain: BrainView | null;
+  brainError: string | null;
+}
+export const killerCard = signal<KillerCard | null>(null);
+
+// The page's style sheet styles the sketch of the bud card only.
+const SKETCH_STYLE = {
+  flex: 'none',
+  width: '6rem',
+  margin: 0,
+  color: '#cfe6ee',
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: 1.2,
+  strokeLinecap: 'round',
+  strokeLinejoin: 'round',
+} as const;
+
+// The card holds what the message carried: a frame that no longer holds the killer changes nothing.
+function KillerBody(props: { card: KillerCard }) {
+  const { killer, brain, brainError } = props.card;
+  const kin = { ...killer, growth: 1, flags: 0, hidden: 0, conns: 0 };
+  return (
+    <div class="killer">
+      <div class="heir-top" style={{ justifyContent: 'center', margin: '4px 0' }}>
+        <figure style={SKETCH_STYLE}>
+          <Sketch kin={kin} marked={[]} />
+        </figure>
+        <span style={{ textAlign: 'left' }}>
+          The body that killed you.
+          <span class="heir-top">
+            <span class="swatch" style={{ background: swatch(killer.hue, 1) }} />
+            Generation {killer.generation}
+          </span>
+        </span>
+      </div>
+      {brainError !== null ? (
+        <p role="alert">Its brain could not be read.</p>
+      ) : (
+        brain && (
+          <>
+            <p>Its brain at the kill:</p>
+            <BrainStill brain={brain} />
+          </>
+        )
+      )}
+    </div>
+  );
+}
 
 // The body shader colours a creature in HSV: saturation 0.2 to 0.7 and value 0.5 to 1 with energy.
 // CSS has HSL, so this converts the same colour.
@@ -43,17 +104,26 @@ export function DeathOverlay(props: {
     const overlay = section.current;
     (overlay?.querySelector<HTMLElement>('.heir') ?? overlay?.querySelector('p'))?.focus();
   }, []);
+  const card = killerCard.value;
   const causeLine = (
-    <p
-      class={lineFirst ? 'death-after' : 'death-cause'}
-      role={lineFirst ? undefined : 'status'}
-      tabIndex={lineFirst ? undefined : -1}
-    >
-      {CAUSE_TEXT[cause]}
-    </p>
+    <>
+      <p
+        class={lineFirst ? 'death-after' : 'death-cause'}
+        role={lineFirst ? undefined : 'status'}
+        tabIndex={lineFirst ? undefined : -1}
+      >
+        {CAUSE_TEXT[cause]}
+      </p>
+      {card && <KillerBody card={card} />}
+    </>
   );
   return (
-    <section class="death" aria-label="You died" ref={section}>
+    <section
+      class="death"
+      aria-label="You died"
+      ref={section}
+      style={card ? { maxHeight: 'calc(100% - 32px)' } : undefined}
+    >
       {lineFirst ? (
         <p class="death-cause" role="status" tabIndex={-1}>
           {FIRST_DEATH}

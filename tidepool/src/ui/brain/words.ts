@@ -12,6 +12,10 @@ export const SWITCH_MARGIN = 1.5;
 const MAX_HIDDEN = 2; // hidden neurons on one path
 const OUT_THRUST = 128;
 const OUT_TURN = 129;
+const OUT_DASH = 131;
+const OUT_LUNGE = 132;
+const OUT_TOXIN = 133;
+const EYE_FOOD_B = 2; // a port of cone B: a midline eye has none
 
 /**
  * An input: `label` is the short name in the graph. `says` is what it reads when it is above 0, and
@@ -32,6 +36,8 @@ const BODY_INPUT: Record<number, Input> = {
   3: { label: 'speed', says: 'Is moving fast' },
   4: { label: 'size', says: 'Meets a large mate' },
   5: { label: 'kin', says: 'Meets a relative' },
+  6: { label: 'hurt', says: 'Is hit' },
+  7: { label: 'hit side', says: 'Is hit on the right', saysNegative: 'Is hit on the left' },
   16: { label: 'strength', says: 'Smells food' },
   17: {
     label: 'ahead',
@@ -45,17 +51,20 @@ const BODY_INPUT: Record<number, Input> = {
   },
 };
 // The ports of an eye: cone A looks to the right of the heading and cone B to the left. A midline eye
-// has cone A only, and it looks ahead.
-const EYE_PAIRED: Input[] = [
-  { label: 'food R', says: 'Sees a plant on the right' },
-  { label: 'body R', says: 'Sees another body on the right' },
-  { label: 'food L', says: 'Sees a plant on the left' },
-  { label: 'body L', says: 'Sees another body on the left' },
-];
-const EYE_MIDLINE: Input[] = [
-  { label: 'food', says: 'Sees a plant ahead' },
-  { label: 'body', says: 'Sees another body ahead' },
-];
+// has cone A only, and it looks ahead. Ports 4 and 5 are the jaw inputs of cones A and B.
+const EYE_PAIRED: Record<number, Input> = {
+  0: { label: 'food R', says: 'Sees a plant on the right' },
+  1: { label: 'body R', says: 'Sees another body on the right' },
+  2: { label: 'food L', says: 'Sees a plant on the left' },
+  3: { label: 'body L', says: 'Sees another body on the left' },
+  4: { label: 'teeth R', says: 'Sees teeth on the right' },
+  5: { label: 'teeth L', says: 'Sees teeth on the left' },
+};
+const EYE_MIDLINE: Record<number, Input> = {
+  0: { label: 'food', says: 'Sees a plant ahead' },
+  1: { label: 'body', says: 'Sees another body ahead' },
+  4: { label: 'teeth', says: 'Sees teeth ahead' },
+};
 const UNKNOWN_INPUT: Input = { label: '', says: 'Senses something' };
 
 /** An output that a path can end in: what it does when the path adds to it and when it takes away. */
@@ -78,6 +87,24 @@ const OUTPUT: Record<number, Action> = {
     alwaysMore: 'turns right',
     alwaysLess: 'turns left',
   },
+  [OUT_DASH]: {
+    more: 'Dashes',
+    less: 'Holds back a dash',
+    alwaysMore: 'dashes',
+    alwaysLess: 'holds back a dash',
+  },
+  [OUT_LUNGE]: {
+    more: 'Lunges',
+    less: 'Holds back a lunge',
+    alwaysMore: 'lunges',
+    alwaysLess: 'holds back a lunge',
+  },
+  [OUT_TOXIN]: {
+    more: 'Releases toxin',
+    less: 'Holds back its toxin',
+    alwaysMore: 'releases toxin',
+    alwaysLess: 'holds back its toxin',
+  },
 };
 
 const inputOf = (brain: BrainView, i: number): Input => {
@@ -85,8 +112,10 @@ const inputOf = (brain: BrainView, i: number): Input => {
   if (!n) return UNKNOWN_INPUT;
   if (n.owner === 0) return BODY_INPUT[n.port] ?? UNKNOWN_INPUT;
   if (n.kind !== KIND_EYE) return UNKNOWN_INPUT;
-  const cones = brain.neurons.slice(0, brain.inputs).filter((m) => m.owner === n.owner).length;
-  return (cones === 2 ? EYE_MIDLINE : EYE_PAIRED)[n.port] ?? UNKNOWN_INPUT;
+  const paired = brain.neurons
+    .slice(0, brain.inputs)
+    .some((m) => m.owner === n.owner && m.port === EYE_FOOD_B);
+  return (paired ? EYE_PAIRED : EYE_MIDLINE)[n.port] ?? UNKNOWN_INPUT;
 };
 
 /** The short label of input `i` in the graph. */
@@ -98,8 +127,8 @@ interface Found {
 }
 
 /**
- * Each path above `PATH_FLOOR`: `nodes` are indices into `brain.neurons` from an input to thrust or
- * turn, and `gain` is the activation of the input times every weight, with its sign. A neuron is on a
+ * Each path above `PATH_FLOOR`: `nodes` are indices into `brain.neurons` from an input to an output
+ * of `OUTPUT`, and `gain` is the activation of the input times every weight, with its sign. A neuron is on a
  * path once, so a loop cannot make one longer, and a path has at most `MAX_HIDDEN` hidden neurons, so
  * the search ends.
  */
@@ -142,7 +171,7 @@ const named = (brain: BrainView, found: Found): { nodes: number[]; text: string 
   text: sentence(brain, found),
 });
 
-/** The strongest path from an input to thrust or turn, or null when none is above `PATH_FLOOR`. */
+/** The strongest path from an input to an output of `OUTPUT`, or null when none is above `PATH_FLOOR`. */
 export function strongestPath(brain: BrainView): { nodes: number[]; text: string } | null {
   let best: Found | null = null;
   for (const found of search(brain)) {

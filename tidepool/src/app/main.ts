@@ -24,6 +24,7 @@ import {
 } from '../protocol';
 import { createRenderer, type Renderer } from '../render/renderer';
 import { App } from '../ui/App';
+import { killerCard } from '../ui/DeathOverlay';
 import { BUD, MATE, REFUSE } from '../ui/words/lines';
 import {
   benchText,
@@ -240,6 +241,7 @@ function start(): void {
   // The overlay's actions. They run after `send`, `resume`, and `leave` exist.
   const closeDeath = (): void => {
     death.value = null;
+    killerCard.value = null;
     focusHeir.value = null;
     heirGone.value = false;
   };
@@ -705,6 +707,17 @@ function start(): void {
         heirPick = false;
         watch();
         closeDeath();
+        if (msg.killer) {
+          // A readout that does not fit its header leaves the card with the body alone.
+          let read: BrainView | null = null;
+          let brainError: string | null = null;
+          try {
+            read = readBrain(msg.killerBrain);
+          } catch (e) {
+            brainError = e instanceof Error ? e.message : String(e);
+          }
+          killerCard.value = { killer: msg.killer, brain: read, brainError };
+        }
         showDeath({
           cause: msg.cause,
           heirs: msg.heirs,
@@ -873,7 +886,10 @@ function start(): void {
     const alpha = Math.min(Math.max((now - arrival) / TICK_MS, 0), 1);
     body = cur ? possessedBody(prev, cur, alpha) : null;
     const focus = focusHeir.peek();
-    if (focus && death.peek()) cam = inWorld(follow(cam, focus.x, focus.y, cam.scale, dt));
+    // After a death the camera goes to the heir in focus, or else to the killer.
+    const killer = killerCard.peek()?.killer;
+    const to = focus ?? killer;
+    if (to && death.peek()) cam = inWorld(follow(cam, to.x, to.y, cam.scale, dt));
     if (mode.peek() === 'play') {
       // Zoom about the body, then slide it to the centre. A plain `follow` zooms about the centre,
       // which throws a body near the edge off the screen and out of the next frames. While no
