@@ -9,6 +9,7 @@
 //! Mass is the area times the heft of the parts. Capacity is for area alone: parts are not stores.
 
 use crate::control::{CAUSE_OLD_AGE, CAUSE_STARVED};
+use crate::debris::DEBRIS_RADIUS;
 use crate::genome::{REF_AREA, REF_WIDTH};
 use crate::math::pow075;
 use crate::params::id;
@@ -16,16 +17,22 @@ use crate::plant;
 use crate::snapshot::{LoadError, Reader, Writer};
 use crate::world::World;
 
-/// Each live creature in slot order takes from the plants it touches, in grid order. What a plant
-/// loses is what the creature gains and what `stats.eaten` counts.
+/// Each live creature in slot order takes from the plants it touches, then from the debris it
+/// touches, each in grid order, from one budget and one room. What a plant or a piece loses is what
+/// the creature gains and what `stats.eaten` or `stats.debris_eaten` counts.
 pub fn contact(world: &mut World) {
     // `plant::step` runs later in the tick, so a plant added since then is not in the grid yet.
     world.plants.refresh_grid();
+    // A piece is added by a death and freed by `debris::step`.
+    world.debris.refresh_grid();
     let p = &world.params;
     let (per_mass, intake_rate) = (p.get(id::ENERGY_PER_MASS), p.get(id::INTAKE_RATE));
     let (bite_fraction, plant_cap) = (p.get(id::BITE_FRACTION), p.get(id::PLANT_CAP));
     let death_reserve = p.get(id::PLANT_DEATH_RESERVE);
     let (c, plants, stats) = (&mut world.creatures, &mut world.plants, &mut world.stats);
+    let debris = &mut world.debris;
+    // With no debris the pass is skipped, so a world without it pays nothing for it.
+    let any_debris = debris.slots.count() > 0;
     for s in 0..c.slots.high_water() as usize {
         if !c.slots.is_alive(s as u32) {
             continue;
@@ -60,6 +67,23 @@ pub fn contact(world: &mut World) {
                     stats.eaten += take as f64;
                 }
             });
+        if any_debris {
+            let touch = radius + DEBRIS_RADIUS;
+            debris
+                .grid
+                .for_each_in_box(x - touch, y - touch, x + touch, y + touch, |j| {
+                    let j = j as usize;
+                    let (dx, dy) = (debris.x[j] - x, debris.y[j] - y);
+                    if budget > 0.0 && room > 0.0 && dx * dx + dy * dy <= touch * touch {
+                        let take = budget.min(room).min(debris.energy[j]);
+                        debris.energy[j] -= take;
+                        energy += take;
+                        budget -= take;
+                        room -= take;
+                        stats.debris_eaten += take as f64;
+                    }
+                });
+        }
         c.energy[s] = energy;
     }
 }

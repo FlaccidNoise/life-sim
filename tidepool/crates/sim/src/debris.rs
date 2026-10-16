@@ -1,7 +1,7 @@
 //! Debris: what a dead body leaves, which a filter eats after the plants (rule F1 of the M4 plan).
-//! Task 2 of that plan builds the pool and its snapshot. The rule comes in Task 4.
 
 use crate::grid::Grid;
+use crate::params::id;
 use crate::pool::Slots;
 use crate::snapshot::{LoadError, Reader, Writer};
 use crate::world::World;
@@ -46,8 +46,24 @@ impl Debris {
     }
 }
 
-/// Decay. Nothing yet: rule F1 comes in Task 4.
-pub fn step(_world: &mut World) {}
+/// Each live piece in slot order keeps `1 - debris_decay` of its energy and is freed under
+/// `debris_min`.
+pub fn step(world: &mut World) {
+    let p = &world.params;
+    let (keep, min) = (1.0 - p.get(id::DEBRIS_DECAY), p.get(id::DEBRIS_MIN));
+    let d = &mut world.debris;
+    for s in 0..d.slots.high_water() {
+        if !d.slots.is_alive(s) {
+            continue;
+        }
+        let energy = d.energy[s as usize] * keep;
+        d.energy[s as usize] = energy;
+        if energy < min {
+            d.slots.free(s);
+            d.dirty = true;
+        }
+    }
+}
 
 /// The live slots, then x, y, and energy for those slots. The grid is scratch.
 pub fn save(world: &World, w: &mut Writer) {
