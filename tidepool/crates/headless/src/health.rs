@@ -144,14 +144,6 @@ pub struct Bands {
 }
 
 impl Bands {
-    pub const OFF: Bands = Bands {
-        hunt_lo: None,
-        hunt_hi: None,
-        prey_lo: None,
-        kills_late: None,
-        flesh_late: None,
-    };
-
     fn any(&self) -> bool {
         self.hunt_lo.is_some()
             || self.hunt_hi.is_some()

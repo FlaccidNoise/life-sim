@@ -197,3 +197,36 @@ above 0 on at least 1 of 3 seeds by 36,000, `gland` mean under 0.05, and `toxin_
 to 5 read as at stage 1: no seed under 150 bodies, the M2 and brain bands held. "Evolution keeps it":
 the gland share at 144,000 against `toxin_drain=0`, no band, read in the long run below. At most 3
 trials, for the targets only.
+
+### Part 2 rows (`8435888`, load 1 to 3)
+
+`make gates` exits 0 at the defaults: native 2,425 and WASM 2,440 at 1,540 bodies, 266 to 268 ns per
+creature-tick (the fixed pre-Task-9 head read 253; the full default world holds 1,540 bodies
+against 1,394, so the per-creature cost of the bite, the debris pass, and the larger brains is
+about 5% and the lower ticks per second are mostly more bodies). **Target 2 is met at the floor and
+not at the target:** 2,440 against 2,400 and 2,600. `gate-health` 3 of 3 and `gate-evolve` 3 of 3,
+rows identical to T2's. The long row at the defaults is the long read above: 5 of 5 on the M2 and
+brain bands (target 5 met), the predation share bands failed on every seed (target 4 not met).
+
+The jaw gap at 144,000, `gate-evolve --brain` on seeds 1, 4, 5, 6, 8 and `probe-hunt` on 1, 2, 3:
+
+| Arm | M2 and brain bands | `hunt_lo` to `hunt_hi` | `prey_lo` | `kills_late` | Hunters : prey at 144,000 (`probe-hunt`) | Mean jaw |
+|---|---|---|---|---|---|---|
+| Defaults (the long read) | 5/5 | 0.78 to 1.00 | 0 to 90 | 240 to 690 | 903 : 1; 501 : 118; 607 : 183 | 1.00, 0.17, 0.48 |
+| `bite_rate=0`, a dead jaw | 4/5 (seed 5's scent, 0.069) | 0.04 to 0.96 | 47 to 950 | 0 | 751 : 1,018; 454 : 1,173; 187 : 1,307 | 0.10, 0.18, 0.08 |
+| `bite_rate=0.0001`, chance | 4/5 (seed 1's scent, 0.043) | 0.02 to 0.87 | 225 to 1,015 | 0 to 2 | 902 : 862; 815 : 838; 926 : 656 | 0.04, 0.07, 0.26 |
+
+- **A dead jaw is not selected out in 144,000 ticks.** With `bite_rate` 0 the jaw share drifts between
+  4% and 96% of the living across seeds, and the chance arm reads the same. A jaw of 0.1 costs a
+  tenth of a part's mass and nothing else. So `hunt_lo` separates nothing at 144,000 either: it is
+  not a gate, at either length.
+- **The jaw gap is in the size of the jaw, not the share.** With the bite on, the mean jaw over
+  the living grows to 0.17 to 1.00 at 144,000; dead, 0.08 to 0.18. Evolution grows a jaw that bites
+  and does not grow one that cannot. That is "evolution uses it", read with no band.
+- **The long bands that the dead arm proves:** `kills_late` 20 or more and `flesh_late` 0.01 or
+  more at 144,000 reject the dead arm on 5 of 5 (0 and 0.000) and pass the defaults on 5 of 5 (240
+  to 690, 0.022 to 0.037). Set in `evolve.rs` `PREDATION`, judged under `--brain --predation`.
+  `hunt_hi` and `prey_lo` stay unset at 144,000 with the finding above.
+- Both arms lose one seed's scent gap at 144,000 by a hair (0.069, 0.043 against 0.10), as the
+  Task 10 arm did on seed 8. The default world holds every seed's scent (0.42 to 0.88): the bite
+  is good for the nose.
