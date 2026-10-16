@@ -33,6 +33,9 @@ fn still_water() -> World {
     w.params.set(id::SPIKE_HURT, 0.0);
     w.params.set(id::SHELL_DRAG, 0.0);
     w.params.set(id::LUNGE_BITE, 1.0);
+    // The diet rules (D1, D2) are off here: `diet.rs` tests them.
+    w.params.set(id::DIET_K, 0.0);
+    w.params.set(id::BITE_DIET_GAP, -1.0);
     w
 }
 

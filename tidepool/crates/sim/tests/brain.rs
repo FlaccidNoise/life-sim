@@ -527,6 +527,7 @@ fn a_body_hit_on_the_left_reads_a_negative_side() {
     w.params.set(id::BITE_MASS_RATIO, 0.0); // the biter is not three times its prey
     let mut jawed = Genome::default();
     jawed.set_size(KIND_JAW, 0.5);
+    jawed.diet = 1.0; // a carnivore, so its jaw takes a full bite (rules D1 and D2)
     let left = put(&mut w, Genome::default(), 300.0, 500.0, 0.0);
     put(&mut w, jawed.clone(), 300.0, 493.0, PI / 2.0);
     let right = put(&mut w, Genome::default(), 900.0, 500.0, 0.0);

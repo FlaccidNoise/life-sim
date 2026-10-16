@@ -218,7 +218,7 @@ table! {
     /// Half angle of a jaw cone, radians.
     JAW_ARC "jaw_arc" 0.6 0.1 1.5;
     /// A body bites only a body this many times lighter. 0: any body.
-    BITE_MASS_RATIO "bite_mass_ratio" 3.0 0.0 3.0;
+    BITE_MASS_RATIO "bite_mass_ratio" 1.15 0.0 3.0;
     /// Half angle that a spike guards.
     SPIKE_ARC "spike_arc" 0.8 0.1 1.5;
     /// Energy lost by a biter per unit of bite per unit of spike.
@@ -275,16 +275,16 @@ table! {
     STARTER_TRIGGER_BIAS "starter_trigger_bias" -1.0 -3.0 3.0;
     /// The generalist penalty of rule D1: a Filter takes `(1 - diet)^diet_k` and a bite
     /// `diet^diet_k`. In steps of `DIET_K_STEP`. 0: both factors are 1, the M4 world.
-    DIET_K "diet_k" 0.0 0.0 4.0;
+    DIET_K "diet_k" 1.5 0.0 4.0;
     /// Diet drift per birth.
-    DIET_SIGMA "diet_sigma" 0.05 0.0 0.5;
+    DIET_SIGMA "diet_sigma" 0.1 0.0 0.5;
     /// The `diet` gene of a founder with no Jaw.
     FOUNDER_DIET "founder_diet" 0.0 0.0 1.0;
-    /// The `diet` gene of a hunter founder. At 0.8 and `diet_k` 1.5 its Filter takes 9%.
-    FOUNDER_HUNTER_DIET "founder_hunter_diet" 0.8 0.0 1.0;
+    /// The `diet` gene of a hunter founder. At 0.6 and `diet_k` 1.5 its Filter takes 25%.
+    FOUNDER_HUNTER_DIET "founder_hunter_diet" 0.6 0.0 1.0;
     /// Rule D2 of the diet retune, a food chain: a body bites only a body whose `diet` is at least
     /// this much under its own. −1: any body, the M4 world.
-    BITE_DIET_GAP "bite_diet_gap" -1.0 -1.0 1.0;
+    BITE_DIET_GAP "bite_diet_gap" 0.25 -1.0 1.0;
 }
 
 /// `diet_k` moves in steps of this, so that `math::pow_quarters` gives its power exactly.

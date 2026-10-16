@@ -264,13 +264,15 @@ fn seed_founders_stops_at_a_full_pool() {
 #[test]
 fn founders_swim_and_every_tick_adds_one_to_each_age() {
     let mut w = World::new(2, 1536.0, 1024.0);
-    // Nothing starves, so the test holds after Task 13 adds upkeep.
+    // Nothing starves, so the test holds after Task 13 adds upkeep, and nothing is eaten: at a
+    // `bite_mass_ratio` of 1.15 a founder hunter can bite a founder.
     for k in [
         id::BASAL,
         id::FIXED_UPKEEP,
         id::NEURON_UPKEEP,
         id::CONN_UPKEEP,
         id::MOVE_COST,
+        id::BITE_RATE,
     ] {
         w.params.set(k, 0.0);
     }

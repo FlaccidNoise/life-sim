@@ -969,9 +969,13 @@ test('a possessed body bitten to death posts cause eaten, the killer, and its br
         },
       }),
   });
+  // The diet rules are off: the page cannot set a founder's diet, and a jaw on a diet-0 body bites
+  // nothing (rules D1 and D2, tested in crates/sim/tests/diet.rs).
   const params = [
     { name: 'bite_rate', value: 0.5 },
     { name: 'bite_mass_ratio', value: 0 },
+    { name: 'diet_k', value: 0 },
+    { name: 'bite_diet_gap', value: -1 },
   ];
   r.host.handle({ type: 'init', seed: 1, params });
   r.advance(100);

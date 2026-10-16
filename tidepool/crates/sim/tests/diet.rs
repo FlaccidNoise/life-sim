@@ -29,6 +29,8 @@ fn still_water() -> World {
         w.params.set(k, 0.0);
     }
     w.params.set(id::LUNGE_BITE, 1.0);
+    // Rule D2 off: these tests read rule D1 alone. `bite_across` sets it.
+    w.params.set(id::BITE_DIET_GAP, -1.0);
     w
 }
 
@@ -157,6 +159,7 @@ fn a_mutation_keeps_the_diet_in_0_to_1_and_a_sigma_of_0_keeps_it() {
 /// `gap` and `diet_k` 0, so only rule D2 can stop the bite.
 fn bite_across(gap: f32, biter: f32, prey: f32) -> f32 {
     let mut w = still_water();
+    w.params.set(id::DIET_K, 0.0);
     w.params.set(id::BITE_DIET_GAP, gap);
     adult(&mut w, 100.0, biter, true);
     adult(&mut w, 108.0, prey, false);
@@ -172,7 +175,6 @@ fn a_body_bites_only_down_the_food_chain_by_the_gap() {
     // At a gap of 0 an equal diet is bitten, and a higher one is not.
     assert!(bite_across(0.0, 0.5, 0.5) > 0.0);
     assert_eq!(bite_across(0.0, 0.5, 0.6), 0.0);
-    // Off (the default, −1): any body, even one higher on the chain, is bitten.
-    assert_eq!(Params::new().get(id::BITE_DIET_GAP), -1.0);
+    // Off (−1): any body, even one higher on the chain, is bitten.
     assert!(bite_across(-1.0, 0.2, 0.9) > 0.0);
 }

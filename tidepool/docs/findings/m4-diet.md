@@ -323,3 +323,44 @@ Expected: carnivores feed on omnivores, which grows the flesh end and thins the 
 lose some omnivore predators. Target 1 on 2 or more seeds, the ladder kept on 4 or more. The risk: a
 founder hunter at 0.6 bites only bodies at 0.25 or under, the herbivores, so the founding is as in
 T8.
+
+### T10 rows (`0c16df4`, load 23 to 124)
+
+| Seed | 144,000: creatures | herb | omni | carn | diet_sd | kills | second half: herb_min, carn_min, sd_min |
+|---|---|---|---|---|---|---|---|
+| 1 | 1,790 | 0.970 | 0.030 | 0.000 | 0.09 | 0 | 0.968, 0.000, 0.09 |
+| 4 | 1,400 | 0.974 | 0.026 | 0.000 | 0.10 | 86 | 0.939, 0.000, 0.10 |
+| 5 | 1,778 | 0.952 | 0.048 | 0.000 | 0.10 | 755 | 0.922, 0.000, 0.10 |
+| 6 | 1,418 | 0.971 | 0.029 | 0.000 | 0.09 | 45 | 0.962, 0.000, 0.09 |
+| 8 | 1,092 | 0.809 | 0.139 | 0.052 | 0.22 | 1,067 | 0.809, 0.000, 0.10 |
+
+**Falsified.** At a gap of 0.35 a climbing omnivore's prey is too narrow: the ladder forms on 1 of
+5 seeds.
+
+## The stop of rule 7, and what ships
+
+Ten trials. **Target 1 is not met by any trial**: no set holds herbivores and carnivores at 0.10 or
+more through the second half on 5 of 5 seeds. Seed 5 of T7 is the only seed that met it.
+
+| Trial | Ladder at 144,000 (seeds of 5) | Target 1 (seeds) | Bodies at 144,000 |
+|---|---|---|---|
+| Baseline (`diet_k` 0) | no: the jaw takeover | — | 711 to 886 |
+| T1 to T3 | 0 | 0 | 1,268 to 1,845 |
+| T4 (ratio 1.15) | 0: a cannibal cloud | 0 | 192 to 318 |
+| T5 (D2 gap 0.25) | 4 | 0 | 930 to 1,331 |
+| T6 (`diet_k` 2.0) | 1 | 0 | 1,236 to 1,633 |
+| T7 (founders 0.4) | 3 | 1 | 728 to 1,338 |
+| **T8 (`diet_sigma` 0.1)** | **5** | 0 | **890 to 1,045** |
+| T9 (`diet_k` 1.75) | 2 | 0 | 1,008 to 1,585 |
+| T10 (gap 0.35) | 1 | 0 | 1,092 to 1,790 |
+
+**T8's set ships on**, by the owner's standing instruction that built features ship on
+(2026-10-16): `diet_k` 1.5, `diet_sigma` 0.1, `founder_hunter_diet` 0.6, `bite_mass_ratio` 1.15,
+`bite_diet_gap` 0.25. It is the only set with a ladder from plants to flesh on every seed: at
+144,000 herbivores 0.09 to 0.38, omnivores 0.57 to 0.83, carnivores 0.04 to 0.17, `diet_sd` 0.16 to
+0.22, 3,200 to 6,600 kills per 24,000 ticks, and no jaw takeover of the M4 kind (herbivores keep
+their jaws on some seeds, but a diet-0 jaw takes nothing). What fails: the middle is the largest
+guild and the carnivores dip under 0.10 in the second half on every seed. The owner decides
+whether that is the spectrum they want or a target to keep. The levers measured: `diet_k` 1.5 is
+the only value that climbs; the gap 0.25 is better than 0.35; the founders do not hold at 12,000
+at any value tried, so target 2 (coexistence at 12,000) is not met either.
