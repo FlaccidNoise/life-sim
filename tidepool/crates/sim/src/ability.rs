@@ -76,10 +76,22 @@ pub fn step(world: &mut World) {
         if !c.slots.is_alive(s as u32) {
             continue;
         }
-        c.cd_dash[s] = c.cd_dash[s].saturating_sub(1);
-        c.cd_lunge[s] = c.cd_lunge[s].saturating_sub(1);
-        c.cd_toxin[s] = c.cd_toxin[s].saturating_sub(1);
-        c.lunge_left[s] = c.lunge_left[s].saturating_sub(1);
+        // A count at 0 is read and not written: at Off every body is at 0 on every tick, and the
+        // four stores per body cost 8% of a tick (M4 Task 8).
+        for count in [
+            &mut c.cd_dash,
+            &mut c.cd_lunge,
+            &mut c.cd_toxin,
+            &mut c.lunge_left,
+        ] {
+            if count[s] > 0 {
+                count[s] -= 1;
+            }
+        }
+        // No command above 0: nothing can fire, and the part sums are not read.
+        if c.cmd_dash[s] <= 0.0 && c.cmd_lunge[s] <= 0.0 && c.cmd_toxin[s] <= 0.0 {
+            continue;
+        }
         let flag = c.flag_push[s];
         if flag > 0.0
             && c.cmd_dash[s] > 0.0
