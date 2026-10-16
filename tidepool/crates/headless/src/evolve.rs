@@ -43,11 +43,13 @@ const HIDDEN: f64 = 1.0;
 /// The least mean of expressed connections. Proof: the same bad world reads 1.4 to 2.7. At the
 /// Start values the mean reads 34.7 to 42.6.
 const CONNS: f64 = 15.0;
-/// The least variety of brain shapes: the effective number of shapes. Proof: with the four
-/// structural rates at 0 no brain can change shape, and it reads 1.0 on seeds 1, 4, 5. At the
-/// Start values it reads 12.1 to 21.2 on seeds 1, 4, 5, 6, 8. It replaces a band on `shapes`
-/// (M3 Task 10): a shape that under 5% hold is not counted, so that count falls as brains come to
-/// differ more, and it read 1 on seed 3 at a variety of 27.3.
+/// The least variety of brain shapes: the effective number of shapes, read over the wired hidden
+/// neurons (`variety_wired`, owner's decision of 2026-10-15). Proof: with the four structural rates
+/// at 0 no brain can change shape, and it reads 1.0 on seeds 1, 4, 5. At the M3 defaults
+/// `variety_wired` reads 12 to 38 on seeds 1, 4, 5, 6, 8. It replaces a band on `shapes` (M3 Task
+/// 10): a shape that under 5% hold is not counted, so that count falls as brains come to differ
+/// more, and it read 1 on seed 3 at a variety of 27.3. `variety`, over every hidden neuron, is
+/// printed with no band: a cross can leave a donor's hidden genes unwired, and it counts them.
 const VARIETY: f64 = 2.0;
 
 /// The mean and the standard deviation. Both are 0 for no values.
@@ -181,7 +183,7 @@ pub fn shape(m: &Mind) -> (usize, usize) {
 
 /// The same shape with only the hidden neurons that have a way in from an input and a way out to an
 /// output. A cross can leave a donor's hidden genes unwired, and `shape` counts them. Printed as
-/// `variety_wired`, with no band (M3 audit, finding M2).
+/// `variety_wired`, which the `VARIETY` band reads (M3 audit, finding M2).
 pub fn shape_wired(m: &Mind) -> (usize, usize) {
     (m.wired, m.core)
 }
@@ -303,8 +305,8 @@ fn measure(seed: u32, a: &Args, brain: bool) -> (String, Vec<String>) {
         band(hidden >= HIDDEN, format!("hidden={hidden:.2} < {HIDDEN}"));
         band(conns >= CONNS, format!("conns={conns:.1} < {CONNS}"));
         band(
-            variety >= VARIETY,
-            format!("variety={variety:.1} < {VARIETY}"),
+            variety_wired >= VARIETY,
+            format!("variety_wired={variety_wired:.1} < {VARIETY}"),
         );
     }
     let mut row = format!(
