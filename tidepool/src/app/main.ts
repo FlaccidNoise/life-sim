@@ -620,6 +620,8 @@ function start(): void {
         abilityCooldown = params.find((p) => p.name === 'ability_cooldown')?.value ?? 0;
         cam = fitWorld(world.w, world.h, cssW, cssH);
         ready.value = true;
+        // A tab hidden while the world loaded holds the world still, as `visibilitychange` would.
+        if (document.hidden) resume();
         if (query.has('bench')) {
           benchText.value = 'Measuring. This can take a minute on a slow device.';
           send({ type: 'bench', settle: BENCH_SETTLE_TICKS, ticks: BENCH_TICKS });
@@ -823,8 +825,10 @@ function start(): void {
   const resume = (): void => send({ type: 'speed', ticksPerSecond: document.hidden ? 0 : TICK_HZ });
   document.addEventListener('visibilitychange', () => {
     dropKeys();
-    // A `speed` message would end the pause of a death. The overlay's buttons end it.
-    if (!death.peek()) resume();
+    // A `speed` message would end the pause of a death. The overlay's buttons end it. Before
+    // `ready` the worker has no world: a `speed` then is an error, and a world file still loading
+    // when the tab is hidden or shown failed with "got `speed` before `init`".
+    if (!death.peek() && ready.peek()) resume();
   });
 
   // One frame of the walkthrough: the facts of this frame in, the line and the pulse out.
