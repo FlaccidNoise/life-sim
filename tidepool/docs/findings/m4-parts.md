@@ -90,3 +90,25 @@ question: if the middle empties toward plants and not toward flesh, the carnivor
 middle and the bottom, may fall. If carnivores stay under 0.10 on most seeds, the gut lever is spent
 and the meat end needs its own lever (T4: `gut_upkeep` back to the best value and `bite_diet_gap`
 0.2, so a carnivore at 0.75 can eat omnivores up to 0.55).
+
+### T3 rows (`213359c`, load 7 to 9)
+
+| Seed | 144,000: creatures | herb | omni | carn | diet_sd | kills |
+|---|---|---|---|---|---|---|
+| 1 | 932 | 0.451 | 0.461 | 0.088 | 0.24 | 9,984 |
+| 4 | 1,370 | 0.974 | 0.026 | 0.000 | 0.09 | 110 |
+| 5 | 915 | 0.352 | 0.549 | 0.099 | 0.25 | 4,707 |
+| 6 | 1,487 | 0.967 | 0.033 | 0.000 | 0.09 | 51 |
+| 8 | 1,389 | 0.974 | 0.026 | 0.000 | 0.09 | 14 |
+
+**Falsified: 0.6 kills the climb on 3 of 5 seeds.** Where it climbs, the shape is the closest yet
+(seed 1: 0.45, 0.46, 0.088; seed 5: 0.35, 0.55, 0.099). The bracket: 0.3 climbs on 5 of 5, 0.6 on 2.
+
+## T4: `gut_upkeep` 0.3 and `bite_diet_gap` 0.2 — hypothesis before the run
+
+One change from T2: `--param bite_diet_gap=0.2`. A carnivore at 0.75 can eat omnivores up to 0.55
+(not 0.5), and an omnivore at 0.5 herbivores up to 0.3.
+
+Expected: more food at the top lifts carnivores to 0.10 or more on 3 or more seeds, with the middle
+held near T2's 0.38 to 0.74 by the gut cost. Target on 2 or more seeds. The risk is T4 of the diet
+retune: a smaller gap lets near neighbours eat each other. 0.2 is close to 0.25, so I expect no cloud.
