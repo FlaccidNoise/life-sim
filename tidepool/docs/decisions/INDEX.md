@@ -312,6 +312,10 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
   is thinned without walls at the ends. → `../plans/2026-10-16-m4-retune-parts.md`
 - 2026-10-16: **The diet retune's shape is not the end state: the owner wants fewer omnivores and
   more plant eaters and meat eaters.** → `../plans/2026-10-16-m4-retune-parts.md` P2, P4
+- 2026-10-16: **The owner approved the parts plan at every recommended option ("Go"):** the lunge
+  folds into the dash (a Jaw bites harder during its body's dash), two guts cost upkeep in the middle
+  of the diet, an audit of every part, and the target: omnivores at most 0.50, plant eaters and meat
+  eaters 0.10 or more each, at tick 144,000 on 4 of 5 seeds. → `../plans/2026-10-16-m4-retune-parts.md`
 - 2026-10-16: **The diet rules ship on with T8's set, owner to confirm: `diet_k` 1.5, `diet_sigma`
   0.1, `founder_hunter_diet` 0.6, `bite_mass_ratio` 1.15, `bite_diet_gap` 0.25.** Of ten trials it is
   the only set with a ladder from plants to flesh on 5 of 5 seeds at 144,000. Target 1 (herbivores

@@ -1,6 +1,6 @@
 # Tidepool M4 retune 2 — Parts with one job, and a thinner middle
 
-Status: **Written 2026-10-16. Waits for the owner's go.**
+Status: **Approved by the owner on 2026-10-16 ("Go"), at the recommended option of P1 to P4. Being built.**
 
 The owner, 2026-10-16, after the diet retune (`../findings/m4-diet.md` "Exit"): thin the omnivore
 group and grow the plant eaters and the meat eaters, maybe with a bonus for specialists or a damper
