@@ -112,3 +112,23 @@ One change from T2: `--param bite_diet_gap=0.2`. A carnivore at 0.75 can eat omn
 Expected: more food at the top lifts carnivores to 0.10 or more on 3 or more seeds, with the middle
 held near T2's 0.38 to 0.74 by the gut cost. Target on 2 or more seeds. The risk is T4 of the diet
 retune: a smaller gap lets near neighbours eat each other. 0.2 is close to 0.25, so I expect no cloud.
+
+### T4 rows (`d52f8de`, load 6)
+
+| Seed | 144,000: creatures | herb | omni | carn | diet_sd | kills |
+|---|---|---|---|---|---|---|
+| 1 | 891 | 0.035 | 0.816 | 0.149 | 0.13 | 5,494 |
+| 4 | 1,267 | 0.934 | 0.066 | 0.000 | 0.11 | 522 |
+| 5 | 840 | 0.175 | 0.600 | 0.225 | 0.23 | 4,759 |
+| 6 | 906 | 0.389 | 0.478 | 0.134 | 0.27 | 4,732 |
+| 8 | 666 | 0.182 | 0.563 | 0.255 | 0.24 | 2,443 |
+
+**Confirmed for the meat end: carnivores 0.13 to 0.26 on the 4 seeds that climb. Target: 1 of 5**
+(seed 6: 0.389, 0.478, 0.134). Seeds 5 and 8 miss on omnivores only (0.600, 0.563). Seed 1's
+herbivores are squeezed to 0.035. Seed 4 does not climb (it did in T2: the climb is chance).
+
+## T5: `gut_upkeep` 0.4 with the gap 0.2 — hypothesis before the run
+
+One change from T4: `--param gut_upkeep=0.4`. Expected: omnivores fall under 0.5 on seeds 5 and 8,
+seed 6 holds: the target on 3 seeds. The risk is T3's: the climb fails on more seeds. If it does,
+T6 holds `gut_upkeep` 0.3 and raises `diet_sigma` (a larger step crosses the band).
