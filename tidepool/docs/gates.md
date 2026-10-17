@@ -1184,3 +1184,10 @@ stay: the shipped world reads 0.100 to 0.165 and 1,113 to 1,193.
 The per-creature-tick floor of Task 5 has no bad-input proof yet: every bench reading of this
 retune was taken at a load of 96 to 138. To prove on a quiet machine with a build that spins in
 `World::tick`.
+
+### The per-creature-tick floor's bad-input proof (2026-10-16)
+
+At load 2.4 to 3.5, three interleaved rounds of `node scripts/bench-wasm.mjs`: the head read 277.7,
+282.5, 276.8 ns (PASS, FAIL, PASS against 277.8); the same head with a spin of 200,000 additions at
+the top of `World::tick` (a temporary worktree, never merged) read 524.8, 520.9, 512.5 ns, FAIL on
+every round. `../findings/m4-parts.md` "The proof".

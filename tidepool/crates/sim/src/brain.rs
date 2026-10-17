@@ -179,7 +179,7 @@ struct Wire {
 
 impl Block {
     /// Hidden genes past the room of a block are left out, silently: a body that declares every
-    /// input (8 of the body, 3 of the scent, 8 cones of 3) and every output leaves room for 55 of
+    /// input (8 of the body, 3 of the scent, 8 cones of 3) and every output leaves room for 56 of
     /// `MAX_HIDDEN` 64. The genes past the room still mutate and are inherited and cost no upkeep.
     /// A genome from `World::spawn` is not checked.
     fn of(g: &Genome) -> Block {

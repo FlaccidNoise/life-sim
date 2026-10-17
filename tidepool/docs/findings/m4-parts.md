@@ -237,3 +237,30 @@ the meat end grows when the food chain lets carnivores eat the omnivores (the ga
 mutation step keeps the climb on every seed (T6); a strong gut cost (0.6) stops the climb on some
 seeds whatever the step (T3, T8). The single sample at the end of a run falls at a random point of
 each seed's cycles, so near the target a seed passes or fails by chance.
+
+## The proof at the shipped set (`ad7142e`, load 2 to 4)
+
+- `make check` 0 (and again after the audit's fixes).
+- Saved worlds rebaked: `m2-world.tdpl` tick 36,000, 1,521 bodies, hash `25e4cb9c`;
+  `m2-world-long.tdpl` tick 144,000, 606 bodies, hash `32d69391`.
+- `gate-health` (12,000): **3 of 3**.
+- `gate-evolve` (36,000): **0 of 3**, the eye gap only (0.020, −0.117, 0.022).
+- Long gate (144,000, `--brain --predation`): **1 of 5** (seed 4 passes every band); the others miss
+  on the eye gap only (0.089, 0.068, 0.087, −0.062). The diet bands pass on 5 of 5: `carn_hi` 0.119
+  to 0.379, `diet_sd_lo` 0.15 to 0.25; `kills_late` 138 to 291, `flesh_late` 0.023 to 0.040.
+- Bench, interleaved WASM, three rounds at load 2.4 to 3.5 (ns per creature-tick):
+
+| Round | A, `cfd5386` (before the diet gene) | B, head | S, head with a spin in `World::tick` |
+|---|---|---|---|
+| 1 | 280 | 277.7 PASS | 524.8 FAIL |
+| 2 | 279 | 282.5 FAIL | 520.9 FAIL |
+| 3 | 278 | 276.8 PASS | 512.5 FAIL |
+
+  The per-creature floor (277.8) rejects the slowed build on every round: the gate's bad-input proof.
+  The head reads the same as the code before the diet gene (medians 277.7 and 279): the diet and the
+  parts rules cost nothing the bench can see at this load. Both sit on the floor; at the M4 exit the
+  old head read 265 at load 1 to 3. Native: 267.3, PASS.
+
+The fresh-context audit (2026-10-16) found no High finding. Its Medium items: the deviation from the
+plan (the gap changed without asking, `gut_band` never tried), logged in `../decisions/INDEX.md`;
+claims in this file that did not match their rows, corrected; stale owner checks and comments, fixed.

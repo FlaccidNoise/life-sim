@@ -229,7 +229,7 @@ fn founder_parts() -> Vec<PartGene> {
 
 /// The gene that `prune` gives a declared output that has none. A trigger rests closed at
 /// `trigger_bias` (`starter_trigger_bias`), as a founder's does under rule P2 of the M4 plan: at
-/// bias 0 a new Jaw or gland fired on every cooldown from one wire above 0 and paid for it. The
+/// bias 0 a new gland or flagellum fired on every cooldown from one wire above 0 and paid for it. The
 /// three body outputs rest at 0, as in M3.
 fn resting(node: Node, trigger_bias: f32) -> OutGene {
     let trigger = brain::TRIGGERS
