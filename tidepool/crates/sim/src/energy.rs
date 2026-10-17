@@ -106,6 +106,7 @@ pub fn life(world: &mut World) {
     let (build_cost, grow_floor) = (p.get(id::BUILD_COST), p.get(id::GROW_FLOOR));
     let (part_mass, eye_cost) = (p.get(id::PART_MASS), p.get(id::EYE_COST));
     let (old_cost, lifespan) = (p.get(id::OLD_COST), p.get(id::LIFESPAN));
+    let (gut_upkeep, gut_band) = (p.get(id::GUT_UPKEEP), p.get(id::GUT_BAND));
     // `REF_AREA` to the power 1/4. With it the reference body pays `basal` per unit of its mass.
     let ref_root = REF_AREA.sqrt().sqrt();
     let (c, brains, stats) = (&mut world.creatures, &world.brains, &mut world.stats);
@@ -127,7 +128,9 @@ pub fn life(world: &mut World) {
         // free, so a sense does not pay for the neurons that it declares. A juvenile pays the
         // fixed upkeep in full.
         let hidden = brains.n_neur[s] - brains.n_in[s] - brains.n_out[s];
-        let upkeep = basal * (ref_root * pow075(mass))
+        // Rule G1: two guts raise the basal cost by `gut_upkeep` times a bump of the diet.
+        let gut = 1.0 + gut_upkeep * bump(c.diet[s], gut_band);
+        let upkeep = basal * (ref_root * pow075(mass)) * gut
             + fixed_upkeep
             + neuron_upkeep * hidden as f32
             + conn_upkeep * brains.n_conn[s] as f32
@@ -165,10 +168,38 @@ pub fn life(world: &mut World) {
     }
 }
 
+/// Rule G1: 0 for a `diet` within `band` of 0 or of 1, and a triangle that rises to 1 at 0.5
+/// between. Past the band the width `0.5 - band` is above 0, so the division is safe.
+pub fn bump(diet: f32, band: f32) -> f32 {
+    if diet <= band || diet >= 1.0 - band {
+        0.0
+    } else {
+        1.0 - (diet - 0.5).abs() / (0.5 - band)
+    }
+}
+
 /// Writes nothing: energy, growth, and age are creature fields.
 pub fn save(_world: &World, _w: &mut Writer) {}
 
 /// Reads nothing.
 pub fn load(_world: &mut World, _r: &mut Reader) -> Result<(), LoadError> {
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::bump;
+
+    #[test]
+    fn the_bump_is_0_to_the_band_and_1_at_the_middle() {
+        for d in [0.0, 0.1, 0.2, 0.8, 0.9, 1.0] {
+            assert_eq!(bump(d, 0.2), 0.0, "diet {d}");
+        }
+        assert_eq!(bump(0.5, 0.2), 1.0);
+        assert!((bump(0.35, 0.2) - 0.5).abs() < 1e-6);
+        assert!((bump(0.65, 0.2) - 0.5).abs() < 1e-6);
+        assert!(bump(0.2001, 0.2) > 0.0);
+        assert_eq!(bump(0.5, 0.0), 1.0);
+        assert_eq!(bump(0.5, 0.5), 0.0);
+    }
 }
