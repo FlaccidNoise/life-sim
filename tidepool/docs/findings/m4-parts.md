@@ -20,3 +20,27 @@ eaters (`diet` under 0.3) and meat eaters (over 0.7) 0.10 or more each, on 4 of 
 Not a trial. Expected: herbivores lose the free burst a jaw gave them, so `herb_jaw` falls; hunters
 lose a separate lunge cooldown, so kills may fall a little. The diet shape near the diet retune's
 T8: omnivores 0.57 to 0.83 at 144,000.
+
+### Baseline rows (`d088068`, load 7 to 9)
+
+| Seed | 144,000: creatures | herb | omni | carn | diet_sd | kills | `herb_jaw` |
+|---|---|---|---|---|---|---|---|
+| 1 | 1,026 | 0.064 | 0.866 | 0.069 | 0.14 | 5,163 | 1.000 |
+| 4 | 931 | 0.279 | 0.669 | 0.052 | 0.20 | 4,135 | 0.992 |
+| 5 | 878 | 0.146 | 0.771 | 0.083 | 0.19 | 2,790 | 0.898 |
+| 6 | 997 | 0.374 | 0.604 | 0.022 | 0.20 | 2,403 | 0.853 |
+| 8 | 730 | 0.173 | 0.604 | 0.223 | 0.24 | 2,964 | 1.000 |
+
+At 12,000 (seeds 1 to 3): herbivores 0.817 to 0.978; seed 2 has 1,136 kills and omnivores 0.180.
+**Target: 0 of 5** (no seed has omnivores at 0.50 or under). **The expectation about jaws is
+falsified:** herbivores keep jaws (0.85 to 1.00) without the lunge, so the free burst was not the
+reason. A likelier one from the audit (finding 4): mass is armour against the mass ratio.
+
+## T1: `gut_upkeep` 0.1 — hypothesis before the run
+
+Change: `--param gut_upkeep=0.1` (`gut_band` 0.2). A body at 0.5 pays 10% more than its basal cost,
+one at 0.35 or 0.65 pays 5%; bodies under 0.2 or over 0.8 pay nothing.
+
+Expected: the middle thins by 5 to 15 points and both ends grow; the climb from plants is untouched
+(the band leaves 0 to 0.2 free). Target on 1 or 2 seeds. If the middle moves less than 5 points,
+T2 is `gut_upkeep` 0.3.
