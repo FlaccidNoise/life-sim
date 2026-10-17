@@ -44,3 +44,25 @@ one at 0.35 or 0.65 pays 5%; bodies under 0.2 or over 0.8 pay nothing.
 Expected: the middle thins by 5 to 15 points and both ends grow; the climb from plants is untouched
 (the band leaves 0 to 0.2 free). Target on 1 or 2 seeds. If the middle moves less than 5 points,
 T2 is `gut_upkeep` 0.3.
+
+### T1 rows (`46dd510`, load 6 to 7)
+
+| Seed | 144,000: creatures | herb | omni | carn | diet_sd | kills |
+|---|---|---|---|---|---|---|
+| 1 | 1,102 | 0.156 | 0.777 | 0.067 | 0.17 | 9,778 |
+| 4 | 874 | 0.333 | 0.596 | 0.071 | 0.23 | 2,986 |
+| 5 | 965 | 0.202 | 0.636 | 0.162 | 0.23 | 5,283 |
+| 6 | 1,162 | 0.520 | 0.449 | 0.031 | 0.23 | 5,246 |
+| 8 | 756 | 0.224 | 0.620 | 0.156 | 0.25 | 1,766 |
+
+At 12,000: herbivores 0.966 to 0.983. **Confirmed in direction:** omnivores fall 9 to 16 points
+(0.45 to 0.78, from 0.60 to 0.87), both ends grow, the spread rises to 0.17 to 0.25. **Target: 0 of
+5** (seed 6 has omnivores at 0.449 but carnivores at 0.031).
+
+## T2: `gut_upkeep` 0.3 — hypothesis before the run
+
+Change: `--param gut_upkeep=0.3`. A body at 0.5 pays 30% more than its basal cost.
+
+Expected: the middle falls another 10 to 20 points, to about 0.35 to 0.6, with the ends 0.10 or more
+on 3 or more seeds: the target met on 2 to 4 seeds. The risk: the climb crosses the band more slowly
+(a climber at 0.3 pays 10%), so carnivores may come later or not at all on some seeds.
