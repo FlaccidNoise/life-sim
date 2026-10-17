@@ -154,3 +154,23 @@ that a larger step makes the climb happen on every seed (T8 there, 0.05 to 0.1).
 Expected: the ladder on 5 of 5 seeds, with T4's shape where it climbs (carnivores 0.13 or more,
 omnivores 0.48 to 0.6): the target on 2 or 3 seeds. The risk: a larger step spreads every lineage's
 diet, which may fill the middle again.
+
+### T6 rows (`45e4d77`, load 3 to 4)
+
+| Seed | 144,000: creatures | herb | omni | carn | diet_sd | kills |
+|---|---|---|---|---|---|---|
+| 1 | 606 | 0.046 | 0.741 | 0.213 | 0.15 | 3,860 |
+| 4 | 904 | 0.501 | 0.413 | 0.086 | 0.27 | 3,378 |
+| 5 | 643 | 0.207 | 0.516 | 0.277 | 0.26 | 2,870 |
+| 6 | 739 | 0.309 | 0.571 | 0.120 | 0.26 | 2,920 |
+| 8 | 500 | 0.182 | 0.532 | 0.286 | 0.24 | 1,592 |
+
+**Confirmed for the climb: a ladder on 5 of 5 seeds.** Target 0 of 5, each by a little: omnivores
+0.516, 0.532, 0.571 on seeds 5, 8, 6; seed 4 on carnivores (0.086); seed 1 on herbivores (0.046).
+Fewer bodies: 500 to 904 (T4: 666 to 1,267).
+
+## T7: `gut_upkeep` 0.4 on T6 — hypothesis before the run
+
+One change from T6: `--param gut_upkeep=0.4` (gap 0.2, `diet_sigma` 0.15). T5 lost the climb at 0.4
+with the small step; the larger step should keep it. Expected: omnivores under 0.5 on seeds 5, 8, and
+6, the ladder on 4 or more seeds: the target on 3 seeds. Risk: fewer bodies again.
