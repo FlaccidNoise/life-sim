@@ -273,18 +273,18 @@ table! {
     /// `diet^diet_k`. In steps of `DIET_K_STEP`. 0: both factors are 1, the M4 world.
     DIET_K "diet_k" 1.5 0.0 4.0;
     /// Diet drift per birth.
-    DIET_SIGMA "diet_sigma" 0.1 0.0 0.5;
+    DIET_SIGMA "diet_sigma" 0.15 0.0 0.5;
     /// The `diet` gene of a founder with no Jaw.
     FOUNDER_DIET "founder_diet" 0.0 0.0 1.0;
     /// The `diet` gene of a hunter founder. At 0.6 and `diet_k` 1.5 its Filter takes 25%.
     FOUNDER_HUNTER_DIET "founder_hunter_diet" 0.6 0.0 1.0;
     /// Rule D2 of the diet retune, a food chain: a body bites only a body whose `diet` is at least
     /// this much under its own. −1: any body, the M4 world.
-    BITE_DIET_GAP "bite_diet_gap" 0.25 -1.0 1.0;
+    BITE_DIET_GAP "bite_diet_gap" 0.2 -1.0 1.0;
     /// Rule G1 of the parts plan, two guts cost upkeep: a body pays this fraction of its own basal
     /// cost, times a bump of its `diet` (see `gut_band`), for keeping two digestive systems. At 0.5
     /// of `diet` the bump is 1. 0: off.
-    GUT_UPKEEP "gut_upkeep" 0.0 0.0 2.0;
+    GUT_UPKEEP "gut_upkeep" 0.3 0.0 2.0;
     /// Rule G1 of the parts plan: a `diet` at most this far from 0 or from 1 pays no gut upkeep. The
     /// bump rises from 0 at the band edge to 1 at `diet` 0.5. Under 0.5 so that the rise has a width.
     GUT_BAND "gut_band" 0.2 0.0 0.45;

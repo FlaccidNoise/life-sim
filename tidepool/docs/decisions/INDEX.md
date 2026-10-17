@@ -304,6 +304,12 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
   carnivore holds. Prey defined only by size gives no food that only hunters need. The draft's
   "cannibalism off" restored the predator and prey balance (predators 85% to 41%).
   → `../findings/m4-diet.md` T1 to T4, `../plans/2026-10-16-m4-retune-diet.md`
+- 2026-10-16: **The parts plan ships on with T6's set, owner to confirm: `gut_upkeep` 0.3,
+  `bite_diet_gap` 0.2 (was 0.25), `diet_sigma` 0.15 (was 0.1); the lunge folds into the dash.** Eight
+  trials; the target (omnivores 0.50 or under, each end 0.10 or more at 144,000 on 4 of 5) is met by
+  none (T8 on 2 seeds, with no meat eater on 2 others). T6 is the only set with a ladder on every
+  seed: omnivores 0.41 to 0.74 (0.57 to 0.83 before), carnivores 0.09 to 0.29 (0.04 to 0.17 before).
+  → `../findings/m4-parts.md` "The stop at the trial cap"
 - 2026-10-16: **Design principle, the owner's words: "we need to have benefits and costs for
   everything and all these parts and systems need to be isolated but co-working in interesting
   ways", balanced for uniqueness, randomness, creativity, and variation.** Read as: each part does
