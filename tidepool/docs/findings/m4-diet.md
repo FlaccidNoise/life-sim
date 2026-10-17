@@ -445,6 +445,8 @@ while the tab's visibility changed failed with "got `speed` before `init`" (`8bb
 6. **Jaws on herbivores.** Herbivores keep jaws on most seeds (0.46 to 1.00 at 144,000). The jaw
    gives the lunge, a second dash, whatever it bites: likely the reason, not measured. A design
    question: should a lunge need a bite to pay?
+   *Answered by the parts plan:* the lunge left the jaw, and herbivores still keep jaws (0.85 to
+   1.00, `m4-parts.md` baseline), so the lunge was not the reason.
 
 **Owner checks (play):** open `/?world=/m2-world-long.tdpl`, possess a body, and read the diet line
 on the mate card. Find a herbivore, an omnivore, and a carnivore in one world. Be eaten by a

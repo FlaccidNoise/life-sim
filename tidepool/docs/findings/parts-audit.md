@@ -33,6 +33,8 @@ part.
 **Free systems of the body:** the hurt sense and its side, speed, energy, age, the mate senses, and
 the outputs thrust, turn, and accept are free; only the wires that use them cost (`conn_upkeep`).
 
+*Since this audit the shipped gap is 0.2 (`m4-parts.md`): finding 5's line is now over 0.8.*
+
 ## Findings for the owner, most important first
 
 1. **A mirrored pair gives a double benefit for one cost.** Jaws, eyes, spikes, and shells: a gene

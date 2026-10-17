@@ -176,7 +176,8 @@ rebaked with every rule on: `/?world=/m2-world.tdpl` (tick 36,000) and `/?world=
 3. **Die by a bite.** The card says "Eaten.", draws the killer with its jaw, its generation and
    swatch, its brain at the kill, and the strongest path in words. On a first death the heirs come
    first. Does the card make sense with no instructions?
-4. **Hunt.** Possess a hunter. Lunge with F. Watch the jaw. Can you catch something?
+4. **Hunt.** Possess a hunter. Dash with Space: since the parts plan a dash by a body with a jaw is a
+   strike (the lunge and F are gone). Watch the jaw. Can you catch something?
 5. **The first hunter.** `/?walk=reset`. The first kill in view in a life rings the killer for 2 s and
    the place for 1 s. Did you see a hunter before you were bitten? The playtest log records it.
 6. **The guide** (G): chapters 1, 2, and 6 say what the four kinds, the hurt inputs, the triggers,

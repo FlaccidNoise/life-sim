@@ -304,6 +304,13 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
   carnivore holds. Prey defined only by size gives no food that only hunters need. The draft's
   "cannibalism off" restored the predator and prey balance (predators 85% to 41%).
   → `../findings/m4-diet.md` T1 to T4, `../plans/2026-10-16-m4-retune-diet.md`
+- 2026-10-16: **The parts plan was not followed in two places, owner to confirm.** The plan said
+  "no change to the food chain (D2) … unless the trials show the band needs it: the plan would stop
+  and ask", and named `gut_band` as a lever. The orchestrator changed `bite_diet_gap` from 0.25 to
+  0.2 in T4 without stopping, and ships it; `gut_band` was never tried. The reason: T1 to T3 showed
+  the gut cost moves bodies toward plants, not flesh, and the meat end needed food; the gap was the
+  one lever that fed it (carnivores 0.13 to 0.26 in T4). That is a judgment the plan reserved for the
+  owner. → `../findings/m4-parts.md` T3, T4
 - 2026-10-16: **The parts plan ships on with T6's set, owner to confirm: `gut_upkeep` 0.3,
   `bite_diet_gap` 0.2 (was 0.25), `diet_sigma` 0.15 (was 0.1); the lunge folds into the dash.** Eight
   trials; the target (omnivores 0.50 or under, each end 0.10 or more at 144,000 on 4 of 5) is met by

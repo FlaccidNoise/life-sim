@@ -55,8 +55,9 @@ T2 is `gut_upkeep` 0.3.
 | 6 | 1,162 | 0.520 | 0.449 | 0.031 | 0.23 | 5,246 |
 | 8 | 756 | 0.224 | 0.620 | 0.156 | 0.25 | 1,766 |
 
-At 12,000: herbivores 0.966 to 0.983. **Confirmed in direction:** omnivores fall 9 to 16 points
-(0.45 to 0.78, from 0.60 to 0.87), both ends grow, the spread rises to 0.17 to 0.25. **Target: 0 of
+At 12,000: herbivores 0.966 to 0.983. **Confirmed in direction, not on every seed:** omnivores fall on
+seeds 1, 4, 5, 6 (by 7 to 16 points) and rise on seed 8 (0.604 to 0.620); herbivores grow on every
+seed; carnivores grow on 4, 5, 6 and fall on 1 and 8. The spread rises to 0.17 to 0.25. **Target: 0 of
 5** (seed 6 has omnivores at 0.449 but carnivores at 0.031).
 
 ## T2: `gut_upkeep` 0.3 — hypothesis before the run
@@ -144,7 +145,7 @@ T6 holds `gut_upkeep` 0.3 and raises `diet_sigma` (a larger step crosses the ban
 | 8 | 670 | 0.173 | 0.576 | 0.251 | 0.24 | 2,009 |
 
 **Falsified. Target 0 of 5.** The climb fails on seeds 4 and 6, and where it climbs the middle is
-not thinner than T4's (0.58 to 0.67). Between 0.3 and 0.4 the seed's path decides more than the cost.
+thinner than T4's on seed 1 (0.587 from 0.816) and not on seeds 5 and 8 (0.666, 0.576). Between 0.3 and 0.4 the seed's path decides more than the cost.
 
 ## T6: `diet_sigma` 0.15 on T4 — hypothesis before the run
 
@@ -207,7 +208,8 @@ or 3 seeds. If the climb fails on 3 or more seeds, T6's set ships (the ladder on
 | 8 | 519 | 0.229 | 0.424 | 0.347 | 0.28 | 2,079 |
 
 **Target: 2 of 5** (seeds 5 and 8), the most of any trial, as expected. But the climb fails on seeds 1
-and 6: no carnivore at all, which the long gate's `carn_hi` band rejects.
+and 6: no carnivore at the end. The long gate's `carn_hi` band (the most over the second half, 0.03)
+would likely reject them; not run (seed 6 had 676 kills in the last 24,000 ticks).
 
 ## The stop at the trial cap, and what ships
 
@@ -222,11 +224,12 @@ met by no trial: T4 and T7 meet it on 1 seed, T8 on 2.
 | T4 (gut 0.3, gap 0.2) | 4 | 1 | 0.48 to 0.82 | 0.13 to 0.26 | 666 to 1,267 |
 | **T6 (gut 0.3, gap 0.2, `diet_sigma` 0.15)** | **5** | 0 | **0.41 to 0.74** | **0.09 to 0.29** | **500 to 904** |
 | T7 (T6 with gut 0.4) | 4 | 1 | 0.31 to 0.71 | 0.06 to 0.30 | 623 to 1,193 |
-| T8 (T6 with gut 0.6) | 3 | 2 | 0.40 to 0.65 | 0.20 to 0.35 | 519 to 1,741 |
+| T8 (T6 with gut 0.6) | 3 | 2 | 0.40 to 0.65 | 0.20 to 0.35 | 519 to 1,740 |
 
 **T6's set ships** (`gut_upkeep` 0.3, `bite_diet_gap` 0.2, `diet_sigma` 0.15): the only set with a
 ladder on every seed, a thinner middle than before the plan, and meat eaters at about twice their
-share. Each seed misses the target by a little. T8 is the other choice for the owner: the target on
+share. Seeds 4, 5, 6, and 8 miss the target by a little; seed 1 by far (omnivores 0.741, herbivores
+0.046). T8 is the other choice for the owner: the target on
 2 seeds and the thinnest middle, but 2 worlds in 5 with no meat eater, which the long gate rejects.
 
 What the trials show: the gut cost moves bodies out of the middle mostly toward plants (T1 to T3);
