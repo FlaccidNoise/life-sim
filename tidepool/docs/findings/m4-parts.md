@@ -66,3 +66,27 @@ Change: `--param gut_upkeep=0.3`. A body at 0.5 pays 30% more than its basal cos
 Expected: the middle falls another 10 to 20 points, to about 0.35 to 0.6, with the ends 0.10 or more
 on 3 or more seeds: the target met on 2 to 4 seeds. The risk: the climb crosses the band more slowly
 (a climber at 0.3 pays 10%), so carnivores may come later or not at all on some seeds.
+
+### T2 rows (`3240614`, load 6 to 7)
+
+| Seed | 144,000: creatures | herb | omni | carn | diet_sd | kills |
+|---|---|---|---|---|---|---|
+| 1 | 866 | 0.169 | 0.744 | 0.088 | 0.17 | 5,121 |
+| 4 | 960 | 0.525 | 0.431 | 0.044 | 0.23 | 4,499 |
+| 5 | 859 | 0.250 | 0.668 | 0.081 | 0.23 | 2,630 |
+| 6 | 1,116 | 0.542 | 0.380 | 0.078 | 0.26 | 5,637 |
+| 8 | 678 | 0.301 | 0.549 | 0.150 | 0.25 | 1,936 |
+
+**Confirmed in direction, target 0 of 5.** Omnivores 0.38 to 0.74. The thinning goes mostly to the
+plant end (herbivores 0.17 to 0.54); carnivores move little (0.04 to 0.15). Seed 6 misses on
+carnivores only (0.078), seed 8 on omnivores only (0.549).
+
+## T3: `gut_upkeep` 0.6 — hypothesis before the run
+
+Change: `--param gut_upkeep=0.6`. A body at 0.5 pays 60% more than its basal cost.
+
+Expected: omnivores under 0.5 on 4 or more seeds. Whether carnivores reach 0.10 is the open
+question: if the middle empties toward plants and not toward flesh, the carnivores, fed by the
+middle and the bottom, may fall. If carnivores stay under 0.10 on most seeds, the gut lever is spent
+and the meat end needs its own lever (T4: `gut_upkeep` back to the best value and `bite_diet_gap`
+0.2, so a carnivore at 0.75 can eat omnivores up to 0.55).
