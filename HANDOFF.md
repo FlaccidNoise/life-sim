@@ -1,4 +1,4 @@
-# Handoff — Tidepool: the M4 diet retune is built, on, measured, and waits for the owner
+# Handoff — Tidepool: the diet retune and the parts plan are built, on, measured, and wait for the owner
 
 **Date:** 2026-10-16, evening. **Project:** life-sim, subproject `tidepool/`. The draft in `src/` at
 the repo root is frozen.
@@ -32,21 +32,21 @@ The previous handoff (mid-M4) is at `git show 9a0b25a:HANDOFF.md`.
 
 ## What comes next
 
-1. **The diet retune is built and shipped on** (`tidepool/docs/plans/2026-10-16-m4-retune-diet.md`,
-   approved 2026-10-16). Rows and verdict: `tidepool/docs/findings/m4-diet.md`; its "Exit" section
-   lists the six questions for the owner in the order they block: the shape (omnivores the largest
-   guild, carnivores under 10% at times), rule D2 and the rule 6 deviation to confirm, the founding
-   (no hunters at 12,000), the eye gap band (fails on its own since E1 made the gap honest), the
-   bench (unreadable at load 10 to 138; about 2.5% to 3% cost), and jaws on herbivores. Evidence:
-   `tidepool/docs/research/diet-coexistence.md`. Decisions: `tidepool/docs/decisions/INDEX.md`
-   2026-10-16.
-2. **Unpushed:** everything since `5344ada` (the M4 exit), on `main`. The owner said "no push
-   mid-plan"; push when the owner says so.
+1. **Two retunes are built and shipped on, unpushed** (everything since `5344ada`, the M4 exit):
+   - The diet retune (`tidepool/docs/plans/2026-10-16-m4-retune-diet.md`, rows `m4-diet.md`): the
+     diet gene (D1), the food chain (D2), a blind eye sees no teeth (E1).
+   - The parts plan (`tidepool/docs/plans/2026-10-16-m4-retune-parts.md`, rows `m4-parts.md`,
+     audit `parts-audit.md`): the lunge folded into the dash (a jaw bites harder during its body's
+     dash), two guts cost upkeep in the middle of the diet (G1). Shipped: `gut_upkeep` 0.3,
+     `bite_diet_gap` 0.2, `diet_sigma` 0.15.
+2. **For the owner:** the target (omnivores 0.50 or under, each end 0.10 or more on 4 of 5 seeds) is
+   met by no trial; T6 ships (a ladder on every seed, omnivores 0.41 to 0.74, carnivores 0.09 to
+   0.29); T8 is the other choice. The plan was not followed in two places (the gap changed without
+   asking, `gut_band` never tried): `tidepool/docs/decisions/INDEX.md` 2026-10-16. The parts audit's
+   ten findings are rule changes for the owner. The eye gap (E1 made it honest) fails `make gates`
+   and the long gate on its own; CI runs `gate-evolve` and would go red on a push.
 3. M5 (Deep time) has no plan yet. It carries: the kill marks lost when the page holds every buffer,
-   the guards and gland that evolution does not use, and the eye's jaw input unclamped above 1
-   (audit, low). Fixed after the M4 exit: the still brain's labels (`9258483`), the killer card for a
-   killer that died in the same kill list (`5c81aea`, `3010972`), the eye's jaw input scaled by
-   `eye_gain` (E1), a world file failing to load when the tab's visibility changed (`8bb1eb7`).
+   the guards and gland that evolution does not use, the eye's jaw input unclamped above 1.
 4. The bigger world is M6 (zones with gaps), decided 2026-10-16.
 
 ## Warnings
@@ -61,11 +61,12 @@ The previous handoff (mid-M4) is at `git show 9a0b25a:HANDOFF.md`.
 - Leftover agent browser tabs run the sim and load the machine: close them before a bench.
 - `bd` does not start in this repo. Open problems live in the findings files.
 - Two reference worktrees: `../life-sim-ref` (`7b8c74f`, the M4 bench reference) and `../life-sim-ab`
-  (`cfd5386`, before the diet gene, for the diet retune's bench A/B). Keep both until the bench is
-  read on a quiet machine.
+  (`cfd5386`, before the diet gene). At load 3 both the head and `cfd5386` read about 278 ns per
+  creature-tick, on the floor (277.8): the floor is tight on this machine, not the new rules.
 - The machine runs `llama-server` processes and other projects' tests: check `uptime` and `ps` before
   any bench; at a load over 5 a reading is not a reading.
-- Snapshot format 11, ABI 9. The saved worlds (gitignored) are rebaked at the shipped set.
+- Snapshot format 12, ABI 10. The saved worlds (gitignored) are rebaked at the shipped set
+  (`25e4cb9c`, `32d69391`).
 
 ## Key files
 

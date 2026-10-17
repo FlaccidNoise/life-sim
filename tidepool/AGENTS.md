@@ -33,7 +33,9 @@ built with every rule on by the owner's instruction of 2026-10-16, measured, and
 roadmap's coexistence is not met and is the owner's finding; the owner's checks are open.** **The diet retune (`docs/plans/2026-10-16-m4-retune-diet.md`) was approved and built on 2026-10-16:
 a diet gene from plants to flesh (D1), a food chain (D2), and a blind eye that sees no teeth (E1)
 ship on. Its targets are not all met and its open questions are the owner's
-(`docs/findings/m4-diet.md` "Exit"). `make gates` and `make gates-long` exit non-zero on the eye gap
+(`docs/findings/m4-diet.md` "Exit"). The parts plan (`docs/plans/2026-10-16-m4-retune-parts.md`)
+followed: the lunge folds into the dash and two guts cost upkeep, shipped on; its target is not met
+(`docs/findings/m4-parts.md`). `make gates` and `make gates-long` exit non-zero on the eye gap
 alone, and the bench could not be read on a loaded machine.** The plan says which owner stops the
 build runs through and which stops are hard
 ("How the build runs without the owner"). A choice logged as "provisional, owner to confirm" in
