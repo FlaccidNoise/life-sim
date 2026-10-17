@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::io::Write;
 
 use tidepool_sim::brain::{
-    self, IN_MATE_SIZE, MAX_NEURONS, NO_INPUT, OUT_DASH, OUT_LUNGE, OUT_THRUST, OUT_TOXIN,
+    self, IN_MATE_SIZE, MAX_NEURONS, NO_INPUT, OUT_DASH, OUT_THRUST, OUT_TOXIN,
 };
 use tidepool_sim::control::ABILITY_DASH;
 use tidepool_sim::creature::MAX_EYES;
@@ -704,12 +704,13 @@ pub fn encounter_probe(argv: &[String]) {
 
 /// A hit within this many ticks before a think is in the context of `dash` and of `toxin`.
 const HIT_TICKS: u32 = 10;
-/// A body seen within this many of the looker's own lengths is in the context of `lunge`.
-const LUNGE_LENGTHS: f32 = 2.0;
-/// The triggers, in the order of a row.
+/// A body seen within this many of the looker's own lengths is in the context of `strike`.
+const STRIKE_LENGTHS: f32 = 2.0;
+/// The columns of the triggers, in the order of a row. `strike` is the dash of a body with a jaw
+/// (rule P1 of the parts retune): its thinks and fires are also counted under `dash`.
 const HUNT_TRIGGERS: [(u8, &str); 3] = [
     (OUT_DASH, "dash"),
-    (OUT_LUNGE, "lunge"),
+    (OUT_DASH, "strike"),
     (OUT_TOXIN, "toxin"),
 ];
 
@@ -730,7 +731,8 @@ fn hunt_counts(world: &World) -> (u64, f64, f64, u64, u64) {
 
 /// For the body in `s`, which has just thought on `tick`: whether each trigger of `HUNT_TRIGGERS`
 /// was in its context. `dash`: a hit in the last `HIT_TICKS` ticks, or a jaw seen in a cone.
-/// `lunge`: a body seen in a cone within `LUNGE_LENGTHS` of the body's own lengths. `toxin`: a hit.
+/// `strike`: a body seen in a cone within `STRIKE_LENGTHS` of the body's own lengths. `toxin`: a
+/// hit.
 ///
 /// What a cone sees is read from the eye inputs as the brain read them, so on a think with no
 /// scan (`see_every`) it is what the last scan saw. The distance of the body seen comes back from
@@ -750,7 +752,7 @@ fn contexts(world: &World, s: usize, tick: u32) -> [bool; 3] {
             let (body, jaw_seen) = (inputs[3 * k + 1], inputs[3 * k + 2]);
             jaw |= jaw_seen > 0.0;
             let d = (1.0 - body / gain) * c.cone_range(s, k, range);
-            near |= body > 0.0 && d <= LUNGE_LENGTHS * c.length(s);
+            near |= body > 0.0 && d <= STRIKE_LENGTHS * c.length(s);
         }
     }
     [hit || jaw, near, hit]
@@ -775,13 +777,14 @@ fn hunt(world: &mut World, ticks: u32, every: u32, mut row: impl FnMut(String)) 
                 continue;
             }
             let context = contexts(world, s, tick);
-            for (k, &(port, _)) in HUNT_TRIGGERS.iter().enumerate() {
-                if b.out_at[s][(port - OUT_THRUST) as usize] == NO_INPUT {
+            for (k, &(port, name)) in HUNT_TRIGGERS.iter().enumerate() {
+                if b.out_at[s][(port - OUT_THRUST) as usize] == NO_INPUT
+                    || (name == "strike" && c.jaw_sum[s] <= 0.0)
+                {
                     continue;
                 }
                 let cmd = match port {
                     OUT_DASH => c.cmd_dash[s],
-                    OUT_LUNGE => c.cmd_lunge[s],
                     _ => c.cmd_toxin[s],
                 };
                 let f = &mut fires[k];
@@ -1421,11 +1424,16 @@ mod tests {
             "{}",
             rows[1]
         );
-        // Every founder has a flagellum and so declares dash, and a hunter declares lunge. Each
-        // body thinks on one tick in `think_every`.
+        // Every founder has a flagellum and so declares dash, and the dash of a hunter is a strike.
+        // Each body thinks on one tick in `think_every`.
         let living = number("hunters") + number("prey");
         assert!(number("dash_thinks") > living * 0.5, "{}", rows[1]);
-        assert!(number("lunge_thinks") > 0.0, "{}", rows[1]);
+        assert!(number("strike_thinks") > 0.0, "{}", rows[1]);
+        assert!(
+            number("strike_thinks") < number("dash_thinks"),
+            "{}",
+            rows[1]
+        );
         assert_eq!(number("toxin_thinks"), 0.0, "{}", rows[1]);
     }
 

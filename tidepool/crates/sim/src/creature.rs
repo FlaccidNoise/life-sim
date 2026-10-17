@@ -58,14 +58,12 @@ pub struct Creatures {
     /// Above 0: the body fires that ability. Written by the brain or by control. Read by
     /// `ability::step`.
     pub cmd_dash: Vec<f32>,
-    pub cmd_lunge: Vec<f32>,
     pub cmd_toxin: Vec<f32>,
     /// Ticks until the ability can fire again.
     pub cd_dash: Vec<u32>,
-    pub cd_lunge: Vec<u32>,
     pub cd_toxin: Vec<u32>,
-    /// Ticks that the bite of the last lunge stays raised.
-    pub lunge_left: Vec<u32>,
+    /// Ticks that the bite of the last strike, a dash of a body with a jaw, stays raised.
+    pub strike_left: Vec<u32>,
     /// Energy lost to bites, spikes, and toxin since the last think. `sense::step` zeroes it.
     pub hurt: Vec<f32>,
     /// The side of the last hit: negative on the side of negative angles from the heading.
@@ -154,12 +152,10 @@ impl Default for Creatures {
             mark: vec![0; n],
             bud_cooldown: vec![0; n],
             cmd_dash: floats(),
-            cmd_lunge: floats(),
             cmd_toxin: floats(),
             cd_dash: vec![0; n],
-            cd_lunge: vec![0; n],
             cd_toxin: vec![0; n],
-            lunge_left: vec![0; n],
+            strike_left: vec![0; n],
             hurt: floats(),
             hurt_side: floats(),
             bit_tick: vec![0; n],
@@ -410,12 +406,10 @@ impl Creatures {
         w.u8s(&gather(&live, &self.mark));
         w.u32s(&gather(&live, &self.bud_cooldown));
         w.f32s(&gather(&live, &self.cmd_dash));
-        w.f32s(&gather(&live, &self.cmd_lunge));
         w.f32s(&gather(&live, &self.cmd_toxin));
         w.u32s(&gather(&live, &self.cd_dash));
-        w.u32s(&gather(&live, &self.cd_lunge));
         w.u32s(&gather(&live, &self.cd_toxin));
-        w.u32s(&gather(&live, &self.lunge_left));
+        w.u32s(&gather(&live, &self.strike_left));
         w.f32s(&gather(&live, &self.hurt));
         w.f32s(&gather(&live, &self.hurt_side));
     }
@@ -465,12 +459,10 @@ impl Creatures {
         scatter(&live, r.u8s()?, &mut c.mark)?;
         scatter(&live, r.u32s()?, &mut c.bud_cooldown)?;
         scatter(&live, r.f32s()?, &mut c.cmd_dash)?;
-        scatter(&live, r.f32s()?, &mut c.cmd_lunge)?;
         scatter(&live, r.f32s()?, &mut c.cmd_toxin)?;
         scatter(&live, r.u32s()?, &mut c.cd_dash)?;
-        scatter(&live, r.u32s()?, &mut c.cd_lunge)?;
         scatter(&live, r.u32s()?, &mut c.cd_toxin)?;
-        scatter(&live, r.u32s()?, &mut c.lunge_left)?;
+        scatter(&live, r.u32s()?, &mut c.strike_left)?;
         scatter(&live, r.f32s()?, &mut c.hurt)?;
         scatter(&live, r.f32s()?, &mut c.hurt_side)?;
         for &s in &live {

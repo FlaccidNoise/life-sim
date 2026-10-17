@@ -167,8 +167,8 @@ fn teeth_world() -> World {
     (cl.x[k], cl.y[k], cl.radius[k]) = (500.0, 600.0, 24.0);
     (cl.left[k], cl.drain[k], cl.maker[k]) = (40, 0.3, w.creatures.uid[7]);
     let c = &mut w.creatures;
-    (c.cmd_dash[3], c.cmd_lunge[3], c.cmd_toxin[3]) = (0.5, -0.25, 1.0);
-    (c.cd_dash[3], c.cd_lunge[3], c.cd_toxin[3], c.lunge_left[3]) = (7, 8, 9, 4);
+    (c.cmd_dash[3], c.cmd_toxin[3]) = (0.5, 1.0);
+    (c.cd_dash[3], c.cd_toxin[3], c.strike_left[3]) = (7, 9, 4);
     (c.hurt[3], c.hurt_side[3]) = (2.5, -0.75);
     let s = &mut w.stats;
     (s.flesh, s.kills, s.poisoned, s.spiked, s.debris_eaten) = (3.5, 2, 1, 1, 4.25);
@@ -235,19 +235,19 @@ fn a_world_with_debris_a_cloud_and_a_killer_is_the_same_in_a_reload() {
         (40, a.creatures.uid[7])
     );
     assert_eq!(
-        (b.creatures.lunge_left[3], b.creatures.hurt_side[3]),
+        (b.creatures.strike_left[3], b.creatures.hurt_side[3]),
         (4, -0.75)
     );
     a.run(60);
     b.run(60);
     assert_eq!(b.state_hash(), a.state_hash());
 
-    // The mask is held while a body is possessed, and only its three bits.
+    // The mask is held while a body is possessed, and only its two bits: 2, the lunge, is retired.
     let mut c = teeth_world();
     assert!(c.possess(c.creatures.uid[20]));
     c.input(true, 0.0, 0.0, false, 0xFF);
     let d = World::load(&c.save()).expect("load");
-    assert_eq!(d.control.abilities, 7);
+    assert_eq!(d.control.abilities, 5);
     assert_eq!((d.control.killer, d.control.killer_brain.len()), (0, 0));
 }
 

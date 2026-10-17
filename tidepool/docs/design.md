@@ -94,8 +94,9 @@ pays more upkeep (`decisions/INDEX.md`, 2026-10-12).
 
 ### 5.3 Abilities
 
-Active abilities come from parts: dash (Flagellum), lunge (Jaw), toxin cloud (Toxin gland), flash
-(Photophore). Each costs energy and has a cooldown. Each is one brain output, so NPCs evolve to use them.
+Active abilities come from parts: dash (Flagellum), toxin cloud (Toxin gland), flash (Photophore).
+Each costs energy and has a cooldown. Each is one brain output, so NPCs evolve to use them. Parts work
+together: a body with a Jaw bites harder during its dash, a strike (2026-10-16, which retired the lunge).
 The player's ability buttons are whatever their current body carries.
 
 ### 5.4 One currency

@@ -37,7 +37,6 @@ const OUTPUT: Record<number, Output> = {
   129: { name: 'turn', low: 'left', high: 'right', fromZero: false },
   130: { name: 'accept', low: 'no', high: 'yes', fromZero: false },
   131: { name: 'dash', low: 'rest', high: 'fire', fromZero: false },
-  132: { name: 'lunge', low: 'rest', high: 'fire', fromZero: false },
   133: { name: 'toxin', low: 'rest', high: 'fire', fromZero: false },
 };
 const outputOf = (port: number): Output =>

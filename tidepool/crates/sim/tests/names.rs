@@ -4,7 +4,7 @@
 use tidepool_sim::brain::{
     self, Brains, EYE_BODY_A, EYE_BODY_B, EYE_FOOD_A, EYE_FOOD_B, EYE_JAW_A, EYE_JAW_B, IN_CONST,
     IN_ENERGY, IN_HURT, IN_HURT_SIDE, IN_SCENT, MAX_CONNS, MAX_NEURONS, N_BODY_IN, N_OUT_MAX,
-    OUT_ACCEPT, OUT_DASH, OUT_LUNGE, OUT_THRUST, OUT_TOXIN, OUT_TURN, READOUT_CONN_WORDS,
+    OUT_ACCEPT, OUT_DASH, OUT_THRUST, OUT_TOXIN, OUT_TURN, READOUT_CONN_WORDS,
     READOUT_HEADER_WORDS, READOUT_NEURON_WORDS,
 };
 use tidepool_sim::genome::{
@@ -670,40 +670,36 @@ fn a_body_with_a_flagellum_declares_dash_and_one_without_does_not() {
 }
 
 #[test]
-fn a_jaw_declares_lunge_and_a_gland_declares_toxin() {
-    // The gland is put on before the jaw: the outputs are in port order, not gene order.
+fn a_jaw_declares_no_trigger_and_a_gland_declares_toxin() {
+    // Rule P1 of the parts retune: a jaw declares nothing, so a body with one has the outputs of
+    // the same body without it. Port 132, the retired lunge, is in no list: an out gene for it is
+    // not expressed, and it reads as undeclared.
+    let retired = 132;
     let mut g = Genome::default();
     g.set_size(KIND_TOXIN, 0.3);
     g.set_size(KIND_JAW, 0.5);
-    let ports = [
-        OUT_THRUST, OUT_TURN, OUT_ACCEPT, OUT_DASH, OUT_LUNGE, OUT_TOXIN,
-    ];
+    let ports = [OUT_THRUST, OUT_TURN, OUT_ACCEPT, OUT_DASH, OUT_TOXIN];
     assert_eq!(brain::ports(&g).outputs, ports.map(Node::body));
-    // Each output is read by its port. Without the jaw, toxin takes the place in the block that
-    // lunge had, and lunge reads as undeclared.
     let bias = |port: u8| 0.1 * (port - OUT_THRUST) as f32 - 0.2;
-    g.brain.outs = ports
-        .map(|port| OutGene {
+    g.brain.outs = (ports.iter().chain([&retired]))
+        .map(|&port| OutGene {
             node: Node::body(port),
             bias: bias(port),
             alpha: 1.0,
         })
-        .into();
+        .collect();
     let mut jawless = g.clone();
     jawless.parts.retain(|part| part.kind != KIND_JAW);
+    assert_eq!(brain::ports(&jawless).outputs, brain::ports(&g).outputs);
     let mut b = Brains::new(2);
     b.express(0, &g, &Params::new());
     b.express(1, &jawless, &Params::new());
-    b.step_one(0);
-    b.step_one(1);
-    assert_eq!((b.n_out[0], b.n_out[1]), (6, 5));
-    for port in ports {
-        assert_eq!(b.output(0, port), act(bias(port)), "{port}");
-        let want = if port == OUT_LUNGE {
-            -1.0
-        } else {
-            act(bias(port))
-        };
-        assert_eq!(b.output(1, port), want, "{port}");
+    for slot in [0, 1] {
+        b.step_one(slot);
+        assert_eq!(b.n_out[slot], 5);
+        for port in ports {
+            assert_eq!(b.output(slot, port), act(bias(port)), "{port}");
+        }
+        assert_eq!(b.output(slot, retired), -1.0);
     }
 }

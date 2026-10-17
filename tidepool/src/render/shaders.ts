@@ -220,7 +220,7 @@ flat out vec3 v_rgb;
 flat out vec4 v_body; // half length, half width, energy01, cilia size
 flat out vec4 v_marks; // 1 for the player's lineage, 1 for the possessed creature, the bud pulse, 1 for a young cross
 flat out vec3 v_rgb2; // the colour of the other side of the rim of a young cross
-flat out vec2 v_hits; // 1 for a body hurt a short time ago, 1 for one that dashed or lunged
+flat out vec2 v_hits; // 1 for a body hurt a short time ago, 1 for one that dashed
 flat out float v_seen;
 ${TINT}${SIGHT}
 void main() {
@@ -305,7 +305,7 @@ void main() {
   hair *= bend > 0.0 ? 1.0 + d / bend : 1.0;
   float fringe = line(hair, (0.03 + 0.07 * cilia) * hw) * fill(-d) * fill(d - reach);
   vec4 c = vec4(pale, 1.0) * 0.7 * fringe * step(0.001, cilia);
-  // A body that just dashed or lunged: two lines that open out behind its tail, and fade.
+  // A body that just dashed: two lines that open out behind its tail, and fade.
   if (v_hits.y > 0.0) {
     float back = -v_p.x - hl + 0.5 * v_ends.y; // behind a point near the tail
     float wake = line(abs(v_p.y) - 0.4 * v_ends.y - 0.6 * back, 0.05 * hw);

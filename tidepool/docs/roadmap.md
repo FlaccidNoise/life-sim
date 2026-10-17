@@ -120,7 +120,7 @@ their own brain while they play, let go, and see it take over.
 
 ### M4 — Teeth
 
-- Jaw, Spike, Shell plate, Toxin gland. Abilities: dash, lunge, toxin cloud.
+- Jaw, Spike, Shell plate, Toxin gland. Abilities: dash, lunge, toxin cloud. The lunge folded into the dash on 2026-10-16: a jaw bites harder during its body's dash.
 - Contact rules with facing and defended arcs. Energy-conserving transfers.
 - Carried from M2: the strength of the Fin. At the default `fin_grip` of 0.3 a fin raises the slip,
   and it cuts the slip at 0.6 (`findings/m2-audit.md`, finding L5). That decision rested on a fin in 2%

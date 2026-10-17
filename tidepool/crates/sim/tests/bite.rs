@@ -3,7 +3,7 @@
 
 use std::f32::consts::PI;
 use tidepool_sim::brain;
-use tidepool_sim::control::{CAUSE_EATEN, CAUSE_SPIKED};
+use tidepool_sim::control::{ABILITY_DASH, CAUSE_EATEN, CAUSE_SPIKED};
 use tidepool_sim::genome::{BrainGenome, Genome, PartGene, KIND_JAW, KIND_SHELL, KIND_SPIKE};
 use tidepool_sim::motor::NO_TOUCH;
 use tidepool_sim::params::id;
@@ -26,13 +26,13 @@ fn still_water() -> World {
     }
     w.params.set(id::BITE_RATE, 0.5);
     // The tests were written at the Off defaults: any body can be bitten, no guard does anything,
-    // a shell adds no drag, and a lunge does not raise the bite. Each test that reads one of these
+    // a shell adds no drag, and a strike does not raise the bite. Each test that reads one of these
     // sets it itself.
     w.params.set(id::BITE_MASS_RATIO, 0.0);
     w.params.set(id::SHELL_BLOCK, 0.0);
     w.params.set(id::SPIKE_HURT, 0.0);
     w.params.set(id::SHELL_DRAG, 0.0);
-    w.params.set(id::LUNGE_BITE, 1.0);
+    w.params.set(id::STRIKE_BITE, 1.0);
     // The diet rules (D1, D2) are off here: `diet.rs` tests them.
     w.params.set(id::DIET_K, 0.0);
     w.params.set(id::BITE_DIET_GAP, -1.0);
@@ -115,7 +115,7 @@ fn with_bite_rate_0_nothing_changes() {
         (id::BITE_MASS_RATIO, 1.15),
         (id::SPIKE_HURT, 1.0),
         (id::SHELL_BLOCK, 1.0),
-        (id::LUNGE_BITE, 2.0),
+        (id::STRIKE_BITE, 2.0),
         (id::JAW_ARC, 1.2),
     ];
     let (mut a, mut b) = (hunting_world(&off), hunting_world(&others));
@@ -182,6 +182,34 @@ fn what_the_prey_loses_the_biter_gains() {
         assert!((w.stats.flesh - (es - start_s) as f64).abs() < 1e-6);
     }
     assert!((w.stats.flesh - 100.0 * 3.0 / 32.0).abs() < 1e-6);
+}
+
+/// Rule P1 of the parts retune: a dash of a body with a jaw is a strike. Its bites are
+/// `strike_bite` times for `strike_ticks` ticks, then as before. A dash of no impulse keeps the pair
+/// in place.
+#[test]
+fn a_strike_raises_the_bite_by_strike_bite_for_strike_ticks() {
+    let (mut w, s, j) = pair(|_| {});
+    w.params.set(id::BITE_RATE, 1.0 / 64.0);
+    w.params.set(id::STRIKE_BITE, 3.0);
+    w.params.set(id::STRIKE_TICKS, 4.0);
+    w.params.set(id::DASH_IMPULSE, 0.0);
+    w.params.set(id::DASH_SPIN, 0.0);
+    w.creatures.energy[s] = 18.0;
+    assert!(w.possess(w.creatures.uid[s]));
+    w.input(true, 0.0, 0.0, false, ABILITY_DASH);
+    let mut takes = Vec::new();
+    for _ in 0..6 {
+        let ej = w.creatures.energy[j];
+        w.run(1);
+        takes.push(ej - w.creatures.energy[j]);
+    }
+    assert_eq!(w.creatures.cd_dash[s], 95);
+    let bite = 3.0 / 32.0;
+    for (k, take) in takes.iter().enumerate() {
+        let want = if k < 4 { 3.0 * bite } else { bite };
+        assert!((take - want).abs() < 1e-6, "tick {k}: {take}");
+    }
 }
 
 #[test]

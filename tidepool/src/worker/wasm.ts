@@ -41,8 +41,7 @@ export interface Sim {
   /** The uid of the possessed creature, or 0. */
   possessed(): number;
   /**
-   * `accept`: the player courts. `abilities`: the abilities held, a mask of 1 dash, 2 lunge, and 4
-   * toxin. While the input is manual, each bit sets the ability's command on the possessed body (rule X2).
+   * `accept`: the player courts. `abilities`: the abilities held, a mask of 1 dash and 4 toxin. While the input is manual, each bit sets the ability's command on the possessed body (rule X2).
    */
   input(manual: boolean, thrust: number, turn: number, accept: boolean, abilities: number): void;
   /** 0 for none. Set when the possessed creature dies. Cleared by the next possess. */

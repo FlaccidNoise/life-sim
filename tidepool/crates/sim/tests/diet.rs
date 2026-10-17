@@ -28,7 +28,7 @@ fn still_water() -> World {
     ] {
         w.params.set(k, 0.0);
     }
-    w.params.set(id::LUNGE_BITE, 1.0);
+    w.params.set(id::STRIKE_BITE, 1.0);
     // Rule D2 off: these tests read rule D1 alone. `bite_across` sets it.
     w.params.set(id::BITE_DIET_GAP, -1.0);
     w

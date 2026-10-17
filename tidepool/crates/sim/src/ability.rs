@@ -1,5 +1,5 @@
-//! Abilities: dash, lunge, and the toxin cloud (rules A1 to A3 of the M4 plan), and the pool of
-//! clouds.
+//! Abilities: dash, with the strike of a body with a jaw, and the toxin cloud (rules A1 and A3 of
+//! the M4 plan, P1 of the parts retune), and the pool of clouds.
 
 use crate::bite::side;
 use crate::control::CAUSE_POISONED;
@@ -52,21 +52,21 @@ fn pay(cost: f32, energy: &mut f32) -> bool {
     paid
 }
 
-/// Dash, lunge, and toxin, after `control::apply` and before `motor::step`. Each live slot in
-/// ascending order counts its cooldowns and `lunge_left` down by 1, then tries a dash, a lunge, and
-/// a cloud in that order. An ability fires with its part, its command above 0, its cooldown at 0,
-/// and its cost of `*_cost * area / REF_WIDTH` paid. It sets its cooldown to `ability_cooldown`. A
-/// cloud needs a free place in the pool: a full pool fires nothing and charges nothing. The motor
-/// holds the speed limit after this, so a dash cannot pass it.
+/// Dash and toxin, after `control::apply` and before `motor::step`. Each live slot in ascending
+/// order counts its cooldowns and `strike_left` down by 1, then tries a dash and a cloud in that
+/// order. An ability fires with its part, its command above 0, its cooldown at 0, and its cost of
+/// `*_cost * area / REF_WIDTH` paid. It sets its cooldown to `ability_cooldown`. A dash of a body
+/// with a jaw is a strike: its bite is `strike_bite` times for `strike_ticks` ticks. A cloud needs a
+/// free place in the pool: a full pool fires nothing and charges nothing. The motor holds the speed
+/// limit after this, so a dash cannot pass it.
 pub fn step(world: &mut World) {
     let p = &world.params;
     let cooldown = p.get(id::ABILITY_COOLDOWN) as u32;
     let (dash_impulse, dash_spin) = (p.get(id::DASH_IMPULSE), p.get(id::DASH_SPIN));
-    let (lunge_impulse, lunge_ticks) = (p.get(id::LUNGE_IMPULSE), p.get(id::LUNGE_TICKS) as u32);
+    let strike_ticks = p.get(id::STRIKE_TICKS) as u32;
     let (toxin_drain, toxin_radius) = (p.get(id::TOXIN_DRAIN), p.get(id::TOXIN_RADIUS));
     let toxin_ticks = p.get(id::TOXIN_TICKS) as u32;
-    let (dash_cost, lunge_cost) = (p.get(id::DASH_COST), p.get(id::LUNGE_COST));
-    let toxin_cost = p.get(id::TOXIN_COST);
+    let (dash_cost, toxin_cost) = (p.get(id::DASH_COST), p.get(id::TOXIN_COST));
     let (part_mass, eye_cost) = (p.get(id::PART_MASS), p.get(id::EYE_COST));
     let World {
         creatures: c,
@@ -78,19 +78,14 @@ pub fn step(world: &mut World) {
             continue;
         }
         // A count at 0 is read and not written: at Off every body is at 0 on every tick, and the
-        // four stores per body cost 8% of a tick (M4 Task 8).
-        for count in [
-            &mut c.cd_dash,
-            &mut c.cd_lunge,
-            &mut c.cd_toxin,
-            &mut c.lunge_left,
-        ] {
+        // stores per body cost 8% of a tick (M4 Task 8).
+        for count in [&mut c.cd_dash, &mut c.cd_toxin, &mut c.strike_left] {
             if count[s] > 0 {
                 count[s] -= 1;
             }
         }
         // No command above 0: nothing can fire, and the part sums are not read.
-        if c.cmd_dash[s] <= 0.0 && c.cmd_lunge[s] <= 0.0 && c.cmd_toxin[s] <= 0.0 {
+        if c.cmd_dash[s] <= 0.0 && c.cmd_toxin[s] <= 0.0 {
             continue;
         }
         let flag = c.flag_push[s];
@@ -105,18 +100,9 @@ pub fn step(world: &mut World) {
             c.vy[s] += gain * c.hs[s];
             c.omega[s] += dash_spin * c.cmd_turn[s] * flag / heft;
             c.cd_dash[s] = cooldown;
-        }
-        let jaw = c.jaw_sum[s];
-        if jaw > 0.0
-            && c.cmd_lunge[s] > 0.0
-            && c.cd_lunge[s] == 0
-            && pay(lunge_cost * c.area(s) / REF_WIDTH, &mut c.energy[s])
-        {
-            let gain = lunge_impulse * jaw / creature::heft(c.part_sum(s, eye_cost), part_mass);
-            c.vx[s] += gain * c.hc[s];
-            c.vy[s] += gain * c.hs[s];
-            c.cd_lunge[s] = cooldown;
-            c.lunge_left[s] = lunge_ticks;
+            if c.jaw_sum[s] > 0.0 {
+                c.strike_left[s] = strike_ticks;
+            }
         }
         let gland = c.gland_sum[s];
         if gland > 0.0

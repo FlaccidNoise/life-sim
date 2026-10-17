@@ -18,11 +18,11 @@ pub const CAUSE_POISONED: u32 = 4;
 pub const CAUSE_SPIKED: u32 = 5;
 /// The words of `Control::killer_body`.
 pub const KILLER_BODY_WORDS: u32 = 7 + PART_WORDS;
-/// The bits of the player's ability mask (rule X2).
+/// The bits of the player's ability mask (rule X2). Bit 2 was the lunge, retired by rule P1 of the
+/// parts retune: a mask that holds it is dropped by `input` and refused by `load`.
 pub const ABILITY_DASH: u32 = 1;
-pub const ABILITY_LUNGE: u32 = 2;
 pub const ABILITY_TOXIN: u32 = 4;
-const ABILITY_BITS: u32 = ABILITY_DASH | ABILITY_LUNGE | ABILITY_TOXIN;
+const ABILITY_BITS: u32 = ABILITY_DASH | ABILITY_TOXIN;
 /// uid, slot, x, y, energy01, generation, hue. The floats are stored by bit pattern.
 pub const HEIR_STRIDE: usize = 7;
 pub const MAX_HEIRS: usize = 5;
@@ -174,7 +174,6 @@ pub fn apply(world: &mut World) {
         world.creatures.cmd_accept[slot] = if c.accept { 1.0 } else { -1.0 };
         let held = |bit: u32| if c.abilities & bit != 0 { 1.0 } else { -1.0 };
         world.creatures.cmd_dash[slot] = held(ABILITY_DASH);
-        world.creatures.cmd_lunge[slot] = held(ABILITY_LUNGE);
         world.creatures.cmd_toxin[slot] = held(ABILITY_TOXIN);
     }
 }

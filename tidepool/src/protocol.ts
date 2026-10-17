@@ -1,7 +1,7 @@
 // Constants and layouts shared by the page and the worker. The frame layout mirrors
 // crates/sim/src/frame.rs. tests/abi.test.ts fails if the two disagree.
 
-export const ABI_VERSION = 9;
+export const ABI_VERSION = 10;
 export const TICK_HZ = 20;
 export const FRAME_HEADER_WORDS = 50;
 export const CREATURE_STRIDE = 26;
@@ -63,7 +63,7 @@ export const FLAG_LINEAGE = 1,
   FLAG_DONOR = 64, // the body holds the genes of a partner for its next bud
   FLAG_BIT = 128, // a bite of the body took energy a short time ago
   FLAG_HURT = 256, // the body lost energy to a hit a short time ago
-  FLAG_DASH = 512; // the body dashed or lunged a short time ago
+  FLAG_DASH = 512; // the body dashed a short time ago
 
 // The kinds of part. They mirror the `KIND_` constants in crates/sim/src/genome.rs.
 export const KIND_FLAGELLUM = 1,
@@ -78,9 +78,8 @@ export const KIND_FLAGELLUM = 1,
   KIND_TOXIN = 10;
 
 // The bits of the abilities mask of the `input` message. They mirror `ABILITY_` in
-// crates/sim/src/control.rs.
+// crates/sim/src/control.rs. Bit 2 was the lunge, retired: the core drops it.
 export const ABILITY_DASH = 1,
-  ABILITY_LUNGE = 2,
   ABILITY_TOXIN = 4;
 
 /** One part of a body. `anchor`, `size`, and `extra` are 0 to 1 each, in steps of 1/255. */
@@ -389,7 +388,7 @@ export type ToWorker =
   | { type: 'possessAt'; x: number; y: number; radius: number }
   | { type: 'possess'; uid: number }
   | { type: 'release' }
-  // `accept`: the player courts. `abilities`: the abilities held, 1 dash, 2 lunge, 4 toxin; absent
+  // `accept`: the player courts. `abilities`: the abilities held, 1 dash, 4 toxin; absent
   // for none. The core reads both while `manual` is set.
   | {
       type: 'input';

@@ -175,12 +175,12 @@ export const closeGuide = (): void => {
 /**
  * The ability buttons, rule X2 of the M4 plan. `has`: the `ABILITY_` bits that the parts of the
  * possessed body give, 0 for none (no buttons). `left`: ticks until the page's own count of each
- * ability ends. `fired`: the body dashed or lunged in the last ticks (`FLAG_DASH`), which shows
+ * ability ends. `fired`: the body dashed in the last ticks (`FLAG_DASH`), which shows
  * what the brain fires while it drives.
  */
 export const abilityView = signal({
   has: 0,
-  left: { dash: 0, lunge: 0, toxin: 0 },
+  left: { dash: 0, toxin: 0 },
   fired: false,
 });
 export const abilityButtons = signal(0); // the `ABILITY_` bits of the buttons that are down

@@ -11,7 +11,7 @@ use std::ops::Range;
 use crate::creature::MAX_EYES;
 use crate::genome::{
     BrainGenome, ConnGene, Genome, HiddenGene, Node, OutGene, BODY, FOUNDER_EYE_HISTORY,
-    FOUNDER_JAW_HISTORY, KIND_CHEMO, KIND_EYE, KIND_FLAGELLUM, KIND_JAW, KIND_TOXIN,
+    FOUNDER_JAW_HISTORY, KIND_CHEMO, KIND_EYE, KIND_FLAGELLUM, KIND_TOXIN,
 };
 use crate::math::act;
 use crate::params::{id, Params};
@@ -58,9 +58,10 @@ pub const EYE_JAW_B: u8 = 5;
 pub const OUT_THRUST: u8 = 128;
 pub const OUT_TURN: u8 = 129;
 pub const OUT_ACCEPT: u8 = 130;
-/// The triggers. Each is declared by a body with a part of its kind, as `TRIGGERS` says.
+/// The triggers. Each is declared by a body with a part of its kind, as `TRIGGERS` says. Port 132
+/// was the lunge of a jaw, retired by rule P1 of the parts retune: no body declares it, and it is
+/// never used again.
 pub const OUT_DASH: u8 = 131;
-pub const OUT_LUNGE: u8 = 132;
 pub const OUT_TOXIN: u8 = 133;
 /// The inputs that every body declares, in block order.
 const BODY_INPUTS: [u8; N_BODY_IN] = [
@@ -77,13 +78,9 @@ const SCENT_INPUTS: [u8; 3] = [IN_SCENT, IN_GRAD_FWD, IN_GRAD_SIDE];
 /// The outputs that every body declares, in block order. Their ports count up from `OUT_THRUST`.
 pub const BODY_OUTPUTS: [u8; 3] = [OUT_THRUST, OUT_TURN, OUT_ACCEPT];
 /// Each trigger output and the kind whose sizes, summed above 0, declare it, in block order.
-pub const TRIGGERS: [(u8, u8); 3] = [
-    (OUT_DASH, KIND_FLAGELLUM),
-    (OUT_LUNGE, KIND_JAW),
-    (OUT_TOXIN, KIND_TOXIN),
-];
-/// The output ports, `OUT_THRUST` and up.
-const OUT_PORTS: usize = BODY_OUTPUTS.len() + TRIGGERS.len();
+pub const TRIGGERS: [(u8, u8); 2] = [(OUT_DASH, KIND_FLAGELLUM), (OUT_TOXIN, KIND_TOXIN)];
+/// The output ports, `OUT_THRUST` to `OUT_TOXIN`, with the retired 132 among them.
+const OUT_PORTS: usize = (OUT_TOXIN - OUT_THRUST + 1) as usize;
 /// What `Brains::output` reads of an output that the body does not declare. A trigger at -1 never
 /// fires.
 pub const UNDECLARED: f32 = -1.0;
@@ -496,23 +493,22 @@ fn trigger_gene(port: u8, p: &Params) -> OutGene {
     }
 }
 
-/// Rule P2 of the M4 plan for a hunter founder, with no draw: the out gene of `lunge` rests
-/// closed, and with an eye `EYE_BODY_A` runs to turn at `starter_chase` and `EYE_BODY_B` at minus
-/// (toward a body), and both to lunge at `starter_lunge`. These take the 4 ids after the wires of
-/// `starter`.
+/// Rule P2 of the M4 plan for a hunter founder, with no draw: with an eye `EYE_BODY_A` runs to
+/// turn at `starter_chase` and `EYE_BODY_B` at minus (toward a body), and both to dash at
+/// `starter_strike`: with its jaw, a dash is a strike (rule P1 of the parts retune). `starter`
+/// gave the out gene of `dash`. These take the 4 ids after the wires of `starter`.
 pub fn hunter(brain: &mut BrainGenome, p: &Params) {
-    brain.outs.push(trigger_gene(OUT_LUNGE, p));
     if p.get(id::FOUNDER_EYE) <= 0.0 {
         return;
     }
-    let (turn, lunge) = (Node::body(OUT_TURN), Node::body(OUT_LUNGE));
-    let (chase, bite) = (p.get(id::STARTER_CHASE), p.get(id::STARTER_LUNGE));
+    let (turn, dash) = (Node::body(OUT_TURN), Node::body(OUT_DASH));
+    let (chase, strike) = (p.get(id::STARTER_CHASE), p.get(id::STARTER_STRIKE));
     let (body_a, body_b) = (founder_eye(EYE_BODY_A), founder_eye(EYE_BODY_B));
     let wires = [
         (body_a, turn, chase),
         (body_b, turn, -chase),
-        (body_a, lunge, bite),
-        (body_b, lunge, bite),
+        (body_a, dash, strike),
+        (body_b, dash, strike),
     ];
     let first = FIRST_TRIGGER_CONN + TRIGGER_CONNS - wires.len() as u32;
     let wires = (first..).zip(wires);
@@ -562,7 +558,6 @@ pub fn step(world: &mut World) {
         c.cmd_turn[s] = brains.output(s, OUT_TURN);
         c.cmd_accept[s] = brains.output(s, OUT_ACCEPT);
         c.cmd_dash[s] = brains.output(s, OUT_DASH);
-        c.cmd_lunge[s] = brains.output(s, OUT_LUNGE);
         c.cmd_toxin[s] = brains.output(s, OUT_TOXIN);
     }
 }

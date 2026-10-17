@@ -148,39 +148,50 @@ fn the_speed_limit_holds_through_a_dash() {
     assert!((speed - v_max).abs() < 1e-4, "speed {speed}");
 }
 
+/// Rule P1 of the parts retune: a dash of a body with a jaw is a strike, and raises the bite for
+/// `strike_ticks`. The dash is the same with a jaw or without. A jaw alone gives no burst.
 #[test]
-fn a_lunge_needs_a_jaw_and_raises_the_bite_for_lunge_ticks() {
-    let lunge = |w: &mut World| {
-        w.params.set(id::LUNGE_IMPULSE, 2.0);
-        w.params.set(id::LUNGE_COST, 0.5);
-        w.params.set(id::LUNGE_TICKS, 7.0);
-        w.creatures.cmd_lunge[0] = 1.0;
+fn a_dash_of_a_body_with_a_jaw_strikes_for_strike_ticks() {
+    let dash = |w: &mut World| {
+        dash_on(w);
+        w.params.set(id::STRIKE_TICKS, 7.0);
+        w.creatures.cmd_dash[0] = 1.0;
     };
-    let mut w = one(genome(0.0, 0.0), 0.0);
-    lunge(&mut w);
+    let mut plain = one(genome(0.0, 0.0), 0.0);
+    dash(&mut plain);
+    ability::step(&mut plain);
+    let c = &plain.creatures;
+    assert_eq!((c.cd_dash[0], c.strike_left[0]), (100, 0));
+
+    let mut w = one(genome(0.5, 0.0), 0.0);
+    dash(&mut w);
+    let (e0, cost) = (w.creatures.energy[0], 0.5 * mouth(&w, 0));
+    ability::step(&mut w);
+    let c = &w.creatures;
+    let push = 2.0 * c.flag_push[0] / heft(&w, 0);
+    assert!((c.vx[0] - push).abs() < 1e-5);
+    assert!((e0 - c.energy[0] - cost).abs() < 1e-5);
+    assert_eq!((c.cd_dash[0], c.strike_left[0]), (100, 7));
+    // `bite::step` reads it on this tick and on the 6 after it. The cooldown holds the next dash.
+    for left in (0..7).rev() {
+        ability::step(&mut w);
+        assert_eq!(w.creatures.strike_left[0], left);
+    }
+    ability::step(&mut w);
+    assert_eq!(w.creatures.strike_left[0], 0);
+
+    // A jaw with no flagellum: no burst, no strike, nothing paid.
+    let mut g = genome(0.5, 0.0);
+    g.parts.retain(|p| p.kind != KIND_FLAGELLUM);
+    let mut w = one(g, 0.0);
+    dash(&mut w);
     let e0 = w.creatures.energy[0];
     ability::step(&mut w);
     let c = &w.creatures;
     assert_eq!(
-        (c.vx[0], c.energy[0], c.cd_lunge[0], c.lunge_left[0]),
+        (c.vx[0], c.energy[0], c.cd_dash[0], c.strike_left[0]),
         (0.0, e0, 0, 0)
     );
-
-    let mut w = one(genome(0.5, 0.0), 0.0);
-    lunge(&mut w);
-    let (e0, cost) = (w.creatures.energy[0], 0.5 * mouth(&w, 0));
-    ability::step(&mut w);
-    let c = &w.creatures;
-    assert!((c.vx[0] - 2.0 * 0.5 / heft(&w, 0)).abs() < 1e-5);
-    assert!((e0 - c.energy[0] - cost).abs() < 1e-5);
-    assert_eq!((c.cd_lunge[0], c.lunge_left[0]), (100, 7));
-    // `bite::step` reads it on this tick and on the 6 after it.
-    for left in (0..7).rev() {
-        ability::step(&mut w);
-        assert_eq!(w.creatures.lunge_left[0], left);
-    }
-    ability::step(&mut w);
-    assert_eq!(w.creatures.lunge_left[0], 0);
 }
 
 /// A maker with a gland of 0.5 at slot 0, a body inside its cloud at slot 1, and one outside it at
@@ -286,26 +297,30 @@ fn a_manual_player_fires_only_the_abilities_held() {
     let mut w = one(genome(0.5, 0.5), 0.0);
     dash_on(&mut w);
     toxin_on(&mut w);
-    w.params.set(id::LUNGE_IMPULSE, 2.0);
     assert!(w.possess(w.creatures.uid[0]));
-    w.input(true, 0.0, 0.0, false, ABILITY_DASH | ABILITY_TOXIN);
+    w.input(true, 0.0, 0.0, false, ABILITY_TOXIN);
     control::apply(&mut w);
     let c = &w.creatures;
-    assert_eq!(
-        (c.cmd_dash[0], c.cmd_lunge[0], c.cmd_toxin[0]),
-        (1.0, -1.0, 1.0)
-    );
+    assert_eq!((c.cmd_dash[0], c.cmd_toxin[0]), (-1.0, 1.0));
     ability::step(&mut w);
     let c = &w.creatures;
-    assert_eq!((c.cd_dash[0], c.cd_lunge[0], c.cd_toxin[0]), (100, 0, 100));
-    assert_eq!(c.lunge_left[0], 0);
+    assert_eq!((c.cd_dash[0], c.cd_toxin[0], c.strike_left[0]), (0, 100, 0));
     assert_eq!(w.clouds.slots.count(), 1);
+
+    // Bit 2 was the lunge: it is dropped, and holds nothing.
+    w.input(true, 0.0, 0.0, false, ABILITY_DASH | 2);
+    assert_eq!(w.control.abilities, ABILITY_DASH);
+    control::apply(&mut w);
+    ability::step(&mut w);
+    let c = &w.creatures;
+    assert_eq!((c.cmd_dash[0], c.cmd_toxin[0]), (1.0, -1.0));
+    assert_eq!((c.cd_dash[0], c.strike_left[0]), (100, 10));
 
     // Released, the commands are the brain's: control leaves them.
     w.input(false, 0.0, 0.0, false, 0);
-    w.creatures.cmd_lunge[0] = 0.5;
+    w.creatures.cmd_toxin[0] = 0.5;
     control::apply(&mut w);
-    assert_eq!(w.creatures.cmd_lunge[0], 0.5);
+    assert_eq!(w.creatures.cmd_toxin[0], 0.5);
     assert_eq!(w.creatures.cmd_dash[0], 1.0);
 }
 
@@ -318,18 +333,16 @@ fn a_world_with_clouds_in_flight_is_the_same_in_a_reload() {
     }
     dash_on(&mut w);
     toxin_on(&mut w);
-    w.params.set(id::LUNGE_IMPULSE, 2.0);
-    w.params.set(id::LUNGE_COST, 0.5);
     w.params.set(id::ABILITY_COOLDOWN, 7.0);
-    // Cheap enough that a body pays for all three from a half store.
+    // Cheap enough that a body pays for both from a half store.
     w.params.set(id::TOXIN_COST, 0.5);
     for s in 0..12 {
         let c = &mut w.creatures;
-        (c.cmd_dash[s], c.cmd_lunge[s], c.cmd_toxin[s]) = (1.0, 1.0, 1.0);
+        (c.cmd_dash[s], c.cmd_toxin[s]) = (1.0, 1.0);
     }
     w.run(5);
     assert!(w.clouds.slots.count() > 0);
-    assert!((0..12).any(|s| w.creatures.lunge_left[s] > 0));
+    assert!((0..12).any(|s| w.creatures.strike_left[s] > 0));
     let mut copy = World::load(&w.save()).expect("load");
     assert_eq!(copy.state_hash(), w.state_hash());
     w.run(40);

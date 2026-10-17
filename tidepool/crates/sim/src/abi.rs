@@ -18,7 +18,7 @@ use crate::math::{sin_cos, wrap_angle};
 use crate::params::{ParamDef, DEFS};
 use crate::world::{self, World};
 
-pub const ABI_VERSION: u32 = 9;
+pub const ABI_VERSION: u32 = 10;
 
 thread_local! {
     /// Why the last `tp_new` or `tp_load` returned null.
@@ -226,7 +226,7 @@ pub unsafe extern "C" fn tp_place(
 
 /// `manual` is 0 for the brain and any other value for the player. `accept` is 0 for a player who
 /// does not court and any other value for one who does. `abilities` is a mask of the `ABILITY_`
-/// bits in `control.rs`: 1 dash, 2 lunge, 4 toxin. Other bits are dropped.
+/// bits in `control.rs`: 1 dash, 4 toxin. Other bits are dropped, among them 2, the retired lunge.
 #[no_mangle]
 pub unsafe extern "C" fn tp_input(
     world: *mut World,
@@ -511,7 +511,7 @@ mod tests {
                 (7, 0.5)
             );
             assert!((*b).control.accept);
-            assert_eq!((*b).control.abilities, 7);
+            assert_eq!((*b).control.abilities, 5);
             tp_free(a);
             tp_free(b);
         }

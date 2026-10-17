@@ -41,7 +41,7 @@ export const CHAPTERS: { id: ChapterId; title: string; text: string[] }[] = [
     text: [
       'A brain runs many times a second, also while you steer: your hands replace only its outputs.',
       'Inputs, on the left, are numbers the body senses: its energy, the smell of plants, how hard and where it was hit, and for each eye the plants, bodies, and teeth it sees.',
-      'Outputs, on the right, are thrust, turn, and accept, the answer to a mate. Parts add triggers: dash with a pushing flagellum, lunge with a jaw, toxin with a gland. A trigger above zero fires if the body can pay, then rests a while.',
+      'Outputs, on the right, are thrust, turn, and accept, the answer to a mate. Parts add triggers: dash with a pushing flagellum, toxin with a gland. A trigger above zero fires if paid, then rests. A body with a jaw bites harder during its dash.',
       'Hidden neurons sit between. A connection carries a neuron’s value to another, times its weight. A neuron sums what arrives, adds its bias, and squashes the result. A loop makes a brain recurrent.',
       'A slow neuron, one with a long time constant, holds part of its old value: the only memory, lost with the body. The wiring is set at birth. It does not learn.',
     ],

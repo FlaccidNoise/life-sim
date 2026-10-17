@@ -37,7 +37,7 @@ pub const FLAG_DONOR: u32 = 64;
 pub const FLAG_BIT: u32 = 128;
 /// The body lost energy to a hit in the last `HURT_FLASH` ticks.
 pub const FLAG_HURT: u32 = 256;
-/// The body dashed or lunged in the last `DASH_FLASH` ticks.
+/// The body dashed in the last `DASH_FLASH` ticks.
 pub const FLAG_DASH: u32 = 512;
 /// A body this far outside the view is still in the frame, so a body on the edge is drawn whole.
 const MARGIN: f32 = 32.0;
@@ -241,8 +241,7 @@ pub fn write(world: &mut World, x0: f32, y0: f32, x1: f32, y1: f32) -> u32 {
         if flashing(c.hurt_tick[s], *tick, HURT_FLASH) {
             flags |= FLAG_HURT;
         }
-        if just_fired(c.cd_dash[s], ability_cooldown) || just_fired(c.cd_lunge[s], ability_cooldown)
-        {
+        if just_fired(c.cd_dash[s], ability_cooldown) {
             flags |= FLAG_DASH;
         }
         let hidden = brains.n_neur[s] - brains.n_in[s] - brains.n_out[s];
@@ -733,9 +732,8 @@ mod tests {
             (cooldown - DASH_FLASH, 0),
             (0, 0),
         ] {
-            (w.creatures.cd_dash[7], w.creatures.cd_lunge[8]) = (left, left);
+            w.creatures.cd_dash[7] = left;
             assert_eq!(flags(&mut w, 7), flag, "{left} ticks left");
-            assert_eq!(flags(&mut w, 8), flag, "{left} ticks left");
         }
     }
 

@@ -988,7 +988,7 @@ fn a_new_eye_arrives_with_part_wires_connections_from_its_own_ports() {
         assert_eq!(child.brain.conns[..count], g.brain.conns[..]);
         eyes += (part.kind == KIND_EYE) as u32;
         if brain::ports(&child).outputs != brain::ports(&g).outputs {
-            // A jaw or a gland declares an output: `a_new_jaw_arrives_with_part_wires_into_lunge`.
+            // A gland declares an output: `a_new_gland_arrives_with_part_wires_into_toxin`.
             continue;
         }
         if ports.is_empty() {
@@ -1244,7 +1244,7 @@ fn a_thousand_mutations_at_high_rates_always_load_and_express() {
 }
 
 #[test]
-fn a_new_jaw_arrives_with_part_wires_into_lunge() {
+fn a_new_gland_arrives_with_part_wires_into_toxin() {
     let mut p = quiet();
     p.set(id::MUT_PART_ADD, 1.0);
     let plain_p = p.clone();
@@ -1266,8 +1266,9 @@ fn a_new_jaw_arrives_with_part_wires_into_lunge() {
             .collect();
         let new = &child.brain.conns[count..];
         match part.kind {
+            // A jaw declares no trigger (rule P1 of the parts retune).
             KIND_JAW => {
-                assert_eq!(outputs, [Node::body(brain::OUT_LUNGE)]);
+                assert!(outputs.is_empty());
                 jaws += 1;
             }
             KIND_TOXIN => {

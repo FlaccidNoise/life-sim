@@ -3,7 +3,6 @@
 
 import {
   ABILITY_DASH,
-  ABILITY_LUNGE,
   ABILITY_TOXIN,
   C_AGE,
   C_ENERGY,
@@ -15,7 +14,6 @@ import {
   C_Y,
   CREATURE_STRIDE,
   KIND_FLAGELLUM,
-  KIND_JAW,
   KIND_TOXIN,
   NO_SLOT,
   type FrameView,
@@ -35,7 +33,6 @@ export interface Keys {
   right: boolean;
   court: boolean;
   dash: boolean;
-  lunge: boolean;
   toxin: boolean;
 }
 export const GRACE_MS = 500;
@@ -57,7 +54,6 @@ const KEY_OF: Record<string, keyof Keys> = {
   ArrowRight: 'right',
   KeyC: 'court',
   Space: 'dash',
-  KeyF: 'lunge',
   KeyQ: 'toxin',
 };
 
@@ -68,7 +64,7 @@ export function keyOf(code: string): keyof Keys | undefined {
 
 /**
  * W or ArrowUp thrusts. A or ArrowLeft turns -1. D or ArrowRight turns +1. Both turn keys cancel. C
- * courts: the body accepts a mate. Space, F, and Q hold the dash, lunge, and toxin bits, but only
+ * courts: the body accepts a mate. Space and Q hold the dash and toxin bits, but only
  * those in `has`, the abilities that the body carries (the default is none). `steers`: a key that
  * moves the body is down, and it wins over a held pointer. `active`: any key that the body takes is
  * down, and the input is manual.
@@ -85,9 +81,7 @@ export function steerFromKeys(
   active: boolean;
 } {
   const steers = k.up || k.left || k.right;
-  const abilities =
-    ((k.dash ? ABILITY_DASH : 0) | (k.lunge ? ABILITY_LUNGE : 0) | (k.toxin ? ABILITY_TOXIN : 0)) &
-    has;
+  const abilities = ((k.dash ? ABILITY_DASH : 0) | (k.toxin ? ABILITY_TOXIN : 0)) & has;
   return {
     thrust: k.up ? 1 : 0,
     turn: (k.right ? 1 : 0) - (k.left ? 1 : 0),
@@ -98,12 +92,14 @@ export function steerFromKeys(
   };
 }
 
-/** The abilities that parts give: a Flagellum a dash, a Jaw a lunge, a Toxin gland a cloud. */
+/**
+ * The abilities that parts give: a Flagellum a dash, a Toxin gland a cloud. A Jaw gives none: it
+ * makes the body's dash a strike.
+ */
 export function abilitiesOf(parts: Part[]): number {
   let mask = 0;
   for (const { kind } of parts) {
     if (kind === KIND_FLAGELLUM) mask |= ABILITY_DASH;
-    else if (kind === KIND_JAW) mask |= ABILITY_LUNGE;
     else if (kind === KIND_TOXIN) mask |= ABILITY_TOXIN;
   }
   return mask;
@@ -112,7 +108,6 @@ export function abilitiesOf(parts: Part[]): number {
 /** The tick at which each ability is ready again, by the count of the page. */
 export interface ReadyAt {
   dash: number;
-  lunge: number;
   toxin: number;
 }
 
@@ -132,7 +127,6 @@ export function pressCooldowns(
     held & bit && tick >= at ? tick + cooldown : at;
   return {
     dash: next(ABILITY_DASH, ready.dash),
-    lunge: next(ABILITY_LUNGE, ready.lunge),
     toxin: next(ABILITY_TOXIN, ready.toxin),
   };
 }

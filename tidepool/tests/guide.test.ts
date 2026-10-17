@@ -422,7 +422,7 @@ test('what the guide says of mixing is what the code does', () => {
     'pub const BODY_OUTPUTS: [u8; 3] = [OUT_THRUST, OUT_TURN, OUT_ACCEPT];',
   );
   expect(rust('brain.rs')).toContain(
-    'pub const TRIGGERS: [(u8, u8); 3] = [\n    (OUT_DASH, KIND_FLAGELLUM),\n    (OUT_LUNGE, KIND_JAW),\n    (OUT_TOXIN, KIND_TOXIN),\n];',
+    'pub const TRIGGERS: [(u8, u8); 2] = [(OUT_DASH, KIND_FLAGELLUM), (OUT_TOXIN, KIND_TOXIN)];',
   );
 });
 
@@ -564,15 +564,19 @@ test('the guide names each kind of part, and says what a jaw, a spike, a shell, 
 
 test('chapter 2 says what fires each trigger, as ability.rs does', () => {
   const brain = CHAPTERS.find((c) => c.id === 'brain')?.text.join(' ') ?? '';
-  expect(brain).toContain('dash with a pushing flagellum, lunge with a jaw, toxin with a gland');
+  expect(brain).toContain('dash with a pushing flagellum, toxin with a gland');
+  // "A body with a jaw bites harder during its dash": the dash of a body with a jaw sets the
+  // strike, and a bite during the strike is times `strike_bite`.
+  expect(brain).toContain('A body with a jaw bites harder during its dash.');
   const code = rust('ability.rs').replace(/\/\/.*$/gm, '');
   // Each fires with its part, its trigger above zero, its cooldown at zero, and its cost paid.
   expect(code).toMatch(
     /flag > 0\.0\s+&& c\.cmd_dash\[s\] > 0\.0\s+&& c\.cd_dash\[s\] == 0\s+&& pay\(/,
   );
   expect(code).toMatch(
-    /jaw > 0\.0\s+&& c\.cmd_lunge\[s\] > 0\.0\s+&& c\.cd_lunge\[s\] == 0\s+&& pay\(/,
+    /c\.cd_dash\[s\] = cooldown;\s+if c\.jaw_sum\[s\] > 0\.0 \{\s+c\.strike_left\[s\] = strike_ticks;/,
   );
+  expect(rust('bite.rs')).toMatch(/if c\.strike_left\[s\] > 0 \{\s+bite \*= strike_bite;/);
   expect(code).toMatch(/gland > 0\.0\s+&& c\.cmd_toxin\[s\] > 0\.0\s+&& c\.cd_toxin\[s\] == 0/);
   // A pushing flagellum: `flag_push` sums the push of the flagella toward the tail.
   expect(rust('creature.rs')).toContain('flag_push += size * push_of(anchor);');

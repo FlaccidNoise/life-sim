@@ -243,14 +243,10 @@ table! {
     DASH_SPIN "dash_spin" 0.3 0.0 2.0;
     /// Energy per unit of mouth for one dash.
     DASH_COST "dash_cost" 0.5 0.0 5.0;
-    /// Speed gained per unit of jaw, over heft.
-    LUNGE_IMPULSE "lunge_impulse" 2.0 0.0 8.0;
-    /// Bite multiplier during a lunge.
-    LUNGE_BITE "lunge_bite" 2.0 1.0 4.0;
-    /// Ticks that a lunge's bite lasts.
-    LUNGE_TICKS "lunge_ticks" 10.0 1.0 100.0;
-    /// Energy per unit of mouth for one lunge.
-    LUNGE_COST "lunge_cost" 0.5 0.0 5.0;
+    /// Bite multiplier of a body with a jaw during its dash: a strike.
+    STRIKE_BITE "strike_bite" 2.0 1.0 4.0;
+    /// Ticks that a strike's bite lasts.
+    STRIKE_TICKS "strike_ticks" 10.0 1.0 100.0;
     /// Energy per tick per unit of gland, from each body in the cloud.
     TOXIN_DRAIN "toxin_drain" 0.3 0.0 4.0;
     /// Cloud radius in the maker's lengths.
@@ -267,8 +263,8 @@ table! {
     FOUNDER_JAW_SIZE "founder_jaw_size" 0.5 0.0 1.0;
     /// Hunter founder brain: seen body to turn.
     STARTER_CHASE "starter_chase" 1.5 -8.0 8.0;
-    /// Hunter founder brain: seen body to lunge.
-    STARTER_LUNGE "starter_lunge" 2.0 -8.0 8.0;
+    /// Hunter founder brain: seen body to dash, a strike with its jaw.
+    STARTER_STRIKE "starter_strike" 2.0 -8.0 8.0;
     /// Founder brain: seen teeth and a hit to dash, seen teeth to turn away.
     STARTER_FLEE "starter_flee" 2.0 -8.0 8.0;
     /// Founder brain: bias of each trigger output.

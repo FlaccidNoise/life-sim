@@ -198,12 +198,10 @@ fn every_saved_field_is_in_the_hash_and_survives_a_load() {
         ("mark", |w| w.creatures.mark[S] ^= 1),
         ("bud_cooldown", |w| w.creatures.bud_cooldown[S] += 1),
         ("cmd_dash", |w| w.creatures.cmd_dash[S] += 0.1),
-        ("cmd_lunge", |w| w.creatures.cmd_lunge[S] += 0.1),
         ("cmd_toxin", |w| w.creatures.cmd_toxin[S] += 0.1),
         ("cd_dash", |w| w.creatures.cd_dash[S] += 1),
-        ("cd_lunge", |w| w.creatures.cd_lunge[S] += 1),
         ("cd_toxin", |w| w.creatures.cd_toxin[S] += 1),
-        ("lunge_left", |w| w.creatures.lunge_left[S] += 1),
+        ("strike_left", |w| w.creatures.strike_left[S] += 1),
         ("hurt", |w| w.creatures.hurt[S] += 0.5),
         ("hurt_side", |w| w.creatures.hurt_side[S] -= 0.5),
         ("genome len", |w| w.genomes[S].len += 1.0),
@@ -292,7 +290,7 @@ fn every_saved_field_is_in_the_hash_and_survives_a_load() {
         ("killer_body", |w| {
             w.control.killer_body = vec![7; KILLER_BODY_WORDS as usize]
         }),
-        ("abilities", |w| w.input(true, 0.8, 0.5, false, 2)),
+        ("abilities", |w| w.input(true, 0.8, 0.5, false, 4)),
         ("cloud slots", |w| w.clouds.slots.free(0)),
         ("cloud x", |w| w.clouds.x[0] += 1.0),
         ("cloud y", |w| w.clouds.y[0] += 1.0),
@@ -363,10 +361,10 @@ fn garbage_is_rejected_without_panic() {
 const HEADER_BYTES: usize = 4 * (5 + 4 * 2);
 /// The `f32` creature fields. They come before the integer fields.
 const FLOATS_BEFORE: usize = 13;
-/// The `f32` creature fields of M4 that follow the integer fields: the three ability commands,
-/// then, after the four counters, `hurt` and `hurt_side`.
-const COMMANDS: usize = 3;
-const COUNTERS: usize = 4;
+/// The `f32` creature fields of M4 that follow the integer fields: the two ability commands,
+/// then, after the three counters, `hurt` and `hurt_side`.
+const COMMANDS: usize = 2;
+const COUNTERS: usize = 3;
 const HURTS: usize = 2;
 
 /// A payload written by hand in the order of `World::save_payload`. A test changes one part.
@@ -512,7 +510,7 @@ impl Crafted {
             p.f32s(&self.field);
         }
         for _ in 0..COUNTERS {
-            p.u32s(&vec![0; self.field.len()]); // the three cooldowns and lunge_left
+            p.u32s(&vec![0; self.field.len()]); // the two cooldowns and strike_left
         }
         for _ in 0..HURTS {
             p.f32s(&self.field);
@@ -836,6 +834,41 @@ fn a_bad_brain_genome_is_invalid() {
     }
 }
 
+/// Port 132 was the lunge of a jaw, retired by rule P1 of the parts retune. A genome with an out
+/// gene for it and a wire into it loads: no body declares 132, so neither is expressed, and the
+/// next birth's `prune` drops both.
+#[test]
+fn a_genome_with_the_retired_port_132_loads_and_never_declares_it() {
+    let retired = Node::body(132);
+    let mut held = brain(0, &[]);
+    held.outs.push(OutGene {
+        node: retired,
+        bias: 3.0,
+        alpha: 1.0,
+    });
+    held.conns.push(ConnGene {
+        src: node(0, 0),
+        dst: retired,
+        weight: 1.0,
+        history: 1,
+    });
+    let mut w = Crafted {
+        brain: held,
+        ..Crafted::new(&[0], &[1.0])
+    }
+    .load()
+    .expect("load");
+    assert_eq!(w.brains.n_conn[0], 0);
+    assert_eq!(w.brains.n_out[0] as usize, N_OUT);
+    assert_eq!(w.brains.output(0, 132), brain::UNDECLARED);
+    w.run(5);
+    assert_eq!(w.brains.output(0, 132), brain::UNDECLARED);
+    let mut child = w.genomes[0].clone();
+    child.prune(0.0);
+    assert!(child.brain.outs.iter().all(|gene| gene.node != retired));
+    assert!(child.brain.conns.iter().all(|conn| conn.dst != retired));
+}
+
 #[test]
 fn a_brain_part_of_the_wrong_length_is_invalid() {
     // Two creatures with the smallest brain hold 30 activations.
@@ -924,12 +957,12 @@ fn a_bad_control_block_is_invalid() {
         killer: 5,
         killer_brain: vec![5, 0, 0, 0, 0, 0],
         killer_body: vec![0; KILLER_BODY_WORDS as usize],
-        abilities: 7,
+        abilities: 5,
         ..Crafted::uids(0, 9, &[3, 5])
     };
     let w = eaten.load().expect("load");
     let c = &w.control;
-    assert_eq!((c.death_cause, c.killer, c.abilities), (CAUSE_EATEN, 5, 7));
+    assert_eq!((c.death_cause, c.killer, c.abilities), (CAUSE_EATEN, 5, 5));
     assert_eq!(c.killer_brain.len(), READOUT_HEADER_WORDS as usize);
     assert_eq!(c.killer_body.len(), KILLER_BODY_WORDS as usize);
     for (bad, reason) in [
@@ -950,6 +983,14 @@ fn a_bad_control_block_is_invalid() {
         (
             Crafted {
                 abilities: 8,
+                ..Crafted::uids(0, 9, &[3, 5])
+            },
+            "control ability mask",
+        ),
+        // 2 was the lunge, retired by rule P1 of the parts retune.
+        (
+            Crafted {
+                abilities: 2,
                 ..Crafted::uids(0, 9, &[3, 5])
             },
             "control ability mask",
@@ -1220,7 +1261,7 @@ fn every_cut_of_a_payload_is_an_error() {
         killer: 1,
         killer_brain: vec![1, 0, 0, 0, 0, 0],
         killer_body: vec![0; KILLER_BODY_WORDS as usize],
-        abilities: 3,
+        abilities: 5,
         cloud_slots: vec![0],
         cloud_field: vec![5.0],
         cloud_left: vec![9],

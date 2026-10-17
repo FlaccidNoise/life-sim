@@ -4,8 +4,8 @@
 use tidepool_sim::brain::{
     self, Brains, EYE_BODY_A, EYE_BODY_B, EYE_FOOD_A, EYE_FOOD_B, EYE_JAW_A, EYE_JAW_B, IN_AGE,
     IN_CONST, IN_ENERGY, IN_GRAD_FWD, IN_GRAD_SIDE, IN_HURT, IN_HURT_SIDE, IN_MATE_KIN,
-    IN_MATE_SIZE, IN_SCENT, IN_SPEED, NO_INPUT, N_BODY_IN, OUT_ACCEPT, OUT_DASH, OUT_LUNGE,
-    OUT_THRUST, OUT_TOXIN, OUT_TURN,
+    IN_MATE_SIZE, IN_SCENT, IN_SPEED, NO_INPUT, N_BODY_IN, OUT_ACCEPT, OUT_DASH, OUT_THRUST,
+    OUT_TOXIN, OUT_TURN, UNDECLARED,
 };
 use tidepool_sim::genome::{
     self, BrainGenome, ConnGene, Genome, Node, OutGene, FOUNDER_EYE_HISTORY, FOUNDER_JAW_HISTORY,
@@ -510,9 +510,8 @@ fn armed(w: &mut World) {
     for (k, v) in [
         (id::STARTER_FLEE, 2.0),
         (id::STARTER_CHASE, 1.5),
-        (id::STARTER_LUNGE, 2.0),
+        (id::STARTER_STRIKE, 2.0),
         (id::DASH_IMPULSE, 2.0),
-        (id::LUNGE_IMPULSE, 2.0),
     ] {
         w.params.set(k, v);
     }
@@ -551,10 +550,14 @@ fn a_body_hit_on_the_left_reads_a_negative_side() {
     assert_eq!([inputs[6], inputs[7]], [0.0, 0.0]);
 }
 
+/// Port 132 was the lunge of a jaw, retired by rule P1 of the parts retune.
+const RETIRED_LUNGE: u8 = 132;
+
 #[test]
 fn an_undeclared_trigger_never_fires() {
     // A body with no flagellum, no jaw, and no gland, whose genome holds an open gene for each of
-    // the three triggers, beside a body with a flagellum whose dash gene is open.
+    // the two triggers and for the retired port 132, beside a body with a flagellum and a jaw whose
+    // dash gene and 132 gene are open, with a wire into 132.
     let mut w = still_world();
     armed(&mut w);
     let open = |port: u8| OutGene {
@@ -566,18 +569,34 @@ fn an_undeclared_trigger_never_fires() {
     bare.parts.retain(|part| part.kind != KIND_FLAGELLUM);
     bare.brain
         .outs
-        .extend([OUT_DASH, OUT_LUNGE, OUT_TOXIN].map(open));
+        .extend([OUT_DASH, RETIRED_LUNGE, OUT_TOXIN].map(open));
     let mut swimmer = Genome::default();
-    swimmer.brain.outs.push(open(OUT_DASH));
+    swimmer.set_size(KIND_JAW, 0.5);
+    swimmer
+        .brain
+        .outs
+        .extend([OUT_DASH, RETIRED_LUNGE].map(open));
+    swimmer.brain.conns.push(ConnGene {
+        src: Node::body(IN_CONST),
+        dst: Node::body(RETIRED_LUNGE),
+        weight: 3.0,
+        history: 1000,
+    });
+    for g in [&bare, &swimmer] {
+        let outputs = brain::ports(g).outputs;
+        assert!(!outputs.contains(&Node::body(RETIRED_LUNGE)), "{outputs:?}");
+    }
     let s = put(&mut w, bare, 300.0, 500.0, 0.0);
     let d = put(&mut w, swimmer, 900.0, 500.0, 0.0);
+    assert_eq!(w.brains.n_conn[d], 0, "the wire into 132 is not expressed");
     for _ in 0..200 {
         w.tick();
         let c = &w.creatures;
-        let cmds = [c.cmd_dash[s], c.cmd_lunge[s], c.cmd_toxin[s]];
-        assert_eq!(cmds, [-1.0; 3]);
-        assert_eq!([c.cd_dash[s], c.cd_lunge[s], c.cd_toxin[s]], [0; 3]);
-        assert_eq!(c.cmd_lunge[d], -1.0);
+        assert_eq!([c.cmd_dash[s], c.cmd_toxin[s]], [-1.0; 2]);
+        assert_eq!([c.cd_dash[s], c.cd_toxin[s], c.strike_left[s]], [0; 3]);
+        for slot in [s, d] {
+            assert_eq!(w.brains.output(slot, RETIRED_LUNGE), UNDECLARED);
+        }
     }
     assert!(w.creatures.cmd_dash[d] > 0.9);
     assert!(w.creatures.cd_dash[d] > 0, "the declared dash fires");
@@ -625,7 +644,7 @@ fn a_founder_dashes_when_hit() {
 }
 
 #[test]
-fn a_hunter_founder_turns_to_a_body_it_sees_and_lunges() {
+fn a_hunter_founder_turns_to_a_body_it_sees_and_strikes() {
     let mut w = still_world();
     armed(&mut w);
     w.params.set(id::FOUNDER_JAW, 1.0);
@@ -639,16 +658,22 @@ fn a_hunter_founder_turns_to_a_body_it_sees_and_lunges() {
         Some((0.0, size, FOUNDER_JAW_HISTORY))
     );
     assert!(hunter.size_of(KIND_FILTER) > 0.0);
-    let lunge = hunter
-        .brain
-        .outs
-        .iter()
-        .find(|o| o.node == Node::body(OUT_LUNGE));
+    // It keeps the founder's flagellum, so its dash is a strike. It has one dash gene and no other
+    // trigger.
+    assert!(hunter.size_of(KIND_FLAGELLUM) > 0.0);
+    let triggers: Vec<&OutGene> = (hunter.brain.outs.iter())
+        .filter(|o| o.node.port > OUT_ACCEPT)
+        .collect();
     let bias = w.params.get(id::STARTER_TRIGGER_BIAS);
-    assert_eq!(lunge.map(|out| out.bias), Some(bias));
+    assert_eq!(triggers.len(), 1);
+    assert_eq!(
+        (triggers[0].node, triggers[0].bias),
+        (Node::body(OUT_DASH), bias)
+    );
 
     // The hunter at (700, 500) facing +x, and a still body 12 units away in the middle of one of
-    // its two eye cones, or none. Gives the turn command and the lunge cooldown after 3 ticks.
+    // its two eye cones, or none. Gives the turn command, the dash cooldown, and the strike after 3
+    // ticks.
     let side = genome::FOUNDER_EYE_ANCHOR * PI;
     let hunt = |angle: Option<f32>| {
         let mut w = still_world();
@@ -665,11 +690,16 @@ fn a_hunter_founder_turns_to_a_body_it_sees_and_lunges() {
             );
         }
         w.run(3);
-        (w.creatures.cmd_turn[s], w.creatures.cd_lunge[s])
+        let c = &w.creatures;
+        (c.cmd_turn[s], c.cd_dash[s], c.strike_left[s])
     };
     let (alone, a, b) = (hunt(None), hunt(Some(side)), hunt(Some(-side)));
     assert!(a.0 > alone.0 + 0.3, "{a:?} {alone:?}");
     assert!(b.0 < alone.0 - 0.3, "{b:?} {alone:?}");
-    assert_eq!(alone.1, 0, "a hunter with nothing in view does not lunge");
-    assert!(a.1 > 0 && b.1 > 0, "{a:?} {b:?}");
+    assert_eq!(
+        (alone.1, alone.2),
+        (0, 0),
+        "a hunter with nothing in view does not strike"
+    );
+    assert!(a.1 > 0 && b.1 > 0 && a.2 > 0 && b.2 > 0, "{a:?} {b:?}");
 }

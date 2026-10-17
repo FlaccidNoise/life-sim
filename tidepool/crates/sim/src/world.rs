@@ -156,8 +156,8 @@ impl World {
         (c.cmd_thrust[s], c.cmd_turn[s], c.cmd_accept[s]) = (0.0, 0.0, 0.0);
         (c.mate_size[s], c.mate_kin[s], c.mixed_with[s]) = (0.0, 0.0, 0);
         (c.age[s], c.bud_cooldown[s]) = (0, 0);
-        (c.cmd_dash[s], c.cmd_lunge[s], c.cmd_toxin[s]) = (0.0, 0.0, 0.0);
-        (c.cd_dash[s], c.cd_lunge[s], c.cd_toxin[s], c.lunge_left[s]) = (0, 0, 0, 0);
+        (c.cmd_dash[s], c.cmd_toxin[s]) = (0.0, 0.0);
+        (c.cd_dash[s], c.cd_toxin[s], c.strike_left[s]) = (0, 0, 0);
         (c.hurt[s], c.hurt_side[s], c.bit_tick[s], c.hurt_tick[s]) = (0.0, 0.0, 0, 0);
         (c.generation[s], c.parent[s], c.mark[s]) = (at.generation, at.parent, at.mark);
         c.express(s, &genome);

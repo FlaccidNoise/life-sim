@@ -35,7 +35,7 @@ pub(crate) fn side(y: f32) -> f32 {
 /// `bite_mass_ratio` times `j`, the `diet` of `j` is not at least `bite_diet_gap` under that of `s`
 /// (rule D2 of the diet retune), or `s` is full. The bite is `bite_rate` times the jaws that hold
 /// `j` times the mouth of `s` times `diet^diet_k` of `s` (rule D1 of the diet plan), and
-/// `lunge_bite` times that during a lunge. A spike hurts in proportion to that bite. The guards of `j` whose
+/// `strike_bite` times that during a strike. A spike hurts in proportion to that bite. The guards of `j` whose
 /// arc holds `s`, at the places of this tick after the motor, block a share of it (shells) and
 /// hurt `s` (spikes). What `j` loses `s` gains. What a spike hurts is lost.
 ///
@@ -48,7 +48,7 @@ pub fn step(world: &mut World) {
         return;
     }
     let (ratio, per_mass) = (p.get(id::BITE_MASS_RATIO), p.get(id::ENERGY_PER_MASS));
-    let (lunge_bite, spike_hurt) = (p.get(id::LUNGE_BITE), p.get(id::SPIKE_HURT));
+    let (strike_bite, spike_hurt) = (p.get(id::STRIKE_BITE), p.get(id::SPIKE_HURT));
     let (shell_block, diet_k) = (p.get(id::SHELL_BLOCK), p.get(id::DIET_K));
     let diet_gap = p.get(id::BITE_DIET_GAP);
     let (shell_cos2, spike_cos2) = (cos2(p.get(id::SHELL_ARC)), cos2(p.get(id::SPIKE_ARC)));
@@ -79,8 +79,8 @@ pub fn step(world: &mut World) {
         }
         let mut bite =
             rate * motor.bite_jaws[s] * (area / REF_WIDTH) * pow_quarters(c.diet[s], diet_k);
-        if c.lunge_left[s] > 0 {
-            bite *= lunge_bite;
+        if c.strike_left[s] > 0 {
+            bite *= strike_bite;
         }
         // The offset from `j` to `s`, in the frame of `j`, where `express` holds the guards.
         let (dx, dy) = (c.x[s] - c.x[j], c.y[s] - c.y[j]);

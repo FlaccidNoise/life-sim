@@ -386,8 +386,10 @@ pub fn gate(argv: &[String]) {
 
 #[cfg(test)]
 mod tests {
-    use tidepool_sim::brain::{IN_CONST, OUT_LUNGE};
-    use tidepool_sim::genome::{ConnGene, Genome, KIND_CHEMO, KIND_EYE, KIND_FLAGELLUM, KIND_JAW};
+    use tidepool_sim::brain::{IN_CONST, OUT_TOXIN};
+    use tidepool_sim::genome::{
+        ConnGene, Genome, KIND_CHEMO, KIND_EYE, KIND_FLAGELLUM, KIND_TOXIN,
+    };
     use tidepool_sim::rng::Rng;
     use tidepool_sim::world::SpawnAt;
 
@@ -437,18 +439,18 @@ mod tests {
         assert_eq!(brain_measures(&minds), (4.0, 47.0, 1, 2));
     }
 
-    /// Two bodies with a jaw, so both declare `lunge`. The second has one more connection, from the
-    /// constant input into `lunge`. A trigger is a port of a part, as a sense is: one shape, and
+    /// Two bodies with a gland, so both declare `toxin`. The second has one more connection, from the
+    /// constant input into `toxin`. A trigger is a port of a part, as a sense is: one shape, and
     /// two raw shapes.
     #[test]
     fn a_wire_into_a_trigger_changes_the_raw_shape_and_not_the_shape() {
         let mut world = World::new(1, 256.0, 256.0);
         let mut plain = Genome::founder(&mut Rng::new(1), &world.params);
-        plain.set_size(KIND_JAW, 0.5);
+        plain.set_size(KIND_TOXIN, 0.5);
         let mut wired = plain.clone();
         wired.brain.conns.push(ConnGene {
             src: Node::body(IN_CONST),
-            dst: Node::body(OUT_LUNGE),
+            dst: Node::body(OUT_TOXIN),
             weight: 1.0,
             history: 1000,
         });

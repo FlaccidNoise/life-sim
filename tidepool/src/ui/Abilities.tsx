@@ -1,20 +1,19 @@
-// The ability buttons of the possessed body, rule X2 of the M4 plan: Dash with a Flagellum, Lunge
-// with a Jaw, Toxin with a Toxin gland, and none for a body with no such part. A button is held,
+// The ability buttons of the possessed body, rule X2 of the M4 plan: Dash with a Flagellum, Toxin
+// with a Toxin gland, and none for a body with no such part. A dash of a body with a Jaw is a
+// strike (rule P1 of the parts retune): it has no button of its own. A button is held,
 // as the Court button is: its bit is set for as long as the pointer or the key is down. While the
 // brain drives, a button takes no press and shows what the brain fires. `main.ts` writes the state.
 
-import { ABILITY_DASH, ABILITY_LUNGE, ABILITY_TOXIN, TICK_HZ } from '../protocol';
+import { ABILITY_DASH, ABILITY_TOXIN, TICK_HZ } from '../protocol';
 import { abilityButtons, abilityView, brainDriving, death, mode } from './state';
 
 const BUTTONS = [
   { bit: ABILITY_DASH, name: 'Dash', key: 'Space', field: 'dash' },
-  { bit: ABILITY_LUNGE, name: 'Lunge', key: 'F', field: 'lunge' },
   { bit: ABILITY_TOXIN, name: 'Toxin', key: 'Q', field: 'toxin' },
 ] as const;
 
-// What `FLAG_DASH` shows is a dash or a lunge: it lights the buttons of those two. A cloud shows
-// no flag.
-const LIGHT = ABILITY_DASH | ABILITY_LUNGE;
+// What `FLAG_DASH` shows is a dash: it lights the Dash button. A cloud shows no flag.
+const LIGHT = ABILITY_DASH;
 
 export function Abilities() {
   const { has, left, fired } = abilityView.value;

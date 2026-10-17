@@ -3,7 +3,6 @@
 import { h, render } from 'preact';
 import {
   ABILITY_DASH,
-  ABILITY_LUNGE,
   ABILITY_TOXIN,
   BENCH_SETTLE_TICKS,
   C_ENERGY,
@@ -411,7 +410,6 @@ function start(): void {
     right: false,
     court: false,
     dash: false,
-    lunge: false,
     toxin: false,
   };
   let held: { x: number; y: number } | null = null; // the pointer that is down, in CSS pixels
@@ -429,15 +427,15 @@ function start(): void {
   // The abilities of the body, from its parts, and the tick at which the page's count of each
   // ends. The ticks of `ability_cooldown` are the page's own count: the frame does not carry them.
   let carries = 0;
-  let readyAt: ReadyAt = { dash: 0, lunge: 0, toxin: 0 };
+  let readyAt: ReadyAt = { dash: 0, toxin: 0 };
   let abilityCooldown = 0;
-  let firing = false; // the body dashed or lunged a short time ago: the brain fires it, or the player
+  let firing = false; // the body dashed a short time ago: the brain fires it, or the player
   const showAbilities = (): void => {
     const tick = cur?.tick ?? 0;
     const left = (at: number): number => Math.max(at - tick, 0);
     const next = {
       has: carries,
-      left: { dash: left(readyAt.dash), lunge: left(readyAt.lunge), toxin: left(readyAt.toxin) },
+      left: { dash: left(readyAt.dash), toxin: left(readyAt.toxin) },
       fired: firing,
     };
     if (JSON.stringify(next) !== JSON.stringify(abilityView.peek())) abilityView.value = next;
@@ -452,7 +450,7 @@ function start(): void {
     pressedAt = null;
     courtedAt = -Infinity;
     carries = 0;
-    readyAt = { dash: 0, lunge: 0, toxin: 0 };
+    readyAt = { dash: 0, toxin: 0 };
     firing = false;
     abilityButtons.value = 0;
     showAbilities();
@@ -533,7 +531,7 @@ function start(): void {
   };
   const dropKeys = (): void => {
     keys.up = keys.left = keys.right = keys.court = false;
-    keys.dash = keys.lunge = keys.toxin = false;
+    keys.dash = keys.toxin = false;
     courtHeld.value = false;
     abilityButtons.value = 0;
   };
@@ -920,7 +918,6 @@ function start(): void {
           ...keys,
           court: keys.court || courtHeld.peek(),
           dash: keys.dash || (buttons & ABILITY_DASH) !== 0,
-          lunge: keys.lunge || (buttons & ABILITY_LUNGE) !== 0,
           toxin: keys.toxin || (buttons & ABILITY_TOXIN) !== 0,
         },
         carries,

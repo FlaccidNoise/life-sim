@@ -13,7 +13,6 @@ const MAX_HIDDEN = 2; // hidden neurons on one path
 const OUT_THRUST = 128;
 const OUT_TURN = 129;
 const OUT_DASH = 131;
-const OUT_LUNGE = 132;
 const OUT_TOXIN = 133;
 const EYE_FOOD_B = 2; // a port of cone B: a midline eye has none
 
@@ -92,12 +91,6 @@ const OUTPUT: Record<number, Action> = {
     less: 'Holds back a dash',
     alwaysMore: 'dashes',
     alwaysLess: 'holds back a dash',
-  },
-  [OUT_LUNGE]: {
-    more: 'Lunges',
-    less: 'Holds back a lunge',
-    alwaysMore: 'lunges',
-    alwaysLess: 'holds back a lunge',
   },
   [OUT_TOXIN]: {
     more: 'Releases toxin',
