@@ -132,3 +132,25 @@ herbivores are squeezed to 0.035. Seed 4 does not climb (it did in T2: the climb
 One change from T4: `--param gut_upkeep=0.4`. Expected: omnivores fall under 0.5 on seeds 5 and 8,
 seed 6 holds: the target on 3 seeds. The risk is T3's: the climb fails on more seeds. If it does,
 T6 holds `gut_upkeep` 0.3 and raises `diet_sigma` (a larger step crosses the band).
+
+### T5 rows (`0cf7f97`, load 3 to 5)
+
+| Seed | 144,000: creatures | herb | omni | carn | diet_sd | kills |
+|---|---|---|---|---|---|---|
+| 1 | 796 | 0.225 | 0.587 | 0.188 | 0.25 | 5,010 |
+| 4 | 1,296 | 0.964 | 0.036 | 0.000 | 0.10 | 400 |
+| 5 | 930 | 0.190 | 0.666 | 0.144 | 0.22 | 4,849 |
+| 6 | 1,258 | 0.963 | 0.037 | 0.000 | 0.10 | 335 |
+| 8 | 670 | 0.173 | 0.576 | 0.251 | 0.24 | 2,009 |
+
+**Falsified. Target 0 of 5.** The climb fails on seeds 4 and 6, and where it climbs the middle is
+not thinner than T4's (0.58 to 0.67). Between 0.3 and 0.4 the seed's path decides more than the cost.
+
+## T6: `diet_sigma` 0.15 on T4 — hypothesis before the run
+
+One change from T4 (`gut_upkeep` 0.3, gap 0.2): `--param diet_sigma=0.15`. The diet retune found
+that a larger step makes the climb happen on every seed (T8 there, 0.05 to 0.1).
+
+Expected: the ladder on 5 of 5 seeds, with T4's shape where it climbs (carnivores 0.13 or more,
+omnivores 0.48 to 0.6): the target on 2 or 3 seeds. The risk: a larger step spreads every lineage's
+diet, which may fill the middle again.
