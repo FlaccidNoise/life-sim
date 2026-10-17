@@ -174,3 +174,24 @@ Fewer bodies: 500 to 904 (T4: 666 to 1,267).
 One change from T6: `--param gut_upkeep=0.4` (gap 0.2, `diet_sigma` 0.15). T5 lost the climb at 0.4
 with the small step; the larger step should keep it. Expected: omnivores under 0.5 on seeds 5, 8, and
 6, the ladder on 4 or more seeds: the target on 3 seeds. Risk: fewer bodies again.
+
+### T7 rows (`5e03746`, load 3 to 6)
+
+| Seed | 144,000: creatures | herb | omni | carn | diet_sd | kills |
+|---|---|---|---|---|---|---|
+| 1 | 780 | 0.147 | 0.705 | 0.147 | 0.20 | 8,811 |
+| 4 | 1,193 | 0.908 | 0.090 | 0.003 | 0.13 | 910 |
+| 5 | 623 | 0.202 | 0.498 | 0.300 | 0.26 | 2,019 |
+| 6 | 1,028 | 0.630 | 0.311 | 0.058 | 0.25 | 4,017 |
+| 8 | 706 | 0.149 | 0.602 | 0.249 | 0.23 | 3,210 |
+
+**Target: 1 of 5** (seed 5). Seed 4 barely climbs, seed 6 short of carnivores, seeds 1 and 8 heavy in
+the middle. Near the target the one sample at the end of the run decides: a seed caught at another
+point of its cycle would read otherwise.
+
+## T8: `gut_upkeep` 0.6 on T6 — hypothesis before the run, the last trial
+
+One change from T7: `--param gut_upkeep=0.6` (gap 0.2, `diet_sigma` 0.15). T3 at 0.6 with the small
+step gave the best shapes where it climbed and lost the climb on 3 seeds; the larger step may keep
+it. Expected: the climb on 4 or more seeds and omnivores under 0.5 where it climbs: the target on 2
+or 3 seeds. If the climb fails on 3 or more seeds, T6's set ships (the ladder on 5 of 5).
