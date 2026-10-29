@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "jtbug": {
+      "type": "http",
+      "url": "${BUG_URL}/mcp",
+      "headers": { "X-Actor": "claude-tidepool" }
+    }
+  }
+}

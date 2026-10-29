@@ -64,7 +64,7 @@ The hard rules (determinism, layers, params, gates, measured claims) are in `doc
 - **Two long runs at once die silently.**
 - **Browser checks:** use a port that is not already in use, since a reused port can serve a stale
   module. Keep the tab in the foreground, since a hidden tab stops `requestAnimationFrame`.
-- **Pushing at session end follows the root `AGENTS.md`.** The GitHub repo is public.
+- **Push only when the owner asks.** The GitHub repo is public.
 
 ## Agent skills
 
@@ -74,7 +74,7 @@ Non-negotiable rules. Read `docs/agents/CONSTITUTION.md` in full before you plan
 
 ### Issue tracker
 
-Beads at the repo root, shared with the draft. Tidepool tickets carry the `tidepool` label. See `docs/agents/issue-tracker.md`.
+JTBug, group `tidepool`, actor `claude-tidepool`. See `docs/agents/issue-tracker.md`.
 
 ### Domain docs
 

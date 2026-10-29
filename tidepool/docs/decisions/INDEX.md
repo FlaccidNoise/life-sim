@@ -4,6 +4,10 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
 `/docs/decisions/INDEX.md`. It does not bind Tidepool, but its measured lessons are collected in
 `../research/draft-inventory.md` and they do.
 
+## Tooling
+
+- 2026-10-29: Work is tracked in JTBug, group `tidepool`, not Beads. Beads had a repo-ID fault that warned of deleted issues, and it wrote the owner's email into a public repo. The draft's Beads backlog moved to group `lifesim-draft`. → `../agents/issue-tracker.md`
+
 ## Game
 
 - 2026-10-09: Tidepool is a ground-up rebuild in `tidepool/`, as a game. The draft in `/src` is kept as
