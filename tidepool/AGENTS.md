@@ -54,29 +54,31 @@ Run from `tidepool/`. If `cargo` is not found, run `. "$HOME/.cargo/env"`.
 
 ## Gotchas
 
+The hard rules (determinism, layers, params, gates, measured claims) are in `docs/agents/CONSTITUTION.md`. These are working notes.
+
 - **`tidepool/` is its own pnpm root.** `pnpm-workspace.yaml` here gives it a separate lockfile and
   `node_modules`. Run `pnpm` from `tidepool/`, never from the repo root, for Tidepool work.
-- **TypeScript stays on 6.** `typescript-eslint` 8 requires `<6.1.0`.
-- **No standard-library transcendental math in `crates/sim`.** Banned on `f32` and `f64`: trigonometric
-  and hyperbolic functions and their inverses, exponentials, logarithms, powers (`powf`, `powi`),
-  `hypot`, `cbrt`, and `mul_add`. They differ between native and WASM and break the determinism test.
-  Use `sim::math`. `sqrt`, `abs`, and rounding are allowed. Clippy rejects the banned calls
-  (`clippy.toml`). A test file under `crates/sim/tests/` runs native only and can start with
+- **The banned math has two escapes.** A test file under `crates/sim/tests/` runs native only and can start with
   `#![allow(clippy::disallowed_methods)]`. A `#[cfg(test)]` module in `crates/sim/src` can carry the
-  same `allow` on the one function that needs it.
-- **A field that is not in `save` and `load` is a bug.** The state hash is the CRC of the saved bytes.
-- **A number that needs tuning goes in `params.rs`.** Rule code has no magic numbers.
-- **Tune at 12,000 ticks on 3 seeds, one run at a time, against a baseline.** Shorter runs were wrong in
-  both directions on the draft. Two long runs at once die silently.
-- **A gate counts only after it has rejected a known-bad input.** Record the proof in `docs/gates.md`.
-- **Claim only what was measured.** "The mechanism fires", "evolution uses it", and "it helps" are three
-  different claims.
-- **A feature that fails its measurement is deleted.** Keep the note in `docs/findings/`. No dead flags.
+  same `allow` on the one function that needs it. Clippy rejects the banned calls everywhere else (`clippy.toml`).
+- **Two long runs at once die silently.**
 - **Browser checks:** use a port that is not already in use, since a reused port can serve a stale
   module. Keep the tab in the foreground, since a hidden tab stops `requestAnimationFrame`.
-- **`spikes/` is throwaway.** Never import from it. Port code out of it by copying.
-- **Commit at each task. Do not push in the middle of a plan.** Pushing at session end follows the root
-  `AGENTS.md`. The GitHub repo is public.
+- **Pushing at session end follows the root `AGENTS.md`.** The GitHub repo is public.
+
+## Agent skills
+
+### Constitution
+
+Non-negotiable rules. Read `docs/agents/CONSTITUTION.md` in full before you plan, implement, or review Tidepool work, and pass its path to every subagent.
+
+### Issue tracker
+
+Beads at the repo root, shared with the draft. Tidepool tickets carry the `tidepool` label. See `docs/agents/issue-tracker.md`.
+
+### Domain docs
+
+Single context: `GLOSSARY.md` and the decision log `docs/decisions/INDEX.md`. See `docs/agents/domain.md`.
 
 ## Building with agents
 
