@@ -164,6 +164,8 @@ band, rule, or default changed.
 
 ## Owner checks
 
+**Replaced on 2026-11-16 by `../playtest.md`: checks 1, 3, 4, and 5 are in steps 2, 7, 14, and 15. Check 2 was answered by the owner on 2026-10-12. The list below is the record of what was open.**
+
 Not done by an agent. The game is at `http://localhost:5394/` while the dev server of this session
 runs. Otherwise run `make dev` in `tidepool/`.
 

@@ -55,7 +55,7 @@ An agent cannot answer these questions. An agent can only make sure that each st
 ### Open the world
 
 1. **Do:** Open the address from set-up with no `?`.
-   **Look:** The page loads the baked world with no wait. The tick starts near 36,000. A line says "Click any creature to become it."
+   **Look:** The page loads the baked world with no wait. A crowd of creatures swims at once. A line says "Click any creature to become it."
    **Answer:** Does the world look alive in the first 5 seconds, with no instructions?
 
 ### M3 and M2: shapes, brain, mixing
@@ -80,26 +80,29 @@ An agent cannot answer these questions. An agent can only make sure that each st
    **Look:** The card. It lists length, width, parts, diet, hidden neurons, and connections for both. It also says why an exchange can or cannot happen.
    **Answer:** Do you know what the card compares? Do you know why it said yes or no?
 
-7. **Do:** Press Esc. Click creatures one at a time until the brain panel has no Eye row and the world has no cone.
-   **Look:** About one creature in nine has no eye. The world outside a circle around it is dimmed.
+7. **Do:** Press Esc. Click creatures one at a time. Stop at the first one whose brain panel has no Eye row. Try 20 at most.
+   **Look:** A creature with no eye is a minority, so you may need many tries. It has no vision cone, and the world around it is dimmed.
+   If none of 20 has no eye, write that down. It is a finding.
    **Answer:** Is the dimmed world fair, or only annoying?
 
 ### M4: hunts, deaths, diets
 
 8. **Do:** Press Esc. In Watch, zoom in on a crowd and wait. If you see no bite in 2 minutes, open `/?world=m2-world-long.tdpl`.
-   **Look:** The jaw shuts on a bite. The bitten creature flashes red. A kill leaves a pale ring on the killer and a dull fleck of debris.
+   **Look:** The jaw shuts on a bite. The bitten creature flashes red. A kill leaves a dull fleck of debris.
    **Answer:** Can you see who bit whom? Many creatures carry jaws, also plant eaters. Does a jaw tell you who hunts?
 
-9. **Do:** Click a small creature next to a bigger one with a jaw. Keep your hands off for 1 minute. If it lives, press Space.
+9. **Do:** Click a small creature next to a bigger one with a jaw. Make sure a Dash button shows, or pick another. Keep your hands off for 1 minute. If it lives, press Space.
    **Look:** The energy ring flashes on the side of each hit. The Dash button counts down after a dash.
    **Answer:** Is it frightening? Is the cause of each hit always shown?
 
 10. **Do:** Let a creature be eaten. Read the card.
-    **Look:** "Eaten." The killer is drawn with its jaw, its generation, and its swatch. Its diet reads "eats plants", "eats both", or "eats flesh". Under it are its brain at the kill, the strongest path in words, and the heirs.
+    **Look:** "Eaten." and the killer. The killer is drawn with its jaw, its generation, and its swatch. Its diet reads "eats plants", "eats both", or "eats flesh". Under it are its brain at the kill and the strongest path in words.
+    On a first death with a living heir, the card opens with "You are gone. Your line is not." and the heirs. "Eaten." and the killer come under the heirs.
     **Answer:** Does the card make sense with no instructions? Is the killer's diet what you expected?
 
-11. **Do:** Click Keep watching. Take a creature that the Courting card calls "eats both" or "eats flesh". Hold W and press Space toward another creature.
-    **Look:** A dash by a creature with a jaw is a strike. Watch the jaw.
+11. **Do:** Click Keep watching. Take a creature that shows a Dash button. Steer near another creature until the Courting card shows.
+    **Look:** Read "You" on the card. It must list a jaw and say "eats both" or "eats flesh". If not, pick another. Then hold W and press Space toward the other creature.
+    A dash by a creature with a jaw is a strike. Watch the jaw.
     **Answer:** Can you catch something? Find a creature that eats plants, one that eats both, and one that eats flesh in this one world.
 
 12. **Do:** Open `/?walk=reset`. Click a creature. Watch until a kill happens in view.
@@ -116,8 +119,8 @@ An agent cannot answer these questions. An agent can only make sure that each st
     **Look:** "N ticks per second at N creatures." and how long a 24,000-tick skip takes on this device. On a slow device the wait is about a minute. The page also shows "Time runs slow on this device." while it drops ticks.
     **Answer:** Write both lines. Does the skip time feel acceptable?
 
-15. **Do:** Take a creature with a full ring. Do the four moves below.
-    **Look:** Circle a plant with a held pointer. Turn at full speed with W and D. Let go of W and watch it coast. Hold W through a crowd.
+15. **Do:** Take a creature with a full ring. Circle a plant with a held pointer. Turn at full speed with W and D. Let go of W and watch it coast. Hold W through a crowd.
+    **Look:** The path of the creature, how far it overshoots, and how it slides after the keys come up.
     **Answer:**
     1. Can you circle a plant without overshooting?
     2. Does turning at full speed feel wide but fair?
