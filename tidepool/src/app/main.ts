@@ -354,8 +354,9 @@ function start(): void {
     stop();
   };
 
-  // In `?debug`, each `p=<name>=<value>` of the query string sets a parameter before the founders
-  // are seeded. The worker rejects a name that is not in the table.
+  // In `?debug`, each `p=<name>=<value>` of the query string sets a parameter: before the founders
+  // are seeded under `?founders`, after the load of a world file otherwise. The worker rejects a
+  // name that is not in the table.
   const initParams: { name: string; value: number }[] = [];
   for (const p of query.has('debug') ? query.getAll('p') : []) {
     const [name = '', number = '', ...rest] = p.split('=');
