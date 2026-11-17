@@ -382,6 +382,9 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
   rebaked after I1; each visit starts from it until M5. The site page says it is an early build and
   names what is missing; the owner approves its copy and every push to either repo. → `../roadmap.md`
   "Ship slice"
+- 2026-11-16: **A phone that cannot hold real time runs the same world slower and says so (the
+  owner's grill, round 3).** One world and one set of rules on every device; not a smaller world, not
+  a still. Measured on the owner's Pixel before any change. → `../roadmap.md` "Ship slice"
 
 ## Architecture
 
