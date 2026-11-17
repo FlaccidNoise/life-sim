@@ -26,7 +26,7 @@ import {
   walkLine,
   walkLog,
 } from './state';
-import { COUNTER, LINE, STARVING } from './words/lines';
+import { COUNTER, LINE, SLOW, STARVING } from './words/lines';
 
 function Readout() {
   const s = stats.value;
@@ -133,6 +133,11 @@ export function App(props: {
     <>
       {props.debug && <Readout />}
       {benchText.value !== null && <p class="bench">{benchText.value}</p>}
+      {stats.value.slow && !dead && (
+        <p class="bench" role="status">
+          {SLOW}
+        </p>
+      )}
       <Hint touch={props.touch} />
       {mode.value === 'play' && <Line debug={props.debug} />}
       {mode.value === 'play' && !dead && <BudCard />}

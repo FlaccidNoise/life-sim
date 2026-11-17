@@ -775,6 +775,7 @@ function start(): void {
           creatures: msg.creatures,
           plants: msg.plants,
           tickMicros: msg.tickMicros,
+          slow: msg.slow,
           fps: stats.peek().fps,
         };
         break;

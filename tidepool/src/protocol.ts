@@ -421,6 +421,14 @@ export type FromWorker =
   | { type: 'brain'; words: Uint32Array }
   // The readout of the body `uid`: see `readBrain`. 0 words when no living body has the uid.
   | { type: 'brainOf'; uid: number; words: Uint32Array }
-  | { type: 'stats'; tick: number; creatures: number; plants: number; tickMicros: number }
+  // `slow`: since the last `stats`, the world ran fewer ticks than it was asked for.
+  | {
+      type: 'stats';
+      tick: number;
+      creatures: number;
+      plants: number;
+      tickMicros: number;
+      slow: boolean;
+    }
   | { type: 'benchResult'; ticks: number; millis: number; creatures: number } // alive at the end
   | { type: 'error'; message: string };

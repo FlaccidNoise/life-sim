@@ -64,6 +64,8 @@ export function createHost(deps: HostDeps): Host {
   // Since the last `stats` message.
   let tickMillis = 0;
   let timedTicks = 0;
+  // Ticks that were due and dropped, since the last `stats` message. A pause owes none.
+  let dropped = 0;
   const pool: ArrayBuffer[] = [];
 
   // Every `error` message is final: the loop does not run after one.
@@ -124,6 +126,7 @@ export function createHost(deps: HostDeps): Host {
     last = now;
     if (!(ticksPerSecond > 0)) {
       owed = 0;
+      dropped = 0;
       return;
     }
     owed += elapsed;
@@ -151,6 +154,7 @@ export function createHost(deps: HostDeps): Host {
         pausedByDeath = true;
         input = NO_INPUT;
         owed = 0;
+        dropped = 0;
       }
       const tick = sim.tickCount();
       if (tick % STATS_EVERY === 0) {
@@ -160,13 +164,18 @@ export function createHost(deps: HostDeps): Host {
           creatures: sim.stat(STAT_CREATURES),
           plants: sim.stat(STAT_PLANTS),
           tickMicros: (tickMillis * 1000) / timedTicks,
+          slow: dropped > 0,
         });
         tickMillis = 0;
         timedTicks = 0;
+        dropped = 0;
       }
     }
     // A stall: the world runs late instead of running fast to catch up.
-    if (owed >= period) owed = 0;
+    if (owed >= period) {
+      dropped += Math.floor(owed / period);
+      owed = 0;
+    }
     if (ran === 0) return;
     const buffer = pool.pop();
     if (buffer) write(sim, view, buffer);

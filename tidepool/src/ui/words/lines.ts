@@ -19,6 +19,9 @@ export const COUNTER = 'Your line: {n} alive';
 /** The line that stands while the body the player is in has under a quarter of a full store. */
 export const STARVING = 'You are starving. Find a plant.';
 
+/** The note that stands while the device runs fewer ticks than the world asks for. */
+export const SLOW = 'Time runs slow on this device.';
+
 /** A click in Watch on a body that the page does not hand to the player, by what the body is. */
 export const REFUSE = {
   starving: 'That one is starving. Pick another.',
