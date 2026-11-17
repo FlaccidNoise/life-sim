@@ -20,15 +20,18 @@ build: wasm ## Production bundle
 	pnpm exec vite build
 
 site-guard:
+	@test -n "$(SITE)" || { echo "error: SITE is empty. Fix: run make site SITE=<path to the site repo>."; exit 1; }
 	@test -d "$(SITE)/public/demos" || { echo "error: the site repo is not at $(SITE) (no public/demos folder). Fix: clone it there, or run make site SITE=<path to the site repo>."; exit 1; }
 
 site: site-guard headless wasm ## Bake the world, build the bundle, and replace the site's tidepool demo folder. Never commits
 	mkdir -p public
 	$(HEADLESS) run --seed 1 --ticks 36000 --creatures 400 --plants 1200 --out public/m2-world.tdpl
 	pnpm exec vite build
+	find dist -name '*.tdpl' ! -name m2-world.tdpl -delete
+	rm -rf "$(SITE_DEMO).new"
+	cp -R dist "$(SITE_DEMO).new"
 	rm -rf "$(SITE_DEMO)"
-	mkdir -p "$(SITE_DEMO)"
-	cp -R dist/. "$(SITE_DEMO)/"
+	mv "$(SITE_DEMO).new" "$(SITE_DEMO)"
 
 fmt: ## Format Rust and TypeScript
 	cargo fmt --all
