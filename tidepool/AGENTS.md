@@ -51,6 +51,7 @@ Run from `tidepool/`. If `cargo` is not found, run `. "$HOME/.cargo/env"`.
 | `make gates` | Native bench, the throughput gate (`scripts/bench-wasm.mjs`), the health gate (`gate-health`), then the evolution gate (`gate-evolve`) |
 | `make gates-long` | The evolution gate at tick 144,000 on seeds 1, 4, 5, 6, 8, with the brain bands. About 17 minutes on the reference machine at a load of 4 to 7. Run it at each milestone exit. It is not in CI |
 | `make dev` | Build the WASM and start the dev server |
+| `make site` | Bake `public/m2-world.tdpl` (seed 1, 36,000 ticks, a few minutes), build the bundle, and replace `public/demos/tidepool/` in the site repo (`SITE=` sets its path, default `~/CodingProjects/personal-website`). Never commits or pushes |
 
 ## Gotchas
 

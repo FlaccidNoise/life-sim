@@ -1,7 +1,9 @@
-.PHONY: wasm headless dev build check gates gates-long fmt
+.PHONY: wasm headless dev build site site-guard check gates gates-long fmt
 
 WASM := target/wasm32-unknown-unknown/release/tidepool_sim.wasm
 HEADLESS := target/release/tidepool-headless
+SITE ?= $(HOME)/CodingProjects/personal-website
+SITE_DEMO := $(SITE)/public/demos/tidepool
 
 wasm: ## Build the core for the browser
 	cargo build --release -p tidepool-sim --target wasm32-unknown-unknown
@@ -16,6 +18,17 @@ dev: wasm ## Run the dev server
 
 build: wasm ## Production bundle
 	pnpm exec vite build
+
+site-guard:
+	@test -d "$(SITE)/public/demos" || { echo "error: the site repo is not at $(SITE) (no public/demos folder). Fix: clone it there, or run make site SITE=<path to the site repo>."; exit 1; }
+
+site: site-guard headless wasm ## Bake the world, build the bundle, and replace the site's tidepool demo folder. Never commits
+	mkdir -p public
+	$(HEADLESS) run --seed 1 --ticks 36000 --creatures 400 --plants 1200 --out public/m2-world.tdpl
+	pnpm exec vite build
+	rm -rf "$(SITE_DEMO)"
+	mkdir -p "$(SITE_DEMO)"
+	cp -R dist/. "$(SITE_DEMO)/"
 
 fmt: ## Format Rust and TypeScript
 	cargo fmt --all
