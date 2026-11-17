@@ -164,6 +164,8 @@ pictures, under `img/`):
 
 ## Owner checks
 
+**Replaced on 2026-11-16 by `../playtest.md`, one script for the M3 and M4 checks. The list below is the record of what was open.**
+
 Not done by an agent. `make dev` in `tidepool/`, open the page it prints. The saved worlds are
 rebaked with every rule on: `/?world=/m2-world.tdpl` (tick 36,000) and `/?world=/m2-world-long.tdpl`
 (tick 144,000).

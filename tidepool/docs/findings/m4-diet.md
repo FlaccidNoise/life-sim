@@ -448,6 +448,6 @@ while the tab's visibility changed failed with "got `speed` before `init`" (`8bb
    *Answered by the parts plan:* the lunge left the jaw, and herbivores still keep jaws (0.85 to
    1.00, `m4-parts.md` baseline), so the lunge was not the reason.
 
-**Owner checks (play):** open `/?world=/m2-world-long.tdpl`, possess a body, and read the diet line
+**Owner checks (play), replaced on 2026-11-16 by `../playtest.md`:** open `/?world=/m2-world-long.tdpl`, possess a body, and read the diet line
 on the mate card. Find a herbivore, an omnivore, and a carnivore in one world. Be eaten by a
 carnivore and read "eats flesh" on the card. Does the guide's line about a jaw make sense?

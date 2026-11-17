@@ -191,6 +191,8 @@ and both read 1.0 in the frozen world. The wired reading does not count genes th
 
 ## Owner checks
 
+**Replaced on 2026-11-16 by `../playtest.md`, one script for the M3 and M4 checks. The list below is the record of what was open.**
+
 Not done by an agent. Run `make dev` in `tidepool/` and open the page it prints.
 
 1. Play with the brain panel open (key B). Does it make sense with no instructions?
