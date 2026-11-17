@@ -1053,6 +1053,66 @@ test('a pause and a hidden tab, which is a pause, do not turn the slow signal on
   expect(after.map((s) => s.slow)).not.toContain(true);
 });
 
+test('a world that is slow for a moment and then clears does not turn the signal on', () => {
+  const r = rig({ recycle: true });
+  r.host.handle({ type: 'init', seed: 1 });
+  r.advance(500);
+  r.jump(10_000); // one stalled step, as a collection of garbage or a busy tab makes
+  r.advance(3000);
+  expect(r.of('stats').length).toBeGreaterThan(5);
+  expect(r.of('stats').map((s) => s.slow)).not.toContain(true);
+});
+
+test('a device a hair too slow does not make the signal toggle once it has settled', () => {
+  const { r, setCost } = costly();
+  r.host.handle({ type: 'init', seed: 1 });
+  setCost(51); // against a period of 50 ms
+  r.advance(20_000);
+  const settled = r
+    .of('stats')
+    .map((s) => s.slow)
+    .slice(-50);
+  expect(settled.length).toBe(50);
+  expect(new Set(settled).size).toBe(1);
+});
+
+test('the slow signal clears when the world pauses, for a hidden tab or a death', () => {
+  const { r, setCost } = costly();
+  r.host.handle({ type: 'init', seed: 1 });
+  setCost(100);
+  r.advance(1500);
+  expect(r.of('stats').at(-1)?.slow).toBe(true);
+  r.host.handle({ type: 'speed', ticksPerSecond: 0 });
+  r.advance(10);
+  expect(r.of('stats').at(-1)?.slow).toBe(false);
+
+  const m = mortal();
+  let cost = 100;
+  const d = rig({
+    recycle: true,
+    wrap: (sim) => {
+      const w = m.wrap(sim);
+      return {
+        ...w,
+        tick: (n) => {
+          d.jump(cost * n);
+          w.tick(n);
+        },
+      };
+    },
+  });
+  d.host.handle({ type: 'init', seed: 1 });
+  d.host.handle({ type: 'possess', uid: 7 });
+  d.advance(400);
+  expect(d.of('stats').at(-1)?.slow).toBe(true);
+  expect(d.of('died')).toEqual([]);
+  cost = 0;
+  m.die(1);
+  d.advance(100);
+  expect(d.of('died').length).toBe(1);
+  expect(d.of('stats').at(-1)?.slow).toBe(false);
+});
+
 test('a death pause does not turn the slow signal on', () => {
   const m = mortal();
   const r = rig({ recycle: true, wrap: m.wrap });

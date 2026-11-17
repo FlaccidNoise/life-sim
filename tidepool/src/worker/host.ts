@@ -29,6 +29,11 @@ export interface Host {
 const STEP_MS = 10;
 const MAX_TICKS_PER_STEP = 5;
 const STATS_EVERY = 10; // ticks
+// The `slow` signal turns on after this many windows of `STATS_EVERY` ticks in a row with dropped
+// ticks, and off after this many in a row without. A stall or a device a hair too slow does not
+// make it flicker.
+const SLOW_ON_WINDOWS = 2;
+const SLOW_OFF_WINDOWS = 2;
 // The seed of the benches in crates/headless/src/bench.rs and scripts/bench-wasm.mjs.
 const BENCH_SEED = 1;
 // Keys of `tp_stat`: the `STAT_` constants in crates/sim/src/stats.rs.
@@ -66,6 +71,10 @@ export function createHost(deps: HostDeps): Host {
   let timedTicks = 0;
   // Ticks that were due and dropped, since the last `stats` message. A pause owes none.
   let dropped = 0;
+  // The windows in a row with dropped ticks, and the windows in a row without.
+  let dropRun = 0;
+  let clearRun = 0;
+  let slow = false; // what the page is told
   const pool: ArrayBuffer[] = [];
 
   // Every `error` message is final: the loop does not run after one.
@@ -120,13 +129,40 @@ export function createHost(deps: HostDeps): Host {
     if (frameDue && !(ticksPerSecond > 0)) postFrame(sim);
   };
 
+  const postStats = (sim: Sim): void =>
+    deps.post({
+      type: 'stats',
+      tick: sim.tickCount(),
+      creatures: sim.stat(STAT_CREATURES),
+      plants: sim.stat(STAT_PLANTS),
+      tickMicros: timedTicks > 0 ? (tickMillis * 1000) / timedTicks : 0,
+      slow,
+    });
+
+  // The end of a window of `STATS_EVERY` ticks.
+  const settleSlow = (): void => {
+    if (dropped > 0) [dropRun, clearRun] = [dropRun + 1, 0];
+    else [dropRun, clearRun] = [0, clearRun + 1];
+    if (!slow && dropRun >= SLOW_ON_WINDOWS) slow = true;
+    else if (slow && clearRun >= SLOW_OFF_WINDOWS) slow = false;
+    dropped = 0;
+  };
+
+  // A pause owes no ticks. The page holds the last `stats`, so a signal that is on is told off.
+  const clearSlow = (sim: Sim): void => {
+    dropped = dropRun = clearRun = 0;
+    if (!slow) return;
+    slow = false;
+    postStats(sim);
+  };
+
   const step = (sim: Sim): void => {
     const now = deps.now();
     const elapsed = now - last;
     last = now;
     if (!(ticksPerSecond > 0)) {
       owed = 0;
-      dropped = 0;
+      clearSlow(sim);
       return;
     }
     owed += elapsed;
@@ -154,21 +190,13 @@ export function createHost(deps: HostDeps): Host {
         pausedByDeath = true;
         input = NO_INPUT;
         owed = 0;
-        dropped = 0;
       }
       const tick = sim.tickCount();
       if (tick % STATS_EVERY === 0) {
-        deps.post({
-          type: 'stats',
-          tick,
-          creatures: sim.stat(STAT_CREATURES),
-          plants: sim.stat(STAT_PLANTS),
-          tickMicros: (tickMillis * 1000) / timedTicks,
-          slow: dropped > 0,
-        });
+        settleSlow();
+        postStats(sim);
         tickMillis = 0;
         timedTicks = 0;
-        dropped = 0;
       }
     }
     // A stall: the world runs late instead of running fast to catch up.

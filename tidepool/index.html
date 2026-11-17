@@ -72,6 +72,20 @@
         bottom: 12px;
         max-width: calc(100% - 44px);
       }
+      /* The note that time runs slow. Bottom left, under the line at the foot (`.hint`, 12% up), and
+         no wider than the left half of a phone so that it never reaches the centred line. */
+      .slow-note {
+        position: fixed;
+        left: 12px;
+        bottom: 8px;
+        max-width: calc(50% - 12px);
+        box-sizing: border-box;
+        margin: 0;
+        padding: 4px 10px;
+        border-radius: 6px;
+        background: rgb(4 18 28 / 0.75);
+        font-size: 0.8em;
+      }
       .hint {
         position: fixed;
         left: 50%;

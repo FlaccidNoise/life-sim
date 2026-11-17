@@ -134,7 +134,7 @@ export function App(props: {
       {props.debug && <Readout />}
       {benchText.value !== null && <p class="bench">{benchText.value}</p>}
       {stats.value.slow && !dead && (
-        <p class="bench" role="status">
+        <p class="slow-note" role="status">
           {SLOW}
         </p>
       )}
