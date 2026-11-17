@@ -14,9 +14,10 @@ An agent cannot answer these questions. An agent can only make sure that each st
 
 1. In `tidepool/`, run `make dev`. Open the address that it prints, with no `?` after it.
 2. Use a port that you have not used before. A reused port can serve a stale page.
-3. Keep the tab in front. A hidden tab stops the world.
-4. Use a window of about 1300 by 700 pixels.
-5. Keys: W A D or the arrows steer. A held pointer steers. C courts, Space dashes, and Esc leaves a creature. B opens the brain. G opens the guide.
+3. The worlds in `public/` are not in git. A world from an older build fails with `BadVersion`. Bake it again with `make headless` and `target/release/tidepool-headless run --seed 1 --ticks 36000 --creatures 400 --plants 1200 --out public/m2-world.tdpl`. Step 8 can use the same command with `--ticks 144000` and `--out public/m2-world-long.tdpl`.
+4. Keep the tab in front. A hidden tab stops the world.
+5. Use a window of about 1300 by 700 pixels.
+6. Keys: W A D or the arrows steer. A held pointer steers. C courts, Space dashes, and Esc leaves a creature. B opens the brain. G opens the guide.
 
 ## Where each old check went
 
@@ -112,7 +113,7 @@ An agent cannot answer these questions. An agent can only make sure that each st
 ### Speed and feel
 
 14. **Do:** Open `/?bench` on a phone and on a slower laptop. Wait for the line.
-    **Look:** "N ticks per second at N creatures." and how long a 24,000-tick skip takes on this device. On a slow device the wait is about a minute.
+    **Look:** "N ticks per second at N creatures." and how long a 24,000-tick skip takes on this device. On a slow device the wait is about a minute. The page also shows "Time runs slow on this device." while it drops ticks.
     **Answer:** Write both lines. Does the skip time feel acceptable?
 
 15. **Do:** Take a creature with a full ring. Do the four moves below.
