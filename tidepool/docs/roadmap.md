@@ -16,8 +16,8 @@ one before it ships, because what is learned from playing a milestone changes th
    6,000-tick readings were wrong in both directions on the draft.
 3. **Throughput gate.** Headless ticks per second at the reference population must stay above the budget
    in `architecture.md`. It is a test, and it fails the build.
-4. **A feature that fails its measurement is deleted.** Keep the note in `docs/findings/`, not the code.
-   No off-by-default flags for dead features.
+4. **A rule that fails its target ships on and goes to the owner, or the owner deletes it.** Keep the
+   note in `docs/findings/`. No off-by-default flags (owner, 2026-11-16).
 5. **Mechanism fires is not evolution uses it is not it helps.** Claim only the one that was measured. A
    fresh-context reviewer checks each milestone's claims against its probes.
 6. **Long reading at the exit.** Before a milestone closes, run `make gates-long`: the evolution gate at
@@ -133,6 +133,22 @@ their own brain while they play, let go, and see it take over.
 Exit: predators and prey coexist at 12,000 ticks on 3 seeds (risks R2, R4, R5). Being hunted by
 something that learned to dash is frightening and its cause is always shown.
 
+### Ship slice — Tidepool on the owner's site (decided 2026-11-16)
+
+The deploy of M8 moves forward. The site is refreshed at each milestone exit after this one.
+
+- The page opens on the baked 36,000-tick world. Every visit starts from it until M5 brings saves.
+- A deploy script builds the bundle for `public/demos/tidepool/` of the owner's site repo.
+- Tidepool is the site's flagship project and the draft moves to "Also". The page says it is an early
+  build and names what is missing.
+- A performance check on a laptop and on the owner's Pixel.
+- One playtest script that replaces the open owner checks of M3 and M4.
+
+Then, in order: the parts-audit fixes as one batch, then predator interference (I1) and an obligate
+hunter on top of them, each against its own baseline; then a rebake and a redeploy.
+
+Exit: the owner opens the site on a phone and a laptop and plays. Every push waits for the owner.
+
 ### M5 — Deep time
 
 - Headless fast-forward in the worker, with progress streamed to the page.
@@ -172,7 +188,7 @@ a game, not a debug panel.
 - Generative audio.
 - Touch polish and phone performance.
 - The baked world and the first-minute flow.
-- Deploy to Netlify. A performance pass on a mid-range laptop and a real phone.
+- The deploy moved to the ship slice (2026-11-16). A performance pass on a mid-range laptop and a real phone.
 
 Exit: the 60-second test. A person who has never seen it opens the link on a phone and on a laptop, and
 within a minute has possessed a creature, let go of it, and understood that everything is alive.

@@ -28,6 +28,32 @@ _Avoid_: organ, module, component
 A creature's recurrent neural network, grown from node genes and connection genes. A creature thinks on one tick in `think_every`.
 _Avoid_: AI, controller, net
 
+## Ecology
+
+**Diet**:
+A creature's gene from 0 (plants) to 1 (flesh) that sets what its mouths take.
+_Avoid_: trophic level
+
+**Herbivore**:
+A creature with a diet below 0.3.
+_Avoid_: grazer, plant eater
+
+**Omnivore**:
+A creature with a diet from 0.3 to 0.7.
+_Avoid_: generalist, the middle
+
+**Carnivore**:
+A creature with a diet above 0.7. A diet band, not a role: a carnivore with no jaw is not a hunter.
+_Avoid_: meat eater, predator
+
+**Hunter**:
+A creature with a jaw. A role, measured apart from diet.
+_Avoid_: predator
+
+**Prey**:
+A creature with no jaw.
+_Avoid_: victim, grazer
+
 ## Reproduction
 
 **Budding**:

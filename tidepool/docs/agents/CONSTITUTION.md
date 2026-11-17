@@ -35,7 +35,7 @@ make check
 ## Forbidden
 
 - No magic numbers in rule code. A new tunable constant goes in `params.rs` with a default, a minimum, and a maximum. (The 14 older groups listed in `docs/findings/m3-audit.md` step 6 are known debt, not precedent.)
-- No dead flags. A feature that fails its measurement is deleted, and its note stays in `docs/findings/`.
+- No dead flags. A rule that fails its target ships on and its finding goes to the owner, or the owner deletes it. Never keep a rule behind an off flag. The note stays in `docs/findings/` (owner, 2026-11-16).
 - No reopening a decision in `docs/decisions/INDEX.md` without new evidence. A decision marked "provisional, owner to confirm" is not final.
 - TypeScript stays on 6. `typescript-eslint` 8 requires `<6.1.0`.
 - No push in the middle of a plan. Commit at each task.

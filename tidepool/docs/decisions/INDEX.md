@@ -360,6 +360,28 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
   the time-skip budget. M6's column already has zones and narrow gaps: the gap width is its
   migration lever, measured with too little and too much. After the diet retune and M5, since
   pockets need coexistence to diversify. → `../roadmap.md` M6
+- 2026-11-16: **The owner's grill of 2026-11-16, round 1 (every recommended option, "yes to all"):**
+  the design in `../design.md` stands. The behaviors to aim at are hunters and prey that coexist in
+  a cycle, bodies that differ by depth and diet, and a creature that visibly reacts to what it
+  senses. Tidepool goes on the owner's site early, after a ship slice (the page opens on a baked
+  world, a deploy into the site's `public/demos/`, a phone and laptop check), and the site is
+  refreshed at each milestone exit; this moves the deploy of M8 forward. On the site Tidepool is the
+  flagship and the draft moves to "Also". The rule against the hunter takeover is predator
+  interference (I1) with an obligate hunter (a jaw weakens the Filter). Every finding of
+  `../findings/parts-audit.md` is fixed but 4 (mass is armour stays). The open owner checks of M3
+  and M4 become one playtest script, run on the ship-slice build.
+- 2026-11-16: **The owner's grill of 2026-11-16, round 2 (every recommended option):** the
+  constitution's delete rule changes to the owner's practice: a rule that fails its target ships on
+  and goes to the owner, or the owner deletes it, never behind an off flag. The order: the ship
+  slice deployed; the parts-audit fixes as one batch against today's baseline (they must keep the
+  gates green, they need not help); I1 and the obligate hunter on top, against that batch; a rebake
+  and a redeploy; then M5, M6, M7, M8 as the roadmap has them. The target of I1 and the obligate
+  hunter, at tick 144,000 on 4 of 5 seeds: omnivores 0.50 or under, herbivores and carnivores 0.10 or
+  more each, and hunters never over 0.8 of the living; a cap of 8 trials. Hunter (a jaw) and
+  carnivore (`diet` over 0.7) stay two measures. The ship slice opens on the baked 36,000-tick world,
+  rebaked after I1; each visit starts from it until M5. The site page says it is an early build and
+  names what is missing; the owner approves its copy and every push to either repo. → `../roadmap.md`
+  "Ship slice"
 
 ## Architecture
 
@@ -409,8 +431,9 @@ Decisions that are hard to reverse. One line each, with where the reasoning live
 
 ## Process
 
-- 2026-10-09: Every milestone ends playable. A feature that fails its measurement is deleted, not
-  flagged off. → `../roadmap.md`
+- 2026-10-09: Every milestone ends playable. ~~A feature that fails its measurement is deleted, not
+  flagged off.~~ Superseded 2026-11-16: a rule that fails its target ships on and goes to the owner,
+  or the owner deletes it; never behind an off flag. → `../roadmap.md`, `../agents/CONSTITUTION.md`
 - 2026-10-09: Simulation changes are gated at 12,000 ticks on 3 seeds, one run at a time, against a
   baseline. Carried over from the draft's 2026-09-07 rule. → `../roadmap.md`
 - 2026-10-10: Building is done by sub-agents under an orchestrator, one task per agent, with the tier
