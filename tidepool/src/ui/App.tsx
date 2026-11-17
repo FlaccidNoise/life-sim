@@ -16,6 +16,7 @@ import {
   errorText,
   hint,
   lineageAlive,
+  loadingWorld,
   mode,
   pulse,
   ready,
@@ -122,7 +123,11 @@ export function App(props: {
       </div>
     );
   }
-  if (!ready.value) return <div class="panel">Waking the tidepool…</div>;
+  if (!ready.value) {
+    return (
+      <div class="panel">{loadingWorld.value ? 'Loading the world…' : 'Waking the tidepool…'}</div>
+    );
+  }
   const dead = death.value;
   return (
     <>
